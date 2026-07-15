@@ -5,6 +5,9 @@ not unit tests. They formalize the manual `curl`/`kubectl`-based
 verification used throughout this project's build-order steps into a
 repeatable pytest suite.
 
+See [`../README.md`](../README.md) for how to provision and deploy the
+cluster this suite runs against in the first place.
+
 ## Prerequisites
 
 - The chart is deployed to the `podiumd-minikube` namespace, e.g. via
