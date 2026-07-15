@@ -370,3 +370,72 @@ already exists, and it no-ops. `helm.sh/resource-policy: keep` on our hook
 objects prevents them from being deleted on hook cleanup or `helm uninstall`.
 No extra Job/RBAC is required — PV/PVC objects can carry hook annotations
 directly, they don't need a pod to run.
+
+## Pre-provisioned PV/PVC: naming, access mode, and storage class (verified directly)
+
+Diffed `openklant-storage.yaml` against `openzaak-storage.yaml` —
+byte-for-byte identical except the app name substituted throughout — so the
+fix generalizes cleanly across every `<app>-storage.yaml` template, not just
+openzaak.
+
+Checked `podiumd`'s own `values.yaml` defaults for `persistence.*` on every
+affected app:
+
+| app | `persistence.existingClaim` | `persistence.size` |
+|---|---|---|
+| openzaak | `openzaak` | `10Gi` |
+| openklant | `openklant` | `10Gi` |
+| objecten | `objecten` | `10Gi` |
+| opennotificaties | `opennotificaties` | `10Gi` |
+| openarchiefbeheer | `openarchiefbeheer` | `10Gi` |
+
+All fixed, predictable, literally just the app's own name — no override
+needed, our pre-provisioned PVC just needs to be named identically.
+
+`openzaak-storage.yaml`'s PV/PVC both declare `accessModes: [ReadWriteMany]`
+(appropriate for the real target, Azure Files — a network filesystem).
+Minikube's default `standard` StorageClass is backed by
+`k8s.io/minikube-hostpath` (the `storage-provisioner` addon), which only
+really supports `ReadWriteOnce` — node-local storage, no real multi-node
+concurrent-writer capability. Since we control both ends of our own
+pre-provisioned pair, and every app here runs `replicaCount: 1` (no genuine
+concurrent-writer scenario), using `ReadWriteOnce` is simpler and honest
+about what's actually being provided, rather than attempting to declare
+`ReadWriteMany` on what's really just a single hostPath directory.
+
+Considered and rejected: referencing `storageClassName: standard` directly on
+these specific PV/PVC pairs. Minikube marks `standard` as the cluster's
+*default* StorageClass — a PVC that references it (or omits
+`storageClassName` entirely) is dynamically provisioned against that class,
+which creates a **new**, differently-named PV rather than binding to our
+specific pre-created one. Since the whole point of this mechanism is for our
+PV to exist *under a specific, predictable name* (`<namespace>-<app>`, so
+podiumd's `lookup` check finds it), dynamic provisioning would silently
+defeat that — we'd end up with an extra, correctly-bound pair (ours) *and* an
+orphaned Azure PV from podiumd's own template (since its `lookup` for a PV
+named `<namespace>-<app>` specifically would still return nothing, our
+dynamically-provisioned one having some auto-generated name instead). Using
+an explicit empty string for `storageClassName` on both our PV and PVC avoids
+StorageClass-driven dynamic provisioning entirely and forces Kubernetes'
+plain static 1:1 name/capacity/accessMode matching instead — which is what
+guarantees our PVC binds specifically to our own PV. (Note: this distinction
+only matters for these specific pre-provisioned pairs, which are racing
+against podiumd's own same-named-object `lookup` checks. The shared
+Postgres/Solr/Grafana PVCs elsewhere in this chart have no such collision to
+avoid and can just reference `standard` directly via normal dynamic
+provisioning.)
+
+## PABC migrations ordering (verified directly — no gap)
+
+`pabc`'s `templates/migration-job.yaml` is a plain `batch/v1` Job (no Helm
+hook annotation), named `{{ include "pabc.fullname" . }}-migrations-{{
+.Release.Revision }}` (so it re-runs — presumably idempotently — on every
+`helm upgrade`, since the revision-suffixed name changes each time).
+`templates/deployment.yaml` has its own initContainer
+(`{{ .Chart.Name }}-wait-for-migrations`) that references that exact Job name
+and blocks the main container from starting until it completes — the same
+`groundnuty/k8s-wait-for`-style pattern referenced in `podiumd-infra`'s
+scripts. This mirrors compose's `depends_on: pabc-migrations: condition:
+service_completed_successfully` correctly, entirely within the `pabc` chart
+itself. Nothing extra needed from this project for PABC's database-init
+ordering.

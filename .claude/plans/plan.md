@@ -243,8 +243,36 @@ Two details make this fixable rather than a dead end:
 
 The fix: **this chart pre-provisions its own minikube-compatible
 `PersistentVolume` + `PersistentVolumeClaim`**, named exactly what podiumd
-expects (`<namespace>-<app>` for the PV, `podiumd.<app>.persistence.
-existingClaim` for the PVC), backed by minikube's `standard` StorageClass.
+expects. Confirmed directly (diffed `openklant-storage.yaml` against
+`openzaak-storage.yaml` — byte-for-byte identical except the app name, so
+this generalizes cleanly, not just an openzaak-specific fix) that
+`persistence.existingClaim` and `persistence.size` already default to fixed,
+predictable values in podiumd's own `values.yaml` — literally just the app
+name (`openzaak`, `openklant`, `objecten`, `opennotificaties`,
+`openarchiefbeheer`) and `10Gi` — so there's nothing to invent: our PV is
+named `<namespace>-<app>` and our PVC is named `<app>`, mirroring those
+existing defaults exactly.
+
+Two details matter for how these are actually backed, both different from
+the shared Postgres/Solr/Grafana PVCs elsewhere in this chart (which have no
+competing template racing to create a same-named object, so they can just use
+the `standard` StorageClass normally via dynamic provisioning):
+- **`accessModes: [ReadWriteOnce]`, not `ReadWriteMany`.** PodiumD's own
+  (unwanted) PV declares `ReadWriteMany` — appropriate for Azure Files, not
+  for minikube's hostPath-backed `standard` class, which only really supports
+  `ReadWriteOnce`. Since every app here runs at `replicaCount: 1`, there's no
+  genuine multi-writer need — we control both ends of this pair, so we use
+  `ReadWriteOnce` and don't try to fake RWX.
+- **`storageClassName: ""` (explicit empty string), not `standard`.** Minikube
+  marks `standard` as the cluster's *default* StorageClass — a PVC that
+  references it (or omits `storageClassName` entirely) triggers **dynamic**
+  provisioning against that class, which would create a fresh,
+  differently-named PV rather than binding to the specific one we
+  pre-created. An explicit empty string on both our PV and PVC forces
+  Kubernetes' static 1:1 matching instead, guaranteeing our PVC binds to
+  *our* PV specifically. The PV's own volume source is a plain
+  `hostPath: {path: ..., type: DirectoryOrCreate}`.
+
 `lookup` only sees objects that already exist in the *live cluster* at
 template-render time — it can't see objects from the same `helm install`
 pass — so these can't just be regular templates in this chart (on a first
@@ -262,7 +290,15 @@ This applies to every persistent app we actually enable: openzaak and
 openklant from day one (both are "core"), and opennotificaties/
 openarchiefbeheer/openformulieren later when their profiles are turned on —
 each gets its own hook-annotated PV/PVC pair, following the same pattern
-confirmed on openzaak.
+confirmed on openzaak/openklant.
+
+**Also confirmed, no gap**: PABC's migrations (compose:
+`depends_on: pabc-migrations: condition: service_completed_successfully`)
+are already handled robustly by the `pabc` chart itself — its
+`deployment.yaml` has a `wait-for-migrations` initContainer that polls the
+migrations Job (`{{ include "pabc.fullname" . }}-migrations-{{
+.Release.Revision }}`) by name before the main container starts. Nothing
+extra needed from this chart for PABC's database initialization ordering.
 
 ## Raw templates (new, in `templates/`)
 
@@ -589,15 +625,28 @@ production HA rather than a single dev node:
 ## Storage: minikube's default StorageClass
 
 Everything that would otherwise need an Azure-specific storage class is now
-either replaced with a plain single-container Deployment (Redis, Solr — no
-operator, so no Azure-tied PVC templates at all) or handled by the
-pre-provisioned-PV/PVC hook mechanism described above (openzaak, openklant,
-and later opennotificaties/openarchiefbeheer/openformulieren). The shared
-Postgres template and every pre-provisioned PV/PVC use minikube's own default
-StorageClass, `standard` (backed by the `storage-provisioner` addon,
-hostPath-based dynamic provisioning) — `storageClassName` is either left
-unset (falls back to the cluster's marked-default class) or explicitly set to
-`standard`, never inheriting any Azure-specific default.
+either replaced with a plain single-container Deployment with its own
+ordinary PVC (Redis has none needed; Postgres, Solr, Grafana each get one),
+or handled by the pre-provisioned-PV/PVC hook mechanism (openzaak, openklant,
+and later opennotificaties/openarchiefbeheer/openformulieren) — and these two
+cases are deliberately backed differently:
+
+- **Postgres/Solr/Grafana's own PVCs**: ordinary dynamic provisioning against
+  minikube's default StorageClass, `standard` (backed by the
+  `storage-provisioner` addon, hostPath-based) — `storageClassName` left
+  unset (falls back to the cluster's marked-default class) or explicitly set
+  to `standard`. Nothing else is racing to create a same-named object here,
+  so there's no need for anything more precise.
+- **The pre-provisioned PV/PVC pairs for podiumd-nested apps**: `storageClassName:
+  ""` (explicit empty string) on *both* the PV and PVC, `accessModes:
+  [ReadWriteOnce]`, and a plain `hostPath` volume source on the PV — see
+  "PodiumD's Azure-CSI storage templates" above for why: referencing
+  `standard` here would trigger *dynamic* provisioning (since it's the
+  cluster default) instead of statically binding to the specific,
+  fixed-name PV podiumd's own `lookup` check needs to find already existing.
+
+Either way, nothing here ever inherits podiumd's Azure-specific
+`podiumd-standard`/`managed-csi-premiumv2` defaults.
 
 ## Build order (staged, to keep review manageable)
 
