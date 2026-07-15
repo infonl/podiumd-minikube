@@ -1479,3 +1479,21 @@ again within seconds. Not yet fixed at the source (`minikube start
 future full cluster recreation) - left as a live patch for now since a
 disruptive restart wasn't warranted mid-investigation on a cluster with
 real deployed state.
+
+Verified afterwards, once the cluster settled: full pytest suite still
+41/41. Also checked `openformulieren-worker`, which had picked up 1
+restart of its own during the same window - ruled out as unrelated crisis
+collateral rather than a third bug. `kubectl describe`'s event log showed
+`failed liveness probe, will be restarted`, timing out on the worker's own
+`celery ... inspect --destination celery@${HOSTNAME} active` liveness
+probe after its already-generous 15s `timeoutSeconds` (the `openforms`
+chart's own default for this specific probe, higher than the 5s used
+everywhere else in that chart - confirmed via `helm show values`/
+inspecting the pulled chart tarball, not a value this project overrides).
+Exit code 137 here is kubelet's own post-probe-failure `SIGKILL`, not a
+cgroup OOM event (`reason: Error`, not `OOMKilled`, unlike RabbitMQ's
+case) - a heavyweight Python/Celery/Django bootstrap command plausibly
+just couldn't complete in 15s while the node was at 728% CPU. No restarts
+since; no values.yaml override added, since 15s is already the chart
+maintainers' own considered default and the underlying contention is
+already fixed above.
