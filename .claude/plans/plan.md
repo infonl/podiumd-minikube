@@ -297,7 +297,18 @@ Azure-specific operators we've disabled above).
     opennotificaties, openarchiefbeheer, pabc), matching
     `docker-compose.yaml`'s existing names/users/passwords, plus
     `zac-database/init-zac-database.sql`'s schema/grant statements for the
-    `zac` database.
+    `zac` database. **Extension-ordering risk found and fixed here**: the
+    `postgis/postgis` image's own bundled `docker-entrypoint-initdb.d`
+    scripts (which modify `template1` so that new databases inherit PostGIS
+    automatically) are conventionally numbered to run early (e.g. `10_*.sh`),
+    and Postgres runs these scripts in **alphabetical** order — so our own
+    `00-create-databases.sql` would otherwise run *before* them, meaning the
+    four databases that need PostGIS (openzaak, objecten, opennotificaties,
+    openarchiefbeheer) would be created before `template1` has it, and would
+    **not** inherit the extension. Rather than depend on script ordering,
+    `00-create-databases.sql` explicitly runs `\c <dbname>` +
+    `CREATE EXTENSION IF NOT EXISTS postgis;` for each of those four
+    databases itself, right after creating them.
   - `01-seed-fixtures.sh` — one merged, backgrounded script containing the
     three existing per-service blocks unchanged (same readiness queries, same
     vendored numbered `*.sql` fixture files, now parameterized by db/user
@@ -328,7 +339,12 @@ Azure-specific operators we've disabled above).
   one instance using the same DB-index convention as compose.
 - **RabbitMQ** — plain single-container `rabbitmq:4.2.7-alpine` Deployment +
   Service (`opennotificaties`/`openformulieren` profile only).
-- **Solr** — plain single-container `solr:9.10.1-slim` Deployment + Service.
+- **Solr** — plain single-container `solr:9.10.1-slim` Deployment + Service +
+  **PVC** (`storageClassName: standard`), mounted at `/var/solr`. Compose
+  persists Solr's index via a bind-mounted `solr-data` volume — the original
+  plan draft for this chart omitted the PVC entirely, which would have lost
+  the "zac" core's index on every pod restart, forcing a full re-index each
+  time. Fixed here: single-instance PVC, same as the shared Postgres.
   Wired into `podiumd`'s `zac` dependency via
   `podiumd.zac.solr.url: http://<solr-service>:8983` +
   `podiumd.zac.solr.createZacCore: true`, reusing that chart's existing
@@ -360,6 +376,11 @@ Azure-specific operators we've disabled above).
   Services for otel-collector, tempo, prometheus, grafana, each with a
   ConfigMap of its existing config file from
   `scripts/docker-compose/imports/{otel-collector,tempo,prometheus,grafana}/`.
+  Grafana additionally gets a **PVC** (`storageClassName: standard`) mounted
+  at `/var/lib/grafana` — compose persists `grafana-data` (dashboards, users,
+  its own SQLite DB); omitting this (as the original plan draft did) would
+  reset Grafana's state on every restart. Tempo/Prometheus/otel-collector
+  have no persistent volumes in compose either — none added here, matching.
 - **opa-tests** (itest profile) — a Helm `Job` running `opa test` against
   `src/test/resources/policies` + `src/main/resources/policies` (mounted via
   ConfigMap), mirroring the compose one-shot container.
@@ -402,6 +423,40 @@ Traefik itself is a **cluster prerequisite**, installed once via Helm
 — not managed by this chart, matching how `podiumd-infra/docs/ingress.md`
 treats Traefik as pre-installed cluster infra rather than an app-chart
 dependency. This will be documented in a short README for the new chart.
+
+## External reachability: every service compose exposed on a host port
+
+The earlier drafts of this plan only explicitly assigned `.local` Ingress
+hostnames to the services that also needed a self-referential URL fix
+(zac, pabc, openarchiefbeheer, openformulieren) — openzaak, openklant,
+objecten, objecttypen, and Solr's admin UI were left to "use the native
+ingress block" without ever actually being assigned a hostname. Every compose
+service with a host `ports:` mapping needs an explicit entry so nothing is
+silently unreachable from the browser:
+
+| Compose service (host port) | Ingress hostname | Mechanism |
+|---|---|---|
+| `zac` (8080) | `zac.local` | `podiumd.zac.ingress.*` (native) |
+| `keycloak` (8081) | `keycloak.local` | raw Ingress template |
+| `openzaak-nginx` (8001) | `openzaak.local` | `podiumd.openzaak.ingress.*` (native) |
+| `objecten-api.local` (8010, `objecten` profile) | `objecten.local` | `podiumd.objecten.ingress.*` (native) |
+| `openklant.local` (8002) | `openklant.local` | `podiumd.openklant.ingress.*` (native) |
+| `solr` (8983) | `solr.local` | raw Ingress template |
+| `pabc-api` (8006) | `pabc.local` | `podiumd.pabc.ingress.*` (native) — already covered above |
+| `opennotificaties` (8003, profile) | `opennotificaties.local` | `podiumd.opennotificaties.ingress.*` (native) |
+| `openarchiefbeheer-web`/`-ui` (8004/8005, profile) | `openarchiefbeheer-web.local`/`openarchiefbeheer-ui.local` | native — already covered above |
+| `objecttypes-api` (8011, openformulieren profile) | `objecttypen.local` | `podiumd.objecttypen.ingress.*` (native) |
+| `openformulieren-nginx`/`-web` (8007/8009, profile) | `openformulieren-nginx.local`/`openformulieren-web.local` | native — already covered above |
+| `grafana` (3000, `metrics` profile) | `grafana.local` | raw Ingress template |
+| `greenmail` (18083 web UI, `itest` profile) | `greenmail.local` | raw Ingress template |
+
+Deliberately **not** exposed (matches compose's own intent — these are
+internal-only even there, or genuinely not meant for interactive browser use):
+ZAC's WildFly management port (9990, JMX/admin console only), OPA (8181,
+internal policy engine), office-converter/Gotenberg (8083, internal
+conversion API), the wiremocks (18080-18084, internal test doubles reached
+only by ZAC/tests), otel-collector/tempo/prometheus (scrape/ingest endpoints,
+not interactive UIs — only Grafana is).
 
 ## values.yaml profile flags
 
@@ -494,6 +549,42 @@ production HA rather than a single dev node:
 - **`flower.enabled: false` everywhere** (see Dependencies section) — not
   needed for local dev and we already have a separate `metrics` profile for
   observability.
+- **Per-app worker/nginx/beat pod count must match compose's actual container
+  list, not just "disable flower".** The Maykin chart family structurally
+  supports separate worker/beat/nginx sub-deployments per app (confirmed in
+  the earlier `helm show values` research — worker/beat/flower/nginx resource
+  blocks exist in the shared chart shape), but whether each is actually
+  *needed* varies per app, and compose's own service list is the ground
+  truth for "needed":
+  - **openklant**: compose runs it as a **single bare container** — no
+    `openklant-celery` service exists anywhere in `docker-compose.yaml`. If
+    the openklant chart defaults `worker.enabled`/`nginx.enabled` on, both
+    must be explicitly set to `false` — running them would be pure excess
+    over compose, not parity.
+  - **openzaak**: compose runs `openzaak-nginx` **unconditionally** (no
+    `profiles:` entry — required for chunked transfer-encoding on large file
+    uploads, matching how compose already fronts it) but gates
+    `openzaak-celery` behind `profiles: ["opennotificaties",
+    "openformulieren"]`. So: `podiumd.openzaak.nginx.enabled: true` (leave on)
+    but `podiumd.openzaak.worker.enabled: false` for the core profile,
+    flipped to `true` only when `opennotificaties.enabled` or
+    `openformulieren.enabled` is set.
+  - **openarchiefbeheer**/**openformulieren** (both profile-gated, checked at
+    step 5): compose runs *both* a `-celery` and a separate `-celery-beat`
+    service for each — so both `worker.enabled` and `beat.enabled` (exact key
+    names TBD per chart) should stay on when that profile is active, matching
+    compose 1:1 there.
+  - **opennotificaties**: compose runs one `opennotificaties-celery` (no
+    separate beat service) — only `worker.enabled: true`, `beat.enabled:
+    false`, when its profile is active.
+  - **objecten**: compose runs `objecten-api-celery` whenever the `objecten`
+    profile itself is active (no separate beat) — `worker.enabled: true`,
+    `beat.enabled: false` in that case.
+  This audit needs a final per-chart confirmation of the exact
+  `worker.enabled`/`nginx.enabled`/`beat.enabled` key names at implementation
+  time (steps 3 and 5), the same way `flower.enabled` was already confirmed —
+  but the *target state* (which pods compose actually runs, per app) is fully
+  settled now, from `docker-compose.yaml`'s own service list, not guesswork.
 
 ## Storage: minikube's default StorageClass
 
@@ -547,21 +638,48 @@ unset (falls back to the cluster's marked-default class) or explicitly set to
 
 ## Verification
 
-- `helm dependency update && helm lint .` (run from this repo's root).
-- `helm template podiumd-minikube .` renders cleanly with default values
-  (core profile only) and with every profile flag turned on.
-- On an actual minikube cluster: `helm install`, confirm all core pods reach
-  `Running`/`Ready` (including that the pre-provisioned PV/PVC hooks actually
-  ran before podiumd's own storage templates and no Azure-CSI PV got
-  created), then drive the real login flow through `http://zac.local` →
-  Keycloak redirect → back to ZAC, matching the
-  `docs/development/installDockerCompose.md` walkthrough used for the compose
-  stack today (that doc stays in `dimpact-zaakafhandelcomponent` purely as a
-  behavioral reference — nothing in this repo reads it at runtime).
+Structured around the four properties a working equivalent of
+`docker-compose.yaml` actually needs — not just "does it render":
+
+- **Renders cleanly**: `helm dependency update && helm lint .`;
+  `helm template podiumd-minikube .` with default values (core profile only)
+  and with every profile flag turned on.
+- **External reachability**: after `helm install` + adding the External
+  reachability table's hostnames to `/etc/hosts` (pointed at the Traefik
+  address), every URL in that table actually loads — not just `zac.local`.
+  Specifically confirm `kubectl get ingress -A` lists all of them with an
+  address, and that Keycloak's login redirect round-trips correctly (the
+  actual end-to-end proof that the issuer-URL-consistency design works, not
+  just that both services independently start).
+- **Storage is persistent where needed**: `kubectl get pv,pvc -A` shows Bound
+  volumes for Postgres, Solr, and (once enabled) Grafana and every
+  podiumd-nested app with an `-storage.yaml` template (openzaak, openklant,
+  ...) — confirm those are backed by `standard`, not left `Pending` (which
+  would indicate the Azure-CSI template fired instead of ours). Then
+  concretely: `kubectl delete pod` on the Postgres/Solr/an-openzaak pod and
+  confirm data survives the restart (a Solr search still returns previously
+  indexed results, an openzaak-uploaded test document is still present) —
+  actually exercising persistence, not just checking the PVC exists.
+- **Minimum pods**: `kubectl get pods` in the default (core) profile should
+  show roughly Postgres + Redis + Solr + WireMock + Keycloak + zac (+OPA
+  sidecar) + office-converter + openzaak (+its always-on nginx, no worker) +
+  openklant (no worker, no nginx) + pabc-api + brp-personen-mock — compare
+  this list directly against the per-app worker/nginx/beat audit above and
+  flag any pod that audit says shouldn't be there.
+- **Database/storage initialization**: `kubectl exec` into the Postgres pod
+  and confirm all 9 databases exist with the right owners, the 4 PostGIS-
+  dependent ones actually have the extension installed
+  (`\dx` inside each), and the openzaak/openklant/openarchiefbeheer fixture
+  data landed (e.g. the ZAC-test zaaktypes exist in OpenZaak's catalog) —
+  the full sequence (create → wait for app migrations → seed) actually
+  completing, not just the scripts existing.
 - `./scripts/set-podiumd-version.sh <other-version> && helm template .`
   renders cleanly too, confirming the version-swap mechanism actually works
   end-to-end (a real test of the "easily configurable" requirement, not just
   a paper mechanism).
+- Matches the compose walkthrough in
+  `docs/development/installDockerCompose.md` (behavioral reference only —
+  nothing in this repo reads that file at runtime).
 
 ## Status
 
@@ -570,6 +688,21 @@ values`/`helm pull` against `@maykinmedia`/`@dimpact`/OCI repos for the
 individual app charts, and a direct pull + template inspection of
 `dimpact/podiumd` 4.8.1 itself (confirming the enable/disable defaults, the
 OIDC secret auto-generation behavior, and — critically — the Azure-CSI
-storage template problem and its pre-provisioned-PV/PVC-hook fix). **Not yet
-approved by the user in final form** — implementation (build order steps 0–5
-above) has **not started**. Next step once resumed: step 0 (vendoring).
+storage template problem and its pre-provisioned-PV/PVC-hook fix).
+
+A subsequent desk-check against the four criteria "external reachability,
+persistent storage, minimum pods, database/storage initialization" (compared
+directly against `docker-compose.yaml`'s actual service list, since nothing
+is deployed yet to test live) found and fixed five concrete gaps: Solr and
+Grafana were missing PVCs entirely; openzaak/openklant/objecten/objecttypen
+had no explicit Ingress hostname assigned (only the mechanism was described);
+per-app worker/nginx/beat pod counts hadn't been audited against compose's
+actual per-app container list (openklant needs both disabled entirely;
+openzaak needs nginx on but worker off in the core profile); and the merged
+Postgres init script could have silently failed to give 4 of the 9 databases
+the PostGIS extension due to alphabetical script-ordering. All five are now
+resolved in the relevant sections above, not left as open gaps.
+
+**Not yet approved by the user in final form** — implementation (build order
+steps 0–5 above) has **not started**. Next step once resumed: step 0
+(vendoring).
