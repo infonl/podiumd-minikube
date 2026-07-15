@@ -9,8 +9,12 @@ scrape_configs:
     # "non-compliant scrape target sending blank Content-Type and no fallback_scrape_protocol specified for target"
     fallback_scrape_protocol: 'PrometheusText1.0.0'
     static_configs:
-      # listen to the ZAC/WildFly management port exposed on localhost
-      - targets: [ 'host.docker.internal:9990' ]
+      # Patched from compose's "host.docker.internal:9990" (a host-level
+      # port mapping that doesn't exist in-cluster) - zac's own Service
+      # only forwards its app port (80), not the WildFly management port
+      # (9990) the container also listens on, so this points at a small
+      # extra Service (zac-admin) this chart adds just to expose it.
+      - targets: [ 'zac-admin:9990' ]
   - job_name: 'tempo'
     static_configs:
       - targets: [ 'tempo:3200' ]

@@ -18,7 +18,12 @@ distributor:
     otlp:
       protocols:
         grpc:
-          endpoint: tempo:4317
+          # Patched from compose's "tempo:4317": that resolves to the
+          # container's own IP there (bindable). In Kubernetes "tempo"
+          # resolves to the Service's ClusterIP instead, which isn't a
+          # local interface inside this pod - binding would fail. 0.0.0.0
+          # binds every interface, matching what the container needs.
+          endpoint: 0.0.0.0:4317
 
 metrics_generator:
   registry:

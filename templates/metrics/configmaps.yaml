@@ -1,0 +1,37 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  otel-collector.yaml: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/metrics/otel-collector.yaml" | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  tempo.yaml: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/metrics/tempo.yaml" | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  prometheus.yaml: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/metrics/prometheus.yaml" | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  grafana-datasources.yaml: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/metrics/grafana-datasources.yaml" | quote }}
+{{- end }}

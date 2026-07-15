@@ -1,0 +1,10 @@
+{{- if .Values.podiumd.openarchiefbeheer.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openarchiefbeheer-no2fa-settings
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  docker_no2fa.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/openarchiefbeheer/docker_no2fa.py" | quote }}
+{{- end }}

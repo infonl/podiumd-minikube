@@ -1,0 +1,24 @@
+{{/*
+zac's own Service (rendered by the podiumd dependency) only forwards its
+app port (80) - not the WildFly management port (9990) the container also
+listens on, which compose exposes on the host directly and Prometheus
+scrapes. Kubernetes lets multiple Services select the same pods, so this
+adds a second one just for that port rather than needing to change the
+zac chart's own Service (which has no extraPorts-style field to do that).
+*/}}
+{{- if and .Values.metrics.enabled .Values.zac.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: zac-admin
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: zac
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: admin
+      port: 9990
+      targetPort: admin
+{{- end }}

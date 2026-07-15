@@ -39,7 +39,14 @@ spec:
             - name: BAG_API_KEY
               value: {{ .Values.postgres.bagApiKey | quote }}
             - name: SEED_OPENARCHIEFBEHEER
-              value: {{ .Values.openarchiefbeheer.enabled | quote }}
+              # Reads podiumd.openarchiefbeheer.enabled specifically, not
+              # the top-level openarchiefbeheer.enabled flag next to it -
+              # that top-level flag is this chart's own compose-profile
+              # equivalent (documented at the top of values.yaml), but
+              # podiumd.openarchiefbeheer.enabled is what actually controls
+              # whether the app renders at all. Matches storage-hooks.yaml's
+              # own gating for the same reason.
+              value: {{ .Values.podiumd.openarchiefbeheer.enabled | quote }}
           ports:
             - name: postgres
               containerPort: 5432

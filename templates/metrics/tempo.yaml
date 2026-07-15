@@ -1,0 +1,66 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+      annotations:
+        checksum/config: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/metrics/tempo.yaml" | sha256sum }}
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: tempo
+          image: grafana/tempo:3.0.2
+          args: ["-config.file=/etc/tempo.yaml"]
+          ports:
+            - name: http
+              containerPort: 3200
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo.yaml
+              subPath: tempo.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: tempo-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: tempo
+  ports:
+    - name: http
+      port: 3200
+      targetPort: http
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+{{- end }}

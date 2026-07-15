@@ -1,0 +1,51 @@
+{{- if .Values.itest.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-tests-policies
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  {{- (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/policies/main/*.rego").AsConfig | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-tests-tests
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  {{- (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/policies/test/*.rego").AsConfig | nindent 2 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opa-tests
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: opa-tests
+    spec:
+      enableServiceLinks: false
+      restartPolicy: Never
+      containers:
+        - name: opa-tests
+          image: openpolicyagent/opa:1.18.2
+          args: ["test", "/home/policies", "/home/tests"]
+          volumeMounts:
+            - name: policies
+              mountPath: /home/policies
+            - name: tests
+              mountPath: /home/tests
+      volumes:
+        - name: policies
+          configMap:
+            name: opa-tests-policies
+        - name: tests
+          configMap:
+            name: opa-tests-tests
+{{- end }}

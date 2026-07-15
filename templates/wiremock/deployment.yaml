@@ -47,11 +47,31 @@ spec:
               mountPath: /home/wiremock/mappings/{{ base $path }}
               subPath: {{ base $path }}
             {{- end }}
-            # itest.enabled=true (build order step 5) adds smartdocuments/kvk/bag
-            # mapping sets here too, the same way - their URL patterns target
-            # distinct upstream APIs, so mapping filenames don't collide even
-            # sharing this one WireMock instance's mappings/ directory.
+            {{- if .Values.itest.enabled }}
+            {{- range $set := list "smartdocuments-wiremock" "kvk-wiremock" "bag-wiremock" }}
+            {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/mappings/*.json" $set) }}
+            - name: {{ $set }}-mappings
+              mountPath: /home/wiremock/mappings/{{ base $path }}
+              subPath: {{ base $path }}
+            {{- end }}
+            {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/__files/*" $set) }}
+            - name: {{ $set }}-files
+              mountPath: /home/wiremock/__files/{{ base $path }}
+              subPath: {{ base $path }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
       volumes:
         - name: brp-personen-mappings
           configMap:
             name: wiremock-brp-personen-mappings
+        {{- if .Values.itest.enabled }}
+        {{- range $set := list "smartdocuments-wiremock" "kvk-wiremock" "bag-wiremock" }}
+        - name: {{ $set }}-mappings
+          configMap:
+            name: wiremock-{{ $set }}-mappings
+        - name: {{ $set }}-files
+          configMap:
+            name: wiremock-{{ $set }}-files
+        {{- end }}
+        {{- end }}

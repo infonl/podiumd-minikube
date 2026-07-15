@@ -229,15 +229,18 @@ podiumd:
     solr-operator:
       enabled: false # podiumd's own override defaults this to true (unlike charts/zac's own quiet false default) - we use a plain Solr Deployment instead, see templates/solr.yaml
     opentelemetry-collector:
-      enabled: false # renders unexpectedly without this override (verified via --set) even though charts/zac's own default is false - matches our own metrics.enabled=false profile flag; not otherwise wired to it since this is a separate, unrelated otel-collector instance from the one in templates/metrics/
-    # Known, accepted limitation (not fixable via values): the bundled zac
-    # chart version (1.0.251) hardcodes OTEL_SDK_DISABLED: "false" with no
-    # override, and defaults OTEL_EXPORTER_OTLP_ENDPOINT to
-    # http://<release>-opentelemetry-collector:4317 - a service that doesn't
-    # exist since opentelemetry-collector.enabled is false above. ZAC's JVM
-    # will harmlessly retry failed trace exports in the background (noisy
-    # log warnings, no functional impact). No values-level fix exists for
-    # this specific chart version.
+      enabled: false # renders unexpectedly without this override (verified via --set) even though charts/zac's own default is false - this is a separate, unrelated bundled otel-collector subchart from the one in templates/metrics/, which is what we actually want ZAC's traces to go to instead
+    # The bundled zac chart version (1.0.251) hardcodes OTEL_SDK_DISABLED:
+    # "false" with no override, and would otherwise default
+    # OTEL_EXPORTER_OTLP_ENDPOINT to http://<release>-opentelemetry-collector:4317
+    # - the (disabled) bundled subchart above, not our own. Pointed at our
+    # own templates/metrics/ otel-collector Service instead (step 5). When
+    # metrics.enabled is false this Service doesn't exist either, so ZAC's
+    # JVM just harmlessly retries failed trace exports in the background
+    # (noisy log warnings, no functional impact) - same previously-accepted
+    # behavior, now also the actually-working case once metrics is on.
+    opentelemetry_zaakafhandelcomponent:
+      endpoint: http://otel-collector:4317
     ingress:
       enabled: true
       className: traefik
@@ -399,7 +402,14 @@ podiumd:
         axes: redis:6379/0
       celery:
         brokerUrl: redis://redis:6379/2
+        # Set both: this chart's own configmap.yaml has a typo reading
+        # "resultBackendl" (not "resultBackend") - found live while fixing
+        # the same bug on openarchiefbeheer's chart (see that comment).
+        # Currently a no-op in practice since openklant's own celery
+        # worker is disabled (worker.replicaCount: 0 below) and nothing
+        # reads this value, but fixed for correctness/future-proofing.
         resultBackend: redis://redis:6379/2
+        resultBackendl: redis://redis:6379/2
     ingress:
       enabled: true
       className: traefik
@@ -486,16 +496,394 @@ podiumd:
     # exposed via Ingress - compose reaches it only in-cluster, through the
     # wiremock proxy.
 
-  # --- Profile-gated apps: enabled flags flip to true in step 5 wiring,
-  # alongside their own settings.database/tags.redis/replicaCount overrides
-  # and pre-provisioned storage hooks (see plan.md). Left disabled here. ---
+  # --- Profile-gated apps (build order step 5). Each one's `enabled` flag
+  # here is the one that actually controls whether podiumd renders it (its
+  # own Chart.yaml `condition:` on the nested dependency) - the top-level
+  # flags at the very top of this file (objecten.enabled, etc.) are this
+  # chart's own compose-profile-equivalent flags, used by our own templates
+  # (storage-hooks.yaml, the postgres seed script guard, the metrics/itest
+  # raw templates below). Turning a profile on means flipping BOTH: the
+  # top-level flag and this podiumd.<app>.enabled flag. Left disabled here,
+  # matching compose's own opt-in-by-profile default. ---
+
+  # --- objecten (+ objecttypen, its always-on dependency once either
+  # profile is on) ---
   objecten:
     enabled: false
+    replicaCount: 1
+    worker:
+      # Compose runs objecten-api-celery as a real worker - unlike
+      # openzaak/openklant's workers (which compose never runs at all), this
+      # one stays on, just scaled down from the chart's default of 2.
+      replicaCount: 1
+    flower:
+      enabled: false # not run in compose; chart default is true
+    tags:
+      redis: false
+    configuration:
+      job:
+        # No configuration.data set (matching compose, which seeds fixture
+        # data through a separate one-shot "objecten-api-import" container
+        # running the image's own init.sh - not replicated here; see
+        # plan.md's step 5 notes on scope).
+        enabled: false
+    settings:
+      secretKey: objectenApiSecretKey
+      allowedHosts: objecten.local
+      database:
+        host: postgres
+        port: 5432
+        # Compose's objecten-api-database container's actual Postgres
+        # user/db is literally named "objects", not "objecten" - copied
+        # as-is, matching 00-create-databases.sql.
+        username: objects
+        password: objects
+        name: objects
+      cache:
+        default: redis:6379/0
+        axes: redis:6379/0
+        # Compose never sets an OIDC-cache env var for objecten either -
+        # see opennotificaties's identical CACHE_OIDC comment above (same
+        # unconditional-render leak, same fix).
+        oidc: redis:6379/0
+      celery:
+        brokerUrl: redis://redis:6379/1
+        # Set both: see openklant/openarchiefbeheer's identical comment -
+        # this chart's own configmap.yaml has the same "resultBackendl" typo.
+        resultBackend: redis://redis:6379/1
+        resultBackendl: redis://redis:6379/1
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: objecten.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+    persistence:
+      existingClaim: objecten
+      storageClassName: ""
+      size: 10Gi
+
   objecttypen:
     enabled: false
+    replicaCount: 1
+    # No worker/beat/flower/redis blocks exist on this chart at all - it's
+    # a stateless API with no celery use.
+    configuration:
+      job:
+        enabled: false # same fixture-import scope note as objecten above
+    # podiumd's own umbrella override enables create_required_objecttypen_job
+    # by default with placeholder credentials - same class of problem as
+    # openzaak's create_required_catalogi_job (see that override's comment
+    # above): would fail repeatedly against our vendored fixture data
+    # instead of its own.
+    create_required_objecttypen_job:
+      enabled: false
+    settings:
+      secretKey: objecttypesApiSecretKey
+      allowedHosts: objecttypen.local
+      database:
+        host: postgres
+        port: 5432
+        username: objecttypes
+        password: objecttypes
+        name: objecttypes
+      cache:
+        default: redis:6379/0
+        axes: redis:6379/0
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: objecttypen.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+
+  # --- opennotificaties ---
   opennotificaties:
     enabled: false
+    replicaCount: 1
+    worker:
+      replicaCount: 1 # compose runs opennotificaties-celery as a real worker
+    beat:
+      replicaCount: 0 # compose has no opennotificaties beat container
+    flower:
+      enabled: false # already the chart default; explicit for clarity
+    tags:
+      redis: false
+    configuration:
+      job:
+        enabled: false # see plan.md step 5 scope note - opennotificaties-init's setup-configuration data isn't replicated here
+      superuser:
+        # Matches compose's OPENNOTIFICATIES_SUPERUSER_USERNAME/_EMAIL and
+        # DJANGO_SUPERUSER_PASSWORD exactly.
+        username: admin
+        password: admin
+        email: admin@example.com
+    settings:
+      secretKey: opennotificatiesApiSecretKey
+      allowedHosts: opennotificaties.local
+      database:
+        host: postgres
+        port: 5432
+        username: opennotificaties
+        password: opennotificaties
+        name: opennotificaties
+      cache:
+        default: redis:6379/0
+        axes: redis:6379/0
+        # Compose never sets an OIDC-cache env var for opennotificaties, but
+        # this chart's configmap.yaml always renders CACHE_OIDC
+        # unconditionally (no matching {{- if }} guard) - left unset, it
+        # fell through to podiumd's own untouched production default
+        # (redis-ha-master...). Pointed at the shared Redis instead of
+        # leaving that leak in place.
+        oidc: redis:6379/0
+      celery:
+        # Compose points this at rabbitmq, not redis - the only one of
+        # these apps that does.
+        brokerUrl: amqp://guest:guest@rabbitmq:5672//
+        # PUBLISH_BROKER_URL has its own dedicated field (confirmed live
+        # against secret.yaml) - matches compose's own value exactly.
+        publishBrokerUrl: amqp://guest:guest@rabbitmq:5672/%2F
+        # CELERY_RESULT_BACKEND is defined TWICE on this chart: once here
+        # (feeding configmap.yaml's tags.redis-false branch) and once via
+        # settings.messageBroker.celeryResultBackend below (feeding
+        # secret.yaml). Found live: both the ConfigMap and Secret set the
+        # same env var name via envFrom, and Kubernetes resolves that by
+        # whichever source is listed last in the container's envFrom list
+        # winning - rather than depend on that ordering, both are set here
+        # to the same value so it's correct either way. Leaving only one
+        # set left the other object rendering podiumd's own untouched
+        # production default (redis-ha-master...) instead of ours.
+        resultBackend: redis://redis:6379/1
+      messageBroker:
+        celeryResultBackend: redis://redis:6379/1
+    # RABBITMQ_HOST has no dedicated values.yaml field on this chart at all
+    # (confirmed - it isn't referenced anywhere in its templates), and isn't
+    # needed: CELERY_BROKER_URL/PUBLISH_BROKER_URL above already carry the
+    # full connection string the app actually uses.
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: opennotificaties.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+    persistence:
+      existingClaim: opennotificaties
+      storageClassName: ""
+      size: 10Gi
+
+  # --- openarchiefbeheer ---
   openarchiefbeheer:
     enabled: false
+    # replicaCount/worker/beat/nginx/flower all already default to 1 - no
+    # override needed (confirmed live against the chart: unlike the other
+    # Maykin-family apps, this one's chart defaults already match compose's
+    # single-instance topology exactly, including running celery/beat/flower
+    # since compose really does run all of those as separate containers).
+    tags:
+      redis: false
+    configuration:
+      job:
+        enabled: true # compose's openarchiefbeheer-web-init runs the equivalent setup-configuration step for real, unlike the other apps' fixture-import containers - replicated here via configuration.data below
+      # Matches compose's vendored data.yaml (ZGW consumer services
+      # pointing at ZAC's own openzaak client credentials), with API roots
+      # repointed from openzaak.local:8000 to the in-cluster Service
+      # address - see
+      # vendor/dimpact-zaakafhandelcomponent/openarchiefbeheer/NOTES entry.
+      # oidc_db_config_enable stays false, matching the vendored file - this
+      # app's OIDC admin login isn't configured/needed for the admin login
+      # form compose actually exercises (see settings.djangoSettingsModule
+      # override below for how that login form is reached instead).
+      data: |-
+        zgw_consumers_config_enable: true
+        zgw_consumers:
+          services:
+          - identifier: zaken-test
+            label: Open Zaak - Zaken API
+            api_root: http://openzaak/zaken/api/v1/
+            api_type: zrc
+            auth_type: zgw
+            client_id: zac_client
+            secret: openzaakZaakafhandelcomponentClientSecret
+          - identifier: documenten-test
+            label: Open Zaak - Documenten API
+            api_root: http://openzaak/documenten/api/v1/
+            api_type: drc
+            auth_type: zgw
+            client_id: zac_client
+            secret: openzaakZaakafhandelcomponentClientSecret
+          - identifier: catalogi-test
+            label: Open Zaak - Catalogi API
+            api_root: http://openzaak/catalogi/api/v1/
+            api_type: ztc
+            auth_type: zgw
+            client_id: zac_client
+            secret: openzaakZaakafhandelcomponentClientSecret
+          - identifier: besluiten-test
+            label: Open Zaak - Besluiten API
+            api_root: http://openzaak/besluiten/api/v1/
+            api_type: brc
+            auth_type: zgw
+            client_id: zac_client
+            secret: openzaakZaakafhandelcomponentClientSecret
+          - identifier: selectielijst
+            label: Open Zaak (public) - Selectielijst API
+            api_root: https://selectielijst.openzaak.nl/api/v1/
+            api_type: orc
+            auth_type: no_auth
+        api_configuration_enabled: true
+        api_configuration:
+          selectielijst_service_identifier: selectielijst
+        oidc_db_config_enable: false
+    # Compose overrides DJANGO_SETTINGS_MODULE to a custom docker_no2fa
+    # settings module (mounted from a vendored file) purely to disable
+    # enforced two-factor auth on the admin login form - upstream only
+    # reads DISABLE_2FA in a dev-only settings module that pulls in
+    # django-debug-toolbar (not installed in this production image), so
+    # that env var alone has no effect here. Replicated with the same
+    # ConfigMap+extraVolumes+extraVolumeMounts pattern already used for
+    # openzaak's fake-test-document.pdf.
+    settings:
+      djangoSettingsModule: openarchiefbeheer.conf.docker_no2fa
+      secretKey: oabSecretKey
+      # Both hostnames from the compose parity table (plan.md) need to be
+      # here: this chart has only ONE native Ingress, and it routes
+      # exclusively to the nginx sidecar, which itself proxies
+      # /admin|oidc|static|assets|api/ to the backend and serves the SPA
+      # for everything else - so both "hostnames" really are the same
+      # nginx, just two Host-header entry points. Also feeds nginx's own
+      # server_name directive (same mechanism as our raw templates).
+      allowedHosts: openarchiefbeheer-web.local,openarchiefbeheer-ui.local
+      database:
+        host: postgres
+        port: 5432
+        username: openarchiefbeheer
+        password: openarchiefbeheer
+        name: openarchiefbeheer
+      # Plain HTTP ingress (no TLS) - the chart's own secure-cookie
+      # defaults (true) would make the browser silently refuse to send
+      # session/CSRF cookies back at all over our http:// hostnames.
+      cookie:
+        sessionCookieSecure: false
+        csrfCookieSecure: false
+      cors:
+        allowedOrigins: http://openarchiefbeheer-ui.local,http://openarchiefbeheer-web.local
+      csrf:
+        trustedOrigins: http://openarchiefbeheer-ui.local,http://openarchiefbeheer-web.local
+      cache:
+        default: redis:6379/0
+        axes: redis:6379/0
+        choices: redis:6379/0
+      celery:
+        brokerUrl: redis://redis:6379/0
+        # Set both: this chart's own configmap.yaml has a typo reading
+        # "resultBackendl" (not "resultBackend", which is what values.yaml
+        # itself declares) - found live, confirmed directly against the
+        # template. Setting only the correctly-spelled key would silently
+        # leave CELERY_RESULT_BACKEND empty.
+        resultBackend: redis://redis:6379/0
+        resultBackendl: redis://redis:6379/0
+      frontend:
+        apiUrl: http://openarchiefbeheer-web.local
+        apiPath: /api/v1
+        zaakUrlTemplate: "https://zac.local/zaken/{identificatie}"
+      frontendUrl: http://openarchiefbeheer-ui.local
+      requestsReadTimeout: "5000"
+    extraVolumes:
+      - name: no2fa-settings
+        configMap:
+          name: openarchiefbeheer-no2fa-settings
+    extraVolumeMounts:
+      - name: no2fa-settings
+        subPath: docker_no2fa.py
+        mountPath: /app/src/openarchiefbeheer/conf/docker_no2fa.py
+        readOnly: true
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: openarchiefbeheer-web.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+        - host: openarchiefbeheer-ui.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+    persistence:
+      existingClaim: openarchiefbeheer
+      storageClassName: ""
+      size: 10Gi
+
+  # --- openformulieren (aliased from the openforms chart) ---
   openformulieren:
     enabled: false
+    # also pulls in objecten + objecttypen + opennotificaties (compose's
+    # own "openformulieren" profile transitively enables all three - see
+    # top-level openformulieren.enabled's comment).
+    replicaCount: 1
+    worker:
+      replicaCount: 1 # compose runs openformulieren-celery
+    beat:
+      replicaCount: 1 # compose runs openformulieren-celery-beat, unlike opennotificaties
+    nginx:
+      replicaCount: 1 # compose runs openformulieren-nginx
+    flower:
+      enabled: false # chart default is true; not run in compose
+    tags:
+      redis: false
+    configuration:
+      job:
+        enabled: false # see plan.md step 5 scope note - openformulieren-init's demo-data seeding (BRP service link, klantinteracties API group, importing the test form) isn't replicated here
+      superuser:
+        username: admin
+        password: admin
+        email: admin@example.com
+    settings:
+      secretKey: openFormulierenSecretKey
+      allowedHosts: openformulieren-nginx.local,openformulieren-web.local
+      database:
+        host: postgres
+        port: 5432
+        username: openformulieren
+        password: openformulieren
+        name: openformulieren
+      cache:
+        default: redis:6379/2
+        axes: redis:6379/2
+        portalLocker: redis:6379/2
+      celery:
+        brokerUrl: redis://redis:6379/2
+        # Set both: see openklant/objecten/openarchiefbeheer's identical
+        # comment - this chart's own configmap.yaml has the same
+        # "resultBackendl" typo.
+        resultBackend: redis://redis:6379/2
+        resultBackendl: redis://redis:6379/2
+      csrf:
+        trustedOrigins:
+          - http://openformulieren-nginx.local
+          - http://openformulieren-web.local
+      cors:
+        allowAllOrigins: true
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: openformulieren-nginx.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+        - host: openformulieren-web.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+    persistence:
+      existingClaim: openformulieren
+      storageClassName: ""
+      size: 10Gi

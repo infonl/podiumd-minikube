@@ -1,0 +1,59 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+      annotations:
+        checksum/config: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/metrics/prometheus.yaml" | sha256sum }}
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.13.1
+          args:
+            - --config.file=/etc/prometheus.yaml
+            - --web.enable-remote-write-receiver
+            - --enable-feature=exemplar-storage
+          ports:
+            - name: http
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus.yaml
+              subPath: prometheus.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+{{- end }}

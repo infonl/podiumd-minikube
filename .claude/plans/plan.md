@@ -786,7 +786,7 @@ the PostGIS extension due to alphabetical script-ordering. All five are now
 resolved in the relevant sections above, not left as open gaps.
 
 **Step 0 (vendoring) is now done** — see `vendor/dimpact-zaakafhandelcomponent/NOTES.md`
-for exact provenance of every file. Notable findings during vendoring itself:
+for exact provenance of every file. Notable can  during vendoring itself:
 `00-create-databases.sql` needed a 10th database (`openformulieren`, missing
 from this plan's earlier "9 databases" phrasing), and the merged
 `01-seed-fixtures.sh` intentionally drops the original scripts' `useradd`
@@ -1089,3 +1089,135 @@ Next step: build order step 5 (layer in the optional profile groups -
 objecten, opennotificaties, openarchiefbeheer, openformulieren, metrics,
 itest - each following step 3's wiring pattern, not yet individually
 verified the way the core profile now has been).
+
+**Step 5 is now done** (values.yaml/templates wiring + `helm lint`/`helm
+template` verification with every profile flag on at once - not yet a live
+minikube deploy the way step 4 was for the core profile; that's the natural
+next verification pass, not yet done).
+
+Researched each remaining subchart directly (objecten/objecttypen,
+opennotificaties/openforms, openarchiefbeheer, plus the vendored metrics/itest
+assets) before wiring anything, the same way step 1 researched openzaak/pabc -
+this caught several real chart quirks that reading values.yaml alone would
+have missed:
+
+- **objecttypen** is fully stateless (no worker/beat/flower/persistence at
+  all) - only objecten itself has a real celery worker and its own PVC.
+  `create_required_objecttypen_job` (podiumd's own override, enabled by
+  default with placeholder credentials) has the same problem as openzaak's
+  `create_required_catalogi_job` - disabled for the same reason.
+- **openarchiefbeheer is genuinely 5 Deployments** (main/nginx/worker/beat/
+  flower), not the 2 ("web"/"ui") the plan's compose-derived naming implied -
+  nginx serves the SPA static files AND proxies `/api/` to the backend from
+  the *same* container, and there is only **one** native Ingress, routing
+  exclusively to nginx. Reproducing the two compose hostnames
+  (`-web.local`/`-ui.local`) means two `host` entries in that single
+  `ingress.hosts` list, both hitting the same nginx, plus both hostnames in
+  `settings.allowedHosts` (feeds both Django's ALLOWED_HOSTS and nginx's own
+  `server_name`).
+- **openarchiefbeheer needs a two-file custom-settings workaround**, mirroring
+  openzaak's test-PDF initContainer trick from step 3: compose overrides
+  `DJANGO_SETTINGS_MODULE` to a vendored `docker_no2fa.py` file purely to
+  disable enforced two-factor auth on the admin login form (the only
+  DISABLE_2FA-reading dev settings module pulls in django-debug-toolbar,
+  which isn't installed in the production image) - vendored the file,
+  mounted via the same `extraVolumes`/`extraVolumeMounts` + small ConfigMap
+  pattern, and set `settings.djangoSettingsModule` to point at it.
+  Also vendored (and lightly patched - `openzaak.local:8000` → `openzaak`)
+  compose's `data.yaml` into `configuration.data`, giving openarchiefbeheer
+  the same ZAC-client ZGW-consumers config compose provides via its
+  `openarchiefbeheer-web-init` container.
+- **opennotificaties needs RabbitMQ** - the only app here whose
+  `settings.celery.brokerUrl` points at anything other than the shared Redis
+  (`amqp://guest:guest@rabbitmq:5672//`, matching compose exactly). No
+  rabbitmq raw template existed yet - added one
+  (`templates/rabbitmq/deployment.yaml`), gated on
+  `podiumd.opennotificaties.enabled` (openformulieren's own profile never
+  actually uses rabbitmq itself - it only pulls in opennotificaties
+  transitively per compose's profile list, so gating on that one flag alone
+  is correct and sufficient).
+- **A real, reproducible typo bug in podiumd's own bundled charts**: found on
+  openarchiefbeheer first (`configmap.yaml` reads
+  `.Values.settings.celery.resultBackendl`, note the trailing "l" - but
+  `values.yaml` itself declares the correctly-spelled `resultBackend`),
+  then confirmed the *same* typo also affects **openklant** (already
+  deployed as a core app since step 3/4!), **objecten**, and **openforms**.
+  Fixed on all four by setting both the correctly-spelled and typo'd key to
+  the same value, so it works regardless of which the template actually
+  reads. openklant's case is currently a no-op in practice (its celery
+  worker is disabled, so nothing reads the result backend), but fixed
+  anyway for correctness/future-proofing.
+- **opennotificaties has an even less obvious variant of the same class of
+  bug**: `CELERY_RESULT_BACKEND` is defined *twice* on this one chart - once
+  in `configmap.yaml` (reading `settings.celery.resultBackend`, correctly
+  spelled) and once in `secret.yaml` (reading a completely different,
+  undocumented field, `settings.messageBroker.celeryResultBackend`). Both
+  render the same env var name via `envFrom` on the same container: whichever
+  Kubernetes resolves last wins, so both fields now carry the same value
+  rather than depending on that ordering. Also found live: `PUBLISH_BROKER_URL`
+  *does* have a real dedicated field (`settings.celery.publishBrokerUrl`,
+  in `secret.yaml`) - an early draft of this wiring assumed it didn't exist
+  and reached for the generic `extraEnvVars` passthrough instead; corrected
+  to use the real field, and confirmed `RABBITMQ_HOST` genuinely has no
+  field anywhere in this chart (and isn't needed - the app never reads it,
+  the full connection strings already carry everything required).
+- **`CACHE_OIDC` unconditionally rendered on two charts** (objecten,
+  opennotificaties) with no `{{- if }}` guard at all - compose never sets an
+  equivalent env var for either app, and leaving `settings.cache.oidc` unset
+  let podiumd's own untouched production default
+  (`redis-ha-master.podiumd.svc.cluster.local:...`) leak through into an
+  otherwise fully-parameterized manifest. Caught by grepping the fully
+  rendered manifest for `redis-ha-master`/`.podiumd.svc.cluster.local`/
+  `azurecr.io` across every profile at once after finishing the "known"
+  wiring - worth repeating as a check any time a new app is wired in, since
+  it catches exactly this class of "forgot one field" leak that reading
+  values.yaml alone won't reveal.
+- **Tempo's OTLP listener needs `0.0.0.0:4317`, not `tempo:4317`** - compose's
+  vendored `tempo.yaml` binds to the hostname `tempo`, which resolves to the
+  container's own IP there (bindable). In Kubernetes, `tempo` resolves to the
+  Service's ClusterIP instead, which isn't a local interface inside the pod -
+  binding would fail. Patched in the vendored copy.
+- **Prometheus's scrape target needed repointing** from compose's
+  `host.docker.internal:9990` (a host-level port mapping that doesn't exist
+  in-cluster) to a small extra Service, `zac-admin`, added specifically
+  because zac's own Service (rendered by the podiumd dependency) only
+  forwards its app port (80) - Kubernetes lets multiple Services select the
+  same pods, so this reaches the WildFly management port (9990) the
+  container already exposes without needing to touch the zac chart's own
+  Service definition at all (which has no `extraPorts`-style field to do
+  that anyway).
+- **ZAC's OTEL_EXPORTER_OTLP_ENDPOINT gap from step 3 is now actually fixed**,
+  not just documented as accepted: step 3 found the bundled zac chart
+  (1.0.251) hardcodes tracing on with no way to disable it, defaulting to a
+  nonexistent `<release>-opentelemetry-collector:4317`. Now that a real
+  otel-collector exists, `opentelemetry_zaakafhandelcomponent.endpoint` (a
+  values field that was already there, just unused) points traces at it
+  directly - metrics.enabled=false still leaves this pointed at nothing
+  (same harmless-retry behavior as before), but metrics.enabled=true now
+  actually works.
+- **WireMock's `__files` directories were never mounted at all before this
+  step** - the existing `mappings/`-only subPath pattern from step 2 didn't
+  need it since brp-personen-wiremock genuinely has zero `__files` content,
+  but smartdocuments/kvk/bag all do (including one binary `.docx` in
+  smartdocuments's set, needing `binaryData` rather than `.AsConfig`'s
+  plain-text `data`). Extended the same per-file subPath pattern to cover
+  both directories for all three itest-only sets.
+
+**Explicitly out of scope, not silently dropped** - each of these is a
+custom one-shot demo/fixture-seeding container in compose
+(`objecten-api-import`, `objecttypes-api-import`, `opennotificaties-init`,
+`openformulieren-init`) running the app image's own `init.sh` or a bespoke
+multi-step shell script against custom-vendored fixture data, not the
+generic `configuration.data`/django-setup-configuration mechanism the other
+apps use - replicating them would mean vendoring several more
+fixtures/init-script directories and writing custom Helm Jobs per app,
+materially larger than "wire this profile's settings" (step 3's scope for
+this step). Each of these apps still boots, migrates, and is reachable via
+its own Ingress hostname without them - only the specific demo/test data
+those containers seed is missing (openforms's own admin superuser *is*
+still created, via `configuration.superuser`, just without the BRP service
+link / klantinteracties API group / demo form import).
+
+Next step: a live minikube verification pass for these six profile groups,
+following step 4's pattern (deploy, watch pods, check reachability) - not
+yet done for anything beyond the core profile.

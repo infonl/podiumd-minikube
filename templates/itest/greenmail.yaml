@@ -1,0 +1,83 @@
+{{- if .Values.itest.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greenmail
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: greenmail
+  template:
+    metadata:
+      labels:
+        app: greenmail
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: greenmail
+          image: greenmail/standalone:2.1.10
+          env:
+            - name: GREENMAIL_OPTS
+              value: >-
+                -Dgreenmail.smtp.hostname=0.0.0.0
+                -Dgreenmail.smtp.port=25
+                -Dgreenmail.hostname=0.0.0.0
+                -Dgreenmail.auth.disabled
+                -Dgreenmail.verbose
+          ports:
+            - name: smtp
+              containerPort: 25
+            - name: imap
+              containerPort: 143
+            - name: web
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: greenmail
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: greenmail
+  ports:
+    - name: smtp
+      port: 25
+      targetPort: smtp
+    - name: imap
+      port: 143
+      targetPort: imap
+    - name: web
+      port: 8080
+      targetPort: web
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: greenmail
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: greenmail.local
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: greenmail
+                port:
+                  name: web
+{{- end }}

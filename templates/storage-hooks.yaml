@@ -2,20 +2,31 @@
 Pre-provisions a PersistentVolume + PersistentVolumeClaim for every
 podiumd-nested app that has its own <app>-storage.yaml template hardcoding
 the Azure Files CSI driver (openzaak, openklant, opennotificaties,
-openarchiefbeheer, openformulieren) - see plan.md's "PodiumD's Azure-CSI
-storage templates" section for why this is needed and how it works.
+openarchiefbeheer, openformulieren, objecten) - see plan.md's "PodiumD's
+Azure-CSI storage templates" section for why this is needed and how it works.
 
 Named to match podiumd's own defaults exactly (verified: persistence.
 existingClaim is already just the app name, persistence.size is already
-10Gi for every one of these apps) - podiumd's own <app>-storage.yaml then
-finds these already existing via its own `lookup` checks and skips creating
-its broken Azure-CSI ones.
+10Gi for every one of these apps, including objecten - podiumd's own
+override raises it from the objecten chart's own 1Gi default) - podiumd's
+own <app>-storage.yaml then finds these already existing via its own
+`lookup` checks and skips creating its broken Azure-CSI ones.
 
-Ranges over all five possible apps but only renders for whichever are
+Note: this always creates a ReadWriteOnce PV/PVC pair, even though
+podiumd's own competing Azure-CSI objects request ReadWriteMany. That's
+deliberate, not a mismatch to fix: a single-replica app on a single-node
+minikube VM never needs multi-writer access, and RWO is what minikube's
+`standard`/hostPath-backed storage actually supports well. The two specs
+*needing* to differ is exactly what makes Kubernetes' immutable-PVC-spec
+check reject podiumd's competing objects on every subsequent `kubectl
+apply` (verified live in step 4) - matching access modes would remove that
+protection, not strengthen it.
+
+Ranges over all six possible apps but only renders for whichever are
 actually enabled, so turning on a profile flag in values.yaml (step 5) is
 enough - no template changes needed later.
 */}}
-{{- range $app := list "openzaak" "openklant" "opennotificaties" "openarchiefbeheer" "openformulieren" }}
+{{- range $app := list "openzaak" "openklant" "opennotificaties" "openarchiefbeheer" "openformulieren" "objecten" }}
 {{- if (index $.Values.podiumd $app).enabled }}
 apiVersion: v1
 kind: PersistentVolume
