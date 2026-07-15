@@ -798,10 +798,23 @@ regardless). Both are corrected in the vendored files and in `NOTES.md`.
 `scripts/set-podiumd-version.sh` all exist and `helm lint`/`helm template`
 both pass cleanly. The version-swap script was tested end-to-end (actually
 ran `helm dependency update` against a different version and back, not just
-read for syntax). `charts/podiumd-4.8.1.tgz` and `Chart.lock` are committed
-deliberately (not gitignored), matching `podiumd-infra`'s own convention, so
-`helm template`/`helm install` work offline as long as the podiumd version
-isn't being changed.
+read for syntax). `charts/podiumd-4.8.1.tgz` and `Chart.lock` were originally
+committed deliberately (not gitignored), matching `podiumd-infra`'s own
+convention, so `helm template`/`helm install` would work offline without a
+`helm dependency update` step first.
+
+**Reversed after step 5** (`charts/*.tgz` now gitignored, `Chart.lock` still
+committed): the offline-reproducibility argument no longer holds once
+`scripts/provision-cluster.sh` exists and already runs `helm dependency
+update` itself as part of provisioning any cluster - there's no scenario
+left where having the tarball pre-committed actually saves that step. Worse,
+it turned out to be the direct root cause of a real bug hit live in step 4:
+Helm's own release record embeds the entire resolved chart, including this
+3.87MB dependency, which exceeds Kubernetes' hardcoded 3MB API request-size
+limit and is exactly why `helm install` had to be abandoned for
+`helm template | kubectl apply` for the rest of this project. `Chart.lock`
+stays committed - it's a small text file (name/version/repository/digest
+only) with none of the tarball's downsides, genuinely useful for pinning.
 
 Corrected two things this plan had wrong, found only by actually rendering
 the chart against real values rather than reading source: there is **no**
