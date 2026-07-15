@@ -41,6 +41,7 @@ reflects the real cluster state.
 | `test_database.py` | All expected Postgres databases exist, PostGIS is installed where needed, ZAC's own ZGW client credentials are seeded in Open Zaak |
 | `test_metrics.py` | Grafana's provisioned datasources and Prometheus's scrape targets are actually healthy |
 | `test_opa_policies.py` | The `opa-tests` Job succeeded |
+| `test_pabc_migrations_guard.py` | `scripts/apply-pabc-migrations.sh` actually refuses to recreate the (non-idempotent) pabc-migrations Job when PABC's database already has data |
 
 ## Known caveats
 
@@ -52,3 +53,10 @@ reflects the real cluster state.
 - `test_database.py` shells out to `kubectl exec` into the postgres pod
   rather than connecting directly — no port-forward is assumed to be
   running.
+- `test_pabc_migrations_guard.py`'s second test genuinely mutates cluster
+  state (it deletes the real `pabc-migrations-1` Job to reach the scenario
+  the guard protects against), unlike every other test in this suite,
+  which is read-only. It's fully recoverable - the `finally` block restores
+  the Job via `--force`, reloading the same seed dataset the database
+  already had - but be aware if running this suite against a cluster
+  someone else is actively using.
