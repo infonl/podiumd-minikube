@@ -37,10 +37,26 @@ spec:
           image: openpolicyagent/opa:1.18.2
           args: ["test", "/home/policies", "/home/tests"]
           volumeMounts:
+            # Found live: mounting the whole ConfigMap as one directory
+            # makes `opa test`'s own recursive directory walk see each
+            # .rego file three times (Kubernetes ConfigMap volumes expose
+            # every file through the visible name, a "..data" symlink
+            # target, and a timestamped directory - `opa test` doesn't know
+            # to skip the hidden ones), producing "multiple default rules"
+            # errors for rules that only exist once. Same per-file subPath
+            # pattern as templates/wiremock/deployment.yaml avoids this
+            # entirely - each mount is a single real file, no symlink
+            # structure for the directory walk to trip over.
+            {{- range $path, $_ := .Files.Glob "vendor/dimpact-zaakafhandelcomponent/policies/main/*.rego" }}
             - name: policies
-              mountPath: /home/policies
+              mountPath: /home/policies/{{ base $path }}
+              subPath: {{ base $path }}
+            {{- end }}
+            {{- range $path, $_ := .Files.Glob "vendor/dimpact-zaakafhandelcomponent/policies/test/*.rego" }}
             - name: tests
-              mountPath: /home/tests
+              mountPath: /home/tests/{{ base $path }}
+              subPath: {{ base $path }}
+            {{- end }}
       volumes:
         - name: policies
           configMap:

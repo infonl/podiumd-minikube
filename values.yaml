@@ -511,6 +511,12 @@ podiumd:
   objecten:
     enabled: false
     replicaCount: 1
+    # Found live: chart default (3.6.0) differs from compose's pinned
+    # version (3.6.1) - matches the fixture/API shape our vendored SQL
+    # expects. No digest suffix (unlike some other apps here) so no
+    # separate digest-stripping fix is needed for this one.
+    image:
+      tag: "3.6.1"
     worker:
       # Compose runs objecten-api-celery as a real worker - unlike
       # openzaak/openklant's workers (which compose never runs at all), this
@@ -568,6 +574,12 @@ podiumd:
   objecttypen:
     enabled: false
     replicaCount: 1
+    # Digest-qualified chart default fails to pull in-cluster (no network
+    # access) - same class of fix as zac/curlImage/etc in earlier steps.
+    # Version (3.4.2) already matches compose; only the digest needed
+    # stripping.
+    image:
+      tag: "3.4.2"
     # No worker/beat/flower/redis blocks exist on this chart at all - it's
     # a stateless API with no celery use.
     configuration:
@@ -605,6 +617,10 @@ podiumd:
   opennotificaties:
     enabled: false
     replicaCount: 1
+    # Found live: chart default (1.16.0) differs from compose's pinned
+    # version (1.15.0).
+    image:
+      tag: "1.15.0"
     worker:
       replicaCount: 1 # compose runs opennotificaties-celery as a real worker
     beat:
@@ -686,6 +702,14 @@ podiumd:
     # Maykin-family apps, this one's chart defaults already match compose's
     # single-instance topology exactly, including running celery/beat/flower
     # since compose really does run all of those as separate containers).
+    # Digest-qualified defaults fail to pull in-cluster (no network access) -
+    # same class of fix as zac/curlImage/etc in earlier steps. Versions
+    # already match compose; only the digests needed stripping.
+    image:
+      tag: "2.0.0"
+    nginx:
+      image:
+        tag: "1.31.1"
     tags:
       redis: false
     configuration:
@@ -828,12 +852,18 @@ podiumd:
     # own "openformulieren" profile transitively enables all three - see
     # top-level openformulieren.enabled's comment).
     replicaCount: 1
+    # Found live: chart default (3.4.9, digest-qualified - fails to pull
+    # in-cluster anyway) differs from compose's pinned version (3.5.4).
+    image:
+      tag: "3.5.4"
+    nginx:
+      image:
+        tag: "1.31.1" # digest stripped, same class of fix as above
+      replicaCount: 1 # compose runs openformulieren-nginx
     worker:
       replicaCount: 1 # compose runs openformulieren-celery
     beat:
       replicaCount: 1 # compose runs openformulieren-celery-beat, unlike opennotificaties
-    nginx:
-      replicaCount: 1 # compose runs openformulieren-nginx
     flower:
       enabled: false # chart default is true; not run in compose
     tags:

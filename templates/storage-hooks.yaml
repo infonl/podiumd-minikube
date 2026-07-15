@@ -26,7 +26,8 @@ Ranges over all six possible apps but only renders for whichever are
 actually enabled, so turning on a profile flag in values.yaml (step 5) is
 enough - no template changes needed later.
 */}}
-{{- range $app := list "openzaak" "openklant" "opennotificaties" "openarchiefbeheer" "openformulieren" "objecten" }}
+{{- $apps := list "openzaak" "openklant" "opennotificaties" "openarchiefbeheer" "openformulieren" "objecten" }}
+{{- range $app := $apps }}
 {{- if (index $.Values.podiumd $app).enabled }}
 apiVersion: v1
 kind: PersistentVolume
@@ -69,4 +70,57 @@ spec:
       storage: 10Gi
 ---
 {{- end }}
+{{- end }}
+{{/*
+DirectoryOrCreate hostPath volumes are created root:root 0755 - fine for
+apps that only read/append existing files, but found live: openforms (UID
+1000, non-root) needs to `cp -r` fresh static assets into its share of this
+storage on every boot, and its chart has no initContainer field at all to
+chown it first (unlike our own Solr/Postgres raw templates, which fix this
+the same way via an in-pod busybox chown). Kubernetes' own fsGroup
+mechanism doesn't reliably apply to bare hostPath-sourced PVs either
+(confirmed live - the directory stayed root:root even with fsGroup: 1000 set).
+One Job, not one per app, chmods every enabled app's volume to world-writable
+- simplest fix that doesn't need to know each app's own UID/GID, and safe to
+re-run (chmod is idempotent). Not annotated as a Helm hook since this whole
+mechanism only runs via `kubectl apply` (see plan.md's Helm-hooks-don't-fire
+note) - ordering comes from applying this file before the rest of the
+manifest, same as the PV/PVC objects above.
+*/}}
+{{- $anyEnabled := false }}
+{{- range $app := $apps }}{{- if (index $.Values.podiumd $app).enabled }}{{- $anyEnabled = true }}{{- end }}{{- end }}
+{{- if $anyEnabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: storage-permissions-fix
+  labels:
+    {{- include "podiumd-minikube.labels" $ | nindent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: storage-permissions-fix
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: chmod
+          image: busybox:1.38.0
+          command: ["sh", "-c", "chmod -R 0777 /mnt/*"]
+          volumeMounts:
+            {{- range $app := $apps }}
+            {{- if (index $.Values.podiumd $app).enabled }}
+            - name: {{ $app }}
+              mountPath: /mnt/{{ $app }}
+            {{- end }}
+            {{- end }}
+      volumes:
+        {{- range $app := $apps }}
+        {{- if (index $.Values.podiumd $app).enabled }}
+        - name: {{ $app }}
+          persistentVolumeClaim:
+            claimName: {{ $app }}
+        {{- end }}
+        {{- end }}
 {{- end }}

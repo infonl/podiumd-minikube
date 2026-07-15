@@ -1221,3 +1221,68 @@ link / klantinteracties API group / demo form import).
 Next step: a live minikube verification pass for these six profile groups,
 following step 4's pattern (deploy, watch pods, check reachability) - not
 yet done for anything beyond the core profile.
+
+**Live verification of step 5 is now done**, on the same running cluster
+from step 4 (all core pods still healthy throughout, no regression). All 168
+new/changed objects applied cleanly via `kubectl apply` (plus the same 12
+expected "immutable spec" errors for the 6 apps now covered by the
+storage-hook workaround), every pod reached `Running`/`Completed`, and all 9
+new Ingress hostnames plus the 5 core ones responded correctly. Found and
+fixed five more real, live-only issues:
+
+- **Five apps were running the wrong image version** entirely -
+  `values.yaml` never set `image.tag` for objecten/objecttypen/
+  opennotificaties/openarchiefbeheer/openformulieren at all, so each
+  silently used whatever the bundled chart's own default happened to be
+  (objecten 3.6.0 vs compose's 3.6.1; opennotificaties 1.16.0 vs 1.15.0;
+  openforms 3.4.9 vs 3.5.4 - three of these were also still
+  digest-qualified, failing to pull in-cluster the same way zac's image did
+  in step 4). Fixed by setting every one explicitly, pulling + loading all
+  12 net-new images (all missing from minikube's cache, same as every
+  image in step 4) - one `minikube image load` failed with "no space left
+  on device" from running 12 in parallel and needed a sequential retry
+  after clearing stale audit logs from `/tmp`.
+- **A permission problem the openzaak/openklant/openarchiefbeheer apps
+  never hit**: openformulieren's own entrypoint script `cp -r`s built-in
+  static assets into `/srv/static/` (a mount backed by our hostPath PVC) on
+  every boot, and this chart has no initContainer field at all to chown it
+  first. Kubernetes' own `fsGroup: 1000` podSecurityContext (already the
+  chart's default) does **not** reliably apply to bare hostPath-sourced
+  PVs - confirmed live, the directory stayed `root:root` after mount. Fixed
+  generally, not just for this one app: added a `storage-permissions-fix`
+  Job to `storage-hooks.yaml` that `chmod -R 0777`s every enabled app's
+  hostPath volume once, before the main manifest applies (applied as part
+  of the same pre-step that already creates the PV/PVC pairs) - covers any
+  future app hitting the same class of problem, not just openformulieren.
+- **`opa-tests` failed with spurious "multiple default rules" errors**:
+  mounting the whole policies ConfigMap as one directory let `opa test`'s
+  own recursive directory walk see each `.rego` file three times
+  (Kubernetes ConfigMap volumes expose every file through the visible
+  name, a `..data` symlink target, and a timestamped directory - `opa
+  test` doesn't know to skip the hidden ones). Fixed with the same
+  per-file `subPath` mounting pattern already used for wiremock's
+  mappings - one real file per mount point, no symlink structure left for
+  the directory walk to trip over. Confirmed passing after the fix:
+  **261/261**.
+- **`rabbitmq`'s readiness probe** hit the same default-`timeoutSeconds`
+  problem as Solr's did in step 4 (`rabbitmq-diagnostics -q ping` timing
+  out after the default 1s) - fixed the same way, `timeoutSeconds: 5`.
+- **A stale `openarchiefbeheer-config` Job** (created before the image-tag
+  fix landed, and Jobs are immutable like `pabc-migrations-1` was in step
+  4) needed manual deletion to pick up the corrected image on the next
+  apply.
+
+Confirmed working end-to-end, not just "pods are Running": Grafana's own
+`/api/datasources` lists both Prometheus and Tempo, and Prometheus's own
+`/api/v1/targets` shows both scrape targets (`zac-admin:9990/metrics`,
+`tempo:3200/metrics`) reporting `health: up` - the whole zac→otel-collector
+wiring and the new `zac-admin` Service both actually work, not just render.
+openformulieren's own root path (`/`) returns a real, app-rendered 403 (not
+an infra-level block) - expected given no demo form was ever imported
+(documented scope decision above); its actual admin login page
+(`/admin/classic-login/`) returns `200` normally.
+
+Next step: none required for the six profile groups themselves - all now
+verified live. Remaining open items are the explicitly-scoped-out
+demo/fixture-seeding gaps noted above, should a fuller compose-parity pass
+ever be wanted.
