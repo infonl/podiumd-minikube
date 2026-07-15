@@ -1377,3 +1377,28 @@ confirmed it derives the same 29 images either way, and that
 `helm dependency update` now has to run *before* that derivation (moved
 up from step 4 to step 3 in the script), since deriving the image list
 needs the podiumd chart tarball to already be present.
+
+**Added `scripts/deploy.sh`** - the "render + apply the chart" step
+`provision-cluster.sh`'s own final message pointed at, previously a bare
+`helm template | strip-image-digests.py | kubectl apply` command typed by
+hand throughout steps 4-5 (plus a separate, easy-to-forget earlier apply of
+just `templates/storage-hooks.yaml` first, for the reasons explained in
+that file's own comments). Defaults to the core profile only (matching
+`values.yaml`'s own default); `--full` enables every optional profile.
+Classifies the expected "spec is immutable" PV/PVC errors (computed from
+the same render, not a hardcoded count, so it's correct regardless of
+which profiles `--full` or plain `--set` flags select) as success rather
+than a failure needing investigation.
+
+Found live while testing it against both modes on the already-`--full`-deployed
+cluster: `storage-hooks.yaml`'s own `storage-permissions-fix` Job (added in
+step 5's live-verification pass, alongside the PV/PVC pairs) has a volume
+mount list that depends on which profiles are enabled - switching between
+`--full` and the default mode on a cluster already deployed the other way
+hits Job immutability head-on ("field is immutable"), aborting the whole
+script under `set -e`. Fixed by having `deploy.sh` unconditionally delete
+and recreate this one Job every run, before applying anything else -
+unlike `pabc-migrations` (see `scripts/apply-pabc-migrations.sh`'s own
+guard for why *that* one specifically must never be recreated blindly),
+this Job only ever runs an idempotent `chmod`, so there's nothing it could
+lose by being recreated freely.

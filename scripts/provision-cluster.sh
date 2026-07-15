@@ -10,9 +10,7 @@
 #      minikube - its inner Docker has no internet access at all, so any
 #      image not already loaded fails to pull once a pod actually needs it
 #
-# After this finishes: render + apply the chart (see plan.md's Verification
-# section for the `helm template | scripts/strip-image-digests.py |
-# kubectl apply` workflow this project uses instead of `helm install`), then
+# After this finishes: scripts/deploy.sh to render + apply the chart, then
 # scripts/setup-tunnel.sh for external reachability.
 #
 # Usage:
@@ -136,5 +134,5 @@ fi
 
 echo
 echo "Cluster provisioned. Next steps:"
-echo "  1. Render + apply the chart (see plan.md's Verification section)."
+echo "  1. ./scripts/deploy.sh (or ./scripts/deploy.sh --full for every optional profile)."
 echo "  2. ./scripts/setup-tunnel.sh for external reachability."

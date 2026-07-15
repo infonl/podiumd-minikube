@@ -7,10 +7,9 @@ repeatable pytest suite.
 
 ## Prerequisites
 
-- The chart is deployed to the `podiumd-minikube` namespace (see the repo's
-  `.claude/plans/plan.md` "Verification" section for the
-  `helm template | scripts/strip-image-digests.py | kubectl apply` workflow
-  this project uses).
+- The chart is deployed to the `podiumd-minikube` namespace, e.g. via
+  `../scripts/deploy.sh --full` (all optional profiles need to be running
+  for the full suite to pass, not just the core ones).
 - `kubectl` is configured against the cluster (current context).
 - Traefik has a real LoadBalancer external IP — run `../scripts/setup-tunnel.sh`
   first if `kubectl get svc traefik -n traefik` shows `<pending>`.
