@@ -1,0 +1,7 @@
+# Helm
+charts/*.tgz
+Chart.lock
+.helmignore
+
+# OS
+.DS_Store
