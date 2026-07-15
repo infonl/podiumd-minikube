@@ -8,6 +8,15 @@ here is a live reference — this project never reads
 
 ## Copied verbatim
 
+- `openzaak/fake-test-document.pdf`
+  ← `scripts/docker-compose/imports/openzaak/uploads/fake-test-document.pdf`.
+  Missed in the initial step 0 pass (only added once step 3 needed it) -
+  embedded as a ConfigMap `binaryData` entry (`.Files.Get | b64enc`) and
+  mounted via `subPath` directly at the three target paths inside
+  `/app/private-media`, since the bundled `openzaak` chart has no
+  `initContainers`/`extraInitContainers` support at all (only
+  `extraVolumes`/`extraVolumeMounts`, which turned out sufficient - see
+  `plan.md`'s step 3 notes).
 - `wiremocks/{brp-personen-wiremock,smartdocuments-wiremock,kvk-wiremock,bag-wiremock}/`
   ← `scripts/docker-compose/imports/{same-name}/` (full `mappings`/`__files`
   directories, plus each service's own `README.md`).

@@ -886,3 +886,55 @@ Next step: build order step 3 (wire the podiumd-nested core apps' remaining
 settings — this was largely already done in step 1's `values.yaml`, so step 3
 is mostly the openzaak test-PDF initContainer plus a final pass confirming
 everything boots together).
+
+**Step 3 is now done.**
+
+The test-PDF mechanism turned out simpler than planned: checked the actual
+bundled `openzaak` chart's `deployment.yaml` directly and it has **no**
+`initContainers`/`extraInitContainers` support at all — but it does have
+`extraVolumes`/`extraVolumeMounts` (real, `tpl`-rendered extension points).
+Vendored `fake-test-document.pdf` (missed in step 0 — added now, as a
+`binaryData` ConfigMap via `.Files.Get | b64enc`) and mounted it three times
+via `subPath` directly at the three target paths inside the existing
+`/app/private-media` volume — no initContainer needed at all.
+
+Then ran a systematic check: extracted every env var name `docker-compose.yaml`
+sets for `zac`/`openklant`/`pabc` and diffed against what actually renders,
+rather than trusting step 1's values.yaml was complete. Found and fixed four
+real gaps this way:
+- `BRON_ORGANISATIE_RSIN`/`VERANTWOORDELIJKE_ORGANISATIE_RSIN` were entirely
+  missing from step 1 (`organizations.bron.rsin`/`organizations.
+  verantwoordelijke.rsin`) — silently defaulted to `"000000000"`.
+- `openklant.settings.secretKey` was left at its empty-string chart default —
+  now set to `openZaakSecretKey`, matching compose exactly (yes, compose
+  really does reuse openzaak's own secret key literally there — a
+  copy-paste artifact in compose itself).
+- `openklant.settings.cache.default`/`.axes` were missing entirely (only
+  `celery.brokerUrl`/`.resultBackend` had been set in step 1) — checked the
+  chart's own `configmap.yaml` directly and confirmed `tags.redis: false`
+  routes `CACHE_DEFAULT`/`CACHE_AXES` through these fields specifically, not
+  through `celery.*` — would have pointed Django's cache backend at nothing.
+- `pabc.settings.oidc.requireHttps` defaults to `true` — would have rejected
+  every token from our HTTP-only Keycloak outright, breaking PABC's login
+  entirely. Set to `false`, matching compose's own `Oidc__RequireHttps:
+  "false"`.
+
+Also confirmed two things that look like gaps but aren't fixable and are
+being accepted as-is, both tied to the exact zac chart version (1.0.251)
+podiumd 4.8.1 bundles — verified directly against that bundled chart's own
+templates, not the current (newer) `charts/zac` in
+`dimpact-zaakafhandelcomponent`:
+- `auth.enablePkce` is a silent no-op — the bundled version's `config.yaml`
+  has no `AUTH_ENABLE_PKCE` line at all (a newer feature not present in this
+  older, version-locked chart). Left set anyway — harmless, and takes effect
+  automatically if a future podiumd version bundles a newer zac chart.
+- `OTEL_SDK_DISABLED` is hardcoded `"false"` with no override, and
+  `OTEL_EXPORTER_OTLP_ENDPOINT` defaults to a nonexistent collector service
+  (disabled above). ZAC's JVM will harmlessly retry failed trace exports in
+  the background — noisy log warnings, no functional impact, no values-level
+  fix exists for this specific chart version.
+
+Next step: build order step 4 (verify the stack actually boots on a real
+minikube cluster and the login/OIDC flow works end-to-end through
+`http://zac.local` — the first point in this project where anything gets
+deployed to a live cluster rather than just rendered).

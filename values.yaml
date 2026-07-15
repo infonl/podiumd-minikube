@@ -90,6 +90,13 @@ podiumd:
       clientId: zaakafhandelcomponent
       secret: keycloakZaakafhandelcomponentClientSecret
       sslRequired: none
+      # Verified against the actual zac chart version bundled inside podiumd
+      # 4.8.1 (1.0.251, older than this repo's current charts/zac): its
+      # config.yaml template has no AUTH_ENABLE_PKCE line at all - this
+      # setting is a silent no-op on the currently-pinned podiumd version.
+      # Left set anyway since it's harmless and matches compose's own intent;
+      # takes effect automatically if a newer podiumd version bundles a zac
+      # chart that supports it.
       enablePkce: true
     keycloak:
       adminClient:
@@ -99,6 +106,11 @@ podiumd:
       code: "9999"
       naam: FakeZacGemeente
       mail: gemeente-zac-test@example.com
+    organizations:
+      verantwoordelijke:
+        rsin: "316245124"
+      bron:
+        rsin: "123443210"
     mail:
       smtp:
         server: in-v3.mailjet.com
@@ -164,6 +176,14 @@ podiumd:
       enabled: false # podiumd's own override defaults this to true (unlike charts/zac's own quiet false default) - we use a plain Solr Deployment instead, see templates/solr.yaml
     opentelemetry-collector:
       enabled: false # renders unexpectedly without this override (verified via --set) even though charts/zac's own default is false - matches our own metrics.enabled=false profile flag; not otherwise wired to it since this is a separate, unrelated otel-collector instance from the one in templates/metrics/
+    # Known, accepted limitation (not fixable via values): the bundled zac
+    # chart version (1.0.251) hardcodes OTEL_SDK_DISABLED: "false" with no
+    # override, and defaults OTEL_EXPORTER_OTLP_ENDPOINT to
+    # http://<release>-opentelemetry-collector:4317 - a service that doesn't
+    # exist since opentelemetry-collector.enabled is false above. ZAC's JVM
+    # will harmlessly retry failed trace exports in the background (noisy
+    # log warnings, no functional impact). No values-level fix exists for
+    # this specific chart version.
     ingress:
       enabled: true
       className: traefik
@@ -204,6 +224,29 @@ podiumd:
       celery:
         brokerUrl: redis://redis:6379/1
         resultBackend: redis://redis:6379/1
+    # Compose's openzaak.local service copies a vendored test PDF into
+    # /app/private-media/uploads/2023/{10,11,12}/ before starting (see
+    # copy-test-pdf-and-start-openzaak.sh, referenced by the
+    # 07-setup-zac-config-after.sql fixture). This chart has no
+    # initContainers/extraInitContainers support at all (checked its
+    # deployment.yaml directly), but extraVolumes/extraVolumeMounts do exist
+    # and are tpl-rendered - mounting the same ConfigMap-backed file via
+    # subPath at all three target paths achieves the same result without
+    # needing an initContainer.
+    extraVolumes:
+      - name: fake-test-document
+        configMap:
+          name: openzaak-fake-test-document
+    extraVolumeMounts:
+      - name: fake-test-document
+        mountPath: /app/private-media/uploads/2023/10/fake-test-document.pdf
+        subPath: fake-test-document.pdf
+      - name: fake-test-document
+        mountPath: /app/private-media/uploads/2023/11/fake-test-document.pdf
+        subPath: fake-test-document.pdf
+      - name: fake-test-document
+        mountPath: /app/private-media/uploads/2023/12/fake-test-document.pdf
+        subPath: fake-test-document.pdf
     ingress:
       enabled: true
       className: traefik
@@ -237,6 +280,13 @@ podiumd:
         username: openklant
         password: openklant
         name: openklant
+      # Matches docker-compose.yaml's openklant.local value exactly (yes,
+      # it really does reuse openzaak's own secret key literally - a
+      # copy-paste artifact in compose itself, not something we introduced).
+      secretKey: openZaakSecretKey
+      cache:
+        default: redis:6379/0
+        axes: redis:6379/0
       celery:
         brokerUrl: redis://redis:6379/2
         resultBackend: redis://redis:6379/2
@@ -269,6 +319,7 @@ podiumd:
         clientId: pabc
         clientSecret: pabcClientSecret
         functioneelBeheerderRole: administrator
+        requireHttps: false # defaults to true - would reject our HTTP-only Keycloak's tokens entirely; matches compose's own Oidc__RequireHttps: "false"
       keycloakAdmin:
         clientId: pabc-admin-client
         clientSecret: pabcAdminClientSecret

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openzaak-fake-test-document
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+binaryData:
+  fake-test-document.pdf: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/openzaak/fake-test-document.pdf" | b64enc }}
