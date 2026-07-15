@@ -38,7 +38,14 @@ spec:
               cpu: 50m
               memory: 128Mi
             limits:
-              memory: 256Mi
+              # Found live: 256Mi got OOMKilled (exit 137) under normal
+              # steady-state load with just opennotificaties + its worker
+              # connected - no traffic spike needed. RabbitMQ's own memory
+              # high watermark defaults to 40% of what it reads as the
+              # container's available memory, so 256Mi only gave it roughly
+              # 100MB of actual working room before it started struggling,
+              # and the Erlang VM's own baseline overhead ate into that too.
+              memory: 512Mi
           readinessProbe:
             exec:
               command: ["rabbitmq-diagnostics", "-q", "ping"]

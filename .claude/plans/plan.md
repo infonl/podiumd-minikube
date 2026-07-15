@@ -1402,3 +1402,80 @@ unlike `pabc-migrations` (see `scripts/apply-pabc-migrations.sh`'s own
 guard for why *that* one specifically must never be recreated blindly),
 this Job only ever runs an idempotent `chmod`, so there's nothing it could
 lose by being recreated freely.
+
+**Found live: `opennotificaties-worker` restarting every ~8 minutes**,
+visible only as a recurring liveness-probe kill/restart cycle, not an
+obvious crash - traced to two independent, stacked bugs:
+
+1. Kubernetes' legacy "service links" feature auto-injects a
+   `<SERVICE_NAME>_PORT`-style env var for every Service in the namespace
+   into every pod. The worker's image bundles its own
+   `/wait_for_rabbitmq.sh` entrypoint script (run before celery ever
+   starts), which expects `RABBITMQ_PORT` to be a bare port number - it
+   got the injected `tcp://10.96.128.255:5672` instead, and
+   `nc -vz $rabbit_host $rabbit_port` rejected it outright
+   ("port number invalid"), so the worker process never started at all.
+   Same root cause already fixed once for Solr's `SOLR_PORT` in step 4 -
+   generalized this time into a universal Helm post-renderer,
+   `scripts/disable-service-links.py`, chained into `deploy.sh`'s
+   `render()` after `strip-image-digests.py`, setting
+   `enableServiceLinks: false` on every Deployment/StatefulSet/
+   DaemonSet/CronJob pod spec regardless of which chart the object came
+   from (none of the podiumd-nested charts expose this as a values.yaml
+   field, so there's no override point to fix chart-by-chart). Deliberately
+   excludes bare `Job`: a Job's `spec.template` is immutable once created,
+   and patching it here broke `kubectl apply` outright on
+   `pabc-migrations-1` (protected from casual recreation on purpose - see
+   `apply-pabc-migrations.sh`) the first time this was tried with `Job`
+   included.
+2. With the injected variable no longer in the way, the *same* wait
+   script's own hardcoded fallback defaults
+   (`rabbit_host=${RABBITMQ_HOST:-localhost}`,
+   `rabbit_port=${RABBITMQ_PORT:-5672}`) turned out to still be in play -
+   `values.yaml`'s `podiumd.opennotificaties` block had a comment
+   incorrectly claiming `RABBITMQ_HOST` wasn't needed, on the reasoning
+   that `CELERY_BROKER_URL`/`PUBLISH_BROKER_URL` already carry the full
+   connection string. True for the Django app container, wrong for the
+   worker: its wait script reads `RABBITMQ_HOST`/`RABBITMQ_PORT`
+   completely separately, before celery (and therefore before either of
+   those settings) is ever consulted. Fixed by adding both as
+   `extraEnvVars` (`RABBITMQ_HOST=rabbitmq`, `RABBITMQ_PORT="5672"` -
+   no dedicated values.yaml field exists for either on this chart).
+
+Verified live: after both fixes, the worker's log shows
+`Connection to rabbitmq (10.96.128.255) 5672 port [tcp/amqp] succeeded!` →
+`RabbitMQ is up.` → `celery@... ready.`, restart count staying at 0.
+
+**Found live while verifying the above, unrelated second bug: RabbitMQ
+itself was being OOMKilled** (`exitCode: 137`, `reason: OOMKilled`) under
+completely normal steady-state load - just `opennotificaties` and its one
+worker connected, no traffic spike needed. Its container memory limit was
+256Mi; RabbitMQ's own memory high watermark defaults to 40% of what it
+reads as the container's available memory, so 256Mi only gave it roughly
+100MB of actual working room once the Erlang VM's own baseline overhead is
+subtracted. Raised the limit to 512Mi in `templates/rabbitmq/deployment.yaml`.
+Every worker that depends on RabbitMQ reconnects simultaneously each time
+it dies, which plausibly contributed to the wider resource pressure seen
+this session (see below) rather than being purely a symptom of it.
+
+**Found live, separately and more severely: the whole minikube Docker
+container hit its own memory limit** while iterating on the two fixes
+above (several `deploy.sh --full` re-applies in quick succession, each
+restarting many Deployments at once) - load average climbed past 900,
+`kubectl`/`minikube ssh` both became unresponsive with TLS handshake
+timeouts, and `docker stats` showed the `minikube` container itself at
+728% CPU / 7.799GiB of a 7.812GiB limit. That limit (`docker inspect
+--format '{{.HostConfig.Memory}}'` → exactly 8388608000 bytes = 8GiB) is
+half of the 16Gi this project's own `provision-cluster.sh` requests for a
+*newly created* profile - this cluster's profile predated that script (or
+was never resized), so it had silently been running the entire session on
+half the intended memory. Fixed live via `docker update --memory=12g
+--memory-swap=-1 minikube` - no restart, no pod kills, raises the cgroup
+ceiling on the already-running container. Confirmed this alone (before
+either RabbitMQ-related fix was even applied) dropped the container to
+561% CPU / 8.816GiB, and `kubectl get nodes`/`get pods` responded normally
+again within seconds. Not yet fixed at the source (`minikube start
+--memory=...` would need an actual stop/start cycle to persist this past a
+future full cluster recreation) - left as a live patch for now since a
+disruptive restart wasn't warranted mid-investigation on a cluster with
+real deployed state.

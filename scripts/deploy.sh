@@ -3,8 +3,9 @@
 # configured against - the "render + apply the chart" step
 # scripts/provision-cluster.sh points at as its own next step.
 #
-# Uses `helm template | strip-image-digests.py | kubectl apply`, not `helm
-# install`/`helm upgrade`: Helm's own release record embeds the entire
+# Uses `helm template | strip-image-digests.py | disable-service-links.py |
+# kubectl apply`, not `helm install`/`helm upgrade`: Helm's own release
+# record embeds the entire
 # resolved chart (including the ~3.87MB podiumd dependency), which exceeds
 # Kubernetes' hardcoded 3MB API request-size limit (see plan.md's step 4
 # notes - there's no flag to raise this limit in current Kubernetes
@@ -44,7 +45,8 @@ fi
 
 render() {
   helm template "${RELEASE_NAME}" "${CHART_DIR}" -n "${NAMESPACE}" "${EXTRA_SETS[@]}" "$@" \
-    | python3 "${CHART_DIR}/scripts/strip-image-digests.py"
+    | python3 "${CHART_DIR}/scripts/strip-image-digests.py" \
+    | python3 "${CHART_DIR}/scripts/disable-service-links.py"
 }
 
 echo "Ensuring namespace '${NAMESPACE}' exists..."

@@ -661,10 +661,23 @@ podiumd:
         resultBackend: redis://redis:6379/1
       messageBroker:
         celeryResultBackend: redis://redis:6379/1
-    # RABBITMQ_HOST has no dedicated values.yaml field on this chart at all
-    # (confirmed - it isn't referenced anywhere in its templates), and isn't
-    # needed: CELERY_BROKER_URL/PUBLISH_BROKER_URL above already carry the
-    # full connection string the app actually uses.
+    # Found live: this comment used to claim RABBITMQ_HOST/RABBITMQ_PORT
+    # weren't needed since CELERY_BROKER_URL/PUBLISH_BROKER_URL already
+    # carry the full connection string - true for the Django app itself,
+    # but wrong for the *worker* container specifically: its image bundles
+    # its own /wait_for_rabbitmq.sh entrypoint script, run before the
+    # celery process ever starts, which reads these two vars completely
+    # separately (`rabbit_host=${RABBITMQ_HOST:-localhost}`,
+    # `rabbit_port=${RABBITMQ_PORT:-5672}`) and defaults to localhost
+    # without them - meaning the worker never actually started at all,
+    # stuck retrying forever (only visible as a recurring liveness-probe
+    # kill/restart cycle, not an obvious crash). No dedicated values.yaml
+    # field exists for either on this chart, so set via extraEnvVars.
+    extraEnvVars:
+      - name: RABBITMQ_HOST
+        value: rabbitmq
+      - name: RABBITMQ_PORT
+        value: "5672"
     ingress:
       enabled: true
       className: traefik
