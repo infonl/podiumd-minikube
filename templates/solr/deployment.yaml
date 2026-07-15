@@ -16,6 +16,13 @@ spec:
       labels:
         app: solr
     spec:
+      # Kubernetes auto-injects <SERVICE_NAME>_PORT-style env vars for every
+      # Service in the namespace (legacy "service links" feature). Our own
+      # Service is named "solr", which collides with Solr's own SOLR_PORT
+      # config env var - found live: Solr crashed trying to parse the
+      # injected "tcp://10.x.x.x:8983" as an integer port number. Disabling
+      # this avoids the whole class of collision, not just this one.
+      enableServiceLinks: false
       # Matches compose's own "chown -R 8983:8983 /var/solr" step before
       # starting Solr as the non-root "solr" user - a fresh PVC otherwise
       # mounts owned by root, which the solr image's own non-root user can't
@@ -30,6 +37,13 @@ spec:
       containers:
         - name: solr
           image: solr:9.10.1-slim
+          # Matches compose's own "solr-precreate zac" command exactly - this
+          # is plain standalone Solr (no SolrCloud/Zookeeper), so ZAC's own
+          # createZacCore initContainer (which uses the SolrCloud-only
+          # Collections API) can't be used here; disabled in values.yaml
+          # (podiumd.zac.solr.createZacCore: false) in favor of creating the
+          # core ourselves at startup, the same way compose does.
+          command: ["solr-precreate", "zac"]
           env:
             - name: SOLR_JAVA_MEM
               value: "-Xms256m -Xmx512m -XX:ActiveProcessorCount=2"
@@ -48,6 +62,12 @@ spec:
               port: solr
             initialDelaySeconds: 10
             periodSeconds: 5
+            # Default timeoutSeconds (1s) is too tight here: kubelet's HTTP
+            # prober opens a fresh connection every probe (no keep-alive
+            # reuse), and that first-connection cold start measured ~2s live
+            # on this minikube VM - every probe was timing out even though
+            # the app itself responded successfully every time.
+            timeoutSeconds: 5
           volumeMounts:
             - name: data
               mountPath: /var/solr

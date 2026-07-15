@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pabc-mapping-data
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  pabc-mapping-data.json: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/pabc/pabc-mapping-data.json" | quote }}

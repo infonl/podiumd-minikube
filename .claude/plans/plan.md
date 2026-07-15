@@ -938,3 +938,154 @@ Next step: build order step 4 (verify the stack actually boots on a real
 minikube cluster and the login/OIDC flow works end-to-end through
 `http://zac.local` — the first point in this project where anything gets
 deployed to a live cluster rather than just rendered).
+
+**Step 4 is now done**: deployed live to a real minikube cluster (via
+`helm template | kubectl apply`, not `helm install` — see below for why),
+all 14 core-profile pods reached `Running`/`Ready`, and the full OIDC login
+flow was verified end-to-end through `http://zac.local` by replaying the
+browser's redirect chain with `curl` (cookie jar across hops): unauthenticated
+GET → 302 to Keycloak → login form (200) → credential POST → 302 with an
+authorization code → ZAC's own callback → final `200` on `zac-root`, the real
+Angular app shell, not the "Geen toestemming" (403) page. Confirmed with two
+different vendored test users (`raadpleger1newiam`, then
+`beheerder1newiam` after the PABC mapping-data fix below).
+
+Getting there took far more than a clean `helm install` - every fix below was
+found by actually watching pods fail live, not by re-reading values.yaml:
+
+- **Cluster infra, not the chart**: the local `helm` binary (v3.9.0) couldn't
+  parse the latest Traefik chart (needs Go 1.18+ template `break`) - pinned
+  Traefik to `--version 34.4.0` instead. Minikube's inner Docker has zero
+  network access even for `gcr.io/google-samples/hello-app` - every image
+  needed a host-side `docker pull` + `minikube image load` instead of
+  in-cluster pulls. Attempting to raise the Kubernetes API server's request
+  size limit (`--extra-config=apiserver.max-request-bytes=...`, to work
+  around Helm's release record embedding the whole 3.87MB vendored
+  `podiumd-4.8.1.tgz`) crash-looped the whole control plane, since that flag
+  was **removed** in Kubernetes v1.35.1 - recovered via a direct
+  `kube-apiserver.yaml` manifest edit + `kubeadm init phase addon all` to
+  restore CoreDNS/kube-proxy, then abandoned `helm install` for
+  `helm template | kubectl apply` for the rest of this step (the 3MB limit is
+  a hardcoded constant in this Kubernetes version, no flag exists at all).
+  Consequence: Helm hook/`lookup()` semantics needing a live release
+  (`storage-hooks.yaml`'s whole PV/PVC pre-provisioning mechanism) don't fire
+  under `kubectl apply` - worked around by applying those specific objects
+  first and relying on Kubernetes' own immutable-spec protection to reject
+  podiumd's competing Azure-CSI objects on every subsequent apply (the
+  resulting "Forbidden: spec is immutable" errors are expected, not
+  failures).
+- **`SOLR_PORT` service-link collision**: Kubernetes auto-injects
+  `<SERVICE_NAME>_PORT` env vars for every Service in the namespace: Solr
+  crashed parsing the injected `tcp://10.x.x.x:8983` as its own `SOLR_PORT`
+  config value. Fixed with `enableServiceLinks: false` on every raw pod
+  template (postgres, redis, keycloak, solr, wiremock) as a class fix, not
+  just for Solr.
+  `command: ["solr-precreate", "zac"]` (matching compose exactly) with
+  `podiumd.zac.solr.createZacCore: false`.
+- **Solr readiness probe flakiness**: cold TCP connections to Solr measured
+  ~2s live (kubelet's HTTP prober opens a fresh connection per probe, no
+  keep-alive reuse), but the probe never set an explicit `timeoutSeconds`,
+  defaulting to Kubernetes' built-in 1s - every probe attempt was destined to
+  time out even though the app itself always responded successfully. Fixed
+  with `timeoutSeconds: 5` on Solr's readinessProbe. Under genuine node
+  resource contention (multiple JVMs booting concurrently, load average 6+,
+  active swapping) this still occasionally flaps, but resolves itself once
+  concurrent boot activity settles - not a probe misconfiguration at that
+  point, just a genuinely loaded single-node VM.
+- **Five digest-qualified image references failed to pull**
+  (`nginxinc/nginx-unprivileged`, `ghcr.io/infonl/zaakafhandelcomponent`,
+  `gotenberg/gotenberg`, `openpolicyagent/opa`, `curlimages/curl`): kubelet's
+  exact-reference matching for `IfNotPresent` doesn't treat a tag-only
+  loaded image as satisfying a `repo:tag@sha256:digest` reference, so it
+  always attempts a live pull, which then fails (no network in-cluster).
+  Fixed with explicit tag-only overrides for each field
+  (`podiumd.zac.image.tag`, `.global.curlImage.tag`, `.opa.image.tag`,
+  `.office_converter.image.tag`, `podiumd.openzaak.nginx.image.tag`,
+  `podiumd.openklant.nginx.image.tag`). Also found `podiumd.zac.nginx.enabled:
+  true` is podiumd's own production-specific override (the underlying zac
+  chart's own default is `false`, matching compose's single-container
+  architecture) - disabled explicitly, which also sidesteps that image's
+  digest problem entirely.
+- **`openzaak-config`/`openklant-config` Jobs failing "No steps enabled,
+  aborting"**: with no `configuration.data` set for either app (matching
+  compose, which doesn't use django-setup-configuration for them at all), the
+  underlying management command treats "nothing to do" as an error. Fixed
+  with `configuration.job.enabled: false` for both.
+- **openzaak `SECRET_KEY` missing**: `podiumd.openzaak.settings.secretKey`
+  was left unset in step 3's pass (openklant's had already been fixed) -
+  `ImproperlyConfigured: SECRET_KEY must not be empty` on every request.
+  Fixed with `secretKey: openZaakSecretKey`, matching compose's own
+  (copy-pasted) literal value for both apps.
+- **openzaak's fixture-seeding script polling forever**: the vendored
+  `01-seed-fixtures.sh` waits for `accounts_user` with `username='admin'`
+  before applying openzaak's SQL fixtures (the ZGW API client credentials ZAC
+  itself needs), but nothing in this chart ever creates that admin user -
+  compose sets `OPENZAAK_SUPERUSER_USERNAME`/`_PASSWORD`/`_EMAIL` for exactly
+  this, which step 3 missed entirely. Fixed with
+  `podiumd.openzaak.configuration.superuser.{username,password,email}`
+  (verified against the chart's own `secret.yaml`/`configmap.yaml` templates
+  - this is a *different* `configuration.*` block than the
+  `configuration.job` one already disabled above). Since Postgres only runs
+  `docker-entrypoint-initdb.d` once per PVC lifetime and the earlier cluster
+  incident had killed the backgrounded seed script mid-flight on an already-
+  initialized data directory, the fixture SQL had to be re-run manually
+  against the live Postgres pod once the admin user finally existed, rather
+  than relying on a fresh pod restart to retry it.
+- **PABC readiness check permanently `DOWN`**: `PabcClientHeadersFactory`'s
+  companion object reads `pabc.api.key` via MicroProfile Config at
+  class-init time - a missing value throws once and Java caches the failure
+  forever as `Could not initialize class ...` on every later use. Fixed with
+  `podiumd.zac.pabcApi.apiKey: zac-test-api-key`, matching
+  `podiumd.pabc.settings.apiKeys` and compose's own `.env.example` default
+  (both sides of this API key were previously only half-configured - PABC's
+  side had the right value already, ZAC's side was empty).
+- **`openzaak.local`/`openklant.local` returning Django's own 400
+  DisallowedHost page**: the chart's default `ALLOWED_HOSTS` only covers the
+  in-cluster fullname/namespace-qualified name (sufficient for ZAC's own
+  backend calls via Service DNS), never the Traefik Ingress hostname. Fixed
+  with `settings.allowedHosts: <app>.local` on both.
+- **Every login rejected with `invalid_request: Missing parameter:
+  code_challenge_method`**: the vendored realm's `zaakafhandelcomponent`
+  client requires PKCE, but PKCE support in ZAC itself is unreleased (see the
+  `auth.enablePkce` comment in `values.yaml` and
+  `vendor/dimpact-zaakafhandelcomponent/NOTES.md`'s PKCE note) - our pinned
+  `podiumd.zac.image.tag: "5.0.1"` predates it. A first attempt to inject
+  `AUTH_ENABLE_PKCE=true` via a Helm post-renderer
+  (`scripts/post-render.py`, since the chart exposes no values field for it)
+  confirmed the image's bundled `oidc.json` has no matching field at all -
+  reverted that script since it was a genuine no-op. Fixed instead on the
+  Keycloak side: patched the vendored realm's
+  `pkce.code.challenge.method` from `"S256"` to `""` for this one client
+  (`account-console`/`security-admin-console` untouched). Realm re-import on
+  pod restart does **not** overwrite an already-existing realm, so the
+  live Keycloak client also needed a direct Admin REST API `PUT` to take
+  effect immediately without wiping all other realm data.
+- **Every authenticated user rejected with "Geen toestemming" (403), even a
+  `beheerders-elk-domein` group member**: PABC, not Keycloak group/role
+  membership directly, is ZAC's actual source of truth for authorization
+  decisions - and nothing in this chart ever seeded PABC's own
+  application/role/domain/mapping data. Compose's `pabc-migrations` container
+  mounts exactly this via `JSON_DATASET_PATH`
+  (`scripts/docker-compose/imports/pabc-database/json-mapping/
+  pabc-mapping-data.json`), which step 0's vendoring pass missed entirely
+  (it's data for a *migration job*, not an app config file, so it didn't fit
+  the categories vendored back then). Fixed by vendoring the file
+  (`vendor/dimpact-zaakafhandelcomponent/pabc/pabc-mapping-data.json`), adding
+  a ConfigMap for it (`templates/pabc/configmap-mapping-data.yaml`), and
+  wiring it into the migrations Job via the chart's own
+  `migrations.dataSetPath`/`extraVolumes`/`extraVolumeMounts` fields (exactly
+  the mechanism the chart's own values.yaml documents for this). Since the
+  migrations Job's name is pinned to `{{ .Release.Revision }}` (which
+  `helm template` always renders as `1`, having never run a real
+  `helm upgrade`), re-running it after the values change required manually
+  deleting the old completed Job first.
+
+All fixes are committed in `values.yaml`/`templates/`/`vendor/` (nothing left
+as a live-cluster-only patch except the Keycloak Admin API PKCE call above,
+which only affects this specific already-running cluster's live data, not the
+chart - a fresh `helm install` picks up the realm-JSON fix directly instead).
+
+Next step: build order step 5 (layer in the optional profile groups -
+objecten, opennotificaties, openarchiefbeheer, openformulieren, metrics,
+itest - each following step 3's wiring pattern, not yet individually
+verified the way the core profile now has been).

@@ -14,6 +14,8 @@ spec:
       labels:
         app: redis
     spec:
+      # See templates/solr/deployment.yaml's comment.
+      enableServiceLinks: false
       containers:
         - name: redis
           image: redis:8.6.4

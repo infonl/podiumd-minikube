@@ -1005,7 +1005,7 @@
         "display.on.consent.screen": "false",
         "token.response.type.bearer.lower-case": "false",
         "saml.onetimeuse.condition": "false",
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": ""
       },
       "authenticationFlowBindingOverrides": {},
       "fullScopeAllowed": true,

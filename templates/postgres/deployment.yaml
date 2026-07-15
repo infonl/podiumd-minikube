@@ -18,6 +18,10 @@ spec:
       annotations:
         checksum/init-scripts: {{ (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/postgres/*").AsConfig | sha256sum }}
     spec:
+      # See templates/solr/deployment.yaml's comment - avoids Kubernetes'
+      # auto-injected <SERVICE_NAME>_PORT env vars colliding with any
+      # container's own same-named config variable.
+      enableServiceLinks: false
       containers:
         - name: postgres
           image: postgis/postgis:17-3.4

@@ -16,6 +16,8 @@ spec:
       annotations:
         checksum/mappings: {{ (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/wiremocks/brp-personen-wiremock/mappings/*.json").AsConfig | sha256sum }}
     spec:
+      # See templates/solr/deployment.yaml's comment.
+      enableServiceLinks: false
       containers:
         - name: wiremock
           image: wiremock/wiremock:3.13.2

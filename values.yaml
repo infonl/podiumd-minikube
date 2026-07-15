@@ -75,6 +75,33 @@ podiumd:
   zac:
     enabled: true
     replicaCount: 1
+    # Every image.tag below strips the upstream chart's own @sha256 digest
+    # suffix, keeping just the tag. Verified live: minikube's image cache
+    # (populated via `docker pull` + `minikube image load` on the host,
+    # since this cluster has no outbound internet access at all) only
+    # matches cleanly on tag-only references - kubelet's exact-reference
+    # check for a digest-qualified image doesn't recognize a locally-loaded
+    # tag-only image as satisfying it, and instead attempts a live network
+    # pull, which always fails here. Content is identical either way (same
+    # digest, just pulled via tag).
+    image:
+      tag: "5.0.1"
+    global:
+      curlImage:
+        tag: "8.20.0"
+    opa:
+      image:
+        tag: "1.17.1-static"
+    office_converter:
+      image:
+        tag: "8.33.0"
+    # nginx.enabled: true is podiumd's own override, production-specific -
+    # the underlying zac chart's own default is actually false, matching
+    # compose's single-container architecture (WildFly serves everything,
+    # no separate nginx frontend). Disabling this restores that parity and
+    # avoids the digest-matching issue for this image entirely.
+    nginx:
+      enabled: false
     autoscaling:
       enabled: false
     javaOptions: "-Xms512m -Xmx1024m -XX:ActiveProcessorCount=2"
@@ -97,6 +124,16 @@ podiumd:
       # Left set anyway since it's harmless and matches compose's own intent;
       # takes effect automatically if a newer podiumd version bundles a zac
       # chart that supports it.
+      #
+      # Found live in step 4: this being a no-op is NOT harmless as assumed -
+      # the vendored realm's "zaakafhandelcomponent" client requires PKCE
+      # (pkce.code.challenge.method: S256, added upstream alongside PR #6490,
+      # unreleased in any ZAC image tag yet), so with PKCE support actually
+      # absent from this pinned image, Keycloak rejected every single login
+      # with "invalid_request: Missing parameter: code_challenge_method".
+      # Fixed on the Keycloak side instead - see
+      # vendor/dimpact-zaakafhandelcomponent/NOTES.md's PKCE note for the
+      # realm patch and revert-when-upgrading instructions.
       enablePkce: true
     keycloak:
       adminClient:
@@ -132,8 +169,12 @@ podiumd:
       url: http://wiremock:8080/haalcentraal/api/brp
       logLevel: INFO
       apiKey:
+        # Compose defaults both BRP_API_KEY and BRP_API_KEY_HEADER to empty
+        # (docker-compose.yaml lines 797-798) - ZAC's own BrpConfiguration
+        # validation rejects a header set without a matching key, so these
+        # must stay in lockstep, empty together.
         value: ""
-        header: X-API-KEY
+        header: ""
       protocollering:
         enabled: true
         doelbinding:
@@ -163,7 +204,14 @@ podiumd:
       url: http://localhost:9999 # not used at the moment, matches compose's own placeholder
     pabcApi:
       url: http://pabc
-      apiKey: ""
+      # Left empty, this is read by PabcClientHeadersFactory's companion
+      # object via MicroProfile Config at class-init time - a missing value
+      # throws NoSuchElementException there, which Java then caches forever
+      # as "Could not initialize class ...PabcClientHeadersFactory" on every
+      # later use (found live via the PabcReadinessHealthCheck). Matches
+      # podiumd.pabc.settings.apiKeys (below) and compose's own
+      # .env.example default.
+      apiKey: zac-test-api-key
     zacInternalEndpointsApiKey: fakeZacInternalEndpointsApiKey
     smartDocuments:
       enabled: false
@@ -171,7 +219,13 @@ podiumd:
       deleteOlderThanDays: "14"
     solr:
       url: http://solr:8983
-      createZacCore: true
+      # Verified live: createZacCore's initContainer uses the SolrCloud-only
+      # Collections API (/solr/admin/collections), which fails against our
+      # plain standalone Solr (no SolrCloud/Zookeeper). Our own Solr
+      # Deployment runs "solr-precreate zac" at startup instead, matching
+      # compose exactly - the core already exists by the time anything
+      # needs it, without needing this initContainer at all.
+      createZacCore: false
     solr-operator:
       enabled: false # podiumd's own override defaults this to true (unlike charts/zac's own quiet false default) - we use a plain Solr Deployment instead, see templates/solr.yaml
     opentelemetry-collector:
@@ -199,6 +253,14 @@ podiumd:
     replicaCount: 1
     autoscaling:
       enabled: false
+    # The bundled chart's own default (1.27.3) is older than the version
+    # docker-compose.yaml pins (1.29.1) - our vendored fixture SQL does raw
+    # INSERTs against this app's own tables, written against schema as of
+    # 1.29.1, so the version matters for compatibility, not just parity.
+    # openklant's bundled default (2.15.0) already matches compose exactly -
+    # no override needed there.
+    image:
+      tag: "1.29.1"
     flower:
       enabled: false
     worker:
@@ -207,11 +269,49 @@ podiumd:
       replicaCount: 0 # compose never runs a separate openzaak beat/scheduler service at all
     # nginx.replicaCount left at its chart default (1) - compose runs
     # openzaak-nginx unconditionally (chunked transfer-encoding handling).
+    # nginx.image.tag strips the digest suffix - see zac's own image.tag
+    # comment above for why (verified live).
+    nginx:
+      image:
+        tag: "1.31.1"
     tags:
       redis: false # point at the shared Redis instead of the chart's bundled one
     create_required_catalogi_job:
       enabled: false # defaults to true with literal placeholder credentials (<openzaak_client_id>/<openzaak_secret>) that would just fail repeatedly, and would try to create its own test zaaktype/catalog - our vendored SQL fixtures already seed this exact data, matching compose
+    configuration:
+      job:
+        # Verified live: with no configuration.data set (matching compose,
+        # which doesn't use django-setup-configuration for openzaak at all),
+        # this Job's own management command exits with "CommandError: No
+        # steps enabled, aborting." - disabling it entirely rather than
+        # leaving a permanently-failing Job around.
+        enabled: false
+      # Matches docker-compose.yaml's DJANGO_SUPERUSER_PASSWORD/
+      # OPENZAAK_SUPERUSER_USERNAME/OPENZAAK_SUPERUSER_EMAIL exactly. Found
+      # live: left unset, the container never creates the 'admin' user our
+      # vendored fixture-seeding script polls for
+      # (`select count(id) from accounts_user where username = 'admin'`),
+      # so the seed script waited forever and the ZGW API fixtures (zac's
+      # own client credentials) never got applied - causing ZAC's boot-time
+      # calls to Open Zaak to fail with a 403 invalid-client-identifier.
+      superuser:
+        username: admin
+        password: admin
+        email: noreply@example.com
     settings:
+      # Matches docker-compose.yaml's openzaak.local value exactly. Found
+      # live: left unset, Django refuses every request with
+      # "ImproperlyConfigured: The SECRET_KEY setting must not be empty" -
+      # same class of gap as openklant's secretKey fix above, just missed
+      # for openzaak specifically in the initial pass.
+      secretKey: openZaakSecretKey
+      # Default ALLOWED_HOSTS only covers the chart's own in-cluster
+      # fullname/namespace-qualified name (which already covers ZAC's
+      # backend calls via the "openzaak" Service DNS name) - found live:
+      # browsing via the Traefik Ingress hostname got Django's own
+      # DisallowedHost 400 error page, since "openzaak.local" was never in
+      # that list.
+      allowedHosts: openzaak.local
       database:
         host: postgres
         port: 5432
@@ -262,6 +362,9 @@ podiumd:
     replicaCount: 1
     autoscaling:
       enabled: false
+    configuration:
+      job:
+        enabled: false # same "No steps enabled, aborting" issue as openzaak - see its own comment above
     flower:
       enabled: false
     worker:
@@ -271,9 +374,16 @@ podiumd:
     # Ingress template hardwires its backend to the "<fullname>-nginx"
     # Service specifically (not configurable to point elsewhere), so
     # scaling nginx to 0 would make openklant.local completely unreachable.
+    # nginx.image.tag strips the digest suffix - see zac's own image.tag
+    # comment for why (verified live).
+    nginx:
+      image:
+        tag: "1.31.1"
     tags:
       redis: false
     settings:
+      # See openzaak's own allowedHosts comment above - same gap, same fix.
+      allowedHosts: openklant.local
       database:
         host: postgres
         port: 5432
@@ -305,6 +415,40 @@ podiumd:
     replicaCount: 1
     postgresql:
       enabled: false # point at the shared Postgres instead of the chart's bundled bitnami one
+    # podiumd's own override remaps all three pabc images to a private Azure
+    # Container Registry (acrprodmgmt.azurecr.io) with an IP allowlist -
+    # confirmed via a direct pull attempt that it actively denies external
+    # IPs. Overridden back to the pabc chart's own upstream defaults
+    # (verified these pull successfully): the true public ghcr.io addresses.
+    image:
+      repository: ghcr.io/platform-autorisatie-beheer-component/pabc-api
+      tag: "1.1.0"
+    migrations:
+      image:
+        repository: ghcr.io/platform-autorisatie-beheer-component/pabc-migrations
+        tag: "1.1.0"
+      # Matches docker-compose.yaml's pabc-migrations JSON_DATASET_PATH
+      # mount exactly. Found live: without this, PABC's own database has no
+      # application/role/group mapping data at all, so ZAC's own
+      # authorization check rejects every logged-in user with "Geen
+      # toestemming" (403) regardless of their Keycloak group membership -
+      # PABC, not Keycloak roles directly, is the actual source of truth
+      # ZAC's authorization now queries.
+      dataSetPath: /app/json/pabc-mapping-data.json
+      extraVolumes:
+        - name: pabc-mapping-data
+          configMap:
+            name: pabc-mapping-data
+      extraVolumeMounts:
+        - name: pabc-mapping-data
+          subPath: pabc-mapping-data.json
+          mountPath: /app/json/pabc-mapping-data.json
+          readOnly: true
+    initContainers:
+      waitFor:
+        image:
+          repository: ghcr.io/groundnuty/k8s-wait-for
+          tag: v2.0
     settings:
       database:
         host: postgres

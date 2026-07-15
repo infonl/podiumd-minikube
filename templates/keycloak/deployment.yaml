@@ -16,6 +16,8 @@ spec:
       annotations:
         checksum/realm: {{ (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/keycloak/*.json").AsConfig | sha256sum }}
     spec:
+      # See templates/solr/deployment.yaml's comment.
+      enableServiceLinks: false
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.6.4

@@ -50,6 +50,20 @@ here is a live reference — this project never reads
   array entries changed and nothing else. See `plan.md`'s Keycloak section
   for why this is needed (Traefik-exposed `.local` hostnames aren't in the
   original realm's allow-list).
+  Also: the `zaakafhandelcomponent` client's `pkce.code.challenge.method`
+  attribute cleared from `"S256"` to `""`. Found live: this attribute
+  requires PKCE, but PKCE support in ZAC itself
+  (`feat: add configurable PKCE support for the OIDC authorization code
+  flow`, PR #6490) is unreleased - our pinned `podiumd.zac.image.tag:
+  "5.0.1"` predates it, so its bundled `oidc.json` has no `enable-pkce`
+  field at all and never sends a `code_challenge`, making Keycloak reject
+  every login with `invalid_request: Missing parameter:
+  code_challenge_method`. Revert this one attribute back to `"S256"` once
+  `podiumd.zac.image.tag` is bumped to a release that includes PR #6490,
+  and set `podiumd.zac` env var `AUTH_ENABLE_PKCE: "true"` at the same time
+  (no values.yaml field for it - the chart's `zac` container env comes
+  entirely from its own generated ConfigMap/Secret, so this needs a Helm
+  post-renderer or an upstream chart change).
 
 ## Newly authored (not copied from anywhere)
 
