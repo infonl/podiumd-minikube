@@ -1311,3 +1311,69 @@ Next step: none required for the six profile groups themselves - all now
 verified live. Remaining open items are the explicitly-scoped-out
 demo/fixture-seeding gaps noted above, should a fuller compose-parity pass
 ever be wanted.
+
+**Found afterward, a real design flaw**: nearly every `image.tag` override
+added across steps 3-5 to work around digest-qualified images failing to
+pull in-cluster (no network access - see step 4's own note on this) was
+hardcoded to a *specific version string*, not just "whatever the chart's
+bundled default already is, minus the digest." That's fine as long as
+`podiumd`'s own bundled subchart versions never change - but
+`scripts/set-podiumd-version.sh` exists specifically so they can. Audited
+every `tag:` line in `values.yaml` against its own original comment and
+found three genuinely different categories tangled together:
+
+- **Pure digest-strips** (10 of them: zac, curlImage, opa, office_converter,
+  openzaak's nginx, openklant's nginx, objecttypen, openarchiefbeheer +
+  its nginx, openformulieren's nginx) - the hardcoded tag was always just
+  whatever the chart's bundled default happened to be. Removed the
+  hardcoded tags entirely; added `scripts/strip-image-digests.py`, a Helm
+  post-renderer that strips any `@sha256:...` suffix from every image
+  reference in the fully-rendered manifest, regardless of what tag it's
+  attached to. This now needs piping into every `helm template | ... |
+  kubectl apply` invocation project-wide (not just an optional extra step).
+- **Redundant with podiumd's own pin** (pabc's image/migrations/waitFor tags,
+  all `"1.1.0"`/`"v2.0"`) - these were coupled with a *repository* override
+  (escaping podiumd's private, IP-restricted ACR redirect) and the tag
+  values happened to exactly match podiumd's own already-pinned defaults
+  for those same fields. Removed the redundant `tag:` lines, keeping only
+  `repository:` - Helm's own values-merge now inherits whatever tag
+  podiumd's own value currently specifies for each field.
+- **Genuine, intentional version pins** (4 of them: openzaak 1.29.1,
+  objecten 3.6.1, opennotificaties 1.15.0, openformulieren 3.5.4) - these
+  really do need to stay hardcoded regardless of which podiumd version is
+  selected, for real functional reasons (schema compatibility with vendored
+  fixture SQL, or matching `docker-compose.yaml`'s own pinned version
+  exactly) having nothing to do with digest-pull avoidance. Left as-is, with
+  `scripts/set-podiumd-version.sh`'s own usage comment now pointing at all
+  four so a future version swap prompts re-checking whether each is still
+  correct (still diverges from the new version's bundled default in the
+  same way, now redundant because the new default already matches, or
+  genuinely needs updating).
+
+Verified the fix actually solves the problem it claims to, not just that it
+renders: swapped to `podiumd` 4.7.8 via `set-podiumd-version.sh` (with `zac`
+temporarily disabled - that version's bundled `zac` subchart needs a
+different values schema entirely, an unrelated pre-existing limitation of
+version-swapping this chart, not something this fix causes or could fix)
+and confirmed live that `nginx-unprivileged` really does differ between
+podiumd releases (`1.30.2` at 4.7.8 vs `1.31.1` at 4.8.1) - with the
+hardcoded override removed, the chart now correctly picks up whichever
+version the selected podiumd release actually bundles, where before it
+would have stayed silently pinned to `1.31.1` regardless. The four genuine
+version pins correctly stayed fixed at both versions, as intended. Switched
+back to 4.8.1 (the version verified live throughout this project),
+confirmed the post-render-stripped manifest resolves to the exact same tags
+as before this fix (zero pod restarts on re-apply), and re-ran the full
+pytest suite (41/41 still passing).
+
+Also fixed `scripts/provision-cluster.sh`'s own image pre-load list, which
+had the identical staleness problem in a different guise: a hardcoded
+`IMAGES` array that would pre-load the *previous* podiumd version's set of
+images after a version swap, potentially missing whatever the newly
+selected version actually needs. Replaced it with the same
+render-with-every-profile-on-then-strip-digests derivation used to prove
+the values.yaml fix above, run fresh every time the script executes -
+confirmed it derives the same 29 images either way, and that
+`helm dependency update` now has to run *before* that derivation (moved
+up from step 4 to step 3 in the script), since deriving the image list
+needs the podiumd chart tarball to already be present.

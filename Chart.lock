@@ -3,4 +3,4 @@ dependencies:
   repository: https://Dimpact-Samenwerking.github.io/helm-charts/
   version: 4.8.1
 digest: sha256:f623095247be4a01053f7babec307b9351566fcac83b81c4af03649dd71cb1d2
-generated: "2026-07-15T17:16:06.933140581+02:00"
+generated: "2026-07-15T23:02:54.480760541+02:00"

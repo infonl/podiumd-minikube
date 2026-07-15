@@ -75,26 +75,13 @@ podiumd:
   zac:
     enabled: true
     replicaCount: 1
-    # Every image.tag below strips the upstream chart's own @sha256 digest
-    # suffix, keeping just the tag. Verified live: minikube's image cache
-    # (populated via `docker pull` + `minikube image load` on the host,
-    # since this cluster has no outbound internet access at all) only
-    # matches cleanly on tag-only references - kubelet's exact-reference
-    # check for a digest-qualified image doesn't recognize a locally-loaded
-    # tag-only image as satisfying it, and instead attempts a live network
-    # pull, which always fails here. Content is identical either way (same
-    # digest, just pulled via tag).
-    image:
-      tag: "5.0.1"
-    global:
-      curlImage:
-        tag: "8.20.0"
-    opa:
-      image:
-        tag: "1.17.1-static"
-    office_converter:
-      image:
-        tag: "8.33.0"
+    # Digest-qualified image references (zac itself, curlImage, opa,
+    # office_converter) fail to pull in-cluster - see
+    # scripts/strip-image-digests.py's own docstring for why, and why that's
+    # a post-renderer now instead of hardcoded image.tag overrides here (an
+    # earlier version of this fix hardcoded specific tags, which would
+    # silently go stale the moment scripts/set-podiumd-version.sh selects a
+    # podiumd release whose bundled charts default to different versions).
     # nginx.enabled: true is podiumd's own override, production-specific -
     # the underlying zac chart's own default is actually false, matching
     # compose's single-container architecture (WildFly serves everything,
@@ -272,11 +259,8 @@ podiumd:
       replicaCount: 0 # compose never runs a separate openzaak beat/scheduler service at all
     # nginx.replicaCount left at its chart default (1) - compose runs
     # openzaak-nginx unconditionally (chunked transfer-encoding handling).
-    # nginx.image.tag strips the digest suffix - see zac's own image.tag
-    # comment above for why (verified live).
-    nginx:
-      image:
-        tag: "1.31.1"
+    # Its digest-qualified default image tag is handled by
+    # scripts/strip-image-digests.py now, not a hardcoded override here.
     tags:
       redis: false # point at the shared Redis instead of the chart's bundled one
     create_required_catalogi_job:
@@ -377,11 +361,8 @@ podiumd:
     # Ingress template hardwires its backend to the "<fullname>-nginx"
     # Service specifically (not configurable to point elsewhere), so
     # scaling nginx to 0 would make openklant.local completely unreachable.
-    # nginx.image.tag strips the digest suffix - see zac's own image.tag
-    # comment for why (verified live).
-    nginx:
-      image:
-        tag: "1.31.1"
+    # Its digest-qualified default image tag is handled by
+    # scripts/strip-image-digests.py now, not a hardcoded override here.
     tags:
       redis: false
     settings:
@@ -430,13 +411,18 @@ podiumd:
     # confirmed via a direct pull attempt that it actively denies external
     # IPs. Overridden back to the pabc chart's own upstream defaults
     # (verified these pull successfully): the true public ghcr.io addresses.
+    # Only overriding `repository`, deliberately not `tag` - podiumd's own
+    # values.yaml already pins a specific tag for the ACR-hosted image
+    # (currently "1.1.0", verified matching), and leaving that field alone
+    # means we keep tracking whatever tag the currently-selected podiumd
+    # version pins, instead of a second, independent hardcoded value here
+    # that could silently drift from it after a
+    # scripts/set-podiumd-version.sh swap.
     image:
       repository: ghcr.io/platform-autorisatie-beheer-component/pabc-api
-      tag: "1.1.0"
     migrations:
       image:
         repository: ghcr.io/platform-autorisatie-beheer-component/pabc-migrations
-        tag: "1.1.0"
       # Matches docker-compose.yaml's pabc-migrations JSON_DATASET_PATH
       # mount exactly. Found live: without this, PABC's own database has no
       # application/role/group mapping data at all, so ZAC's own
@@ -456,9 +442,10 @@ podiumd:
           readOnly: true
     initContainers:
       waitFor:
+        # Same reasoning as pabc's own image override above - repository
+        # only, tag left to track whatever podiumd's own value currently is.
         image:
           repository: ghcr.io/groundnuty/k8s-wait-for
-          tag: v2.0
     settings:
       database:
         host: postgres
@@ -574,12 +561,9 @@ podiumd:
   objecttypen:
     enabled: false
     replicaCount: 1
-    # Digest-qualified chart default fails to pull in-cluster (no network
-    # access) - same class of fix as zac/curlImage/etc in earlier steps.
-    # Version (3.4.2) already matches compose; only the digest needed
-    # stripping.
-    image:
-      tag: "3.4.2"
+    # Version (3.4.2) already matches compose; its digest-qualified chart
+    # default is handled by scripts/strip-image-digests.py now, not a
+    # hardcoded override here.
     # No worker/beat/flower/redis blocks exist on this chart at all - it's
     # a stateless API with no celery use.
     configuration:
@@ -702,14 +686,9 @@ podiumd:
     # Maykin-family apps, this one's chart defaults already match compose's
     # single-instance topology exactly, including running celery/beat/flower
     # since compose really does run all of those as separate containers).
-    # Digest-qualified defaults fail to pull in-cluster (no network access) -
-    # same class of fix as zac/curlImage/etc in earlier steps. Versions
-    # already match compose; only the digests needed stripping.
-    image:
-      tag: "2.0.0"
-    nginx:
-      image:
-        tag: "1.31.1"
+    # Versions (image 2.0.0, nginx 1.31.1) already match compose; their
+    # digest-qualified chart defaults are handled by
+    # scripts/strip-image-digests.py now, not hardcoded overrides here.
     tags:
       redis: false
     configuration:
@@ -852,13 +831,13 @@ podiumd:
     # own "openformulieren" profile transitively enables all three - see
     # top-level openformulieren.enabled's comment).
     replicaCount: 1
-    # Found live: chart default (3.4.9, digest-qualified - fails to pull
-    # in-cluster anyway) differs from compose's pinned version (3.5.4).
+    # Found live: chart default (3.4.9) differs from compose's pinned
+    # version (3.5.4) - a genuine version pin, unlike nginx's own
+    # digest-qualified default just below, which is handled by
+    # scripts/strip-image-digests.py instead of a hardcoded tag here.
     image:
       tag: "3.5.4"
     nginx:
-      image:
-        tag: "1.31.1" # digest stripped, same class of fix as above
       replicaCount: 1 # compose runs openformulieren-nginx
     worker:
       replicaCount: 1 # compose runs openformulieren-celery

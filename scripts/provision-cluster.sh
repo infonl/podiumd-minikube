@@ -5,15 +5,15 @@
 #   2. installs Traefik, pinned to a version compatible with older `helm`
 #      binaries (see the version note below) - a cluster prerequisite this
 #      chart deliberately doesn't manage itself
-#   3. pre-pulls and loads every image this chart can reference into
+#   3. runs `helm dependency update` so the podiumd chart tarball is present
+#   4. pre-pulls and loads every image this chart can reference into
 #      minikube - its inner Docker has no internet access at all, so any
 #      image not already loaded fails to pull once a pod actually needs it
-#   4. runs `helm dependency update` so the podiumd chart tarball is present
 #
 # After this finishes: render + apply the chart (see plan.md's Verification
-# section for the `helm template | kubectl apply` workflow this project
-# uses instead of `helm install`), then scripts/setup-tunnel.sh for external
-# reachability.
+# section for the `helm template | scripts/strip-image-digests.py |
+# kubectl apply` workflow this project uses instead of `helm install`), then
+# scripts/setup-tunnel.sh for external reachability.
 #
 # Usage:
 #   ./scripts/provision-cluster.sh
@@ -37,42 +37,6 @@ TRAEFIK_NAMESPACE="traefik"
 # enough, or upgrade helm itself first.
 TRAEFIK_CHART_VERSION="34.4.0"
 
-# Every image referenced anywhere in this chart, across every profile -
-# collected by rendering with all profile flags on (see the helm template
-# invocation this list was generated from in scripts/provision-cluster.sh's
-# own git history / plan.md, if it ever needs regenerating).
-IMAGES=(
-  busybox:1.38.0
-  curlimages/curl:8.20.0
-  ghcr.io/brp-api/personen-mock:2.7.0-202606230850
-  ghcr.io/groundnuty/k8s-wait-for:v2.0
-  ghcr.io/infonl/zaakafhandelcomponent:5.0.1
-  ghcr.io/platform-autorisatie-beheer-component/pabc-api:1.1.0
-  ghcr.io/platform-autorisatie-beheer-component/pabc-migrations:1.1.0
-  gotenberg/gotenberg:8.33.0
-  grafana/grafana:13.1.0
-  grafana/tempo:3.0.2
-  greenmail/standalone:2.1.10
-  maykinmedia/objects-api:3.6.1
-  maykinmedia/objecttypes-api:3.4.2
-  maykinmedia/open-archiefbeheer:2.0.0
-  maykinmedia/open-klant:2.15.0
-  nginxinc/nginx-unprivileged:1.31.1
-  openformulieren/open-forms:3.5.4
-  openpolicyagent/opa:1.17.1-static
-  openpolicyagent/opa:1.18.2
-  openzaak/open-notificaties:1.15.0
-  openzaak/open-zaak:1.29.1
-  otel/opentelemetry-collector-contrib:0.156.0
-  postgis/postgis:17-3.4
-  prom/prometheus:v3.13.1
-  quay.io/keycloak/keycloak:26.6.4
-  rabbitmq:4.2.7-alpine
-  redis:8.6.4
-  solr:9.10.1-slim
-  wiremock/wiremock:3.13.2
-)
-
 # --- 1. minikube ---
 if minikube status -p "${PROFILE}" > /dev/null 2>&1; then
   echo "minikube profile '${PROFILE}' is already running - leaving it as-is."
@@ -94,7 +58,40 @@ else
     -n "${TRAEFIK_NAMESPACE}" --create-namespace
 fi
 
-# --- 3. images ---
+# --- 3. helm dependency ---
+# Must run before deriving the image list below - that render needs the
+# podiumd chart tarball to already be present.
+echo "Running helm dependency update..."
+helm dependency update "${CHART_DIR}" > /dev/null
+
+# --- 4. images ---
+# The image list is derived by actually rendering the chart with every
+# profile flag on, piped through the same digest-stripping post-renderer
+# used at deploy time (scripts/strip-image-digests.py) - not a hardcoded
+# list. A hardcoded list would silently go stale the moment
+# scripts/set-podiumd-version.sh selects a podiumd release whose bundled
+# charts default to different image tags (confirmed live: podiumd 4.7.8
+# and 4.8.1 bundle genuinely different nginx-unprivileged versions, for
+# example) - this way, whichever podiumd version is currently selected is
+# what actually gets pre-pulled, every time.
+echo "Deriving the image list from the currently-selected podiumd version..."
+mapfile -t images < <(
+  helm template podiumd-minikube "${CHART_DIR}" -n podiumd-minikube \
+    --set itest.enabled=true \
+    --set objecten.enabled=true --set podiumd.objecten.enabled=true \
+    --set podiumd.objecttypen.enabled=true \
+    --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true \
+    --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true \
+    --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true \
+    --set metrics.enabled=true \
+    2>/dev/null \
+  | python3 "${CHART_DIR}/scripts/strip-image-digests.py" \
+  | grep -oE '^\s*image:\s*"?[^"[:space:]]+' \
+  | sed -E 's/^\s*image:\s*"?//' \
+  | sort -u
+)
+echo "${#images[@]} image(s) referenced by this chart's fully-enabled render."
+
 # Pulled on the host, then loaded into minikube - not pulled directly inside
 # minikube, since its inner Docker daemon has no network access at all.
 # Batched (not fully parallel) after an earlier full-parallel run of 12
@@ -102,10 +99,10 @@ fi
 # device" - a moderate batch size gets most of the speedup without that.
 BATCH_SIZE=6
 
-echo "Checking which of ${#IMAGES[@]} images are already loaded in minikube..."
+echo "Checking which are already loaded in minikube..."
 mapfile -t loaded < <(minikube image ls -p "${PROFILE}" 2>/dev/null)
 to_fetch=()
-for img in "${IMAGES[@]}"; do
+for img in "${images[@]}"; do
   found=false
   for l in "${loaded[@]}"; do
     if [[ "${l}" == *"${img}" ]]; then
@@ -136,10 +133,6 @@ else
     wait
   done
 fi
-
-# --- 4. helm dependency ---
-echo "Running helm dependency update..."
-helm dependency update "${CHART_DIR}" > /dev/null
 
 echo
 echo "Cluster provisioned. Next steps:"
