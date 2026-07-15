@@ -768,6 +768,12 @@ Postgres init script could have silently failed to give 4 of the 9 databases
 the PostGIS extension due to alphabetical script-ordering. All five are now
 resolved in the relevant sections above, not left as open gaps.
 
-**Not yet approved by the user in final form** — implementation (build order
-steps 0–5 above) has **not started**. Next step once resumed: step 0
-(vendoring).
+**Step 0 (vendoring) is now done** — see `vendor/dimpact-zaakafhandelcomponent/NOTES.md`
+for exact provenance of every file. Notable findings during vendoring itself:
+`00-create-databases.sql` needed a 10th database (`openformulieren`, missing
+from this plan's earlier "9 databases" phrasing), and the merged
+`01-seed-fixtures.sh` intentionally drops the original scripts' `useradd`
+calls (vestigial — Postgres's official image runs
+`docker-entrypoint-initdb.d` scripts under temporarily-trusted local auth
+regardless). Both are corrected in the vendored files and in `NOTES.md`.
+Next step: build order step 1 (Chart skeleton).

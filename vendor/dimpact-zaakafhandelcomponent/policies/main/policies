@@ -1,0 +1,8 @@
+rollen.rego
+zaak-rechten.rego
+taak-rechten.rego
+document-rechten.rego
+werklijst-rechten.rego
+notitie-rechten.rego
+overige-rechten.rego
+brp-rechten.rego
