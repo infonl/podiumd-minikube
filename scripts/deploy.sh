@@ -4,8 +4,8 @@
 # scripts/provision-cluster.sh points at as its own next step.
 #
 # Uses `helm template | strip-image-digests.py | disable-service-links.py |
-# kubectl apply`, not `helm install`/`helm upgrade`: Helm's own release
-# record embeds the entire
+# exclude-pabc-migration-job.py | kubectl apply`, not `helm install`/`helm
+# upgrade`: Helm's own release record embeds the entire
 # resolved chart (including the ~3.87MB podiumd dependency), which exceeds
 # Kubernetes' hardcoded 3MB API request-size limit (see plan.md's step 4
 # notes - there's no flag to raise this limit in current Kubernetes
@@ -17,6 +17,12 @@
 # comments for the immutable-spec-protection mechanism this relies on),
 # which is why this script applies it as a separate, earlier step rather
 # than one `kubectl apply -f` over everything at once.
+#
+# The pabc-migrations Job is excluded from this general apply for a
+# different reason - not immutability, but because it's genuinely
+# destructive to create unguarded (see scripts/apply-pabc-migrations.sh's
+# own header) - and applied via that guarded script instead, as its own
+# explicit step below.
 #
 # Usage:
 #   ./scripts/deploy.sh            # core profile only (matches values.yaml's own default)
@@ -45,8 +51,9 @@ fi
 
 render() {
   helm template "${RELEASE_NAME}" "${CHART_DIR}" -n "${NAMESPACE}" "${EXTRA_SETS[@]}" "$@" \
-    | python3 "${CHART_DIR}/scripts/strip-image-digests.py" \
-    | python3 "${CHART_DIR}/scripts/disable-service-links.py"
+    | python3 "${CHART_DIR}/scripts/lib/strip-image-digests.py" \
+    | python3 "${CHART_DIR}/scripts/lib/disable-service-links.py" \
+    | python3 "${CHART_DIR}/scripts/lib/exclude-pabc-migration-job.py"
 }
 
 echo "Ensuring namespace '${NAMESPACE}' exists..."
@@ -98,6 +105,10 @@ else
   echo "the known immutable-spec case - re-check the output above for something new." >&2
   exit 1
 fi
+
+echo
+echo "Applying pabc-migrations (guarded - see scripts/apply-pabc-migrations.sh)..."
+"${CHART_DIR}/scripts/apply-pabc-migrations.sh"
 
 echo
 echo "Done. Next: ./scripts/setup-tunnel.sh for external reachability, or run"

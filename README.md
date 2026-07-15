@@ -77,7 +77,25 @@ entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
 | `teardown-cluster.sh` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
 | `set-podiumd-version.sh <version>` | Swaps the `podiumd` Helm dependency to a different version (`helm search repo dimpact/podiumd -l` to list available ones) — re-check the four intentional image-tag pins in `values.yaml` afterward, per that script's own comment |
 | `apply-pabc-migrations.sh` | The **only** safe way to (re)create the `pabc-migrations` Job — it's not idempotent (clears PABC's database before reseeding), so this refuses to run against an already-seeded database unless `--force` is passed |
-| `strip-image-digests.py` | Helm post-renderer piped into automatically by `deploy.sh` — strips `@sha256:...` suffixes so images resolve to the tag-only references pre-loaded into minikube (which has no outbound network access) |
+
+`deploy.sh` already calls `apply-pabc-migrations.sh` itself as its own last
+step, every run — you don't need to run it by hand for a normal deploy,
+first or repeat. It's excluded from the general manifest apply on purpose
+(that Job clears PABC's database before reloading its seed dataset every
+time it *runs*, so letting a plain unguarded `kubectl apply` recreate it —
+which would happen silently if it were ever missing — isn't safe). You'd
+only ever run it directly yourself in the one case `deploy.sh`'s own call
+refuses: the Job is missing but PABC's database already has real data, and
+you need to decide whether `--force` (wipe and reseed) is really intended.
+
+`scripts/lib/` holds internal helpers that aren't meant to be run directly —
+they're only ever piped into by the scripts above:
+
+| Script | What it does |
+|---|---|
+| `strip-image-digests.py` | Helm post-renderer piped into automatically by `deploy.sh`/`provision-cluster.sh` — strips `@sha256:...` suffixes so images resolve to the tag-only references pre-loaded into minikube (which has no outbound network access) |
+| `disable-service-links.py` | Helm post-renderer piped into automatically by `deploy.sh` — sets `enableServiceLinks: false` on every workload pod spec, avoiding Kubernetes' auto-injected `<SERVICE_NAME>_PORT`-style env vars colliding with app-expected ones of the same name |
+| `exclude-pabc-migration-job.py` | Helm post-renderer piped into automatically by `deploy.sh` — drops the `pabc-migrations` Job from the general manifest apply, since `apply-pabc-migrations.sh` is the only safe way to (re)create it |
 
 ## Testing
 
@@ -129,6 +147,7 @@ not something you need to repeat.
 Chart.yaml, values.yaml, templates/   # the chart itself (this repo IS the chart, no nested wrapper)
 vendor/dimpact-zaakafhandelcomponent/  # physical copies of file assets from that repo (see vendor/NOTES.md)
 scripts/                               # cluster lifecycle + deploy-time tooling (see table above)
+scripts/lib/                           # internal helpers, not run directly (see table above)
 tests/                                 # live-cluster pytest suite
 .claude/plans/plan.md                  # full design + build log
 ```

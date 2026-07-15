@@ -1326,7 +1326,7 @@ found three genuinely different categories tangled together:
   openzaak's nginx, openklant's nginx, objecttypen, openarchiefbeheer +
   its nginx, openformulieren's nginx) - the hardcoded tag was always just
   whatever the chart's bundled default happened to be. Removed the
-  hardcoded tags entirely; added `scripts/strip-image-digests.py`, a Helm
+  hardcoded tags entirely; added `scripts/lib/strip-image-digests.py`, a Helm
   post-renderer that strips any `@sha256:...` suffix from every image
   reference in the fully-rendered manifest, regardless of what tag it's
   attached to. This now needs piping into every `helm template | ... |
@@ -1417,7 +1417,7 @@ obvious crash - traced to two independent, stacked bugs:
    ("port number invalid"), so the worker process never started at all.
    Same root cause already fixed once for Solr's `SOLR_PORT` in step 4 -
    generalized this time into a universal Helm post-renderer,
-   `scripts/disable-service-links.py`, chained into `deploy.sh`'s
+   `scripts/lib/disable-service-links.py`, chained into `deploy.sh`'s
    `render()` after `strip-image-digests.py`, setting
    `enableServiceLinks: false` on every Deployment/StatefulSet/
    DaemonSet/CronJob pod spec regardless of which chart the object came
@@ -1497,3 +1497,48 @@ just couldn't complete in 15s while the node was at 728% CPU. No restarts
 since; no values.yaml override added, since 15s is already the chart
 maintainers' own considered default and the underlying contention is
 already fixed above.
+
+**Reorganized `scripts/` into `scripts/lib/` for internal-only helpers.**
+`strip-image-digests.py` and `disable-service-links.py` are never run by a
+person directly - they only exist as pipe stages inside `deploy.sh`'s/
+`provision-cluster.sh`'s own `render()` step - so they moved to
+`scripts/lib/`, with every reference to their old path updated
+(`deploy.sh`, `provision-cluster.sh`, this file). Deliberately did **not**
+move `apply-pabc-migrations.sh` there even though it's rarely needed on the
+happy path: unlike the two above, a human genuinely has to invoke it
+directly and decide on `--force` in the one case it's needed - there's no
+automated caller for *that* decision, which is a different thing from being
+rarely needed.
+
+**Found live, investigating "how would anyone know to run
+`apply-pabc-migrations.sh`": a real, unrelated safety gap, not just a
+documentation one.** Nothing surfaces the need to run it - it's not in the
+Quick start flow, and `test_pabc_migrations_guard.py`'s own steady-state
+test (`test_guard_leaves_succeeded_job_alone`) *skips* rather than fails
+when the Job isn't in a `succeeded` state, so the test suite wouldn't
+flag a missing/failed Job either. Worse: `deploy.sh`'s main "apply
+everything" step renders and `kubectl apply`s the pabc-migrations Job
+completely unfiltered, exactly like every other resource - which is safe
+for everything else (Jobs are immutable, so re-applying an *existing* one
+is already a no-op) but not for this one, since its container clears
+PABC's database before reseeding every time it *runs*. If this Job were
+ever deleted while the database still had real data, the very next plain
+`deploy.sh` run - not `apply-pabc-migrations.sh` - would silently recreate
+it via unguarded `kubectl apply` and wipe that data, completely bypassing
+the guard script's whole reason for existing.
+
+Fixed by excluding this Job from the general apply and instead having
+`deploy.sh` call `apply-pabc-migrations.sh` (without `--force`) as its own
+explicit, later step - safe to call unconditionally every run, since the
+script itself already no-ops if the Job succeeded, safely creates it if
+genuinely missing/empty, and safely refuses (without mutating anything) if
+data exists and the Job's missing, requiring a human to decide `--force`
+only in that specific case. New post-renderer,
+`scripts/lib/exclude-pabc-migration-job.py`, drops the Job by kind+name
+from `deploy.sh`'s `render()` output; chained in after
+`disable-service-links.py`. Verified live: confirmed the Job no longer
+appears in the general render, ran `deploy.sh --full` against the
+already-deployed cluster and confirmed it printed "already exists and
+succeeded - leaving it alone" via the new explicit step, the Job's own
+`creationTimestamp` was unchanged (not recreated), and the full pytest
+suite still passed 41/41.

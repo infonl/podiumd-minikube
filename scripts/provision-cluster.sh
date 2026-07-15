@@ -92,7 +92,7 @@ helm dependency update "${CHART_DIR}" > /dev/null
 # --- 4. images ---
 # The image list is derived by actually rendering the chart with every
 # profile flag on, piped through the same digest-stripping post-renderer
-# used at deploy time (scripts/strip-image-digests.py) - not a hardcoded
+# used at deploy time (scripts/lib/strip-image-digests.py) - not a hardcoded
 # list. A hardcoded list would silently go stale the moment
 # scripts/set-podiumd-version.sh selects a podiumd release whose bundled
 # charts default to different image tags (confirmed live: podiumd 4.7.8
@@ -110,7 +110,7 @@ mapfile -t images < <(
     --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true \
     --set metrics.enabled=true \
     2>/dev/null \
-  | python3 "${CHART_DIR}/scripts/strip-image-digests.py" \
+  | python3 "${CHART_DIR}/scripts/lib/strip-image-digests.py" \
   | grep -oE '^\s*image:\s*"?[^"[:space:]]+' \
   | sed -E 's/^\s*image:\s*"?//' \
   | sort -u
