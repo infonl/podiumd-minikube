@@ -4,6 +4,11 @@ A standalone Helm chart that reproduces the `dimpact-zaakafhandelcomponent`
 docker-compose dev stack (ZAC + its ZGW dependencies) for local development on
 minikube.
 
+For usage instructions (provisioning, deploying, the test suite, script
+reference) see [`README.md`](README.md). This file is oriented at AI coding
+tools instead: cross-repo relationships and local paths a README shouldn't
+hardcode, plus a pointer to the full design/build history.
+
 ## Relationship to other repos
 
 - **`dimpact-zaakafhandelcomponent`** (`~/development/werk/infonl-dimpact/infonl/dimpact-zaakafhandelcomponent`)
@@ -28,20 +33,26 @@ minikube.
 ## Structure
 
 This repo *is* the chart — no nested `charts/<name>` wrapper. `Chart.yaml`,
-`values.yaml`, `templates/`, `vendor/` live at the repo root.
+`values.yaml`, `templates/`, `vendor/` live at the repo root, alongside
+`scripts/` (cluster lifecycle + deploy-time tooling) and `tests/` (a
+live-cluster pytest suite).
 
 `vendor/dimpact-zaakafhandelcomponent/` holds physical copies of file assets
 this chart needs from that repo (Keycloak realm JSON, WireMock mappings, DB
-init/seed SQL, metrics configs, OPA policies) — never live cross-repo
-references. See `vendor/NOTES.md` (once created) for provenance per file.
+init/seed SQL, metrics configs, OPA policies, PABC's role/domain mapping
+dataset) — never live cross-repo references. See `vendor/dimpact-zaakafhandelcomponent/NOTES.md`
+for provenance per file.
 
 ## Current state
 
-See `.claude/plans/plan.md` for the full design plan (dependencies, wiring,
-resource-footprint decisions, resolved issues). As of this writing the plan is
-fully designed but **implementation has not started** — no `Chart.yaml`,
-`values.yaml`, or `templates/` exist yet, and `vendor/` is empty. Next step:
-plan build-order step 0 (vendoring file assets from
-`dimpact-zaakafhandelcomponent`, including patching the Keycloak realm JSON's
-redirect URIs and merging the three per-service Postgres seed scripts into
-one).
+All six build-order steps in `.claude/plans/plan.md` are complete and have
+been verified live against a real minikube cluster (not just rendered):
+vendoring, chart skeleton, core raw templates, wiring the core apps, a full
+live deploy + OIDC login flow through `http://zac.local`, and every optional
+profile group (objecten, opennotificaties, openarchiefbeheer,
+openformulieren, metrics, itest). `plan.md` is a build *log* at this point,
+not a forward-looking plan — it records every bug found and fixed along the
+way (many only discoverable by actually deploying, not by reading source),
+in the order they were found. Read it when you need the reasoning behind a
+specific `values.yaml` override or template decision; read `README.md` when
+you just need to run the thing.
