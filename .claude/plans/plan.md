@@ -1080,6 +1080,18 @@ found by actually watching pods fail live, not by re-reading values.yaml:
   `helm upgrade`), re-running it after the values change required manually
   deleting the old completed Job first.
 
+  **Found live afterward (post step-5), confirmed by direct test**: this
+  Job is not idempotent - its container clears PABC's database before
+  reloading the vendored seed dataset, every time it runs. Re-deleting and
+  reapplying it (the exact manual step used above and again for the
+  image-tag fix in step 5) silently wipes and reseeds PABC's tables even if
+  they already hold the correct data (or, in a real environment, anything
+  added since). `scripts/apply-pabc-migrations.sh` is now the one place
+  this Job should ever be (re)created - it checks PABC's `mapping` table
+  first and refuses to proceed unless it's empty or `--force` is passed,
+  replacing the ad-hoc `kubectl delete job` + `kubectl apply` pattern used
+  twice above.
+
 All fixes are committed in `values.yaml`/`templates/`/`vendor/` (nothing left
 as a live-cluster-only patch except the Keycloak Admin API PKCE call above,
 which only affects this specific already-running cluster's live data, not the
