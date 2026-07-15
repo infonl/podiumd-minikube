@@ -230,3 +230,143 @@ subchart has its own entrypoint, `plan.md` replaces this with an
 initContainer that mounts the vendored PDF + the same persistence volume and
 performs the same three copies, letting the main container start via the
 subchart's normal entrypoint unmodified.
+
+## Depending on `dimpact/podiumd` directly (architecture switch)
+
+After the initial plan (direct dependencies on the ~10 individual ZGW app
+charts), the user asked to switch to depending on the published `podiumd`
+umbrella chart itself as this chart's single Helm dependency, so this
+project's own Chart.yaml/templates contain only the minikube-specific deltas.
+Verified directly: `dimpact/podiumd` is published (`helm search repo dimpact
+-l` lists versions back to `1.0.0`, current `4.8.1`), so `helm repo add
+dimpact https://Dimpact-Samenwerking.github.io/helm-charts/` — the same repo
+already used for `brp-personen-mock` — is sufficient; no separate repo for
+podiumd itself.
+
+### `enabled` defaults across all of podiumd 4.8.1's dependencies
+
+Pulled the chart (`helm pull dimpact/podiumd --version 4.8.1 --untar`) and
+read `Values.<dep>.enabled` for every dependency in `Chart.yaml`:
+
+| dependency | `enabled` default | action needed |
+|---|---|---|
+| `keycloak-operator` | `true` | disable — we run plain Keycloak |
+| `clamav` | unset (falsy) | already off |
+| `brppersonenmock` | unset (falsy) | **enable** — core |
+| `openzaak` | unset (falsy) | **enable** — core |
+| `opennotificaties` | unset (falsy) | enable only for its profile |
+| `objecten` | unset (falsy) | enable only for its profile |
+| `objecttypen` | unset (falsy) | enable only for openformulieren profile |
+| `openarchiefbeheer` | `false` (explicit) | enable only for its profile |
+| `openklant` | unset (falsy) | **enable** — core |
+| `openformulieren` (alias of `openforms`) | unset (falsy) | enable only for its profile |
+| `openinwoner` | unset (falsy) | already off |
+| `referentielijsten` | `false` (explicit) | already off |
+| `openbeheer` | `false` (explicit) | already off |
+| `zac` (alias of `zaakafhandelcomponent`) | `true` | keep — set explicitly anyway |
+| `zaakbrug` | `false` (explicit) | already off |
+| `zgw-office-addin` | `true` | disable — unrelated to ZAC |
+| `ita` | `true` | disable — unrelated to ZAC |
+| `kiss` | `true` | disable — unrelated to ZAC |
+| `pabc` | `true` | keep — set explicitly anyway |
+| `omc` | `false` (explicit) | already off |
+| `redis-operator` | `true` | disable — we run plain Redis |
+| `apisix` | `false` (explicit) | already off |
+| `eck-operator` | `true` | disable — unrelated (Elasticsearch operator for kiss) |
+| `kiss-eck` | `true` | disable — tied to kiss |
+
+In Go templates a missing/`nil` value is falsy, so "unset" and "false" behave
+identically in `{{ if .Values.x.enabled }}` guards — the distinction only
+matters for documentation clarity, not behavior.
+
+### Template-level verification that disabling actually no-ops cleanly
+
+Checked the templates that reference `keycloak-operator`/`redis-operator`
+directly (16 files: `keycloak-cr.yaml`, `keycloak-ensure-operator-sa.yaml`,
+`keycloak-import-master-realm-job.yaml`, `keycloak-import-podiumd-realm-job.yaml`,
+`keycloak-master-realm-config.yaml`, `keycloak-podiumd-realm-config.yaml`,
+`keycloak-podiumd-realm-secrets.yaml`, `keycloak-secrets.yaml`,
+`keycloak-operator-client-secret.yaml`, `keycloak-operator-servicemonitor-rbac.yaml`,
+`keycloak-ensure-podiumd-admin-user.yaml`, `redis-ha.yaml`,
+`redis-ha-label-master.yaml`, `redis-ha-podmonitor.yaml`,
+`redis-ha-pre-delete.yaml`, `validations.yaml`). Spot-checked
+`keycloak-cr.yaml` (`{{- if (index .Values "keycloak-operator").enabled }}`
+as its very first line) and `redis-ha.yaml` (`{{- if and $redisOperator.enabled
+$redisHa.enabled }}`) — both guard correctly. `apisix-etcd.yaml` similarly
+guards on `.Values.apisix.enabled`. `create-required-catalogi.yaml` and
+`create-required-objecttypen.yaml` are guarded by their own app's `.enabled`
+AND a job-specific sub-flag (`openzaak.create_required_catalogi_job.enabled`,
+`objecttypen.create_required_objecttypen_job.enabled`) — these are optional
+extras (declarative catalog/objecttype seeding via the OpenZaak/Objecttypen
+API) that could in principle complement or replace some of our own vendored
+seed SQL, but they almost certainly produce a minimal/generic "zac" catalog
+for production bootstrapping rather than the exact zaaktype-test-1/2/3 +
+BPMN test fixtures docker-compose seeds — not investigated further, left
+disabled (default) for now, our own vendored SQL fixtures cover this instead.
+
+`values.schema.json` does not exist for this chart — no separate schema-level
+validation to worry about beyond the in-template `fail` calls in
+`validations.yaml` (which only trigger for the monitoring OIDC secret and ITA
+medewerker-objecttype cases, both irrelevant once `keycloak-operator` and
+`ita` are disabled).
+
+### The Azure-CSI storage template problem (the one real blocker)
+
+`templates/openzaak-storage.yaml` (and, by the identical filename pattern,
+`openklant-storage.yaml`, `opennotificaties-storage.yaml`,
+`openarchiefbeheer-storage.yaml`, `openformulieren-storage.yaml`,
+`openinwoner-storage.yaml`, `referentielijsten-storage.yaml`,
+`openbeheer-storage.yaml` — `objecten`/`objecttypen`/`pabc`/
+`brp-personen-mock` have no such template, unaffected) creates a raw
+`PersistentVolume` with:
+
+```yaml
+annotations:
+  pv.kubernetes.io/provisioned-by: file.csi.azure.com
+spec:
+  storageClassName: {{ .Values.openzaak.persistentVolume.storageClassName | default "podiumd-standard" }}
+  csi:
+    driver: file.csi.azure.com
+    volumeHandle: ...
+    volumeAttributes:
+      shareName: ...
+    nodeStageSecretRef:
+      name: ...
+      namespace: ...
+```
+
+— the CSI driver itself, not just the storage class name, is Azure Files
+specific (`file.csi.azure.com`). No minikube cluster has this CSI driver
+installed, so this PV can never bind there regardless of what
+`storageClassName` is overridden to.
+
+The template's top guard is:
+```
+{{- if or .Values.openzaak.enabled (not (hasKey .Values.openzaak "enabled")) -}}
+```
+— note the `(not (hasKey ...))` fallback: if the `enabled` key is *absent*
+entirely, this defaults to *rendering the storage template anyway*, even
+though the actual subchart `condition: openzaak.enabled` (a plain truthiness
+check, no such fallback) would NOT install the openzaak app itself in that
+same scenario. So leaving `enabled` unset does not avoid this template. Once
+we explicitly set it `true` to get the app, the same condition obviously
+still fires.
+
+The fix relies on this template's other property: both the PV and its
+matching PVC are wrapped in `{{- if not (lookup "v1" "PersistentVolume"/
+"PersistentVolumeClaim" ...) }}` — genuinely idempotent, skips creation if an
+object with that exact name already exists live in the cluster.
+`lookup` queries the *live* cluster at render time, not the set of objects
+being rendered in the same `helm install`/`helm template` invocation — so our
+own same-name PV/PVC can't just be regular templates in this chart (on a
+first install, both would render in the same pass with neither visible to
+the other's `lookup` yet, risking either a duplicate-resource collision or a
+race depending on apply ordering). Annotating our own PV/PVC as Helm
+`pre-install,pre-upgrade` hooks solves this cleanly: Helm hooks are a
+genuinely separate, ordered phase that completes *before* the release's
+regular manifests (including podiumd's nested `openzaak-storage.yaml`, which
+is not itself a hook) are applied. By the time podiumd's `lookup` runs, ours
+already exists, and it no-ops. `helm.sh/resource-policy: keep` on our hook
+objects prevents them from being deleted on hook cleanup or `helm uninstall`.
+No extra Job/RBAC is required — PV/PVC objects can carry hook annotations
+directly, they don't need a pod to run.

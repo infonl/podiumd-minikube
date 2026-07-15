@@ -10,23 +10,38 @@ a Helm chart that reproduces this stack on minikube, for local
 Kubernetes-based development/testing instead of Docker Compose.
 
 Rather than hand-write Kubernetes manifests for every ZGW component (Open
-Zaak, Open Klant, Objecten, Open Formulieren, ...), we reuse the same Helm
-subcharts that the sibling **PodiumD** umbrella chart
-(`~/development/werk/infonl-dimpact/dimpact-samenwerking/helm-charts/charts/podiumd`)
-already depends on for these exact components. PodiumD itself is tuned for
-production Azure clusters (Keycloak Operator + CRDs, Redis Operator 3-node HA,
-per-app external Postgres, APISIX, cert-manager) — too heavy for a minikube
-dev box — so for the pieces PodiumD handles with cloud-specific operators, we
-instead use plain single-container Deployments that mirror docker-compose's
-own topology (which is itself already a simple, single-instance-per-service
-setup).
+Zaak, Open Klant, Objecten, Open Formulieren, ...), **this chart depends on
+the published `podiumd` umbrella chart** (`dimpact/podiumd`, from
+`https://Dimpact-Samenwerking.github.io/helm-charts/`) as its single Helm
+dependency, and disables the parts of it that are Azure-production-specific
+(Keycloak Operator, Redis Operator HA, APISIX, ClamAV, and the unrelated
+non-ZAC apps it also bundles: ITA, KISS, OpenInwoner, Referentielijsten,
+OpenBeheer, Zaakbrug, zgw-office-addin, OMC, ECK). What's left standing —
+openzaak, openklant, objecten, objecttypen, opennotificaties,
+openarchiefbeheer, openforms, pabc, brp-personen-mock, and zac itself — is
+exactly the set of components `docker-compose.yaml` also runs, all wired
+through PodiumD's own values conventions.
 
-`dimpact-zaakafhandelcomponent`'s own production chart, `charts/zac`, is
-reused too: it already provides the ZAC app, OPA (as a pod sidecar), the
-office-converter (Gotenberg) container, and a `solr.url` + `createZacCore`
-mechanism that lets ZAC create its own Solr core against any external Solr
-instance — exactly matching compose's plain `solr:9.10.1-slim` +
-`solr-precreate` container.
+This was a deliberate choice after comparing it against directly depending on
+each of those ~10 subcharts ourselves (see `research-notes.md` for the
+comparison): depending on the whole `podiumd` chart means `helm dependency
+update` also fetches ~15 subcharts we'll never render (still real cost — see
+below), but it means our own chart genuinely only contains the changes and
+extras needed for minikube — everything else is "disable this, override
+that" against a single upstream dependency, one line in `Chart.yaml`.
+
+`dimpact-zaakafhandelcomponent`'s own production chart, `charts/zac`, comes
+along automatically as `podiumd`'s own `zac` dependency (aliased `zac`,
+enabled by default) — it already provides the ZAC app, OPA (as a pod
+sidecar), the office-converter (Gotenberg) container, and a `solr.url` +
+`createZacCore` mechanism that lets ZAC create its own Solr core against any
+external Solr instance — exactly matching compose's plain
+`solr:9.10.1-slim` + `solr-precreate` container. **Caveat**: because it's a
+nested dependency of `podiumd`, we don't independently choose the `zac` chart
+version — we get whatever version the chosen `podiumd` release itself pins
+(see "PodiumD dependency version" below). Testing a newer `charts/zac`
+release means testing a newer `podiumd` release, not bumping `zac`
+independently.
 
 ## Standalone project: this repo (`podiumd-minikube`)
 
@@ -36,15 +51,8 @@ plan/design notes, and any future memory this project accumulates — lives in
 one self-contained place instead of being scattered across
 `dimpact-zaakafhandelcomponent`'s `charts/` directory.
 
-Consequences of standing alone:
-- **`zaakafhandelcomponent` is a normal remote Helm dependency**, not a local
-  path. Since the chart is no longer colocated with `charts/zac`, it depends
-  on the same **published** repo PodiumD itself already uses for this
-  (`@zac` → `https://infonl.github.io/dimpact-zaakafhandelcomponent/`) — this
-  is fetched like any other subchart (openzaak, openklant, ...), not vendored
-  source.
-- **Every other file asset this chart needs from `dimpact-zaakafhandelcomponent`
-  is physically copied into this repo** at build time, so this project never
+- **Every file asset this chart needs from `dimpact-zaakafhandelcomponent` is
+  physically copied into this repo** at build time, so this project never
   reaches across repos at runtime or at `helm template`/`helm install` time:
   - `scripts/docker-compose/imports/keycloak/realms/zaakafhandelcomponent-realm.json`
   - `scripts/docker-compose/imports/{brp-personen-wiremock,smartdocuments-wiremock,kvk-wiremock,bag-wiremock}/{mappings,__files}`
@@ -61,114 +69,215 @@ This repo *is* the chart (no nested `charts/<name>` wrapper needed, since
 there's nothing else in the repo): `Chart.yaml`, `values.yaml`, `templates/`,
 `vendor/` all live at the repo root.
 
-### Dependencies (reused subcharts, mirroring PodiumD's Chart.yaml)
-
-Repo aliases (resolved via PodiumD's `scripts/add-helm-repos.sh`):
-
-| alias | URL |
-|---|---|
-| `@maykinmedia` | `https://maykinmedia.github.io/charts/` |
-| `@dimpact` | `https://Dimpact-Samenwerking.github.io/helm-charts/` |
+## Dependency: `podiumd`
 
 ```yaml
+# Chart.yaml
 dependencies:
-  - name: zaakafhandelcomponent
-    alias: zac
-    repository: "@zac"    # https://infonl.github.io/dimpact-zaakafhandelcomponent/ (published chart repo)
-    version: "1.0.283"
-    condition: zac.enabled
-  - name: openzaak
-    repository: "@maykinmedia"
-    condition: openzaak.enabled       # always on (core)
-  - name: openklant
-    repository: "@maykinmedia"
-    condition: openklant.enabled      # always on (core)
-  - name: objecten
-    repository: "@maykinmedia"
-    condition: objecten.enabled       # "objecten" profile
-  - name: objecttypen
-    repository: "@maykinmedia"
-    condition: objecttypen.enabled    # needed by openformulieren profile
-  - name: opennotificaties
-    repository: "@maykinmedia"
-    condition: opennotificaties.enabled   # "opennotificaties"/"openformulieren" profile
-  - name: openarchiefbeheer
-    repository: "@maykinmedia"
-    condition: openarchiefbeheer.enabled  # "openarchiefbeheer" profile
-  - name: openforms
-    alias: openformulieren
-    repository: "@maykinmedia"
-    condition: openformulieren.enabled    # "openformulieren" profile
-  - name: pabc
-    repository: "oci://ghcr.io/platform-autorisatie-beheer-component"
-    version: "1.1.0"
-    condition: pabc.enabled           # always on (core)
-  - name: brp-personen-mock
-    alias: brppersonenmock
-    repository: "@dimpact"
-    condition: brppersonenmock.enabled    # always on (core)
+  - name: podiumd
+    repository: "@dimpact"    # https://Dimpact-Samenwerking.github.io/helm-charts/
+    version: "4.8.1"           # see "PodiumD dependency version" below for how to change this
+    condition: podiumd.enabled  # always true — this is our only real dependency
 ```
 
-Each subchart's `image.tag` is overridden in our `values.yaml` to match the
-exact version pinned in `docker-compose.yaml` (e.g. `open-zaak:1.29.1`,
-`open-klant:2.15.0`, `objects-api:3.6.1`, `objecttypes-api:3.4.2`,
-`open-notificaties:1.15.0`, `open-archiefbeheer:2.0.0`, `open-forms:3.5.4`),
-regardless of what the packaged chart version defaults to — chart version and
-app image tag are independent.
+All configuration for every ZGW component now nests one level deeper, under
+`podiumd.<component>.*` in our own `values.yaml` (e.g.
+`podiumd.openzaak.settings.database.host`, `podiumd.zac.contextUrl`), since
+they're podiumd's nested dependencies, not ours directly.
 
-**Verified via `helm show values`/`helm pull` against the live
-`@maykinmedia`/`@dimpact`/OCI repos** (checked openzaak as the representative
-member of the shared Maykin Django-app chart family, plus pabc and
-brp-personen-mock individually):
+### PodiumD dependency version — easily configurable
+
+Helm dependency versions are a `Chart.yaml`-level concept, not a
+`values.yaml`-level one — they can't be templated or overridden at
+`helm install`/`--set` time. To still make "test a different podiumd version"
+a one-line operation instead of a manual edit-and-remember-to-update-deps
+dance, this repo ships `scripts/set-podiumd-version.sh`:
+
+```sh
+#!/usr/bin/env bash
+set -euo pipefail
+NEW_VERSION="${1:?Usage: set-podiumd-version.sh <version>}"
+sed -i.bak "s/version: \"[^\"]*\"  *# podiumd version/version: \"${NEW_VERSION}\"  # podiumd version/" Chart.yaml
+rm -f Chart.yaml.bak
+helm dependency update
+echo "podiumd dependency set to ${NEW_VERSION}; helm dependency update re-run."
+```
+
+Chart.yaml's `version:` line for the `podiumd` dependency carries the
+`# podiumd version` trailing comment specifically so this sed is unambiguous
+even though today it's the only dependency in the file. Usage:
+`./scripts/set-podiumd-version.sh 4.7.8 && helm template . | ...`.
+`helm search repo dimpact/podiumd -l` lists every available version.
+
+### What has to be explicitly disabled (defaults to `enabled: true` in podiumd)
+
+Verified directly (pulled `dimpact/podiumd` 4.8.1 and inspected
+`values.yaml` + `Chart.yaml` + templates):
+
+```yaml
+podiumd:
+  keycloak-operator:
+    enabled: false   # we run plain Keycloak instead — see Raw templates
+  redis-operator:
+    enabled: false   # we run plain Redis instead — see Raw templates
+  apisix:
+    enabled: false    # already false by default, set explicitly for clarity
+  zgw-office-addin:
+    enabled: false
+  ita:
+    enabled: false
+  kiss:
+    enabled: false
+  kiss-eck:
+    enabled: false
+  eck-operator:
+    enabled: false
+  omc:
+    enabled: false    # already false by default
+  clamav:
+    enabled: false    # already unset/false by default
+  openinwoner:
+    enabled: false    # already unset/false by default
+  referentielijsten:
+    enabled: false    # already false by default
+  openbeheer:
+    enabled: false    # already false by default
+  zaakbrug:
+    enabled: false    # already false by default
+```
+
+Each of these is properly guarded internally (e.g. `keycloak-cr.yaml` starts
+with `{{- if (index .Values "keycloak-operator").enabled }}`,
+`redis-ha.yaml` with an equivalent check) — disabling cleanly removes the
+templates. The real cost isn't correctness, it's that **`helm dependency
+update` still downloads all of these subchart archives into `charts/`
+regardless of `condition:`** (conditions only gate rendering, not fetching) —
+accepted as the trade-off for a single upstream dependency.
+
+### What has to be explicitly enabled (defaults to unset/falsy in podiumd)
+
+```yaml
+podiumd:
+  openzaak:
+    enabled: true      # always on (core)
+  openklant:
+    enabled: true      # always on (core)
+  brppersonenmock:
+    enabled: true      # always on (core)
+  # zac.enabled and pabc.enabled already default to true — set explicitly anyway
+  # for robustness against a future podiumd version changing that default.
+  zac:
+    enabled: true
+  pabc:
+    enabled: true
+  # profile-gated — only flipped true when the matching top-level profile flag is set:
+  objecten:
+    enabled: false        # "objecten"/"openformulieren" profile
+  objecttypen:
+    enabled: false         # needed by "openformulieren" profile
+  opennotificaties:
+    enabled: false    # "opennotificaties"/"openformulieren" profile
+  openarchiefbeheer:
+    enabled: false    # "openarchiefbeheer" profile
+  openformulieren:
+    enabled: false      # "openformulieren" profile
+```
+
+### Verified `helm show values`/`helm pull` findings (unchanged facts, now nested under `podiumd.*`)
 
 - **Postgres**: the Maykin family (openzaak/openklant/objecten/objecttypen/
   opennotificaties/openarchiefbeheer/openforms) has **no bundled Postgres at
-  all** — they always expect an external database via
-  `settings.database.{host,port,username,password,name}`, so there's no
-  `postgresql.enabled` toggle to flip for these; we just point those fields at
-  the shared Postgres with each app's own db name/user/password. **pabc** is
-  the exception — it *does* bundle `postgresql` (bitnami) and needs
-  `postgresql.enabled: false` + its own `settings.database.{host,port,
-  username,password}` pointed at the shared instance instead.
+  all** — always expects an external database via
+  `podiumd.<app>.settings.database.{host,port,username,password,name}`. No
+  `postgresql.enabled` toggle for these. **pabc** is the exception — it *does*
+  bundle `postgresql` (bitnami) and needs `podiumd.pabc.postgresql.enabled:
+  false` + its own `settings.database.{host,port,username,password}` pointed
+  at the shared instance instead.
 - **Redis**: every Maykin-family chart bundles its own Redis by default
-  (`tags.redis: true`, `redis.architecture: standalone`, a bitnami subchart).
-  Set `tags.redis: false` on all of them and point their cache/celery Redis
-  DSN settings at the one shared Redis instance instead (exact per-app DSN
-  field name to be confirmed per chart at implementation time, following the
-  same `settings.*` shape confirmed on openzaak).
-- **`flower` (Celery monitoring UI)** defaults to `enabled: true` on
-  openklant/objecten/openarchiefbeheer/openforms (already `false` on
-  openzaak/opennotificaties) — set `flower.enabled: false` explicitly across
-  the board; not needed for local dev and we already have a separate
-  `metrics` profile for observability.
-- **Ingress**: every one of these charts — and `charts/zac` itself — already
-  ships its own native `ingress.{enabled,className,hosts,tls}` block (the
-  standard `helm create` scaffold shape). So exposing zac/openzaak/openklant/
-  pabc/etc. via Traefik needs **no raw Ingress template at all** — just set
-  `ingress.enabled: true`, `ingress.className: traefik`, and
-  `ingress.hosts: [{host: "<service>.local", paths: [{path: "/", pathType:
-  ImplementationSpecific}]}]` in our values.yaml for each. Raw Ingress
-  templates are only needed for components we write ourselves that have no
-  chart (Keycloak, wiremock, Grafana, greenmail — see below).
-- **`replicaCount`** defaults to `2` on most of the family
-  (openzaak/openklant/objecten/objecttypen/opennotificaties/openforms; already
-  `1` on openarchiefbeheer/pabc) — confirms the `replicaCount: 1` override
-  below is actually load-bearing, not just precautionary.
+  (`tags.redis: true`, `redis.architecture: standalone`). Set
+  `podiumd.<app>.tags.redis: false` on all of them and point their
+  cache/celery Redis DSN settings at the one shared Redis instance instead
+  (exact per-app DSN field name confirmed per chart at implementation time).
+- **`flower`** defaults to `enabled: true` on
+  openklant/objecten/openarchiefbeheer/openforms — set
+  `podiumd.<app>.flower.enabled: false` explicitly across the board.
+- **Ingress**: every one of these charts (and `zac`) ships its own native
+  `ingress.{enabled,className,hosts,tls}` block — expose via
+  `podiumd.<app>.ingress.{enabled: true, className: traefik, hosts: [...]}`,
+  no raw Ingress template needed for any of them.
+- **`replicaCount`** defaults to `2` on most of the family — set
+  `podiumd.<app>.replicaCount: 1` + `autoscaling.enabled: false` everywhere.
+- **OIDC client secrets**: PodiumD's own `keycloak-podiumd-realm-secrets.yaml`
+  **auto-generates** an OIDC client secret for every app, unconditionally,
+  whenever neither `configuration.secrets.keycloak_client_secret` nor
+  `configuration.oidcSecret` is explicitly set on that app (confirmed via the
+  comment in `templates/validations.yaml`) — this happens regardless of
+  whether `keycloak-operator` itself is enabled. Since we need the *specific*
+  secrets already baked into our vendored ZAC realm.json (e.g.
+  `openzaakZaakafhandelcomponentClientSecret`), every relevant app gets
+  `podiumd.<app>.configuration.secrets.keycloak_client_secret` set explicitly
+  to the matching compose value — never left to auto-generate.
 
-### Raw templates (new, in `templates/`)
+### PodiumD's Azure-CSI storage templates — the one real blocker, and its fix
+
+**Confirmed directly** (pulled and read `templates/openzaak-storage.yaml`):
+podiumd has a `<app>-storage.yaml` template for openzaak, openklant,
+opennotificaties, openarchiefbeheer, openformulieren, openinwoner,
+referentielijsten, and openbeheer (objecten/objecttypen/pabc/brp-personen-mock
+don't have one — unaffected). Each one **unconditionally creates a raw
+`PersistentVolume` hardcoding the Azure Files CSI driver**
+(`csi: {driver: file.csi.azure.com, ...}`) — not just a storage-class
+reference, the whole PV spec is Azure-only. Setting `storageClassName` does
+**not** fix this; there is no values-only way to make the PV itself portable.
+
+Two details make this fixable rather than a dead end:
+1. The template's guard is `{{- if or .Values.openzaak.enabled (not (hasKey
+   .Values.openzaak "enabled")) }}` — once we explicitly set
+   `podiumd.openzaak.enabled: true` (which we must, to get the app itself),
+   this always fires. There's no separate toggle to keep the app but suppress
+   just its storage template.
+2. Both the PV and its matching PVC creation are individually wrapped in
+   `{{- if not (lookup "v1" "PersistentVolume"/"PersistentVolumeClaim" ...) }}`
+   — i.e. **idempotent**: if an object with that exact name already exists in
+   the cluster, podiumd's own template skips creating it.
+
+The fix: **this chart pre-provisions its own minikube-compatible
+`PersistentVolume` + `PersistentVolumeClaim`**, named exactly what podiumd
+expects (`<namespace>-<app>` for the PV, `podiumd.<app>.persistence.
+existingClaim` for the PVC), backed by minikube's `standard` StorageClass.
+`lookup` only sees objects that already exist in the *live cluster* at
+template-render time — it can't see objects from the same `helm install`
+pass — so these can't just be regular templates in this chart (on a first
+install, ours and podiumd's would render in the same pass and neither would
+see the other yet, risking a name collision). Instead, **this chart's PV/PVC
+templates are annotated as Helm `pre-install,pre-upgrade` hooks**
+(`helm.sh/hook: pre-install,pre-upgrade`, `helm.sh/resource-policy: keep` so
+they survive uninstalls). Helm hooks complete as a distinct phase *before*
+any of the release's regular manifests — including podiumd's nested
+`openzaak-storage.yaml` — are applied, so by the time podiumd's `lookup`
+check runs, our PV/PVC already exist and it cleanly no-ops. No extra Job or
+RBAC needed — PV/PVC objects can carry hook annotations directly.
+
+This applies to every persistent app we actually enable: openzaak and
+openklant from day one (both are "core"), and opennotificaties/
+openarchiefbeheer/openformulieren later when their profiles are turned on —
+each gets its own hook-annotated PV/PVC pair, following the same pattern
+confirmed on openzaak.
+
+## Raw templates (new, in `templates/`)
 
 All file assets referenced below (`scripts/docker-compose/imports/...`,
 policy directories) are the **vendored copies** under
 `vendor/dimpact-zaakafhandelcomponent/` described above, not live references
-into `dimpact-zaakafhandelcomponent`.
-
-Components with no reusable production-grade chart, or where PodiumD's choice
-(operator/HA) is overkill for a single-node minikube box:
+into `dimpact-zaakafhandelcomponent`. These are unaffected by the switch to
+depending on the whole `podiumd` chart — they're still raw templates we write
+ourselves for pieces podiumd doesn't provide (or provides only via
+Azure-specific operators we've disabled above).
 
 - **Postgres — single shared instance.** One `postgis/postgis:17-3.4`
   Deployment + PVC + Service (PostGIS is a superset of plain Postgres, so it
   serves the non-spatial databases too), `storageClassName` left unset /set to
-  minikube's default `standard` class (see Storage section below).
+  minikube's default `standard` class.
 
   Verified detail (checked `init.sh`/`fill-data-on-startup.sh` for openzaak,
   openklant, and openarchiefbeheer directly): these are **not** passive seed
@@ -197,7 +306,9 @@ Components with no reusable production-grade chart, or where PodiumD's choice
   run with `start-dev --import-realm`, importing a **patched copy** of
   `scripts/docker-compose/imports/keycloak/realms/zaakafhandelcomponent-realm.json`
   (100K, mounted via ConfigMap) — no Keycloak Operator/CRDs, no realm-import
-  Jobs. `KC_DB` points at the shared Postgres.
+  Jobs (podiumd's own keycloak-operator-based realm wiring is entirely
+  disabled per above — this is a clean substitute, not a second competing
+  Keycloak). `KC_DB` points at the shared Postgres.
 
   Verified detail: the realm JSON has no `${env.*}` placeholders (so none of
   the `ZAC_*_TEST_*_EMAIL_ADDRESS` env vars compose passes to the Keycloak
@@ -218,9 +329,10 @@ Components with no reusable production-grade chart, or where PodiumD's choice
 - **RabbitMQ** — plain single-container `rabbitmq:4.2.7-alpine` Deployment +
   Service (`opennotificaties`/`openformulieren` profile only).
 - **Solr** — plain single-container `solr:9.10.1-slim` Deployment + Service.
-  Wired into the `zac` subchart via `solr.url: http://<solr-service>:8983` +
-  `solr.createZacCore: true`, reusing that chart's existing initContainer
-  instead of writing our own core-creation logic.
+  Wired into `podiumd`'s `zac` dependency via
+  `podiumd.zac.solr.url: http://<solr-service>:8983` +
+  `podiumd.zac.solr.createZacCore: true`, reusing that chart's existing
+  initContainer instead of writing our own core-creation logic.
 - **Wiremocks — one merged pod, not four.** Only `brp-personen-wiremock` is
   always-on in compose; `smartdocuments-wiremock`, `kvk-wiremock`, and
   `bag-wiremock` are all gated behind the `itest` profile. Rather than four
@@ -231,12 +343,11 @@ Components with no reusable production-grade chart, or where PodiumD's choice
   upstream APIs, so mapping sets don't collide). ZAC/tests reach the
   itest-only mappings through the same in-cluster Service, on the same host,
   differentiated by path. Content is small (20–108K per set) so ConfigMaps
-  work directly, one key per mapping/file. See "Resource footprint
-  optimizations" below for the rationale.
-- **brp-personen-mock** wiring — the reused `brp-personen-mock` subchart
-  (`@dimpact`) provides the personen-mock API itself; `brp-personen-wiremock`
-  (raw template above) is the proxy/translation layer in front of it, exactly
-  as in compose. The wiremock mapping
+  work directly, one key per mapping/file.
+- **brp-personen-mock** wiring — `podiumd`'s `brp-personen-mock` dependency
+  (aliased `brppersonenmock`) provides the personen-mock API itself;
+  `brp-personen-wiremock` (raw template above) is the proxy/translation layer
+  in front of it, exactly as in compose. The wiremock mapping
   `proxy-requests-with-headers.json` hardcodes `"proxyBaseUrl":
   "http://brp-personen-mock:5010"` — verified this resolves with **zero
   overrides needed**: the `brp-personen-mock` chart already ships
@@ -252,18 +363,18 @@ Components with no reusable production-grade chart, or where PodiumD's choice
 - **opa-tests** (itest profile) — a Helm `Job` running `opa test` against
   `src/test/resources/policies` + `src/main/resources/policies` (mounted via
   ConfigMap), mirroring the compose one-shot container.
-- **Traefik Ingress — only for components with no chart of their own.** As
-  confirmed above, zac/openzaak/openklant/objecten/objecttypen/
-  opennotificaties/openarchiefbeheer/openforms/pabc all already ship a native
+- **Traefik Ingress — only for components with no chart of their own.** Every
+  app that comes via the `podiumd` dependency already ships a native
   `ingress.{enabled,className,hosts,tls}` block — those are exposed by setting
-  values, not by writing templates. A **raw Ingress template** is only needed
-  for the components this chart writes itself: Keycloak, the merged WireMock
-  pod, Grafana (`metrics` profile), and greenmail (`itest` profile). Each gets
-  hostname `<service>.local`, `ingressClassName: traefik`, plain HTTP (`web`
-  entrypoint, no TLS/cert-manager — this is local dev only, unlike PodiumD's
-  production Let's Encrypt setup documented in `podiumd-infra/docs/ingress.md`).
+  values (`podiumd.<app>.ingress.*`), not by writing templates. A **raw
+  Ingress template** is only needed for the components this chart writes
+  itself: Keycloak, the merged WireMock pod, Grafana (`metrics` profile), and
+  greenmail (`itest` profile). Each gets hostname `<service>.local`,
+  `ingressClassName: traefik`, plain HTTP (`web` entrypoint, no
+  TLS/cert-manager — this is local dev only, unlike PodiumD's production
+  Let's Encrypt setup documented in `podiumd-infra/docs/ingress.md`).
 
-### Keycloak/ZAC issuer-URL consistency (no hostAliases needed)
+## Keycloak/ZAC issuer-URL consistency (no hostAliases needed)
 
 Compose solves browser vs. container hostname mismatch via
 `KC_HOSTNAME=http://host.docker.internal:8081` while ZAC's own
@@ -276,8 +387,8 @@ browser therefore never need to agree on which hostname to use — they only
 need to agree with whatever Keycloak itself advertises.
 
 Same pattern on minikube, without any `hostAliases` workaround:
-- ZAC's `auth.server` → in-cluster Keycloak Service DNS (`http://keycloak:8080`),
-  used only for backend token/introspection calls.
+- ZAC's `podiumd.zac.auth.server` → in-cluster Keycloak Service DNS
+  (`http://keycloak:8080`), used only for backend token/introspection calls.
 - Keycloak's own `KC_HOSTNAME` → the Traefik Ingress hostname
   (`http://keycloak.local`), which is what ends up in the discovery document
   and is what the browser is redirected to.
@@ -292,10 +403,11 @@ Traefik itself is a **cluster prerequisite**, installed once via Helm
 treats Traefik as pre-installed cluster infra rather than an app-chart
 dependency. This will be documented in a short README for the new chart.
 
-### values.yaml profile flags
+## values.yaml profile flags
 
 Mirrors compose's own opt-in profile behavior (`start-docker-compose.sh` with
-no flags only starts the core stack):
+no flags only starts the core stack). These are **our own** top-level flags,
+separate from the `podiumd.<app>.enabled` flags they control:
 
 ```yaml
 zac.enabled: true                 # "zac" profile — on by default so the app is visible
@@ -309,7 +421,7 @@ metrics.enabled: false
 Core (no profile in compose, so always deployed): postgres, redis, solr,
 keycloak, openzaak, openklant, pabc, brp-personen-mock/wiremock.
 
-### Self-referential URLs: every exposed service gets its hostname updated
+## Self-referential URLs: every exposed service gets its hostname updated
 
 Same root cause as the Keycloak redirect-URI issue above, but broader: several
 apps bake their *own* public-facing URL into their own config, hardcoded in
@@ -321,49 +433,48 @@ implicit:
 
 | Service | Compose value (to replace) | New value |
 |---|---|---|
-| zac (`contextUrl`) | `http://localhost:8080` | `http://zac.local` |
-| pabc (`oidc.authority`) | n/a (already `http://keycloak:8080/realms/zaakafhandelcomponent/`, internal — unaffected) | unchanged |
-| pabc (its own `ingress.hosts`) | `localhost:8006`/`8000` | `pabc.local` |
+| zac (`podiumd.zac.contextUrl`) | `http://localhost:8080` | `http://zac.local` |
+| pabc (`podiumd.pabc.oidc.authority`) | n/a (already `http://keycloak:8080/realms/zaakafhandelcomponent/`, internal — unaffected) | unchanged |
+| pabc (its own `podiumd.pabc.ingress.hosts`) | `localhost:8006`/`8000` | `pabc.local` |
 | openarchiefbeheer-web (`CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`) | `http://localhost:8005,http://localhost:8004` | `http://openarchiefbeheer-ui.local,http://openarchiefbeheer-web.local` |
 | openarchiefbeheer-web (`OAB_API_URL`) | `http://localhost:8004` | `http://openarchiefbeheer-web.local` |
 | openarchiefbeheer-web (`FRONTEND_URL`) | `http://localhost:8005` | `http://openarchiefbeheer-ui.local` |
 | openformulieren (`CSRF_TRUSTED_ORIGINS`) | `http://localhost:8007,http://localhost:8009` | `http://openformulieren-nginx.local,http://openformulieren-web.local` |
 
-The exact `values.yaml` field path for each (`settings.*` nesting) is
-confirmed for openzaak/pabc directly (see Dependencies section); the
-CORS/CSRF/frontend-url field names for openarchiefbeheer/openformulieren
-specifically follow the same `settings.*` shape but get a final confirmation
-pass per-chart during step 5 (when those profile groups are actually wired),
-since I only pulled openzaak and pabc's full values in depth.
+The exact `values.yaml` field path for each (`podiumd.<app>.settings.*`
+nesting) is confirmed for openzaak/pabc directly; the CORS/CSRF/frontend-url
+field names for openarchiefbeheer/openformulieren specifically follow the
+same `settings.*` shape but get a final confirmation pass per-chart during
+step 5 (when those profile groups are actually wired).
 
-### openzaak: the "copy fake-test-document.pdf" startup step
+## openzaak: the "copy fake-test-document.pdf" startup step
 
 Compose's `openzaak.local` service overrides its `command` to
 `copy-test-pdf-and-start-openzaak.sh`, which copies a vendored test PDF into
 `/app/private-media/uploads/2023/{10,11,12}/` (referenced by the zaaktype
 fixture SQL in `06-setup-zac-config-after.sql`) before exec'ing the image's
-normal `/start.sh`. The reused `openzaak` subchart has its own entrypoint we
-don't want to fight with a `command` override, so this becomes an
-**initContainer** on the openzaak subchart's pod (via its `extraInitContainers`
-value, or equivalent — confirmed at implementation time) that mounts the
-vendored `fake-test-document.pdf` (as a ConfigMap or small init image) and the
-same `persistence`-backed media volume the main container uses, and copies
-the file into the same three subpaths, before the main container starts
-normally.
+normal `/start.sh`. The `openzaak` dependency (nested inside `podiumd`) has
+its own entrypoint we don't want to fight with a `command` override, so this
+becomes an **initContainer** on its pod (via its `extraInitContainers` value,
+or equivalent — confirmed at implementation time) that mounts the vendored
+`fake-test-document.pdf` (as a ConfigMap or small init image) and the same
+persistence volume the main container uses (the one we pre-provision — see
+"PodiumD's Azure-CSI storage templates" above), and copies the file into the
+same three subpaths, before the main container starts normally.
 
-### Resource footprint optimizations
+## Resource footprint optimizations
 
 Minikube is a single-node cluster with limited memory, so beyond the
 already-shared Postgres/Redis/OPA-sidecar decisions above, the chart
 deliberately overrides several subchart defaults that are sized for
 production HA rather than a single dev node:
 
-- **`replicaCount: 1` + `autoscaling.enabled: false` on every reused
-  subchart** (openzaak, openklant, objecten, objecttypen, opennotificaties,
-  openarchiefbeheer, openformulieren, pabc). Several of these default to 2+
-  replicas / HPA for production HA — pure waste on one node. This is the
-  single broadest win since it's a uniform override applied identically
-  across every dependency.
+- **`replicaCount: 1` + `autoscaling.enabled: false` on every app nested
+  inside `podiumd`** (openzaak, openklant, objecten, objecttypen,
+  opennotificaties, openarchiefbeheer, openformulieren, pabc). Several of
+  these default to 2+ replicas / HPA for production HA — pure waste on one
+  node. This is the single broadest win since it's a uniform override
+  applied identically across every dependency.
 - **Wiremocks merged into one pod** — see "Wiremocks" above; cuts up to 3
   standing WireMock JVMs (~150–200MB each) down to zero marginal processes
   when `itest.enabled=true`.
@@ -380,36 +491,24 @@ production HA rather than a single dev node:
   - CPU (lower priority): `-XX:ActiveProcessorCount=2` on every JVM-based
     component (ZAC, Keycloak, Solr) so they don't auto-detect the full
     minikube VM core count and over-spawn GC/JIT threads.
-- **Audit each reused subchart at implementation time for bundled
-  extras not needed for local dev** — e.g. a `flower` Celery-monitoring UI,
-  or a per-app tracing/metrics exporter sidecar — and disable them via that
-  subchart's own values. We already have a separate, off-by-default
-  `metrics` profile for observability, so per-app exporters would be pure
-  duplication.
+- **`flower.enabled: false` everywhere** (see Dependencies section) — not
+  needed for local dev and we already have a separate `metrics` profile for
+  observability.
 
-### Storage (replacing Azure-specific storage classes)
+## Storage: minikube's default StorageClass
 
-PodiumD's values hardcode Azure-specific storage classes in several places —
-`redis-ha.yaml` uses `managed-csi-premiumv2` for its per-replica PVCs, the
-solr-operator/zookeeper PVC templates take an explicit Azure `storageClassName`,
-and several Maykin subcharts default `persistence.storageClass` to a
-PodiumD-specific `podiumd-standard` class backed by Azure Files. None of that
-exists on minikube, and since this plan already replaces the Redis operator
-and Solr operator with plain single-container Deployments, the only PVCs left
-are: the shared Postgres, and any reused Maykin subchart that persists
-media/private-media (e.g. openformulieren, openarchiefbeheer).
+Everything that would otherwise need an Azure-specific storage class is now
+either replaced with a plain single-container Deployment (Redis, Solr — no
+operator, so no Azure-tied PVC templates at all) or handled by the
+pre-provisioned-PV/PVC hook mechanism described above (openzaak, openklant,
+and later opennotificaties/openarchiefbeheer/openformulieren). The shared
+Postgres template and every pre-provisioned PV/PVC use minikube's own default
+StorageClass, `standard` (backed by the `storage-provisioner` addon,
+hostPath-based dynamic provisioning) — `storageClassName` is either left
+unset (falls back to the cluster's marked-default class) or explicitly set to
+`standard`, never inheriting any Azure-specific default.
 
-Minikube ships its own default StorageClass, `standard`, backed by the
-`storage-provisioner` addon (hostPath-based dynamic provisioning). Every place
-a PVC is created in this chart — the shared Postgres template and any
-subchart's `persistence.storageClass`/`persistentVolume.storageClass` field —
-either leaves `storageClassName` unset (so it falls back to the cluster's
-marked-default class) or is explicitly set to `standard`, never inheriting a
-subchart's Azure-specific default. This needs auditing per-subchart at
-implementation time (step 3/5 below) since the exact values key name differs
-across the Maykin charts.
-
-### Build order (staged, to keep review manageable)
+## Build order (staged, to keep review manageable)
 
 0. Vendor every file asset listed above into
    `vendor/dimpact-zaakafhandelcomponent/...` with a `NOTES.md` recording
@@ -417,28 +516,34 @@ across the Maykin charts.
    redirect URIs/web origins (not a byte-for-byte copy) and writing the merged
    `00-create-databases.sql`/`01-seed-fixtures.sh` Postgres init scripts out of
    the three existing per-service ones. **Not yet done — next concrete step.**
-1. Chart skeleton (`Chart.yaml`, `values.yaml`) + dependencies (`@maykinmedia`/
-   `@dimpact`/OCI repos and field shapes already confirmed live — see
-   Dependencies section — so this step is wiring known values, not discovery).
+1. Chart skeleton: `Chart.yaml` with the single `podiumd` dependency +
+   `scripts/set-podiumd-version.sh`, `values.yaml` with the
+   enable/disable/replicaCount/flower/redis/ingress overrides from the
+   Dependencies section above (facts already confirmed live — this step is
+   wiring known values, not discovery).
 2. Core raw templates: shared Postgres (with the merged init scripts), the
    merged WireMock pod, Keycloak (with the patched realm ConfigMap), Redis,
-   Solr.
-3. Wire core subcharts (openzaak — including its test-PDF initContainer —
-   openklant, pabc, brp-personen-mock) + the `zac` subchart itself: point
-   `settings.database.*`/`tags.redis: false` at the shared Postgres/Redis,
-   set `replicaCount: 1`/`autoscaling.enabled: false`/`flower.enabled: false`,
-   set each one's own native `ingress.{enabled,className,hosts,tls}` block to
-   `traefik` + its `<service>.local` hostname, and apply the self-referential
-   URL updates from the table above where relevant (pabc, zac).
+   Solr, and the hook-annotated pre-provisioned PV/PVC pair for openzaak and
+   openklant (both "core", both need the storage workaround from day one).
+3. Wire the `podiumd`-nested openzaak (including its test-PDF initContainer),
+   openklant, pabc, brppersonenmock, and zac: point `settings.database.*`/
+   `tags.redis: false` at the shared Postgres/Redis, set
+   `configuration.secrets.keycloak_client_secret` to match the vendored
+   realm's client secrets, set each one's own native
+   `ingress.{enabled,className,hosts,tls}` block to `traefik` + its
+   `<service>.local` hostname, and apply the self-referential URL updates
+   from the table above where relevant (pabc, zac).
 4. Verify the stack boots on minikube and login/OIDC works end-to-end through
    `http://zac.local`.
 5. Layer in optional profile groups (objecten, opennotificaties,
    openarchiefbeheer, openformulieren, metrics, itest) behind their `enabled`
    flags, each following the same wiring pattern established in step 3 —
-   including the openarchiefbeheer/openformulieren self-referential URL
-   updates from the table above, confirmed against those charts' actual
-   `settings.*` field names at that point (not yet individually verified,
-   unlike openzaak/pabc).
+   including their own pre-provisioned PV/PVC hooks (opennotificaties,
+   openarchiefbeheer, openformulieren all have the same Azure-CSI storage
+   template problem as openzaak/openklant) and the
+   openarchiefbeheer/openformulieren self-referential URL updates from the
+   table above, confirmed against those charts' actual `settings.*` field
+   names at that point (not yet individually verified, unlike openzaak/pabc).
 
 ## Verification
 
@@ -446,17 +551,25 @@ across the Maykin charts.
 - `helm template podiumd-minikube .` renders cleanly with default values
   (core profile only) and with every profile flag turned on.
 - On an actual minikube cluster: `helm install`, confirm all core pods reach
-  `Running`/`Ready`, then drive the real login flow through
-  `http://zac.local` → Keycloak redirect → back to ZAC, matching the
+  `Running`/`Ready` (including that the pre-provisioned PV/PVC hooks actually
+  ran before podiumd's own storage templates and no Azure-CSI PV got
+  created), then drive the real login flow through `http://zac.local` →
+  Keycloak redirect → back to ZAC, matching the
   `docs/development/installDockerCompose.md` walkthrough used for the compose
   stack today (that doc stays in `dimpact-zaakafhandelcomponent` purely as a
   behavioral reference — nothing in this repo reads it at runtime).
+- `./scripts/set-podiumd-version.sh <other-version> && helm template .`
+  renders cleanly too, confirming the version-swap mechanism actually works
+  end-to-end (a real test of the "easily configurable" requirement, not just
+  a paper mechanism).
 
 ## Status
 
-Plan fully designed and cross-checked against live chart repos (see Dependencies
-section for what's been verified via `helm show values`/`helm pull`). **Not yet
-approved by the user** — this plan was persisted to disk on explicit user
-request before formal approval, so the actual implementation (build order
-steps 0–5 above) has **not started**. Next step once resumed: step 0
-(vendoring).
+Plan fully designed and cross-checked against live chart repos: `helm show
+values`/`helm pull` against `@maykinmedia`/`@dimpact`/OCI repos for the
+individual app charts, and a direct pull + template inspection of
+`dimpact/podiumd` 4.8.1 itself (confirming the enable/disable defaults, the
+OIDC secret auto-generation behavior, and — critically — the Azure-CSI
+storage template problem and its pre-provisioned-PV/PVC-hook fix). **Not yet
+approved by the user in final form** — implementation (build order steps 0–5
+above) has **not started**. Next step once resumed: step 0 (vendoring).
