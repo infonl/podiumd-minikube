@@ -1,0 +1,17 @@
+{{/*
+One ConfigMap per app's fixture SQL directory - mounted separately (see
+deployment.yaml) since each needs to land in its own subdirectory under
+/docker-entrypoint-initdb.d/fixtures/<app>, which a single combined
+ConfigMap volume mount can't do without per-key subPath entries.
+*/}}
+{{- range $app := list "openzaak" "openklant" "openarchiefbeheer" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-fixtures-{{ $app }}
+  labels:
+    {{- include "podiumd-minikube.labels" $ | nindent 4 }}
+data:
+  {{- ($.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/%s/*.sql" $app)).AsConfig | nindent 2 }}
+---
+{{- end }}

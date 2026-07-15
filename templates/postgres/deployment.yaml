@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # single ReadWriteOnce volume - never run two pods at once
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+      annotations:
+        checksum/init-scripts: {{ (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/postgres/*").AsConfig | sha256sum }}
+    spec:
+      containers:
+        - name: postgres
+          image: postgis/postgis:17-3.4
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: postgres
+            - name: POSTGRES_DB
+              value: postgres
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: BAG_API_CLIENT_MP_REST_URL
+              value: {{ .Values.postgres.bagApiClientUrl | quote }}
+            - name: BAG_API_KEY
+              value: {{ .Values.postgres.bagApiKey | quote }}
+            - name: SEED_OPENARCHIEFBEHEER
+              value: {{ .Values.openarchiefbeheer.enabled | quote }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+            - name: fixtures-openzaak
+              mountPath: /docker-entrypoint-initdb.d/fixtures/openzaak
+            - name: fixtures-openklant
+              mountPath: /docker-entrypoint-initdb.d/fixtures/openklant
+            - name: fixtures-openarchiefbeheer
+              mountPath: /docker-entrypoint-initdb.d/fixtures/openarchiefbeheer
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres
+        - name: init-scripts
+          configMap:
+            name: postgres-init-scripts
+            defaultMode: 0755 # 01-seed-fixtures.sh must stay executable so Postgres runs it as a subprocess, not sources it
+        - name: fixtures-openzaak
+          configMap:
+            name: postgres-fixtures-openzaak
+        - name: fixtures-openklant
+          configMap:
+            name: postgres-fixtures-openklant
+        - name: fixtures-openarchiefbeheer
+          configMap:
+            name: postgres-fixtures-openarchiefbeheer

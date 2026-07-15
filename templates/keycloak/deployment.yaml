@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+      annotations:
+        checksum/realm: {{ (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/keycloak/*.json").AsConfig | sha256sum }}
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.6.4
+          args: ["start-dev", "--import-realm"]
+          env:
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              value: admin
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            # The Traefik Ingress hostname, not the in-cluster Service name -
+            # this is what ends up in the OIDC discovery document and is
+            # what the browser is redirected to. Backend callers (ZAC's own
+            # auth.server) reach Keycloak via the in-cluster Service DNS
+            # instead - see plan.md's "Keycloak/ZAC issuer-URL consistency".
+            - name: KC_HOSTNAME
+              value: http://keycloak.local
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL_HOST
+              value: postgres
+            - name: KC_DB_URL_DATABASE
+              value: keycloak
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_DB_PASSWORD
+              value: keycloak
+            - name: KC_IMPORT
+              value: /opt/keycloak/data/import/zaakafhandelcomponent-realm.json
+            # Bounded heap - dev-mode Keycloak with one small realm doesn't
+            # need much, and we don't want it auto-sizing off the minikube
+            # VM's full memory allocation.
+            - name: JAVA_OPTS_APPEND
+              value: "-Xms256m -Xmx512m -XX:ActiveProcessorCount=2"
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 768Mi
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm

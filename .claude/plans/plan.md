@@ -842,5 +842,47 @@ Current rendered output (core profile, default values): 12 Deployment objects
 `openzaak-beat`), 4 Ingress (zac/openzaak/openklant/pabc `.local` hosts all
 present), 4 Job + 2 CronJob, 2 PersistentVolume + 2 PersistentVolumeClaim
 (still podiumd's own Azure-CSI ones for openzaak/openklant — expected until
-step 2's pre-provisioned-hook fix lands). Next step: build order step 2 (core
-raw templates).
+step 2's pre-provisioned-hook fix lands).
+
+**Step 2 (core raw templates) is now done**: `templates/postgres/` (Deployment
++ Service + PVC + two ConfigMap groups — one for the merged init scripts via
+`.Files.Glob`, one per app for the vendored fixture SQL), `templates/redis/`,
+`templates/keycloak/` (Deployment + Service + Ingress + realm ConfigMap),
+`templates/solr/` (Deployment with a `chown`-fixing initContainer, matching
+compose's own root/chown dance, + PVC + Service + Ingress), `templates/wiremock/`
+(the merged pod, brp-personen-wiremock's 3 mappings mounted via `subPath` —
+see correction below), and `templates/storage-hooks.yaml` (the
+pre-provisioned PV/PVC mechanism from the Dependencies section, written as a
+single `range` over all five possible apps gated on each one's own
+`podiumd.<app>.enabled`, so turning on a profile flag later needs no template
+changes).
+
+Also fixed: `01-seed-fixtures.sh` (vendored in step 0) unconditionally
+backgrounded all three seed loops, but `openarchiefbeheer` isn't deployed in
+the core profile — its loop would have polled forever for migrations that
+would never happen. Added an env-var guard
+(`SEED_OPENARCHIEFBEHEER`, driven by this chart's own
+`openarchiefbeheer.enabled` flag) so it only backgrounds when that profile is
+actually active.
+
+One correction found only by reasoning through WireMock's actual file-loading
+behavior (not caught by rendering, since `helm template` can't detect a
+runtime-only bug like this): WireMock's file-based mapping loader only scans
+**flat files** directly in `mappings/`, it does not recurse into
+subdirectories. The initial draft mounted the whole ConfigMap as one
+subdirectory (`mappings/brp-personen/`), which would have silently loaded
+zero mappings. Fixed by mounting each mapping file individually via `subPath`
+straight into `mappings/` — the same approach step 5 will need for the three
+itest-only mapping sets sharing this one pod.
+
+Verified via `helm template` that the pre-provisioned PV/PVC names match
+podiumd's own exactly (`default-openzaak`/`default-openklant` for PVs,
+`openzaak`/`openklant` for PVCs) — the necessary precondition for the
+lookup-skip mechanism to work. `helm template` can't exercise the actual live
+`lookup()` skip behavior itself (no live cluster during a dry-run render) —
+that's confirmed for real in step 4, on an actual minikube cluster.
+
+Next step: build order step 3 (wire the podiumd-nested core apps' remaining
+settings — this was largely already done in step 1's `values.yaml`, so step 3
+is mostly the openzaak test-PDF initContainer plus a final pass confirming
+everything boots together).

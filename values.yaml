@@ -26,6 +26,16 @@ metrics:
   enabled: false
 
 # -----------------------------------------------------------------------
+# Raw templates this chart defines itself (Postgres/Redis/Keycloak/Solr/
+# WireMock) - see build order step 2.
+# -----------------------------------------------------------------------
+postgres:
+  # Referenced by the openzaak fixture SQL as psql -v variables, matching
+  # docker-compose.yaml's openzaak-database service defaults exactly.
+  bagApiClientUrl: https://api.bag.kadaster.nl/lvbag/individuelebevragingen/v2/
+  bagApiKey: please-request-a-bag-api-key
+
+# -----------------------------------------------------------------------
 # The podiumd dependency and everything nested inside it.
 # -----------------------------------------------------------------------
 podiumd:

@@ -1,0 +1,61 @@
+{{/*
+Pre-provisions a PersistentVolume + PersistentVolumeClaim for every
+podiumd-nested app that has its own <app>-storage.yaml template hardcoding
+the Azure Files CSI driver (openzaak, openklant, opennotificaties,
+openarchiefbeheer, openformulieren) - see plan.md's "PodiumD's Azure-CSI
+storage templates" section for why this is needed and how it works.
+
+Named to match podiumd's own defaults exactly (verified: persistence.
+existingClaim is already just the app name, persistence.size is already
+10Gi for every one of these apps) - podiumd's own <app>-storage.yaml then
+finds these already existing via its own `lookup` checks and skips creating
+its broken Azure-CSI ones.
+
+Ranges over all five possible apps but only renders for whichever are
+actually enabled, so turning on a profile flag in values.yaml (step 5) is
+enough - no template changes needed later.
+*/}}
+{{- range $app := list "openzaak" "openklant" "opennotificaties" "openarchiefbeheer" "openformulieren" }}
+{{- if (index $.Values.podiumd $app).enabled }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $.Release.Namespace }}-{{ $app }}
+  labels:
+    {{- include "podiumd-minikube.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/resource-policy: keep
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /data/podiumd-minikube/{{ $app }}
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $app }}
+  labels:
+    {{- include "podiumd-minikube.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  volumeName: {{ $.Release.Namespace }}-{{ $app }}
+  resources:
+    requests:
+      storage: 10Gi
+---
+{{- end }}
+{{- end }}

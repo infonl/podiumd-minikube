@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wiremock-brp-personen-mappings
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  {{- (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/wiremocks/brp-personen-wiremock/mappings/*.json").AsConfig | nindent 2 }}

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wiremock
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wiremock
+  template:
+    metadata:
+      labels:
+        app: wiremock
+      annotations:
+        checksum/mappings: {{ (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/wiremocks/brp-personen-wiremock/mappings/*.json").AsConfig | sha256sum }}
+    spec:
+      containers:
+        - name: wiremock
+          image: wiremock/wiremock:3.13.2
+          args: ["--disable-gzip", "--verbose"]
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /__admin/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            # WireMock's file-based mapping loader only scans flat files
+            # directly in mappings/, it doesn't recurse into subdirectories -
+            # so each file is mounted individually via subPath rather than
+            # the whole ConfigMap as one subdirectory.
+            {{- range $path, $_ := .Files.Glob "vendor/dimpact-zaakafhandelcomponent/wiremocks/brp-personen-wiremock/mappings/*.json" }}
+            - name: brp-personen-mappings
+              mountPath: /home/wiremock/mappings/{{ base $path }}
+              subPath: {{ base $path }}
+            {{- end }}
+            # itest.enabled=true (build order step 5) adds smartdocuments/kvk/bag
+            # mapping sets here too, the same way - their URL patterns target
+            # distinct upstream APIs, so mapping filenames don't collide even
+            # sharing this one WireMock instance's mappings/ directory.
+      volumes:
+        - name: brp-personen-mappings
+          configMap:
+            name: wiremock-brp-personen-mappings

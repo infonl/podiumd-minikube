@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: solr
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # single ReadWriteOnce volume - never run two pods at once
+  selector:
+    matchLabels:
+      app: solr
+  template:
+    metadata:
+      labels:
+        app: solr
+    spec:
+      # Matches compose's own "chown -R 8983:8983 /var/solr" step before
+      # starting Solr as the non-root "solr" user - a fresh PVC otherwise
+      # mounts owned by root, which the solr image's own non-root user can't
+      # write to.
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.38.0
+          command: ["sh", "-c", "chown -R 8983:8983 /var/solr"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/solr
+      containers:
+        - name: solr
+          image: solr:9.10.1-slim
+          env:
+            - name: SOLR_JAVA_MEM
+              value: "-Xms256m -Xmx512m -XX:ActiveProcessorCount=2"
+          ports:
+            - name: solr
+              containerPort: 8983
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 768Mi
+          readinessProbe:
+            httpGet:
+              path: /solr/admin/info/system
+              port: solr
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/solr
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: solr

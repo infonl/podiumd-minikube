@@ -86,4 +86,13 @@ seed_openarchiefbeheer() {
 
 seed_openzaak &
 seed_openklant &
-seed_openarchiefbeheer &
+
+# openarchiefbeheer is profile-gated (unlike openzaak/openklant, which are
+# always deployed) - only background its wait loop when that profile is
+# actually enabled, otherwise it would poll forever for migrations that will
+# never happen, since no openarchiefbeheer app would ever connect to seed
+# them. Set via the Postgres Deployment's env vars, driven by this chart's
+# own top-level openarchiefbeheer.enabled flag.
+if [ "${SEED_OPENARCHIEFBEHEER:-false}" = "true" ]; then
+  seed_openarchiefbeheer &
+fi
