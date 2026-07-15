@@ -621,6 +621,22 @@ production HA rather than a single dev node:
   time (steps 3 and 5), the same way `flower.enabled` was already confirmed —
   but the *target state* (which pods compose actually runs, per app) is fully
   settled now, from `docker-compose.yaml`'s own service list, not guesswork.
+- **Minimum minikube VM sizing** — a rough tally of the *core* profile alone
+  (ZAC's 1Gi JVM heap + WildFly overhead, Solr's ~512Mi heap + overhead,
+  Keycloak, Postgres, openzaak (app+nginx), openklant, pabc-api,
+  brp-personen-mock, the merged WireMock pod, office-converter) lands
+  somewhere around 6–8Gi of actual memory once every container's baseline
+  overhead (not just its JVM heap) is counted — comfortably more than
+  minikube's own default allocation (2 CPU / 2–4Gi depending on driver/
+  version). None of the optimizations above change that; they reduce
+  overhead, not the fact that this is still ~11 containers. This isn't a
+  chart defect — it needs documenting as a **prerequisite**, not something
+  the chart can enforce: the README should say to start minikube with
+  something like `minikube start --cpus=4 --memory=8192` (adjust from real
+  measurements once step 4's actual `helm install` is up and pods are
+  observed with `kubectl top pods`), so an undersized default minikube VM
+  isn't mistaken for a broken chart when pods are actually just Pending on
+  insufficient allocatable memory.
 
 ## Storage: minikube's default StorageClass
 
