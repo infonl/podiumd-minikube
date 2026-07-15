@@ -1,0 +1,13 @@
+apiVersion: v2
+name: podiumd-minikube
+description: >-
+  Reproduces the dimpact-zaakafhandelcomponent docker-compose dev stack on
+  minikube, built on top of the published podiumd chart.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: podiumd
+    repository: "@dimpact"
+    version: "4.8.1"  # podiumd version - see scripts/set-podiumd-version.sh to change
+    condition: podiumd.enabled

@@ -207,16 +207,31 @@ podiumd:
   no raw Ingress template needed for any of them.
 - **`replicaCount`** defaults to `2` on most of the family — set
   `podiumd.<app>.replicaCount: 1` + `autoscaling.enabled: false` everywhere.
-- **OIDC client secrets**: PodiumD's own `keycloak-podiumd-realm-secrets.yaml`
-  **auto-generates** an OIDC client secret for every app, unconditionally,
-  whenever neither `configuration.secrets.keycloak_client_secret` nor
-  `configuration.oidcSecret` is explicitly set on that app (confirmed via the
-  comment in `templates/validations.yaml`) — this happens regardless of
-  whether `keycloak-operator` itself is enabled. Since we need the *specific*
-  secrets already baked into our vendored ZAC realm.json (e.g.
-  `openzaakZaakafhandelcomponentClientSecret`), every relevant app gets
-  `podiumd.<app>.configuration.secrets.keycloak_client_secret` set explicitly
-  to the matching compose value — never left to auto-generate.
+- **OIDC client secrets — only zac and pabc, corrected.** PodiumD's own
+  `keycloak-podiumd-realm-secrets.yaml` auto-generates an OIDC client secret
+  for every app whenever neither `configuration.secrets.keycloak_client_secret`
+  nor `configuration.oidcSecret` is explicitly set, regardless of whether
+  `keycloak-operator` is enabled. An earlier version of this plan said "every
+  relevant app" needs this set explicitly — **checked the vendored realm.json
+  directly and that's wrong**: it only defines OIDC clients for
+  `zaakafhandelcomponent`(+`-admin-client`) and `pabc`(+`-admin-client`) —
+  nothing for openzaak/openklant/objecten/objecttypen/opennotificaties/
+  openarchiefbeheer/openformulieren, because compose never wires Keycloak
+  OIDC for any of them (they use Django's own local admin login, or in
+  openzaak's case a separate ZGW JWT client-credentials mechanism that has
+  nothing to do with Keycloak despite the similar-sounding secret name —
+  `ZGW_API_SECRET=openzaakZaakafhandelcomponentClientSecret` is a ZGW API
+  client secret registered in OpenZaak's own database via the vendored seed
+  SQL, not a Keycloak client secret). So only two apps need real,
+  compose-matching values: `podiumd.zac.auth.secret` =
+  `keycloakZaakafhandelcomponentClientSecret` and `podiumd.pabc.oidc.
+  clientSecret` = `pabcClientSecret` (plus each app's separate Keycloak
+  *admin*-client secret: `podiumd.zac.keycloak.adminClient.secret` =
+  `zaakafhandelcomponentAdminClientSecret`, `podiumd.pabc.keycloakAdmin.
+  clientSecret` = `pabcAdminClientSecret`). Every other app is left with no
+  OIDC config at all, matching compose — podiumd's auto-generated secret for
+  them sits unused (nothing references it, since we don't add an OIDC
+  `configuration.data` block for apps that don't have one in compose).
 
 ### PodiumD's Azure-CSI storage templates — the one real blocker, and its fix
 
@@ -586,41 +601,43 @@ production HA rather than a single dev node:
   needed for local dev and we already have a separate `metrics` profile for
   observability.
 - **Per-app worker/nginx/beat pod count must match compose's actual container
-  list, not just "disable flower".** The Maykin chart family structurally
-  supports separate worker/beat/nginx sub-deployments per app (confirmed in
-  the earlier `helm show values` research — worker/beat/flower/nginx resource
-  blocks exist in the shared chart shape), but whether each is actually
-  *needed* varies per app, and compose's own service list is the ground
-  truth for "needed":
+  list — and the mechanism is `replicaCount: 0`, not an `.enabled` toggle.**
+  Pulled and read `openzaak`'s and `openklant`'s actual `templates/
+  deployment.yaml` directly: each renders **four separate, unconditional**
+  `Deployment` objects from one file (main app, nginx, worker, beat) — none
+  of nginx/worker/beat has an `{{- if }}` guard at all, only `flower` does
+  (`{{ if .Values.flower.enabled -}}`). So there is no `worker.enabled`/
+  `nginx.enabled` key to set — the only lever is each sub-component's own
+  `replicaCount`, scaling it to zero pods (the Deployment/ReplicaSet objects
+  still exist in the cluster, just with nothing running — functionally
+  equivalent to "off" for pod-count purposes). Compose's own service list is
+  the ground truth for which should be `0` vs. left at their chart default:
   - **openklant**: compose runs it as a **single bare container** — no
-    `openklant-celery` service exists anywhere in `docker-compose.yaml`. If
-    the openklant chart defaults `worker.enabled`/`nginx.enabled` on, both
-    must be explicitly set to `false` — running them would be pure excess
-    over compose, not parity.
+    `openklant-celery` service exists anywhere in `docker-compose.yaml`.
+    `podiumd.openklant.worker.replicaCount: 0` and
+    `podiumd.openklant.nginx.replicaCount: 0` (chart defaults are `2` and `1`
+    respectively — leaving either at its default would be pure excess over
+    compose, not parity).
   - **openzaak**: compose runs `openzaak-nginx` **unconditionally** (no
     `profiles:` entry — required for chunked transfer-encoding on large file
-    uploads, matching how compose already fronts it) but gates
-    `openzaak-celery` behind `profiles: ["opennotificaties",
-    "openformulieren"]`. So: `podiumd.openzaak.nginx.enabled: true` (leave on)
-    but `podiumd.openzaak.worker.enabled: false` for the core profile,
-    flipped to `true` only when `opennotificaties.enabled` or
+    uploads) but gates `openzaak-celery` behind `profiles: ["opennotificaties",
+    "openformulieren"]`. So: `podiumd.openzaak.nginx.replicaCount: 1` (leave
+    at chart default) but `podiumd.openzaak.worker.replicaCount: 0` for the
+    core profile, raised back to `1` only when `opennotificaties.enabled` or
     `openformulieren.enabled` is set.
   - **openarchiefbeheer**/**openformulieren** (both profile-gated, checked at
     step 5): compose runs *both* a `-celery` and a separate `-celery-beat`
-    service for each — so both `worker.enabled` and `beat.enabled` (exact key
-    names TBD per chart) should stay on when that profile is active, matching
+    service for each — so both `worker.replicaCount` and `beat.replicaCount`
+    stay at their chart defaults when that profile is active, matching
     compose 1:1 there.
   - **opennotificaties**: compose runs one `opennotificaties-celery` (no
-    separate beat service) — only `worker.enabled: true`, `beat.enabled:
-    false`, when its profile is active.
+    separate beat service) — `worker.replicaCount` at its default,
+    `beat.replicaCount: 0`, when its profile is active.
   - **objecten**: compose runs `objecten-api-celery` whenever the `objecten`
-    profile itself is active (no separate beat) — `worker.enabled: true`,
-    `beat.enabled: false` in that case.
-  This audit needs a final per-chart confirmation of the exact
-  `worker.enabled`/`nginx.enabled`/`beat.enabled` key names at implementation
-  time (steps 3 and 5), the same way `flower.enabled` was already confirmed —
-  but the *target state* (which pods compose actually runs, per app) is fully
-  settled now, from `docker-compose.yaml`'s own service list, not guesswork.
+    profile itself is active (no separate beat) — `worker.replicaCount` at
+    its default, `beat.replicaCount: 0` in that case.
+  `flower.enabled: false` (a real toggle, unlike the others) stays as
+  documented above regardless.
 - **Minimum minikube VM sizing** — a rough tally of the *core* profile alone
   (ZAC's 1Gi JVM heap + WildFly overhead, Solr's ~512Mi heap + overhead,
   Keycloak, Postgres, openzaak (app+nginx), openklant, pabc-api,
@@ -776,4 +793,54 @@ from this plan's earlier "9 databases" phrasing), and the merged
 calls (vestigial — Postgres's official image runs
 `docker-entrypoint-initdb.d` scripts under temporarily-trusted local auth
 regardless). Both are corrected in the vendored files and in `NOTES.md`.
-Next step: build order step 1 (Chart skeleton).
+
+**Step 1 (Chart skeleton) is now done** — `Chart.yaml`, `values.yaml`,
+`scripts/set-podiumd-version.sh` all exist and `helm lint`/`helm template`
+both pass cleanly. The version-swap script was tested end-to-end (actually
+ran `helm dependency update` against a different version and back, not just
+read for syntax). `charts/podiumd-4.8.1.tgz` and `Chart.lock` are committed
+deliberately (not gitignored), matching `podiumd-infra`'s own convention, so
+`helm template`/`helm install` work offline as long as the podiumd version
+isn't being changed.
+
+Corrected two things this plan had wrong, found only by actually rendering
+the chart against real values rather than reading source: there is **no**
+`worker.enabled`/`nginx.enabled` toggle on the Maykin-family charts at all —
+`openzaak`/`openklant`'s `templates/deployment.yaml` renders four
+Deployments unconditionally (main/nginx/worker/beat; only `flower` has a real
+`{{- if }}` guard) — the actual lever is scaling `replicaCount` to `0`. And
+the earlier "every relevant app needs
+`configuration.secrets.keycloak_client_secret`" claim was wrong — checked the
+vendored realm.json directly and only `zaakafhandelcomponent`/`pabc` have
+Keycloak clients at all; the others use Django's own local admin login or (for
+openzaak specifically) a separate ZGW JWT mechanism unrelated to Keycloak
+despite the similar-sounding secret name. Both corrected in the relevant plan
+sections and in `values.yaml`.
+
+Three more issues found only by actually rendering (not visible from reading
+values.yaml alone), all fixed:
+- `podiumd.zac.solr-operator.enabled` defaults to `true` in podiumd's own
+  override (unlike `charts/zac`'s own quiet `false` default) — rendered a
+  full `SolrCloud` + operator RBAC before being disabled explicitly.
+- `podiumd.zac.opentelemetry-collector.enabled` similarly rendered a
+  standing Deployment despite `charts/zac`'s own default being `false` —
+  confirmed the override path via `--set` before adding it explicitly.
+- `openklant`'s own `templates/ingress.yaml` hardwires its backend to the
+  `<fullname>-nginx` Service specifically — scaling `nginx.replicaCount` to
+  `0` for openklant (to match compose's "single bare container, no nginx")
+  would have made `openklant.local` completely unreachable through this
+  chart's own Ingress. Left `nginx.replicaCount` at its chart default for
+  openklant; only `worker.replicaCount: 0` applies there.
+- `openzaak.create_required_catalogi_job` defaults to `enabled: true` with
+  literal placeholder credentials (`<openzaak_client_id>`/`<openzaak_secret>`)
+  that would just fail repeatedly, and would also attempt to create its own
+  test zaaktype/catalog that could conflict with the vendored SQL fixtures
+  which already seed this exact data — disabled explicitly.
+
+Current rendered output (core profile, default values): 12 Deployment objects
+(3 scaled to 0 replicas: `openklant-worker`, `openzaak-worker`,
+`openzaak-beat`), 4 Ingress (zac/openzaak/openklant/pabc `.local` hosts all
+present), 4 Job + 2 CronJob, 2 PersistentVolume + 2 PersistentVolumeClaim
+(still podiumd's own Azure-CSI ones for openzaak/openklant — expected until
+step 2's pre-provisioned-hook fix lands). Next step: build order step 2 (core
+raw templates).

@@ -1,0 +1,296 @@
+# Service naming convention used throughout this file (must match the raw
+# templates written in build order step 2): plain, unprefixed Service names
+# in this chart's own namespace - postgres, redis, keycloak, solr, wiremock.
+# podiumd's own nested apps are similarly reachable by their plain
+# fullnameOverride (see below) since podiumd already sets each one to just
+# the app's own name (confirmed via `helm show values dimpact/podiumd`),
+# e.g. http://openzaak/, http://openklant/, http://pabc/.
+
+# -----------------------------------------------------------------------
+# Our own profile flags - compose-profile equivalents. Mirrors
+# start-docker-compose.sh's own opt-in behavior (no flags = core stack only).
+# -----------------------------------------------------------------------
+zac:
+  enabled: true # "zac" profile - on by default so the app is visible
+itest:
+  enabled: false # wiremocks (smartdocuments/kvk/bag), greenmail, opa-tests
+objecten:
+  enabled: false
+opennotificaties:
+  enabled: false
+openarchiefbeheer:
+  enabled: false
+openformulieren:
+  enabled: false # also pulls in objecten + objecttypen + opennotificaties
+metrics:
+  enabled: false
+
+# -----------------------------------------------------------------------
+# The podiumd dependency and everything nested inside it.
+# -----------------------------------------------------------------------
+podiumd:
+  enabled: true
+
+  # --- Azure/production-specific pieces this chart doesn't use ---
+  keycloak-operator:
+    enabled: false # we run plain Keycloak instead - see templates/keycloak.yaml
+  redis-operator:
+    enabled: false # we run plain Redis instead - see templates/redis.yaml
+  apisix:
+    enabled: false # already false by default upstream, set explicitly for clarity
+  zgw-office-addin:
+    enabled: false
+  ita:
+    enabled: false
+  kiss:
+    enabled: false
+  kiss-eck:
+    enabled: false
+  eck-operator:
+    enabled: false
+  omc:
+    enabled: false
+  clamav:
+    enabled: false
+  openinwoner:
+    enabled: false
+  referentielijsten:
+    enabled: false
+  openbeheer:
+    enabled: false
+  zaakbrug:
+    enabled: false
+
+  # --- zac (always on - the app itself) ---
+  zac:
+    enabled: true
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    javaOptions: "-Xms512m -Xmx1024m -XX:ActiveProcessorCount=2"
+    contextUrl: http://zac.local
+    db:
+      host: postgres
+      name: zac
+      user: zac
+      password: password
+    auth:
+      server: http://keycloak:8080
+      realm: zaakafhandelcomponent
+      clientId: zaakafhandelcomponent
+      secret: keycloakZaakafhandelcomponentClientSecret
+      sslRequired: none
+      enablePkce: true
+    keycloak:
+      adminClient:
+        id: zaakafhandelcomponent-admin-client
+        secret: zaakafhandelcomponentAdminClientSecret
+    gemeente:
+      code: "9999"
+      naam: FakeZacGemeente
+      mail: gemeente-zac-test@example.com
+    mail:
+      smtp:
+        server: in-v3.mailjet.com
+        port: "587"
+        username: fakeMailjetApiKey
+        password: fakeMailjetApiSecretKey
+    zgwApis:
+      url: http://openzaak/
+      clientId: zac_client
+      secret: openzaakZaakafhandelcomponentClientSecret
+    notificationsSecretKey: openNotificatiesApiSecretKey
+    klantinteractiesApi:
+      url: http://openklant
+      token: fakeToken
+    objectenApi:
+      url: http://objecten
+      token: fakeZacObjectsToken
+    brpApi:
+      url: http://wiremock:8080/haalcentraal/api/brp
+      logLevel: INFO
+      apiKey:
+        value: ""
+        header: X-API-KEY
+      protocollering:
+        enabled: true
+        doelbinding:
+          perZaaktype: true
+          zoekmet: BRPACT-Totaal
+          raadpleegmet: BRPACT-Totaal
+          header: x-doelbinding
+        originOin:
+          oin: "123443210"
+          header: x-origin-oin
+        verwerking:
+          register: Algemeen
+          header: x-verwerking
+        toepassing:
+          value: ZAC
+          header: x-toepassing
+        gebruiker:
+          header: x-gebruiker
+        systemUser: ZacSystemUser
+    kvkApi:
+      url: fakeKvkApiUrl
+      apiKey: fakeKvkApiKey
+    bagApi:
+      url: https://api.bag.kadaster.nl/lvbag/individuelebevragingen/v2/
+      apiKey: fakeBagApiKey
+    openForms:
+      url: http://localhost:9999 # not used at the moment, matches compose's own placeholder
+    pabcApi:
+      url: http://pabc
+      apiKey: ""
+    zacInternalEndpointsApiKey: fakeZacInternalEndpointsApiKey
+    smartDocuments:
+      enabled: false
+    signaleringen:
+      deleteOlderThanDays: "14"
+    solr:
+      url: http://solr:8983
+      createZacCore: true
+    solr-operator:
+      enabled: false # podiumd's own override defaults this to true (unlike charts/zac's own quiet false default) - we use a plain Solr Deployment instead, see templates/solr.yaml
+    opentelemetry-collector:
+      enabled: false # renders unexpectedly without this override (verified via --set) even though charts/zac's own default is false - matches our own metrics.enabled=false profile flag; not otherwise wired to it since this is a separate, unrelated otel-collector instance from the one in templates/metrics/
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: zac.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+
+  # --- openzaak (always on - core) ---
+  openzaak:
+    enabled: true
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    flower:
+      enabled: false
+    worker:
+      replicaCount: 0 # compose only runs openzaak-celery under the opennotificaties/openformulieren profiles
+    beat:
+      replicaCount: 0 # compose never runs a separate openzaak beat/scheduler service at all
+    # nginx.replicaCount left at its chart default (1) - compose runs
+    # openzaak-nginx unconditionally (chunked transfer-encoding handling).
+    tags:
+      redis: false # point at the shared Redis instead of the chart's bundled one
+    create_required_catalogi_job:
+      enabled: false # defaults to true with literal placeholder credentials (<openzaak_client_id>/<openzaak_secret>) that would just fail repeatedly, and would try to create its own test zaaktype/catalog - our vendored SQL fixtures already seed this exact data, matching compose
+    settings:
+      database:
+        host: postgres
+        port: 5432
+        username: openzaak
+        password: openzaak
+        name: openzaak
+      cache:
+        default: redis:6379/0
+        axes: redis:6379/0
+      celery:
+        brokerUrl: redis://redis:6379/1
+        resultBackend: redis://redis:6379/1
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: openzaak.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+
+  # --- openklant (always on - core) ---
+  openklant:
+    enabled: true
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    flower:
+      enabled: false
+    worker:
+      replicaCount: 0 # compose runs openklant as a single bare container, no celery worker at all
+    # nginx.replicaCount left at its chart default (1), even though compose
+    # runs openklant without one: verified directly that this chart's own
+    # Ingress template hardwires its backend to the "<fullname>-nginx"
+    # Service specifically (not configurable to point elsewhere), so
+    # scaling nginx to 0 would make openklant.local completely unreachable.
+    tags:
+      redis: false
+    settings:
+      database:
+        host: postgres
+        port: 5432
+        username: openklant
+        password: openklant
+        name: openklant
+      celery:
+        brokerUrl: redis://redis:6379/2
+        resultBackend: redis://redis:6379/2
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: openklant.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+
+  # --- pabc (always on - core) ---
+  pabc:
+    enabled: true
+    replicaCount: 1
+    postgresql:
+      enabled: false # point at the shared Postgres instead of the chart's bundled bitnami one
+    settings:
+      database:
+        host: postgres
+        port: 5432
+        username: pabc
+        password: pabc
+        name: Pabc
+      apiKeys:
+        - zac-test-api-key
+      oidc:
+        authority: http://keycloak:8080/realms/zaakafhandelcomponent/
+        clientId: pabc
+        clientSecret: pabcClientSecret
+        functioneelBeheerderRole: administrator
+      keycloakAdmin:
+        clientId: pabc-admin-client
+        clientSecret: pabcAdminClientSecret
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: pabc.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+
+  # --- brp-personen-mock (always on - core) ---
+  brppersonenmock:
+    enabled: true
+    # No fullnameOverride/ingress overrides needed - this chart already
+    # ships nameOverride: "brp-personen-mock" by default (verified via
+    # `helm show values dimpact/brp-personen-mock`), matching the vendored
+    # brp-personen-wiremock mapping's hardcoded proxyBaseUrl unchanged. Not
+    # exposed via Ingress - compose reaches it only in-cluster, through the
+    # wiremock proxy.
+
+  # --- Profile-gated apps: enabled flags flip to true in step 5 wiring,
+  # alongside their own settings.database/tags.redis/replicaCount overrides
+  # and pre-provisioned storage hooks (see plan.md). Left disabled here. ---
+  objecten:
+    enabled: false
+  objecttypen:
+    enabled: false
+  opennotificaties:
+    enabled: false
+  openarchiefbeheer:
+    enabled: false
+  openformulieren:
+    enabled: false

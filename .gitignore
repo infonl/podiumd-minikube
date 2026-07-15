@@ -1,7 +1,7 @@
-# Helm
-charts/*.tgz
-Chart.lock
-.helmignore
+# Helm dependency tarballs (charts/*.tgz) and Chart.lock are committed
+# deliberately, matching podiumd-infra's own convention - so `helm template`/
+# `helm install` work offline/reproducibly without a `helm dependency update`
+# step first, as long as the podiumd version isn't being changed.
 
 # OS
 .DS_Store
