@@ -16,7 +16,15 @@ covers the *how*.
   (see `scripts/provision-cluster.sh` for the exact Traefik chart version
   this project is compatible with if your `helm` binary is old)
 - Enough free RAM/CPU on the host for a sized-up minikube VM (default
-  6 CPUs / 16Gi — see below)
+  6 CPUs / 16Gi — see below). This isn't just a recommendation: the full
+  stack (all optional profiles, ~35 pods) has been observed live pushing an
+  under-provisioned cluster into severe CPU/memory thrashing that makes the
+  whole API server unresponsive. `provision-cluster.sh` only applies this
+  sizing when it *creates* a profile — if you already have a `minikube`
+  profile running from before (e.g. from an older version of this project),
+  it checks the running container's actual memory allocation on every run
+  and warns if it's below 16Gi, with the exact command to raise it live
+  (see "Troubleshooting" below)
 - Python 3 + `pip` if you want to run the test suite
 
 ## Quick start
@@ -97,6 +105,23 @@ this workflow never creates — `deploy.sh` handles the one place that
 matters (`templates/storage-hooks.yaml`'s PV/PVC pre-provisioning) by
 applying that file before the rest of the manifest instead. Full details in
 `plan.md`'s step 4 notes.
+
+## Troubleshooting
+
+**Cluster becomes sluggish or unresponsive (`kubectl` hangs or times out on
+TLS handshake), especially after switching between profile combinations a
+few times.** Usually an under-provisioned minikube VM thrashing under the
+full stack's real memory pressure, not an application bug — check with
+`docker stats minikube` (for the docker driver) or `minikube ssh -- free -h`.
+`provision-cluster.sh` checks for this on every run and warns if the running
+profile is below its recommended 16Gi, but only for profiles it can inspect
+via the docker driver. To raise it live, without restarting anything:
+```bash
+docker update --memory=16g --memory-swap=-1 minikube
+```
+This doesn't persist across `minikube delete` — that recreates the container
+fresh from `MINIKUBE_MEMORY`, so it's a one-time fix per existing profile,
+not something you need to repeat.
 
 ## Project structure
 

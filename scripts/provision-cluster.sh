@@ -39,6 +39,33 @@ TRAEFIK_CHART_VERSION="34.4.0"
 if minikube status -p "${PROFILE}" > /dev/null 2>&1; then
   echo "minikube profile '${PROFILE}' is already running - leaving it as-is."
   echo "(delete it first with scripts/teardown-cluster.sh if you want a genuinely fresh start)"
+
+  # Found live: an already-running profile skips MINIKUBE_MEMORY entirely
+  # (it only applies to `minikube start`), so a profile created before this
+  # script existed - or resized down some other way - stays silently
+  # under-provisioned. On the docker driver this container hitting its own
+  # memory limit under the full stack's real load (~35 pods) caused severe
+  # CPU/memory thrashing that made the whole cluster's API server
+  # unresponsive (see plan.md's step 5 notes) - not an obvious crash, so
+  # worth checking every run rather than only at profile-creation time.
+  # Only meaningful for the docker driver - other minikube drivers are
+  # VM-based, not a plain container this can inspect the same way.
+  if command -v docker > /dev/null 2>&1 \
+    && current_bytes="$(docker inspect "${PROFILE}" --format '{{.HostConfig.Memory}}' 2>/dev/null)" \
+    && [ -n "${current_bytes}" ] && [ "${current_bytes}" -gt 0 ]; then
+    requested_bytes=$(( MINIKUBE_MEMORY * 1024 * 1024 ))
+    if [ "${current_bytes}" -lt "${requested_bytes}" ]; then
+      current_gib=$(( current_bytes / 1024 / 1024 / 1024 ))
+      requested_gib=$(( MINIKUBE_MEMORY / 1024 ))
+      echo >&2
+      echo "WARNING: profile '${PROFILE}' is only allocated ${current_gib}GiB, below the" >&2
+      echo "${requested_gib}GiB this script requests for a fresh profile. Raise it now, live," >&2
+      echo "without restarting the container or any pod inside it:" >&2
+      echo "  docker update --memory=${requested_gib}g --memory-swap=-1 ${PROFILE}" >&2
+      echo "This doesn't persist across a future 'minikube delete' - that recreates the" >&2
+      echo "container fresh from MINIKUBE_MEMORY, so it's a one-time fix for this profile." >&2
+    fi
+  fi
 else
   echo "Starting minikube (cpus=${MINIKUBE_CPUS}, memory=${MINIKUBE_MEMORY}MB)..."
   minikube start -p "${PROFILE}" --cpus="${MINIKUBE_CPUS}" --memory="${MINIKUBE_MEMORY}"
