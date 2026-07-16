@@ -1,4 +1,4 @@
-yes# podiumd-minikube
+# podiumd-minikube
 
 A standalone Helm chart that reproduces the `dimpact-zaakafhandelcomponent`
 docker-compose dev stack (ZAC + its ZGW dependencies: Open Zaak, Open
