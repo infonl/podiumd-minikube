@@ -30,6 +30,8 @@ covers the *how*.
 ## Quick start
 
 ```bash
+./scripts/set-podiumd-version.sh <version>  # optional, defaults to the version pinned in Chart.yaml
+                                     # (or --path <dir> for a local podiumd chart checkout)
 ./scripts/provision-cluster.sh      # starts minikube, installs Traefik, pre-loads every image
 ./scripts/deploy.sh --full          # renders and applies the chart (every optional profile on)
 ./scripts/setup-tunnel.sh           # starts `minikube tunnel`, prints the /etc/hosts line to add
@@ -75,7 +77,7 @@ entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
 | `deploy.sh` | Renders and applies the chart (`--full` for every optional profile) |
 | `setup-tunnel.sh` | Starts `minikube tunnel` so Traefik gets a real IP reachable from the host; idempotent, prints the `/etc/hosts` line either way |
 | `teardown-cluster.sh` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
-| `set-podiumd-version.sh <version>` | Swaps the `podiumd` Helm dependency to a different version (`helm search repo dimpact/podiumd -l` to list available ones) — re-check the four intentional image-tag pins in `values.yaml` afterward, per that script's own comment |
+| `set-podiumd-version.sh <version>` | Swaps the `podiumd` Helm dependency to a different version (`helm search repo dimpact/podiumd -l` to list available ones). `set-podiumd-version.sh --path <dir>` points it at a local podiumd chart checkout instead (e.g. for testing unreleased podiumd changes) via a `file://` dependency — re-check the four intentional image-tag pins in `values.yaml` afterward either way, per that script's own comment |
 | `apply-pabc-migrations.sh` | The **only** safe way to (re)create the `pabc-migrations` Job — it's not idempotent (clears PABC's database before reseeding), so this refuses to run against an already-seeded database unless `--force` is passed |
 
 `deploy.sh` already calls `apply-pabc-migrations.sh` itself as its own last
