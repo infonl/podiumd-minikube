@@ -11,6 +11,11 @@ ONE_SHOT_JOB_PREFIXES = (
     "opa-tests",
     "storage-permissions-fix",
     "openarchiefbeheer-config",
+    # ZAC's own bundled CronJobs (periodic signaleren/sig-del housekeeping) -
+    # found live: their completed pods report ready=false once terminated,
+    # same as any other one-shot Job, but weren't in this allowlist yet.
+    "zac-sig-del",
+    "zac-signaleren",
 )
 
 
