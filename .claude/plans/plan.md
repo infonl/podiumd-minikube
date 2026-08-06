@@ -2006,3 +2006,74 @@ Verified live: rendering with `wiremock.enabled=true` includes the extra
 mapping sets, with it unset (default) includes none; deployed `--full`
 and confirmed the actual mappings are mounted and served from the real
 wiremock pod; full suite 44/44 passing.
+
+**Investigated replacing WireMock (JVM) with something lighter, on the
+condition that `vendor/dimpact-zaakafhandelcomponent/wiremocks/` stays
+unchanged. Conclusion: not worth doing - decided to leave WireMock as-is,
+no changes made.**
+
+Evaluated three candidates:
+
+1. **MockServer** - rejected outright. Its own repo
+   (mock-server/mockserver-monorepo) has zero WireMock compatibility
+   code, and its expectation schema (`httpRequest`/`httpResponse`,
+   distinct matcher types) is structurally different from WireMock's
+   (`request`/`response`). The vendored files would need a full rewrite,
+   violating the "unchanged" constraint outright.
+
+2. **stubr** (beltram/stubr, Rust) - the strongest candidate by far.
+   Explicitly built to consume WireMock JSON stubs directly ("we want to
+   be compatible with it" per its own docs), published benchmarks show
+   ~3-8MB memory vs WireMock's ~300-410MB (its own `bench/README.md`,
+   comparing directly against wiremock 2.31.0) and near-instant cold
+   start (332µs vs 5134µs). Actively maintained (releases through mid-
+   2026). Cross-checked our *actual* 22 vendored mapping files' feature
+   usage against stubr's docs and confirmed support for everything used
+   except one thing: read stubr's actual `ResponseStub` struct
+   (`lib/src/model/response/mod.rs`) and confirmed it has no
+   `proxy_base_url`/`remove_proxy_request_headers` field at all - no
+   mention anywhere in its docs either. Since serde silently ignores
+   unknown JSON fields, feeding stubr a WireMock proxy stub wouldn't
+   error, it would silently serve an empty response instead of actually
+   proxying - worse than a hard failure. This directly breaks 2 of
+   `brp-personen-wiremock`'s 3 files (`proxy-requests-with-headers.json`,
+   `proxy-requests-without-headers.json`), whose entire purpose is
+   header-gated live-proxying to the real `brp-personen-mock:5010`
+   service - and critically, `brp-personen-wiremock` is core/always-on,
+   not itest-gated like the other three mapping sets (kvk/bag/
+   smartdocuments, 19 files, all plain static stubs that stubr handles
+   fine).
+
+3. **httpmockie** (Tantalor93/httpmockie, Go) - checked at the user's
+   request after finding stubr's proxy gap, to see if it fared better.
+   It didn't - worse on every axis. Its actual schema (checked
+   `docs/specification.md`) is flat and primitive (`path`/`status`/
+   `body`/`headers`/`delay`, no `request`/`response` nesting at all)
+   despite the README's "similar to Wiremock JSON API" phrasing - no
+   method/header/body matchers, no proxy support, one fixed path per
+   file with no conditional branching. Every one of our 22 files would
+   need a full rewrite, and several (anything needing header-based
+   branching or body matching) couldn't be expressed in this model at
+   all. Also abandoned: last commit August 2022, 0 stars, 0 forks.
+
+**Considered a hybrid (stubr for the 3 itest-only sets, keep WireMock
+just for brp-personen-wiremock's proxying) - looked like the obvious
+compromise, but worked out the actual resource math and it doesn't pay
+off.** The current design already runs a *single* WireMock pod; the
+itest-only mappings are just extra volume mounts on that same pod, not a
+separate process. A JVM's memory footprint is dominated by its baseline
+heap/metaspace, not by how many small stub JSON files are loaded, so
+`wiremock.enabled` toggling barely moves that pod's memory use either
+way. The hybrid keeps that same JVM pod unchanged *and* adds a second
+pod (stubr) for the itest-only sets - even at ~3-8MB, that's a whole
+additional Pod/container/Service, i.e. strictly more total resource
+usage than letting the existing JVM pod keep serving those same files
+for near-zero marginal cost. Do-nothing wins on resource usage precisely
+because the hybrid's savings target was already nearly free.
+
+**Decision: left WireMock completely unchanged.** The only way to
+actually reduce footprint below where it is today would be replacing
+WireMock's proxy role too (e.g. a plain nginx/Envoy config for
+brp-personen-wiremock's 2 header-gated proxy routes instead of a JVM) -
+a bigger, separate change, not attempted here. No files changed in this
+investigation.
