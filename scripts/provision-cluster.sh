@@ -71,6 +71,12 @@ else
   minikube start -p "${PROFILE}" --cpus="${MINIKUBE_CPUS}" --memory="${MINIKUBE_MEMORY}"
 fi
 
+# `minikube start` sets kubectl's current-context itself, but the
+# already-running branch above doesn't touch it at all - re-check
+# explicitly before the first kubectl call either way (see that script's
+# own header for why this can't be assumed to already be correct).
+source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
+
 # --- 2. Traefik ---
 if kubectl get deployment traefik -n "${TRAEFIK_NAMESPACE}" > /dev/null 2>&1; then
   echo "Traefik already installed in namespace '${TRAEFIK_NAMESPACE}' - skipping."
@@ -100,11 +106,12 @@ helm dependency update "${CHART_DIR}" > /dev/null
 # example) - this way, whichever podiumd version is currently selected is
 # what actually gets pre-pulled, every time.
 echo "Deriving the image list from the currently-selected podiumd version..."
+source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
 mapfile -t images < <(
   helm template podiumd-minikube "${CHART_DIR}" -n podiumd-minikube \
     --set itest.enabled=true \
     --set objecten.enabled=true --set podiumd.objecten.enabled=true \
-    --set podiumd.objecttypen.enabled=true \
+    "${OBJECTEN_SHAPE_SETS[@]}" \
     --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true \
     --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true \
     --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true \

@@ -28,6 +28,8 @@ CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="podiumd-minikube"
 JOB_NAME="pabc-migrations-1"
 FORCE=false
+
+source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
 [ "${1:-}" = "--force" ] && FORCE=true
 
 existing_status="$(kubectl get job "${JOB_NAME}" -n "${NAMESPACE}" \

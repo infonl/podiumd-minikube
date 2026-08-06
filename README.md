@@ -79,6 +79,7 @@ entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
 | `teardown-cluster.sh` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
 | `set-podiumd-version.sh <version>` | Swaps the `podiumd` Helm dependency to a different version (`helm search repo dimpact/podiumd -l` to list available ones). `set-podiumd-version.sh --path <dir>` points it at a local podiumd chart checkout instead (e.g. for testing unreleased podiumd changes) via a `file://` dependency — re-check the four intentional image-tag pins in `values.yaml` afterward either way, per that script's own comment |
 | `apply-pabc-migrations.sh` | The **only** safe way to (re)create the `pabc-migrations` Job — it's not idempotent (clears PABC's database before reseeding), so this refuses to run against an already-seeded database unless `--force` is passed |
+| `seed-fixtures.sh` | Loads demo/fixture data into objecten/objecttypen (or `openobject`, whichever shape is currently selected — see `set-podiumd-version.sh`) via `manage.py loaddata`, matching docker-compose's own `*-import` containers for these apps. Run manually after `deploy.sh` once the objecten profile is up — safe to re-run |
 
 `deploy.sh` already calls `apply-pabc-migrations.sh` itself as its own last
 step, every run — you don't need to run it by hand for a normal deploy,
@@ -91,13 +92,14 @@ refuses: the Job is missing but PABC's database already has real data, and
 you need to decide whether `--force` (wipe and reseed) is really intended.
 
 `scripts/lib/` holds internal helpers that aren't meant to be run directly —
-they're only ever piped into by the scripts above:
+they're only ever piped into or sourced by the scripts above:
 
 | Script | What it does |
 |---|---|
 | `strip-image-digests.py` | Helm post-renderer piped into automatically by `deploy.sh`/`provision-cluster.sh` — strips `@sha256:...` suffixes so images resolve to the tag-only references pre-loaded into minikube (which has no outbound network access) |
 | `disable-service-links.py` | Helm post-renderer piped into automatically by `deploy.sh` — sets `enableServiceLinks: false` on every workload pod spec, avoiding Kubernetes' auto-injected `<SERVICE_NAME>_PORT`-style env vars colliding with app-expected ones of the same name |
 | `exclude-pabc-migration-job.py` | Helm post-renderer piped into automatically by `deploy.sh` — drops the `pabc-migrations` Job from the general manifest apply, since `apply-pabc-migrations.sh` is the only safe way to (re)create it |
+| `detect-objecten-shape.sh` | Sourced automatically by `deploy.sh`/`provision-cluster.sh` — detects whether the currently-selected podiumd version still has `objecten`/`objecttypen` as two separate subcharts or has merged them into `openobject` (aliased to `objecten`), and emits the right `--set` flags for whichever shape is active, so switching podiumd versions via `set-podiumd-version.sh` (including `--path` to an unreleased checkout) keeps working either way |
 
 ## Testing
 

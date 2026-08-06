@@ -12,10 +12,17 @@
 # Usage: ./scripts/setup-tunnel.sh
 set -euo pipefail
 
+CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TUNNEL_LOG="/tmp/minikube-tunnel.log"
 TRAEFIK_NAMESPACE="traefik"
 TRAEFIK_SERVICE="traefik"
 TIMEOUT_SECONDS=30
+
+# Not just a courtesy check: a wrong context here would read a *different*
+# cluster's Traefik IP and generate an /etc/hosts line pointing your
+# browser at it - see this repo's own incident notes for why this can't
+# be assumed already correct.
+source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
 
 hosts_line() {
   local ip="$1"

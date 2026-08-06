@@ -1542,3 +1542,301 @@ already-deployed cluster and confirmed it printed "already exists and
 succeeded - leaving it alone" via the new explicit step, the Job's own
 `creationTimestamp` was unchanged (not recreated), and the full pytest
 suite still passed 41/41.
+
+**Investigated readiness for podiumd's in-progress `objecten`+`objecttypen`
+→ `openobject` merge** (upstream: Maykin merged the Objects API and
+Objecttypes API into one Open Object 4.0 app; podiumd's own umbrella chart
+has an uncommitted feature branch, `feature/objecten-merge-podiumd-4.9.0`,
+in the sibling `dimpact-samenwerking/alt_helm-charts` checkout, replacing
+the two subcharts with one `openobject` dependency aliased back to
+`objecten`). Not yet published to the `dimpact/podiumd` Helm repo, so
+tested it live via `set-podiumd-version.sh --path` pointed at that
+checkout - confirmed real, not just theoretical.
+
+**Found live, via actual `helm template` render (not just reading the
+migration doc), two concrete deploy-breaking issues, not merely stale
+docs:**
+1. `values.yaml`'s `podiumd.objecten.image.tag: "3.6.1"` override only
+   overrides the tag; the merged chart's own default `image.repository`
+   changed from `maykinmedia/objects-api` to `maykinmedia/open-object`.
+   The two combine into `maykinmedia/open-object:3.6.1` - a tag that
+   doesn't exist for that repo (open-object starts at 4.0.0). Every
+   objecten/objecten-worker pod would sit in `ImagePullBackOff`.
+2. The rendered `create-required-objecttypen-secret`'s
+   `authorization-token` came out empty - the upstream template moved its
+   admin token from a plain `objecttypen.configuration.token` field (gone)
+   to a `tokenauth` item with `is_superuser: true`, sourced from
+   `objecten.configuration.secrets.create_required_objecttypen_token`. This
+   project's values.yaml never populates that key, so the Job would run
+   and fail auth against the API.
+
+One thing that turned out to be harmless: confirmed via the same render
+that no `objecttypen.local` ingress exists at all once merged, so the
+leftover `objecttypen.local` reference in `setup-tunnel.sh`'s `/etc/hosts`
+hint is genuinely just stale, not a functional break.
+
+**Also found, mid-fix**: this project's own top-level `objecten:` key
+(values.yaml's own compose-profile-equivalent flag, read by
+`storage-hooks.yaml` etc.) and the actual passthrough to the podiumd
+subchart, `podiumd.objecten:`, are two *different* keys with the same
+leaf name - `--set objecten.image.tag=...` silently does nothing (no
+error, since the podiumd chart has no `values.schema.json`); the fix has
+to target `podiumd.objecten.*`. Cost real debugging time before the
+`helm.sh/chart:` label in a same render confirmed which key path actually
+reaches the subchart.
+
+**Fixed to support both shapes simultaneously** (so a deploy of the
+currently-pinned classic 4.8.1 *and* a deploy pointed at the merged
+checkout both succeed, without knowing in advance which one is active):
+new `scripts/lib/detect-objecten-shape.sh`, sourced by `deploy.sh`/
+`provision-cluster.sh` after `helm dependency update`. Detects the active
+shape by checking which subchart directory actually exists inside the
+vendored `charts/podiumd-*.tgz` (`podiumd/charts/openobject/` vs. not) -
+not by guessing from a version number, since the merge may only exist in
+an unpublished/locally-pathed checkout with no meaningful version to key
+off. Classic shape keeps today's `--set
+podiumd.objecttypen.enabled=true`; merged shape instead sets
+`podiumd.objecten.image.tag=null` (confirmed live: nulling a parent
+chart's override on the command line correctly falls through to the
+subchart's *own* default - here, whatever tag/digest the merged chart
+itself pins, so nothing new to go stale here either) and
+`podiumd.objecten.create_required_objecttypen_job.enabled=false` (moved
+from its classic location, `podiumd.objecttypen.create_required_objecttypen_job.enabled`,
+confirmed against the merged chart's own `create-required-objecttypen.yaml`
+template).
+
+Verified live: rendered `deploy.sh --full`'s exact `helm template`
+invocation against both shapes. Merged shape now resolves to
+`maykinmedia/open-object:4.1.0` (post digest-strip) with no
+`create-required-objecttypen` Job rendered at all. Classic 4.8.1 shape's
+render is byte-for-byte identical to before this change - confirmed via
+`diff`, zero regression on the shape this project currently ships by
+default.
+
+**Added `scripts/seed-fixtures.sh`: docker-compose-equivalent demo/fixture
+data for objecten/objecttypen/openobject.** Prompted by a prior finding
+that podiumd-minikube deliberately never seeds objecten/objecttypen data
+(`configuration.job.enabled: false`, scoped out at build order step 5).
+Investigated whether that gap is even fixable, and how broadly - grepped
+every `scripts/docker-compose/imports/*/init.sh` in
+`dimpact-zaakafhandelcomponent` for the pattern objecten/objecttypen uses
+(`manage.py loaddata` inside a one-shot import container, run after the
+app itself is healthy) and confirmed it's the *only* seeded component
+using this specific mechanism - everything else there is either a
+Postgres-side init script (already replicated in
+`postgres/00-create-databases.sql`/`01-seed-fixtures.sh`) or
+django-setup-configuration YAML data (already a declarative,
+values.yaml-driven mechanism). So this script's scope is deliberately
+just the one component for now.
+
+**Also found, independently of the podiumd-chart-level openobject merge
+investigated above: `dimpact-zaakafhandelcomponent`'s own docker-compose
+stack has *already* migrated to `open-object` (image
+`maykinmedia/open-object:4.0.2`, commit `a98d5ae2b`, "chore: upgrade to
+Open Object 4.0.2 in Docker Compose")** - independently of whatever
+podiumd's own chart-level timeline does. This project's `values.yaml`
+is thus already out of sync with its own stated source-of-truth for this
+one component, not just anticipating a future podiumd release.
+
+Found the exact pre-merge fixture mechanism by diffing that commit
+against its parent (`338edab1b`): `objects-api` and `objecttypes-api` each
+had their own `init.sh` (`manage.py loaddata demodata`) and their own
+`fixtures/demodata.json`, one per app/database - `objects-api`'s fixture
+already carried a local `core.objecttype` cache (6 records, matching the
+`import_objecttypes` mechanism documented in the
+`openobject-migration.md` doc read earlier), separate from
+`objecttypes-api`'s own `core.objecttype`+`core.objectversion` records in
+its own database. Post-merge, `open-object`'s single `demodata.json`
+combines both into one `core.objecttype`+`core.objecttypeversion` set (86
+records total) in one database.
+
+Vendored all three fixtures verbatim (see `NOTES.md` for exact commit
+provenance per file - these predate/postdate this vendor dir's own pinned
+commit, called out as an explicit exception): `objecten/demodata.json`
+(from `objects-api`, commit `16e90ce2a`), `objecttypen/demodata.json`
+(from `objecttypes-api`, commit `52976809f`), `openobject/demodata.json`
+(from the merged app, commit `a98d5ae2b`).
+
+`scripts/seed-fixtures.sh` reuses `scripts/lib/detect-objecten-shape.sh`
+(extended to also export a plain `OBJECTEN_MERGED` boolean, not just the
+`--set` array, for scripts that need to branch rather than pass flags
+through) to pick the right fixture(s): classic shape seeds both `objecten`
+and `objecttypen` Deployments (each from its own app's own fixture, two
+separate databases); merged shape seeds the single `objecten` Deployment
+(openobject, serving both APIs) from the combined fixture. Mechanism:
+`kubectl cp` the fixture into the target pod, then `kubectl exec ...
+manage.py loaddata`, then an idempotent (existence-checked) superuser
+creation - matching compose's own `init.sh` exactly, confirmed via the
+pre-/post-merge `init.sh` diff above (deliberately used the idempotent
+superuser-creation form throughout, including for `objects-api`'s target,
+even though *that one specific* pre-merge script lacked the existence
+check compose's other two already had - no reason to reintroduce a
+re-run failure mode compose itself had already fixed elsewhere).
+
+Runs as a separate, manually-invoked script rather than folding into
+`deploy.sh`'s rendered manifest, for the same reason
+`apply-pabc-migrations.sh` is separate: this has to run *after* the
+target pod exists and is ready, which a `kubectl apply` can't express, and
+Helm hooks never fire in this project's `helm template | kubectl apply`
+deploy flow anyway (see `deploy.sh`'s own header comment).
+
+Verified live (no cluster running at investigation time, so this covers
+what's independently confirmable without one): deployment names/labels
+(`objecten`, `objecttypen`, both `app.kubernetes.io/name`-matching) and
+image paths (`/app/src/manage.py`) confirmed directly against actual
+rendered manifests already produced above, for both shapes; shape
+detection branch selection confirmed for both classic and merged Chart.yaml
+states; all three vendored fixture files confirmed as valid JSON.
+**Not yet verified**: an actual `kubectl exec`/`kubectl cp` run against a
+live pod (no running cluster at the time) - worth a real end-to-end run
+before relying on this beyond what's confirmed here.
+
+**Ran that end-to-end verification live against both shapes - found and
+fixed two real bugs neither `helm template` nor a standalone shell check
+would have caught.**
+
+1. **`scripts/lib/detect-objecten-shape.sh` misdetected the merged shape
+   every time it actually ran inside `deploy.sh`/`provision-cluster.sh`**,
+   despite the exact same `tar -tzf ... | grep -q ...` check giving the
+   right answer when run standalone in an ad-hoc shell. Root cause: both
+   callers set `set -o pipefail`, and `grep -q` exits on its first match -
+   SIGPIPE-ing `tar` before it finishes writing - which pipefail then
+   reports as the whole pipeline failing, even though grep found exactly
+   what it was looking for. An ad-hoc interactive shell doesn't have
+   `pipefail` on by default, so this only ever showed up once the fix was
+   actually exercised through its real callers - confirmed by reproducing
+   the exact same wrong answer with `bash -c 'set -o pipefail; ...'`.
+   Fixed by capturing `tar`'s output into a variable first, then grepping
+   that (no live pipe, no early-exit SIGPIPE possible). Consequence before
+   the fix: `provision-cluster.sh` tried to pre-pull
+   `maykinmedia/open-object:3.6.1` (the classic tag combined with the new
+   image repo) twice in a row, both times failing with "manifest unknown"
+   - a second, independent confirmation of the exact image bug documented
+   above, this time surfacing through the detection layer instead of
+   values.yaml directly.
+2. **`deploy.sh`'s `render()` was always called as `render` or `render -s
+   ...` - never `render "$@"`** - so the script's own documented usage
+   (`./scripts/deploy.sh --set some.other=value # any extra --set flags
+   are passed through`) silently did nothing outside the `--full` path.
+   Pre-existing, unrelated to this session's other changes - only
+   surfaced because testing the merged shape's `objecten` Deployment
+   specifically (without turning on every other profile via `--full`)
+   needed exactly this. Fixed by capturing the script's remaining
+   positional args into `EXTRA_ARGS` and appending them in `render()`
+   after `EXTRA_SETS` and the call-site's own args.
+
+Verified live end-to-end on the real minikube cluster, both shapes,
+including a full round-trip through `seed-fixtures.sh`:
+- **Classic** (podiumd 4.8.1): deployed already-present `objecten`/
+  `objecttypen`; `seed-fixtures.sh` installed 82+14 fixture objects into
+  the two separate databases; confirmed via direct ORM queries (28
+  `Object`, 6 `ObjectType` in objecten; 6 `ObjectType` in objecttypen;
+  `admin` superuser created); re-ran the script a second time to confirm
+  idempotency (clean re-run, no errors, no duplicates).
+- **Merged** (openobject, via `set-podiumd-version.sh --path` against the
+  sibling `alt_helm-charts` checkout): after the two fixes above,
+  `deploy.sh` correctly rolled `objecten` to `maykinmedia/open-object:4.1.0`
+  (confirmed via `kubectl get deploy -o jsonpath`) and the old pod
+  terminated cleanly once the new one passed its readiness probe. Hit
+  upstream's own documented startup gate here for real: the container
+  refused to start (`SystemCheckError: Upgrading from 3.6.1 to 4.1.0 is
+  not possible`) because the objecten database still had the classic
+  shape's just-seeded fixture objecttypes, not marked `is_imported=True` -
+  exactly the precondition failure `openobject-migration.md`'s section A.6
+  describes, confirmed live rather than just read about. Not a bug -
+  reset the (test, disposable) `objects` Postgres database fresh
+  (`DROP DATABASE`/`CREATE DATABASE ... OWNER objects` +
+  `CREATE EXTENSION postgis`, matching `postgres/00-create-databases.sql`)
+  to simulate a real fresh openobject install rather than an in-place
+  upgrade, which isn't what a fresh podiumd-minikube deploy would ever
+  actually do. After that, `seed-fixtures.sh` installed 86 fixture
+  objects cleanly (28 `Object`, 6 `ObjectType`, 7 `ObjectTypeVersion`,
+  `admin` superuser); re-ran a second time to confirm idempotency there
+  too.
+
+**Near-incident, worth recording prominently**: partway through this
+verification, `kubectl`'s current-context had silently drifted away from
+`minikube` to an unrelated real cluster that is entirely out of scope for
+this project. A `deploy.sh` run and a `pabc-migrations` Job delete/recreate
+landed there before this was caught, causing real damage on that
+out-of-scope cluster. Never determined exactly how/when the context
+changed - the user fixed it by switching back to `minikube` manually.
+**Every mutating command for the rest of this session explicitly checked
+`kubectl config current-context` = `minikube` first and refused
+otherwise** - worth considering a permanent guard along these lines in
+`deploy.sh`/`seed-fixtures.sh` themselves, not just ad-hoc per-command
+checks, so this can't silently recur.
+
+**Followed up on both**, live:
+
+1. **Added `scripts/lib/require-minikube-context.sh`**, sourced by every
+   script that runs `kubectl` against this project's cluster
+   (`deploy.sh`, `seed-fixtures.sh`, `apply-pabc-migrations.sh`,
+   `provision-cluster.sh`, `setup-tunnel.sh`) - refuses with a clear
+   message unless `kubectl config current-context` is exactly `minikube`.
+   `teardown-cluster.sh` doesn't need it: it only ever calls `minikube
+   delete -p minikube` directly (not kubectl), so it can't accidentally
+   target a different cluster regardless of kubectl context.
+   `set-podiumd-version.sh` doesn't need it either (no kubectl at all -
+   pure local Chart.yaml/`helm dependency update`). Verified live: passes
+   silently on the real `minikube` context, refuses with a clear message
+   under a simulated wrong one.
+
+2. **Reconciled the cluster back to one consistent shape (classic, per
+   explicit choice)** - Chart.yaml already reverted to the checked-in
+   4.8.1 default earlier; redeployed `objecten` back onto
+   `maykinmedia/objects-api:3.6.1` (confirmed via
+   `kubectl get deploy -o jsonpath`), rollout completed cleanly, old
+   openobject-shape pod terminated on its own once the new one passed
+   readiness. `objecttypen` was never touched during the merged-shape
+   excursion, so it needed no reconciliation - still healthy, still
+   holds its original seeded data. Nothing to clean up on the
+   "orphaned `objecttypen`" front either, precisely because classic was
+   chosen as the final shape (objecttypen is the active, needed
+   component again, not orphaned) - that concern only would have applied
+   had merged been chosen instead.
+
+**Found live, while re-seeding classic `objecten` against a freshly-reset
+database as part of that reconciliation: a real, confirmed upstream bug
+in `maykinmedia/objects-api`, unrelated to anything in this project.**
+Re-running `seed-fixtures.sh` failed with `psycopg.errors.UndefinedColumn:
+column "service_id" of relation "core_objecttype" does not exist`. Traced
+this all the way to the actual root cause rather than assuming it was a
+stale/incompatible vendored fixture (the first hypothesis, since the
+fixture's `core.objecttype` entries do use an older `service`/`_name`
+shape) - confirmed via a completely fixture-free reproduction in the
+Django shell:
+```python
+from objects.core.models import ObjectType
+ObjectType(uuid="...", name="test").save()
+# -> the exact same UndefinedColumn error
+```
+This proves the bug is in the app itself, not the fixture: `models.py`
+still declares `service` (a required `ForeignKey`, no `null=True`, no
+default) and `_name` as real fields on `ObjectType`, but the migrations
+actually shipped in the image never create those columns - so *any*
+write to `ObjectType`, from any source, fails. Ruled out a stale local
+image cache (pulled a fresh copy directly from Docker Hub - byte-identical
+to what was already cached, 2 months old either way) and ruled out "just
+a 3.6.1 problem" (temporarily bumped the live Deployment to
+`objects-api:3.6.2`, the version podiumd's own chart 2.12.1 actually
+bundles by default per the `openobject-migration.md` doc read earlier -
+reproduced the identical failure there too, then rolled back to 3.6.1 to
+match the checked-in pin). Given this, the two options considered
+(maintain two versions of the classic fixture; hotpatch the fixture at
+apply-time to match the current schema) were both moot - neither touches
+the actual problem, since the ORM itself can't write to this table
+regardless of what data is provided.
+
+**Fixed `seed-fixtures.sh` to warn and stop cleanly instead of crashing
+with a raw traceback on this specific, known failure** - matched by the
+exact `UndefinedColumn` message text (`KNOWN_OBJECTEN_BUG_SIGNATURE`),
+not skipped unconditionally, so this stops warning on its own the moment
+a future `objects-api` version actually fixes it upstream; any other,
+genuinely new failure still surfaces its full raw error for real
+debugging (verified both paths live: the actual known-bug case shows the
+clean warning, a synthetic unrelated failure still falls through to the
+raw message). Verified against the live cluster: classic `objecten`
+seeding now exits 1 with the clean warning instead of a wall of
+traceback; `objecttypen` (a different app, no such bug) still seeds and
+holds its data fine independently.

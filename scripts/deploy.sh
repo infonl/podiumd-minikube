@@ -35,22 +35,31 @@ CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RELEASE_NAME="podiumd-minikube"
 NAMESPACE="podiumd-minikube"
 
+source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
+
 EXTRA_SETS=()
 if [ "${1:-}" = "--full" ]; then
   shift
+  source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
   EXTRA_SETS=(
     --set itest.enabled=true
     --set objecten.enabled=true --set podiumd.objecten.enabled=true
-    --set podiumd.objecttypen.enabled=true
+    "${OBJECTEN_SHAPE_SETS[@]}"
     --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true
     --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true
     --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true
     --set metrics.enabled=true
   )
 fi
+# Remaining args (e.g. `--set some.other=value`, per this script's own
+# usage comment) are forwarded to every render() call below via "$@" -
+# render()'s own "$@" is its *call-site* args (`-s templates/...` for the
+# storage-hooks-only renders), so these have to be appended there, not
+# read again inside render() itself.
+EXTRA_ARGS=("$@")
 
 render() {
-  helm template "${RELEASE_NAME}" "${CHART_DIR}" -n "${NAMESPACE}" "${EXTRA_SETS[@]}" "$@" \
+  helm template "${RELEASE_NAME}" "${CHART_DIR}" -n "${NAMESPACE}" "${EXTRA_SETS[@]}" "${EXTRA_ARGS[@]}" "$@" \
     | python3 "${CHART_DIR}/scripts/lib/strip-image-digests.py" \
     | python3 "${CHART_DIR}/scripts/lib/disable-service-links.py" \
     | python3 "${CHART_DIR}/scripts/lib/exclude-pabc-migration-job.py"
