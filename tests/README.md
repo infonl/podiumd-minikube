@@ -24,9 +24,14 @@ request, resolved automatically at test time.
 ## Running
 
 ```bash
+python3 -m venv ../.venv
+source ../.venv/bin/activate      # ..\.venv\Scripts\activate on Windows
 pip install -r requirements.txt
 pytest
 ```
+
+The venv only needs creating once — on later runs, just `source
+../.venv/bin/activate` before `pytest`.
 
 Tests for optional profile groups (objecten, objecttypen, opennotificaties,
 openarchiefbeheer, openformulieren, metrics, itest) auto-skip if that
