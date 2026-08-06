@@ -15,6 +15,9 @@ charts/*.tgz
 # OS
 .DS_Store
 
+# IDE
+.idea/
+
 # Python (tests/)
 __pycache__/
 *.pyc
