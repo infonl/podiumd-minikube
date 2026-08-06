@@ -23,11 +23,7 @@ TIMEOUT_SECONDS=30
 # browser at it - see this repo's own incident notes for why this can't
 # be assumed already correct.
 source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
-
-hosts_line() {
-  local ip="$1"
-  echo "${ip} zac.local keycloak.local openzaak.local openklant.local pabc.local solr.local objecten.local objecttypen.local opennotificaties.local openarchiefbeheer-web.local openarchiefbeheer-ui.local openformulieren-nginx.local openformulieren-web.local grafana.local greenmail.local"
-}
+source "${CHART_DIR}/scripts/lib/hosts-line.sh"
 
 external_ip() {
   kubectl get svc "${TRAEFIK_SERVICE}" -n "${TRAEFIK_NAMESPACE}" \
@@ -38,8 +34,7 @@ existing_ip="$(external_ip)"
 if [ -n "${existing_ip}" ]; then
   echo "Traefik already has an external IP (${existing_ip}) - tunnel appears to be running already."
   echo
-  echo "Add this to /etc/hosts if you haven't already:"
-  echo "  echo \"$(hosts_line "${existing_ip}")\" | sudo tee -a /etc/hosts"
+  echo "Run ./scripts/update-hosts.sh to add/refresh the /etc/hosts entry for it."
   exit 0
 fi
 
@@ -64,8 +59,7 @@ while [ "${elapsed}" -lt "${TIMEOUT_SECONDS}" ]; do
     echo
     echo "Tunnel is up. Traefik external IP: ${ip}"
     echo
-    echo "Add this to /etc/hosts if you haven't already:"
-    echo "  echo \"$(hosts_line "${ip}")\" | sudo tee -a /etc/hosts"
+    echo "Run ./scripts/update-hosts.sh to add/refresh the /etc/hosts entry for it."
     exit 0
   fi
   echo -n "."

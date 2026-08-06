@@ -52,6 +52,7 @@ def test_long_running_pods_are_ready(pods):
         "keycloak",
         "solr",
         "wiremock",
+        "mailpit",
         "brp-personen-mock",
         "openzaak",
         "openklant",

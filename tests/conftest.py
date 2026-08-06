@@ -92,7 +92,9 @@ def enabled_profiles(pods):
         "openarchiefbeheer": any_pod_named("openarchiefbeheer"),
         "openformulieren": any_pod_named("openformulieren"),
         "metrics": any_pod_named("grafana"),
-        "itest": any_pod_named("greenmail"),
+        # mailpit is unconditional now (was greenmail, itest-only) - use
+        # the opa-tests Job instead, still itest-gated.
+        "itest": any_pod_named("opa-tests"),
     }
 
 
@@ -118,6 +120,7 @@ def browser_type_launch_args(browser_type_launch_args, traefik_ip):
         **browser_type_launch_args,
         "args": [
             f"--host-resolver-rules=MAP zac.local {traefik_ip},"
-            f"MAP keycloak.local {traefik_ip}"
+            f"MAP keycloak.local {traefik_ip},"
+            f"MAP mailpit.local {traefik_ip}"
         ],
     }

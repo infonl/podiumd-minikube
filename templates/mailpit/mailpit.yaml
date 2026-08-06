@@ -1,83 +1,76 @@
-{{- if .Values.itest.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: greenmail
+  name: mailpit
   labels:
     {{- include "podiumd-minikube.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: greenmail
+      app: mailpit
   template:
     metadata:
       labels:
-        app: greenmail
+        app: mailpit
     spec:
       enableServiceLinks: false
       containers:
-        - name: greenmail
-          image: greenmail/standalone:2.1.10
-          env:
-            - name: GREENMAIL_OPTS
-              value: >-
-                -Dgreenmail.smtp.hostname=0.0.0.0
-                -Dgreenmail.smtp.port=25
-                -Dgreenmail.hostname=0.0.0.0
-                -Dgreenmail.auth.disabled
-                -Dgreenmail.verbose
+        - name: mailpit
+          image: axllent/mailpit:v1.30.6
+          # No auth/TLS env vars needed - a single-node dev/test SMTP sink
+          # every pod can relay through unauthenticated, same posture as
+          # the greenmail deployment this replaces. Ports are the image's
+          # own defaults (verified via `docker inspect`), so no MP_SMTP_*/
+          # MP_UI_* overrides needed either.
           ports:
             - name: smtp
-              containerPort: 25
-            - name: imap
-              containerPort: 143
+              containerPort: 1025
             - name: web
-              containerPort: 8080
+              containerPort: 8025
+          # A static Go binary, not a JVM (unlike the greenmail image this
+          # replaces) - sized well below greenmail's own 50m/128Mi/256Mi
+          # footprint accordingly.
           resources:
             requests:
-              cpu: 50m
-              memory: 128Mi
+              cpu: 10m
+              memory: 32Mi
             limits:
-              memory: 256Mi
+              memory: 64Mi
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: greenmail
+  name: mailpit
   labels:
     {{- include "podiumd-minikube.labels" . | nindent 4 }}
 spec:
   selector:
-    app: greenmail
+    app: mailpit
   ports:
     - name: smtp
-      port: 25
+      port: 1025
       targetPort: smtp
-    - name: imap
-      port: 143
-      targetPort: imap
     - name: web
-      port: 8080
+      port: 8025
       targetPort: web
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: greenmail
+  name: mailpit
   labels:
     {{- include "podiumd-minikube.labels" . | nindent 4 }}
 spec:
   ingressClassName: traefik
   rules:
-    - host: greenmail.local
+    - host: mailpit.local
       http:
         paths:
           - path: /
             pathType: ImplementationSpecific
             backend:
               service:
-                name: greenmail
+                name: mailpit
                 port:
                   name: web
-{{- end }}

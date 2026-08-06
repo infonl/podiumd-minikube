@@ -49,7 +49,9 @@ no-profile-flags behavior.
 ## What's running
 
 **Core (always on):** zac, openzaak, openklant, pabc, brp-personen-mock,
-postgres, redis, solr, keycloak, wiremock.
+postgres, redis, solr, keycloak, wiremock, mailpit (SMTP test server —
+every app's email settings point at it, unauthenticated, regardless of
+which optional profiles are on).
 
 **Optional profiles** (each is its own `values.yaml` top-level flag,
 default `false` — `deploy.sh --full` turns all of them on):
@@ -61,13 +63,13 @@ default `false` — `deploy.sh --full` turns all of them on):
 | `opennotificaties` | Open Notificaties + RabbitMQ |
 | `openformulieren` | Open Formulieren (+ transitively needs `objecten`, `objecttypen`, `opennotificaties` enabled too — matches compose's own profile nesting) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana |
-| `itest` | extra WireMock mappings (SmartDocuments/KVK/BAG), Greenmail, the `opa-tests` Job |
+| `itest` | extra WireMock mappings (SmartDocuments/KVK/BAG), the `opa-tests` Job |
 
 Ingress hostnames (all `*.local`, reachable once the tunnel + `/etc/hosts`
 entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
 `solr`, `objecten`, `objecttypen`, `opennotificaties`,
 `openarchiefbeheer-web`/`-ui`, `openformulieren-nginx`/`-web`, `grafana`,
-`greenmail`.
+`mailpit`.
 
 ## Scripts
 

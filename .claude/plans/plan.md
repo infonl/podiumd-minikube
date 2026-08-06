@@ -1840,3 +1840,116 @@ raw message). Verified against the live cluster: classic `objecten`
 seeding now exits 1 with the clean warning instead of a wall of
 traceback; `objecttypen` (a different app, no such bug) still seeds and
 holds its data fine independently.
+
+**Replaced Greenmail with Mailpit, made it unconditional, and actually
+wired every component's email settings to it** (previously none of them
+did - see below). Evaluated the `jouve/mailpit` Helm chart first
+(`helm pull` + inspected its `templates/`) and rejected it: it drags in
+the full Bitnami `common` library chart (~20 helper templates for
+MongoDB/MariaDB/Cassandra/MySQL/PostgreSQL validation this project would
+never use) just to template one container - inconsistent with this
+project's own established pattern of plain raw templates for every other
+single-container piece it manages itself (Postgres, Redis, Keycloak,
+Solr, WireMock, and Greenmail itself). Wrote `templates/mailpit/
+mailpit.yaml` instead, modeled directly on the greenmail.yaml it
+replaces (same Deployment+Service+Ingress-in-one-file shape), using
+`axllent/mailpit:v1.30.6`'s own default ports (1025 SMTP, 8025 web UI,
+confirmed via `docker inspect`) - no env vars needed at all, unlike
+greenmail's explicit auth-disable flag, since mailpit doesn't require
+auth by default. Sized well below greenmail's 50m/128Mi/256Mi footprint
+(10m/32Mi/64Mi) - a static Go binary, not a JVM.
+
+Deleting `templates/itest/greenmail.yaml` (the whole directory, since it
+only had two files) also deleted `opa-tests-job.yaml` by accident -
+caught immediately via `git status`, restored with `git checkout --`.
+`opa-tests-job.yaml` correctly stays itest-gated in place; only mailpit
+moved out to be unconditional.
+
+**Found live, before touching anything: none of the 8 ZGW components
+actually pointed at greenmail** - a real, pre-existing gap, not
+something this change broke. ZAC pointed at a fake placeholder Mailjet
+hostname (`in-v3.mailjet.com`) nothing ever used; the other 7
+Maykin-family apps (openzaak, openklant, objecten, objecttypen,
+opennotificaties, openarchiefbeheer, openformulieren) all silently
+defaulted to their own chart's `localhost:25` - a no-op inside their own
+pod. Added `settings.email.host: mailpit` / `port: 1025` to all 7 (new
+blocks, none existed before) and repointed zac's `mail.smtp.server`/
+`port` from the Mailjet placeholder to mailpit.
+
+**Found live, only after actually sending a test email through the
+newly-wired config**: podiumd's own umbrella `values.yaml` sets
+`settings.email.useTLS: true` for every one of those 7 apps (a
+production-relay assumption) - since this project's own values.yaml
+never touched that field, it kept leaking through. Confirmed via
+`kubectl exec ... env`: `EMAIL_USE_TLS=True`, `EMAIL_PORT=587` on a pod
+that should've had `mailpit`/`1025`/`false` - initially mis-diagnosed as
+a rollout issue (`kubectl exec deploy/openzaak` had raced onto the *old*
+terminating pod mid-rollout, not the new one) before finding the real
+cause. Mailpit doesn't speak STARTTLS, so this had to be explicitly
+overridden to `false` on all 7 apps, not left at the chart default.
+
+**Found live, a second and completely different gotcha, while verifying
+zac's own SMTP env**: clearing zac's `mail.smtp.username`/`password` to
+`""` (mailpit needs no auth) didn't actually clear the live Secret's
+stale `fakeMailjetApiKey`/`fakeMailjetApiSecretKey` values on this
+already-existing cluster, even though `kubectl apply` reported
+`secret/zac configured`. Root cause: the chart's own `secret.yaml` reads
+`{{- if .Values.mail.smtp.username }}` - an empty string is falsy, so
+the key is omitted from the rendered manifest entirely rather than
+rendered as an empty string, and `kubectl apply` never sees it as a
+value to actively clear from the *existing* object. Fixed live with a
+one-time `kubectl patch --type=json` removing both stale keys directly
+(not a values.yaml bug - a fresh deploy that never had a non-empty value
+would never hit this; only already-existing clusters with old values
+baked into a Secret would). Verified afterward: `kubectl exec ...`
+inside zac's container can open a raw TCP connection to
+`mailpit:1025` and gets mailpit's real ESMTP banner back.
+
+**Incidental fix, found via a new warning during this same
+`helm dependency update` run**: `.venv/` (added earlier this session) has
+no `.helmignore` entry, so Helm's chart-directory walk followed its
+`python3 -> /usr/bin/python3.11` symlinks and warned about it on every
+run. Added `.helmignore` (excluding `.git/`, `.idea/`, `.claude/`,
+`.venv/`, `tests/`) - confirmed the warning is gone.
+
+Verified end-to-end, live: a Django `send_mail()` from openzaak's own
+shell landed in mailpit, confirmed via mailpit's own `/api/v1/messages`
+API (not just "no error raised"). `itest`'s WireMock mappings
+(SmartDocuments/KVK/BAG), lost earlier this session to an unrelated
+targeted `deploy.sh` invocation that didn't set `itest.enabled=true`,
+came back correctly as a side effect of this change's own `--full`
+redeploy - confirmed via the same in-pod `ls` check that found them
+missing originally. Full test suite: 43/43 passing (`tests/conftest.py`'s
+itest-detection fixture switched from `any_pod_named("greenmail")` to
+`any_pod_named("opa-tests")`, since mailpit no longer signals itest;
+`test_reachability.py`/`test_pods.py` updated to `mailpit`/`mailpit.local`
+accordingly).
+
+**Follow-ups, same session.** Added `tests/test_mailpit.py`: sends a
+fresh UUID-marked email per test (not a fixed string, so it can't
+false-positive on a leftover message from a previous run) and confirms
+it shows up both via mailpit's own `/api/v1/messages` API and via a real
+headless-Chromium browser check (`page.goto("http://mailpit.local/")` +
+asserting the marker text is visible) - same "does the SPA actually
+render, not just return 200" reasoning as `test_browser.py`'s ZAC
+dashboard check. `conftest.py`'s `browser_type_launch_args` override
+extended to also resolve `mailpit.local`.
+
+**Found live, unprompted, while pointing a browser at mailpit.local
+directly**: the host's own `/etc/hosts` had a stale, incomplete line
+(only 5 of the 15 hostnames this chart's Ingresses can produce - it
+predated several profile additions). `setup-tunnel.sh` only ever
+*printed* the `sudo tee -a` command rather than running it, so nothing
+had kept it in sync. Extracted the hostname list out of
+`setup-tunnel.sh`'s own `hosts_line()` into a new shared
+`scripts/lib/hosts-line.sh` (avoids the exact kind of duplication that
+let this go stale in two places instead of one), and added
+`scripts/update-hosts.sh`: idempotent, removes any existing line
+matching `zac.local` (catches both a hand-edited line and a previous
+run's own line, not just this script's own marker comment) before
+appending a fresh one. Couldn't fully verify end-to-end - `sudo` needs
+an interactive terminal this session doesn't have; syntax-checked all
+three scripts and confirmed `setup-tunnel.sh` still runs correctly
+end-to-end with the extracted helper, but `update-hosts.sh`'s actual
+`/etc/hosts` write has only been reviewed, not run - left for the user
+to run themselves in a real terminal.

@@ -55,6 +55,7 @@ reflects the real cluster state.
 | `test_database.py` | All expected Postgres databases exist, PostGIS is installed where needed, ZAC's own ZGW client credentials are seeded in Open Zaak |
 | `test_metrics.py` | Grafana's provisioned datasources and Prometheus's scrape targets are actually healthy |
 | `test_opa_policies.py` | The `opa-tests` Job succeeded |
+| `test_mailpit.py` | A real email sent via `send_mail()` from a component (openzaak) actually arrives in mailpit - confirmed both via its API and via its real (headless Chromium) web UI, not just that mailpit's root path returns 200 |
 | `test_pabc_migrations_guard.py` | `scripts/apply-pabc-migrations.sh` actually refuses to recreate the (non-idempotent) pabc-migrations Job when PABC's database already has data |
 
 ## Known caveats

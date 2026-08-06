@@ -13,7 +13,10 @@
 zac:
   enabled: true # "zac" profile - on by default so the app is visible
 itest:
-  enabled: false # wiremocks (smartdocuments/kvk/bag), greenmail, opa-tests
+  enabled: false # wiremocks (smartdocuments/kvk/bag), opa-tests
+  # mailpit (SMTP test server) moved out of this profile - it's now
+  # unconditional (templates/mailpit/), since every app's own email
+  # settings point at it regardless of which optional profiles are on.
 objecten:
   enabled: false
 opennotificaties:
@@ -137,10 +140,15 @@ podiumd:
         rsin: "123443210"
     mail:
       smtp:
-        server: in-v3.mailjet.com
-        port: "587"
-        username: fakeMailjetApiKey
-        password: fakeMailjetApiSecretKey
+        # Was a fake placeholder Mailjet hostname that nothing ever
+        # actually pointed at - repointed at mailpit (see
+        # templates/mailpit/), matching every other app's own email
+        # settings. Chart docs confirm username/password are optional -
+        # mailpit accepts unauthenticated SMTP, same as every other app.
+        server: mailpit
+        port: "1025"
+        username: ""
+        password: ""
     zgwApis:
       url: http://openzaak/
       clientId: zac_client
@@ -299,6 +307,17 @@ podiumd:
       # DisallowedHost 400 error page, since "openzaak.local" was never in
       # that list.
       allowedHosts: openzaak.local
+      # Chart default is "localhost:25" - a compose-only value that's just
+      # a no-op inside this pod in Kubernetes. Pointed at mailpit (see
+      # templates/mailpit/) instead, matching compose's own openzaak-mail
+      # relay role - no auth needed, mailpit accepts unauthenticated SMTP.
+      email:
+        host: mailpit
+        port: 1025
+        # podiumd's own default (true) is a production-relay assumption -
+        # mailpit doesn't speak STARTTLS, so this must be off or mail
+        # delivery fails.
+        useTLS: false
       database:
         host: postgres
         port: 5432
@@ -368,6 +387,15 @@ podiumd:
     settings:
       # See openzaak's own allowedHosts comment above - same gap, same fix.
       allowedHosts: openklant.local
+      # See openzaak's own email comment above - same chart-default
+      # "localhost:25" gap, same fix.
+      email:
+        host: mailpit
+        port: 1025
+        # podiumd's own default (true) is a production-relay assumption -
+        # mailpit doesn't speak STARTTLS, so this must be off or mail
+        # delivery fails.
+        useTLS: false
       database:
         host: postgres
         port: 5432
@@ -523,6 +551,15 @@ podiumd:
     settings:
       secretKey: objectenApiSecretKey
       allowedHosts: objecten.local
+      # See openzaak's own email comment above - same chart-default
+      # "localhost:25" gap, same fix.
+      email:
+        host: mailpit
+        port: 1025
+        # podiumd's own default (true) is a production-relay assumption -
+        # mailpit doesn't speak STARTTLS, so this must be off or mail
+        # delivery fails.
+        useTLS: false
       database:
         host: postgres
         port: 5432
@@ -579,6 +616,15 @@ podiumd:
     settings:
       secretKey: objecttypesApiSecretKey
       allowedHosts: objecttypen.local
+      # See openzaak's own email comment above - same chart-default
+      # "localhost:25" gap, same fix.
+      email:
+        host: mailpit
+        port: 1025
+        # podiumd's own default (true) is a production-relay assumption -
+        # mailpit doesn't speak STARTTLS, so this must be off or mail
+        # delivery fails.
+        useTLS: false
       database:
         host: postgres
         port: 5432
@@ -625,6 +671,15 @@ podiumd:
     settings:
       secretKey: opennotificatiesApiSecretKey
       allowedHosts: opennotificaties.local
+      # See openzaak's own email comment above - same chart-default
+      # "localhost:25" gap, same fix.
+      email:
+        host: mailpit
+        port: 1025
+        # podiumd's own default (true) is a production-relay assumption -
+        # mailpit doesn't speak STARTTLS, so this must be off or mail
+        # delivery fails.
+        useTLS: false
       database:
         host: postgres
         port: 5432
@@ -776,6 +831,15 @@ podiumd:
       # nginx, just two Host-header entry points. Also feeds nginx's own
       # server_name directive (same mechanism as our raw templates).
       allowedHosts: openarchiefbeheer-web.local,openarchiefbeheer-ui.local
+      # See openzaak's own email comment above - same chart-default
+      # "localhost:25" gap, same fix.
+      email:
+        host: mailpit
+        port: 1025
+        # podiumd's own default (true) is a production-relay assumption -
+        # mailpit doesn't speak STARTTLS, so this must be off or mail
+        # delivery fails.
+        useTLS: false
       database:
         host: postgres
         port: 5432
@@ -870,6 +934,15 @@ podiumd:
     settings:
       secretKey: openFormulierenSecretKey
       allowedHosts: openformulieren-nginx.local,openformulieren-web.local
+      # See openzaak's own email comment above - same chart-default
+      # "localhost:25" gap, same fix.
+      email:
+        host: mailpit
+        port: 1025
+        # podiumd's own default (true) is a production-relay assumption -
+        # mailpit doesn't speak STARTTLS, so this must be off or mail
+        # delivery fails.
+        useTLS: false
       database:
         host: postgres
         port: 5432
