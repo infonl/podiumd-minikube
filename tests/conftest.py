@@ -102,3 +102,22 @@ def host_url(traefik_ip, path="/"):
 
 def host_headers(hostname):
     return {"Host": hostname}
+
+
+@pytest.fixture(scope="session")
+def browser_type_launch_args(browser_type_launch_args, traefik_ip):
+    """
+    Extends pytest-playwright's own fixture: makes the browser resolve
+    every *.local hostname straight to Traefik's IP (Chromium's own
+    --host-resolver-rules), so browser-based tests can navigate to real
+    URLs like http://zac.local/ with no `/etc/hosts` edit needed - same
+    "no local hosts-file changes required" property as the rest of this
+    suite, just done at the browser level instead of a manual Host header.
+    """
+    return {
+        **browser_type_launch_args,
+        "args": [
+            f"--host-resolver-rules=MAP zac.local {traefik_ip},"
+            f"MAP keycloak.local {traefik_ip}"
+        ],
+    }

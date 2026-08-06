@@ -107,12 +107,15 @@ they're only ever piped into or sourced by the scripts above:
 python3 -m venv .venv
 source .venv/bin/activate      # .venv\Scripts\activate on Windows
 pip install -r tests/requirements.txt
+playwright install chromium
 cd tests
 pytest
 ```
 
 `.venv` only needs creating once; after that, just `source .venv/bin/activate`
-before running `pytest` again.
+before running `pytest` again. `playwright install chromium` also only
+needs running once per venv (downloads a Chromium build for the
+browser-based test).
 
 Live-cluster integration tests, not unit tests — see
 [`tests/README.md`](tests/README.md) for full coverage, prerequisites, and

@@ -27,11 +27,16 @@ request, resolved automatically at test time.
 python3 -m venv ../.venv
 source ../.venv/bin/activate      # ..\.venv\Scripts\activate on Windows
 pip install -r requirements.txt
+playwright install chromium
 pytest
 ```
 
 The venv only needs creating once — on later runs, just `source
-../.venv/bin/activate` before `pytest`.
+../.venv/bin/activate` before `pytest`. `playwright install chromium`
+also only needs running once (per venv): it downloads Playwright's own
+Chromium build into `~/.cache/ms-playwright`, separate from any browser
+already on the machine, and `test_browser.py` needs it — the rest of
+the suite doesn't.
 
 Tests for optional profile groups (objecten, objecttypen, opennotificaties,
 openarchiefbeheer, openformulieren, metrics, itest) auto-skip if that
@@ -46,6 +51,7 @@ reflects the real cluster state.
 | `test_pods.py` | Every pod is `Running`/`Succeeded`, every long-running container is `Ready`, the core stack is present |
 | `test_reachability.py` | Every Ingress hostname (core + profile-gated) returns its expected status code |
 | `test_login_flow.py` | The full OIDC login flow through `zac.local` — redirect to Keycloak, login form, credential submission, authorization code, callback, landing on the authenticated app shell |
+| `test_browser.py` | Same login flow, but through a real (headless Chromium) browser via Playwright — proves the SPA actually renders/hydrates after login, not just that the HTTP redirect chain succeeds |
 | `test_database.py` | All expected Postgres databases exist, PostGIS is installed where needed, ZAC's own ZGW client credentials are seeded in Open Zaak |
 | `test_metrics.py` | Grafana's provisioned datasources and Prometheus's scrape targets are actually healthy |
 | `test_opa_policies.py` | The `opa-tests` Job succeeded |
