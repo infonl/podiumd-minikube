@@ -1953,3 +1953,37 @@ three scripts and confirmed `setup-tunnel.sh` still runs correctly
 end-to-end with the extracted helper, but `update-hosts.sh`'s actual
 `/etc/hosts` write has only been reviewed, not run - left for the user
 to run themselves in a real terminal.
+
+**Removed `opa-tests` entirely**, at the user's request. Confirmed the
+full scope first: `templates/itest/opa-tests-job.yaml` (the whole
+`templates/itest/` directory, since it was the only file left there
+after mailpit's own removal), `tests/test_opa_policies.py`, the vendored
+`vendor/dimpact-zaakafhandelcomponent/policies/` directory (main + test
+`.rego` files, only ever consumed by this one Job's ConfigMaps - nothing
+else referenced that path), plus every mention in `values.yaml`'s itest
+comment, `README.md`/`tests/README.md`'s coverage tables,
+`tests/test_pods.py`'s `ONE_SHOT_JOB_PREFIXES`, `scripts/lib/
+disable-service-links.py`'s comment, `CLAUDE.md`'s vendor-directory
+description, and `NOTES.md`'s provenance entry. Deliberately did *not*
+touch the unrelated `"opa"` container in zac's own bundled pod spec
+(`openpolicyagent/opa:1.17.1-static`, `OPA_API_CLIENT_MP_REST_URL`) - a
+real runtime authorization sidecar bundled by the zac chart itself,
+completely unrelated to this project's own vendored-policy test Job;
+confirmed by reading the actual rendered manifest before removing
+anything, not just grepping for the string "opa".
+
+Also removed the now-dead `"itest": any_pod_named("opa-tests")` entry
+from `conftest.py`'s `enabled_profiles` fixture - nothing else consumed
+it once `test_opa_policies.py` (its only reader) was deleted, and
+`itest.enabled` still gates something real (the extra WireMock
+mappings), so the flag itself stays, just with no dedicated
+pod-based detection signal left.
+
+Verified live: rendering with `itest.enabled=true` no longer references
+`opa` anywhere except zac's own unrelated sidecar; the old `opa-tests`
+Job and its two ConfigMaps were still sitting on the cluster from a
+`--full` deploy three weeks ago (`kubectl apply` never prunes resources
+that disappear from a later render - the same recurring gotcha as
+`objecttypen` and the itest WireMock mappings earlier this session) -
+deleted them manually. Full suite: 44/44 passing (45 minus the deleted
+opa test).

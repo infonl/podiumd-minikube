@@ -39,7 +39,7 @@ live-cluster pytest suite).
 
 `vendor/dimpact-zaakafhandelcomponent/` holds physical copies of file assets
 this chart needs from that repo (Keycloak realm JSON, WireMock mappings, DB
-init/seed SQL, metrics configs, OPA policies, PABC's role/domain mapping
+init/seed SQL, metrics configs, PABC's role/domain mapping
 dataset) — never live cross-repo references. See `vendor/dimpact-zaakafhandelcomponent/NOTES.md`
 for provenance per file.
 

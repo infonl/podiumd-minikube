@@ -35,7 +35,7 @@ spec doesn't yet have this field - including `pabc-migrations-1`, which
 `scripts/apply-pabc-migrations.sh` deliberately protects from being
 casually deleted and recreated (see that script for why: this Job clears
 PABC's database before reseeding it, every time it runs). None of this
-chart's own one-shot Jobs (`storage-permissions-fix`, `opa-tests`,
+chart's own one-shot Jobs (`storage-permissions-fix`,
 `pabc-migrations-1`) run a long-lived process with a "wait for X"
 entrypoint script of the kind that actually collides with an injected
 env var, so there's no functional need to patch them anyway.

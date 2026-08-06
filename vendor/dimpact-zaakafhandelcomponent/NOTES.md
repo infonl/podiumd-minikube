@@ -32,10 +32,6 @@ here is a live reference — this project never reads
   section — kept here too as a traceable standalone copy).
 - `metrics/{otel-collector,tempo,prometheus,grafana-datasources}.yaml`
   ← `scripts/docker-compose/imports/{otel-collector,tempo,prometheus,grafana}/*.yaml`.
-- `policies/main/*.rego` + `policies/main/policies`
-  ← `src/main/resources/policies/*`.
-- `policies/test/*.rego`
-  ← `src/test/resources/policies/*.rego`.
 - `objecten/demodata.json`, `objecttypen/demodata.json`, `openobject/demodata.json`
   — Django fixtures used by `scripts/seed-fixtures.sh` (`manage.py loaddata`),
   matching docker-compose's own `*-import` one-shot containers.

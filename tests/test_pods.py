@@ -8,7 +8,6 @@ import pytest
 
 ONE_SHOT_JOB_PREFIXES = (
     "pabc-migrations",
-    "opa-tests",
     "storage-permissions-fix",
     "openarchiefbeheer-config",
     # ZAC's own bundled CronJobs (periodic signaleren/sig-del housekeeping) -

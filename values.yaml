@@ -13,7 +13,7 @@
 zac:
   enabled: true # "zac" profile - on by default so the app is visible
 itest:
-  enabled: false # wiremocks (smartdocuments/kvk/bag), opa-tests
+  enabled: false # wiremocks (smartdocuments/kvk/bag)
   # mailpit (SMTP test server) moved out of this profile - it's now
   # unconditional (templates/mailpit/), since every app's own email
   # settings point at it regardless of which optional profiles are on.

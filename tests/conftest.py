@@ -92,9 +92,6 @@ def enabled_profiles(pods):
         "openarchiefbeheer": any_pod_named("openarchiefbeheer"),
         "openformulieren": any_pod_named("openformulieren"),
         "metrics": any_pod_named("grafana"),
-        # mailpit is unconditional now (was greenmail, itest-only) - use
-        # the opa-tests Job instead, still itest-gated.
-        "itest": any_pod_named("opa-tests"),
     }
 
 
