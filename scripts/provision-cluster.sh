@@ -109,7 +109,7 @@ echo "Deriving the image list from the currently-selected podiumd version..."
 source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
 mapfile -t images < <(
   helm template podiumd-minikube "${CHART_DIR}" -n podiumd-minikube \
-    --set itest.enabled=true \
+    --set wiremock.enabled=true \
     --set objecten.enabled=true --set podiumd.objecten.enabled=true \
     "${OBJECTEN_SHAPE_SETS[@]}" \
     --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true \

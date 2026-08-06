@@ -47,7 +47,7 @@ spec:
               mountPath: /home/wiremock/mappings/{{ base $path }}
               subPath: {{ base $path }}
             {{- end }}
-            {{- if .Values.itest.enabled }}
+            {{- if .Values.wiremock.enabled }}
             {{- range $set := list "smartdocuments-wiremock" "kvk-wiremock" "bag-wiremock" }}
             {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/mappings/*.json" $set) }}
             - name: {{ $set }}-mappings
@@ -65,7 +65,7 @@ spec:
         - name: brp-personen-mappings
           configMap:
             name: wiremock-brp-personen-mappings
-        {{- if .Values.itest.enabled }}
+        {{- if .Values.wiremock.enabled }}
         {{- range $set := list "smartdocuments-wiremock" "kvk-wiremock" "bag-wiremock" }}
         - name: {{ $set }}-mappings
           configMap:

@@ -12,8 +12,8 @@
 # -----------------------------------------------------------------------
 zac:
   enabled: true # "zac" profile - on by default so the app is visible
-itest:
-  enabled: false # wiremocks (smartdocuments/kvk/bag)
+wiremock:
+  enabled: false # extra wiremock mappings (smartdocuments/kvk/bag) - was "itest", renamed since that's all this flag does now
   # mailpit (SMTP test server) moved out of this profile - it's now
   # unconditional (templates/mailpit/), since every app's own email
   # settings point at it regardless of which optional profiles are on.
@@ -516,7 +516,7 @@ podiumd:
   # own Chart.yaml `condition:` on the nested dependency) - the top-level
   # flags at the very top of this file (objecten.enabled, etc.) are this
   # chart's own compose-profile-equivalent flags, used by our own templates
-  # (storage-hooks.yaml, the postgres seed script guard, the metrics/itest
+  # (storage-hooks.yaml, the postgres seed script guard, the metrics/wiremock
   # raw templates below). Turning a profile on means flipping BOTH: the
   # top-level flag and this podiumd.<app>.enabled flag. Left disabled here,
   # matching compose's own opt-in-by-profile default. ---

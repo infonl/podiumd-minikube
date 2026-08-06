@@ -27,7 +27,7 @@
 # Usage:
 #   ./scripts/deploy.sh            # core profile only (matches values.yaml's own default)
 #   ./scripts/deploy.sh --full     # every optional profile enabled too (objecten, objecttypen,
-#                                  # opennotificaties, openarchiefbeheer, openformulieren, metrics, itest)
+#                                  # opennotificaties, openarchiefbeheer, openformulieren, metrics, wiremock)
 #   ./scripts/deploy.sh --set some.other=value   # any extra --set flags are passed through
 set -euo pipefail
 
@@ -42,7 +42,7 @@ if [ "${1:-}" = "--full" ]; then
   shift
   source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
   EXTRA_SETS=(
-    --set itest.enabled=true
+    --set wiremock.enabled=true
     --set objecten.enabled=true --set podiumd.objecten.enabled=true
     "${OBJECTEN_SHAPE_SETS[@]}"
     --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true

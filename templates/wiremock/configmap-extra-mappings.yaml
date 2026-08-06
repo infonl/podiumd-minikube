@@ -1,12 +1,12 @@
 {{/*
-The itest-only mapping sets (smartdocuments/kvk/bag), mounted into the same
+The extra mapping sets (smartdocuments/kvk/bag), mounted into the same
 shared WireMock pod as brp-personen-wiremock's mappings - see
 templates/wiremock/deployment.yaml's comment on why one pod, not four.
 Split into per-set ConfigMaps (rather than one merged one) purely so each
 set's own checksum/mappings annotation can track it independently, matching
 the existing brp-personen-wiremock pattern.
 */}}
-{{- if .Values.itest.enabled }}
+{{- if .Values.wiremock.enabled }}
 {{- range $set := list "smartdocuments-wiremock" "kvk-wiremock" "bag-wiremock" }}
 apiVersion: v1
 kind: ConfigMap

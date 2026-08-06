@@ -63,7 +63,7 @@ default `false` — `deploy.sh --full` turns all of them on):
 | `opennotificaties` | Open Notificaties + RabbitMQ |
 | `openformulieren` | Open Formulieren (+ transitively needs `objecten`, `objecttypen`, `opennotificaties` enabled too — matches compose's own profile nesting) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana |
-| `itest` | extra WireMock mappings (SmartDocuments/KVK/BAG) |
+| `wiremock` | extra WireMock mappings (SmartDocuments/KVK/BAG) |
 
 Ingress hostnames (all `*.local`, reachable once the tunnel + `/etc/hosts`
 entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,

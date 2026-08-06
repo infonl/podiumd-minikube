@@ -1987,3 +1987,22 @@ that disappear from a later render - the same recurring gotcha as
 `objecttypen` and the itest WireMock mappings earlier this session) -
 deleted them manually. Full suite: 44/44 passing (45 minus the deleted
 opa test).
+
+**Renamed `itest` to `wiremock`**, at the user's request - now that
+mailpit and opa-tests have both moved out, this flag's only remaining
+effect is wiremock's own extra SmartDocuments/KVK/BAG mappings, so
+"itest" no longer described what it does. Renamed the top-level
+`values.yaml` flag, `templates/wiremock/configmap-itest-mappings.yaml` →
+`configmap-extra-mappings.yaml` (both its filename and its
+`.Values.itest.enabled` check), the same check in
+`templates/wiremock/deployment.yaml` (two occurrences), and every other
+reference: `scripts/deploy.sh`/`provision-cluster.sh`'s `--set` flags,
+`README.md`'s profile table, and the profile-list mentions in
+`CLAUDE.md`/`tests/README.md`. The per-set ConfigMap names themselves
+(`wiremock-kvk-wiremock-mappings` etc.) were never tied to "itest" and
+needed no change.
+
+Verified live: rendering with `wiremock.enabled=true` includes the extra
+mapping sets, with it unset (default) includes none; deployed `--full`
+and confirmed the actual mappings are mounted and served from the real
+wiremock pod; full suite 44/44 passing.

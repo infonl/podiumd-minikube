@@ -50,7 +50,7 @@ been verified live against a real minikube cluster (not just rendered):
 vendoring, chart skeleton, core raw templates, wiring the core apps, a full
 live deploy + OIDC login flow through `http://zac.local`, and every optional
 profile group (objecten, opennotificaties, openarchiefbeheer,
-openformulieren, metrics, itest). `plan.md` is a build *log* at this point,
+openformulieren, metrics, wiremock). `plan.md` is a build *log* at this point,
 not a forward-looking plan — it records every bug found and fixed along the
 way (many only discoverable by actually deploying, not by reading source),
 in the order they were found. Read it when you need the reasoning behind a

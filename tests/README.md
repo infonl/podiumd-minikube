@@ -39,7 +39,7 @@ already on the machine, and `test_browser.py` needs it — the rest of
 the suite doesn't.
 
 Tests for optional profile groups (objecten, objecttypen, opennotificaties,
-openarchiefbeheer, openformulieren, metrics, itest) auto-skip if that
+openarchiefbeheer, openformulieren, metrics, wiremock) auto-skip if that
 profile isn't currently deployed — profile detection is based on which pods
 are actually running, not on reading `values.yaml`, so the suite always
 reflects the real cluster state.
