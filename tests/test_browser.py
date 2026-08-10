@@ -13,7 +13,7 @@ rather than a rendering one.
 """
 
 TEST_USERNAME = "beheerder1newiam"
-TEST_PASSWORD = "minikube-test-1234"
+TEST_PASSWORD = "beheerder1newiam"
 
 
 def test_dashboard_renders_after_login(page):

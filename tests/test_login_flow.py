@@ -6,12 +6,18 @@ and PABC are wired together correctly: it exercises the PKCE realm-client
 fix, the PABC role/domain mapping data, and the Django ALLOWED_HOSTS fixes
 all at once, not just that each service independently boots.
 
-Test credentials (beheerder1newiam / minikube-test-1234) were created
-directly via the Keycloak Admin API against the "beheerders-elk-domein"
-group during live verification - dev-cluster-only, not a compose default.
-If this test fails with a login/credential error rather than an
-infrastructure error, the password may need resetting via that same API
-(see plan.md's step 4 notes for the exact admin API calls used).
+Test credentials (beheerder1newiam / beheerder1newiam) are baked into the
+vendored realm import itself
+(vendor/dimpact-zaakafhandelcomponent/keycloak/zaakafhandelcomponent-realm.json)
+- both the user (in the "beheerders-elk-domein" group) and its password
+credential hash are part of that file, re-imported identically by Keycloak
+on every startup (confirmed live: the user's own createdTimestamp is
+identical across fresh deploys - it's baked into the JSON, not persisted
+state that happens to survive). If this test ever fails with a
+login/credential error rather than an infrastructure error, check that
+file for what the real password is - resetting it against a *live*
+Keycloak via the Admin API is only a temporary fix, silently undone by the
+next fresh import.
 """
 
 from urllib.parse import urlparse
@@ -21,7 +27,7 @@ import requests
 ZAC_HOST = "zac.local"
 KEYCLOAK_HOST = "keycloak.local"
 TEST_USERNAME = "beheerder1newiam"
-TEST_PASSWORD = "minikube-test-1234"
+TEST_PASSWORD = "beheerder1newiam"
 
 
 def _via_traefik(traefik_ip, absolute_url):
