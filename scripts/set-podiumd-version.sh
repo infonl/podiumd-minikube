@@ -20,7 +20,7 @@
 # updating (or, if the underlying reason no longer applies, removing).
 #
 # Usage:
-#   ./scripts/set-podiumd-version.sh <version> [monitoring-logging-version]
+#   ./scripts/set-podiumd-version.sh <version> <monitoring-logging-version>
 #   ./scripts/set-podiumd-version.sh <version> --disable-monitoring-logging
 #   ./scripts/set-podiumd-version.sh --path <dir> [--disable-monitoring-logging]
 # List available published versions:
@@ -57,15 +57,19 @@
 # That's how "1.0.13" (this repo's current default, in Chart.yaml) was
 # found for podiumd 4.8.1.
 #
-# If you don't pass the optional second argument (or pass
-# --disable-monitoring-logging explicitly instead), monitoring-logging is
-# disabled: values.yaml's monitoringLogging.enabled is set to false, and its
-# Chart.yaml dependency entry (repository/version) is left completely
-# untouched - it's still declared, so `helm dependency update` still fetches
-# it below (per values.yaml's own condition:, Helm always downloads every
-# declared dependency regardless of its condition value - only *rendering*
-# is gated), it just won't be deployed/running. Passing a monitoring-logging
-# version has the opposite effect: it's set in Chart.yaml AND enabled.
+# In plain <version> mode the second argument is mandatory - there is no
+# implicit default, on purpose: omitting it used to silently disable
+# monitoring-logging, which was easy to do by accident. You must now say
+# which you mean:
+#   - --disable-monitoring-logging: values.yaml's monitoringLogging.enabled
+#     is set to false, and its Chart.yaml dependency entry
+#     (repository/version) is left completely untouched - it's still
+#     declared, so `helm dependency update` still fetches it below (per
+#     values.yaml's own condition:, Helm always downloads every declared
+#     dependency regardless of its condition value - only *rendering* is
+#     gated), it just won't be deployed/running.
+#   - a monitoring-logging version: sets it in Chart.yaml AND enables it -
+#     there is no way to set a version without also enabling it.
 set -euo pipefail
 
 CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -139,24 +143,24 @@ if [[ "${1:-}" == "--path" ]]; then
 
   echo "podiumd dependency set to local path ${ABS_PATH}; helm dependency update re-run."
 else
-  NEW_VERSION="${1:?Usage: set-podiumd-version.sh <version> [monitoring-logging-version]|<version> --disable-monitoring-logging|--path <dir> [--disable-monitoring-logging]}"
-  ARG2="${2:-}"
+  NEW_VERSION="${1:?Usage: set-podiumd-version.sh <version> <monitoring-logging-version>|<version> --disable-monitoring-logging|--path <dir> [--disable-monitoring-logging]}"
+  ARG2="${2:?Usage: set-podiumd-version.sh <version> <monitoring-logging-version>|<version> --disable-monitoring-logging|--path <dir> [--disable-monitoring-logging] - the second argument is mandatory here: pass a monitoring-logging version (enables it) or --disable-monitoring-logging explicitly}"
 
   set_dependency podiumd "@dimpact" "${NEW_VERSION}"
 
-  if [[ -n "${ARG2}" && "${ARG2}" != "--disable-monitoring-logging" ]]; then
+  if [[ "${ARG2}" == "--disable-monitoring-logging" ]]; then
+    set_monitoring_logging_enabled false
+  else
     set_dependency monitoring-logging "@dimpact" "${ARG2}"
     set_monitoring_logging_enabled true
-  else
-    set_monitoring_logging_enabled false
   fi
 
   helm dependency update "${CHART_DIR}"
 
   echo "podiumd dependency set to ${NEW_VERSION}; helm dependency update re-run."
-  if [[ -n "${ARG2}" && "${ARG2}" != "--disable-monitoring-logging" ]]; then
-    echo "monitoring-logging dependency set to ${ARG2}; values.yaml's monitoringLogging.enabled set to true."
-  else
+  if [[ "${ARG2}" == "--disable-monitoring-logging" ]]; then
     echo "monitoring-logging disabled - values.yaml's monitoringLogging.enabled set to false. Its Chart.yaml dependency entry/version left untouched (still fetched by helm dependency update, just not rendered/deployed)."
+  else
+    echo "monitoring-logging dependency set to ${ARG2}; values.yaml's monitoringLogging.enabled set to true."
   fi
 fi
