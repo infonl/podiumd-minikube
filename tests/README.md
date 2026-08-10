@@ -42,7 +42,12 @@ Tests for optional profile groups (objecten, objecttypen, opennotificaties,
 openarchiefbeheer, openformulieren, metrics, wiremock) auto-skip if that
 profile isn't currently deployed — profile detection is based on which pods
 are actually running, not on reading `values.yaml`, so the suite always
-reflects the real cluster state.
+reflects the real cluster state. `test_monitoring_logging.py` is further
+gated on top of that: it only runs when the `metrics` profile is backed by
+the `monitoring-logging` dependency (`monitoringLogging.enabled=true`)
+rather than `templates/metrics/`'s raw templates — the two are mutually
+exclusive implementations of the same profile, so `test_metrics.py` and
+`test_monitoring_logging.py` never both run against the same deployment.
 
 ## What's covered
 
@@ -53,7 +58,8 @@ reflects the real cluster state.
 | `test_login_flow.py` | The full OIDC login flow through `zac.local` — redirect to Keycloak, login form, credential submission, authorization code, callback, landing on the authenticated app shell |
 | `test_browser.py` | Same login flow, but through a real (headless Chromium) browser via Playwright — proves the SPA actually renders/hydrates after login, not just that the HTTP redirect chain succeeds |
 | `test_database.py` | All expected Postgres databases exist, PostGIS is installed where needed, ZAC's own ZGW client credentials are seeded in Open Zaak |
-| `test_metrics.py` | Grafana's provisioned datasources and Prometheus's scrape targets are actually healthy |
+| `test_metrics.py` | Grafana's provisioned datasources and Prometheus's scrape targets are actually healthy (raw-templates implementation - skips if `monitoringLogging.enabled=true` instead) |
+| `test_monitoring_logging.py` | Same shape of checks as `test_metrics.py`, against the `monitoring-logging` dependency's own Grafana/Prometheus/Tempo instead, plus Loki actually holding this namespace's forwarded pod logs (proves Alloy's log-collection pipeline works, not just that Loki answers queries) - only runs when `monitoringLogging.enabled=true` |
 | `test_mailpit.py` | A real email sent via `send_mail()` from a component (openzaak) actually arrives in mailpit - confirmed both via its API and via its real (headless Chromium) web UI, not just that mailpit's root path returns 200 |
 | `test_pabc_migrations_guard.py` | `scripts/apply-pabc-migrations.sh` actually refuses to recreate the (non-idempotent) pabc-migrations Job when PABC's database already has data |
 

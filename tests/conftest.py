@@ -92,6 +92,16 @@ def enabled_profiles(pods):
         "openarchiefbeheer": any_pod_named("openarchiefbeheer"),
         "openformulieren": any_pod_named("openformulieren"),
         "metrics": any_pod_named("grafana"),
+        # The monitoring-logging dependency's own subcharts are all prefixed
+        # with the release name ("podiumd-minikube-grafana", not plain
+        # "grafana" like templates/metrics/grafana.yaml's raw template) -
+        # exactly what tells the two mutually-exclusive "metrics" profile
+        # implementations apart (see values.yaml's own monitoringLogging
+        # comment). Deliberately its own key, not folded into "metrics"
+        # above: a test that only makes sense against one implementation
+        # (e.g. Loki-specific checks) needs to skip on the *other*
+        # implementation too, not just when the whole profile is off.
+        "monitoringLogging": any_pod_named("podiumd-minikube-grafana"),
     }
 
 

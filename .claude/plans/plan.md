@@ -2374,3 +2374,34 @@ Host disk is also sitting at ~90% capacity (9.8G free) - not yet a hard
 blocker, but close enough to flag if anything starts failing on disk space
 next.
 
+## tests/: monitoringLogging profile checks
+
+Added `tests/test_monitoring_logging.py`, gated the same way as every other
+optional-profile test file (`enabled_profiles` fixture in `conftest.py`,
+autouse skip) - except its gate isn't just "is the profile on", since
+`monitoringLogging` doesn't add a new profile, it swaps which implementation
+backs the existing `metrics` one (see values.yaml's own comment). Added a
+dedicated `enabled_profiles["monitoringLogging"]` key, detected via the
+`podiumd-minikube-grafana` pod name prefix - unique to the dependency's own
+subcharts (release-name-prefixed), never matched by
+`templates/metrics/grafana.yaml`'s raw-template Deployment (plain
+`grafana`). This keeps `test_metrics.py` (raw templates) and
+`test_monitoring_logging.py` (the dependency) mutually exclusive - confirmed
+live running both together: `test_metrics.py` skips ("'metrics' profile is
+not deployed" - accurate, from its own narrower `any_pod_named("grafana")`
+check), `test_monitoring_logging.py` runs and passes.
+
+Three checks, verified against the real cluster (first by hand via
+`kubectl port-forward` to Grafana directly to nail down the exact API
+shapes before writing anything, then for real through Traefik once the
+tunnel bug below was fixed):
+- Grafana's provisioned datasources are exactly `{"Prometheus", "loki",
+  "Tempo"}` - note lowercase "loki", copied verbatim from
+  values.yaml's own datasource name, unlike the other two.
+- Prometheus's own scrape targets are all `up`, including the two explicit
+  `additionalScrapeConfigs` jobs (`zac-admin`, `tempo`).
+- Loki actually holds real log streams for `{namespace="podiumd-minikube"}`
+  - not just that it answers queries, which an empty-but-"success" result
+  would also satisfy while hiding a completely broken Alloy pipeline. This
+  one has no raw-templates equivalent at all (that implementation has no
+  log-shipping story).
