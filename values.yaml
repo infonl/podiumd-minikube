@@ -282,22 +282,18 @@ podiumd:
     # silently replaced it, breaking the whole Loki/Tempo/Grafana pipeline
     # it feeds.
     #
-    # nodeSelector: `replicaCount: 0` looks like the obvious way to stop
-    # this unwanted Deployment from actually running anything, but isn't -
-    # confirmed live in this exact chart's own deployment.yaml: `replicas:`
-    # is only emitted at all `{{- if and (not autoscaling.enabled)
-    # (replicaCount) }}` - 0 is falsy in a Go template `if`, so the whole
-    # field gets omitted rather than rendering `replicas: 0`, and an
-    # omitted `replicas:` defaults to Kubernetes' own default of 1. An
-    # impossible nodeSelector achieves the same goal a different way - the
-    # Deployment exists (still enabled, so ZAC's own env vars above still
-    # render) but its pod sits permanently Pending, unschedulable on this
-    # single-node cluster, and never actually runs.
+    # This subchart's own resources (Deployment/Service/ConfigMap/
+    # ServiceAccount) are dropped from the manifest entirely before
+    # `kubectl apply` ever sees them - see deploy.sh's render() pipeline
+    # and scripts/lib/exclude-zac-bundled-otel-collector.py's own header
+    # for why (short version: `replicaCount: 0` looked like the obvious
+    # way to stop it running, but isn't - confirmed live in this chart's
+    # own deployment.yaml, an omitted `replicas:` field defaults back to
+    # Kubernetes' own default of 1, not 0). fullnameOverride here is what
+    # that filter targets by name.
     opentelemetry-collector:
       enabled: true
       fullnameOverride: zac-unused-otel-collector
-      nodeSelector:
-        podiumd-minikube.local/never-schedule: "true"
     # Pointed at our own templates/metrics/ otel-collector Service instead
     # of the bundled (now zero-replica) one above (step 5). When
     # metrics.enabled is false this Service doesn't exist either, so ZAC's

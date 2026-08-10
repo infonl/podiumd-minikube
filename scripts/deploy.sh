@@ -129,6 +129,7 @@ render() {
     | python3 "${CHART_DIR}/scripts/lib/disable-service-links.py" \
     | python3 "${CHART_DIR}/scripts/lib/exclude-pabc-migration-job.py" \
     | python3 "${CHART_DIR}/scripts/lib/exclude-helm-test-hooks.py" \
+    | python3 "${CHART_DIR}/scripts/lib/exclude-zac-bundled-otel-collector.py" \
     | python3 "${CHART_DIR}/scripts/lib/split-large-configmaps.py"
 }
 
