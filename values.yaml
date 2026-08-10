@@ -56,7 +56,7 @@ monitoringLogging:
   # someone deletes them by hand (`kubectl delete deployment,svc,ingress,cm
   # grafana otel-collector prometheus tempo` for raw-templates leftovers
   # when switching *to* monitoringLogging, for example).
-  enabled: true
+  enabled: false
 
 # -----------------------------------------------------------------------
 # Raw templates this chart defines itself (Postgres/Redis/Keycloak/Solr/
