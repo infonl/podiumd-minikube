@@ -2617,3 +2617,99 @@ failed once both were fixed):
   suggested resetting the password via the Admin API - that only patches
   the current pod's live state and gets silently reverted by the next
   fresh realm import, so it was never a real fix for this specific case.
+
+## Double-checking everything above from a genuine reset-namespace + redeploy from scratch
+
+Ran `reset-namespace.sh --yes` followed by a fresh `deploy.sh --full`, to
+confirm the solr/OTel fixes above hold on a truly empty namespace, not
+just an incrementally-redeployed one where old state could be quietly
+masking a problem.
+
+First attempt hit an unrelated blocker: the podiumd dependency was pointed
+(via `--path`) at `dimpact-samenwerking/helm-charts`'s `feature/podiumd-4.8.4`
+branch (WIP, not a release), which fails to render at all - `error calling
+include: ... executing "common.names.fullname" at <.Release.Name>: invalid
+value; expected string`, inside `openobject`'s own redis-subchart wiring.
+Reproduced with a plain `helm template`, confirming it's a bug in that
+upstream WIP branch itself, unrelated to anything in this project. Switched
+back to the stable, already-verified `podiumd 4.8.3` / `monitoring-logging
+1.0.14` pair to complete the check rather than debug someone else's
+in-progress branch.
+
+With that: `solr` came up `1/1 Running` immediately on the fresh PV (no
+crashloop - confirms the `args:` fix holds cold, not just on a PV that
+happened to already have `/var/solr/data`), and no `zac-unused-otel-
+collector` pod appeared at all (confirms the exclude-post-renderer fix).
+`pabc` and `zac` both went through the same self-resolving startup race
+seen before (pabc's init container waits on a migrations Job that doesn't
+exist yet at pod-creation time; zac waits on solr's core) and settled on
+their own within a few minutes. Full suite: 44 passed, 3 skipped, 0 failed
+(one `test_browser.py` flake on the very first pass, from PABC's
+authorization data barely having finished migrating - passed cleanly on
+retry, not a real regression).
+
+## prune-orphaned-workloads.py didn't cover kube-prometheus-stack's own CRs
+
+Found disabling `monitoringLogging.enabled` (as part of measuring its
+resource-usage tradeoff - see below) and redeploying: the flip correctly
+pruned the raw Deployment/StatefulSet/DaemonSet objects that dropped out
+of the render (Grafana, Loki, Alloy, kube-prom-operator, kube-state-
+metrics, otel-collector, Pushgateway, node-exporter), but a whole
+`Prometheus` StatefulSet (2/2, genuinely running, non-trivial memory) plus
+~25 `PrometheusRule`/`ServiceMonitor`/`PodMonitor` custom resources stayed
+behind - the exact same "`kubectl apply` never deletes what drops out of
+the render" gap `prune-orphaned-workloads.py` already existed to solve for
+Deployments, just never extended to these CR kinds. Root cause: that
+script's own `PRUNABLE_KINDS` only ever listed `Deployment`/`StatefulSet`/
+`DaemonSet`; `Prometheus`/`PrometheusRule`/`ServiceMonitor`/`PodMonitor` are
+themselves top-level, Helm-rendered, owner-less resources (confirmed live -
+none of the four have their own `ownerReferences`), exactly analogous to a
+Deployment, so it's safe to add them the same way.
+
+Fixed by adding all four to `PRUNABLE_KINDS`. The orphaned `Prometheus` CR
+itself now gets deleted directly; its owned StatefulSet+Pod then cascade-
+delete automatically via plain Kubernetes garbage collection (no separate
+handling needed - that's exactly the ownerReference check the script
+already had, working as designed once the actual owner is in scope).
+Had to guard each `kubectl get <kind>` against "the server doesn't have a
+resource type" specifically (not a blanket non-zero-exit swallow) since
+this script runs unconditionally on every `deploy.sh` call, including on a
+setup that's never enabled `monitoringLogging` at all and so never
+installed these CRDs in the first place (see
+`apply-monitoring-logging-crds.sh`/`reset-namespace.sh`'s own header for
+why they're only ever applied, never removed).
+
+Verified live: re-ran the exact same render + prune pipeline by hand,
+confirmed all ~26 leftover objects deleted and the StatefulSet's pod gone
+with them; a subsequent full `deploy.sh --full` came back clean and
+idempotent ("No orphaned workload(s)/monitoring CR(s) found").
+
+## Measuring monitoringLogging's real resource cost, and disabling it by default
+
+No `metrics-server` is installed in this cluster, so `kubectl top` isn't
+available - measured instead via `docker stats minikube --no-stream` (real
+usage, docker driver) and `kubectl describe node`'s "Allocated resources"
+(requests/limits), settled ~5 minutes post-deploy on both sides for a fair
+comparison (CPU in particular is bursty enough right after a deploy to be
+meaningless otherwise).
+
+Real memory usage dropped from ~89% to ~85% (~17.8Gi → ~17.0Gi on a
+20Gi-capped container) with `monitoringLogging.enabled` off - a genuine
+saving, but far more modest than "a dozen fewer pods" suggests. Most of
+what that flag adds is lightweight (kube-state-metrics, prometheus-
+operator, node-exporter, Pushgateway); the real weight is Loki + Alloy +
+Grafana + kube-prometheus-stack's own Prometheus, and those are already
+re-tuned for a single-node box. Declared *limits* dropped far more sharply
+(8308Mi → 5652Mi) than real usage did, since limits are ceilings, not
+actual consumption - worth calling out explicitly so the numbers aren't
+misread. Documented as a before/after table in README.md's new "Resource
+usage" section.
+
+Given that comparison, and that today's testing was the only reason it had
+been left on, reverted `monitoringLogging.enabled` to `false` as the
+committed default - matching this project's original intent (see
+values.yaml's own comment on that key) and what most day-to-day dev
+sessions actually need. Still fully available via `set-podiumd-version.sh
+<version> <monitoring-logging-version>` for whoever needs to test that
+implementation specifically. Full suite re-run clean against this default
+(44 passed, 3 skipped, 0 failed).
