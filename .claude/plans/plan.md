@@ -2405,3 +2405,25 @@ tunnel bug below was fixed):
   would also satisfy while hiding a completely broken Alloy pipeline. This
   one has no raw-templates equivalent at all (that implementation has no
   log-shipping story).
+
+### Found and fixed along the way: `setup-tunnel.sh`'s stale-IP false positive
+
+Hit while trying to actually run the new tests through Traefik rather than
+a port-forward: `./scripts/setup-tunnel.sh` kept reporting "tunnel appears
+to be running already" and exiting immediately, but requests to Traefik's
+reported external IP just hung. Root cause: the script's own "already
+running" check only looked at whether the `traefik` Service had *any* IP
+recorded in `status.loadBalancer.ingress` - but confirmed live that this
+field survives the actual `minikube tunnel` process dying (nothing
+un-assigns it), while the host-side route that process was maintaining
+does not. An IP left over from a tunnel that died in an earlier session
+looks identical to a healthy one by that check alone.
+
+Fixed by checking for a live `minikube tunnel` process first (`pgrep -f`)
+as the real signal, and only trusting an existing IP when one is actually
+running - if no process is alive, a recorded IP is now treated as stale and
+a fresh tunnel is started regardless. Verified live: killed/lost tunnel
+process + stale IP reproduced the original hang; after the fix, the same
+state correctly triggers a fresh `minikube tunnel` start, and once that's
+actually up, requests to Traefik succeed (`curl -H "Host: grafana.local"`
+returns real `200`s) and the full test file passes end to end.
