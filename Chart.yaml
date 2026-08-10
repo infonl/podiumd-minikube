@@ -9,14 +9,14 @@ appVersion: "1.0.0"
 dependencies:
   - name: podiumd
     repository: "@dimpact"
-    version: "4.8.1"  # podiumd version - see scripts/set-podiumd-version.sh to change
+    version: "4.8.3"  # podiumd version - see scripts/set-podiumd-version.sh to change
     condition: podiumd.enabled
   - name: monitoring-logging
     repository: "@dimpact"
     # Optional, off by default - see scripts/set-podiumd-version.sh's own
     # header for how this correlates with the podiumd version above (no
     # formula - both live in the same dimpact-samenwerking/helm-charts
-    # monorepo, versioned independently; 1.0.13 is what was actually
-    # checked in alongside podiumd 4.8.1's own tag).
-    version: "1.0.13"  # monitoring-logging version - see scripts/set-podiumd-version.sh to change
+    # monorepo, versioned independently; 1.0.14 is what was actually
+    # checked in alongside podiumd 4.8.3's own tag).
+    version: "1.0.14"  # monitoring-logging version - see scripts/set-podiumd-version.sh to change
     condition: monitoringLogging.enabled

@@ -1,9 +1,9 @@
 dependencies:
 - name: podiumd
   repository: https://Dimpact-Samenwerking.github.io/helm-charts/
-  version: 4.8.1
+  version: 4.8.3
 - name: monitoring-logging
   repository: https://Dimpact-Samenwerking.github.io/helm-charts/
-  version: 1.0.13
-digest: sha256:c447e4634e078db21afb333f833a0485d4dc84248c7a7b9f206c4650a74ee628
-generated: "2026-08-06T17:25:45.172287728+02:00"
+  version: 1.0.14
+digest: sha256:bf4d5ab358ffb35a12bfc82bef04676bba34374b65a6f43fc344ffb4c82dbad5
+generated: "2026-08-10T14:13:45.006559457+02:00"

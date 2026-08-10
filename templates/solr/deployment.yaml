@@ -43,7 +43,21 @@ spec:
           # Collections API) can't be used here; disabled in values.yaml
           # (podiumd.zac.solr.createZacCore: false) in favor of creating the
           # core ourselves at startup, the same way compose does.
-          command: ["solr-precreate", "zac"]
+          #
+          # args, not command: the image's real ENTRYPOINT is its own
+          # docker-entrypoint.sh (confirmed live via `docker inspect
+          # solr:9.10.1-slim`), which does first-run setup - creating
+          # /var/solr/data itself among other things - before exec'ing
+          # whatever CMD/args it's given. Kubernetes' `command:` maps to
+          # Docker's --entrypoint, replacing docker-entrypoint.sh entirely
+          # and skipping that setup - confirmed live: on a genuinely fresh
+          # PV (empty, no /var/solr/data yet - masked on this project's own
+          # long-lived dev PV, which already had it from months of prior
+          # runs), `command: ["solr-precreate", "zac"]` crashloops with
+          # "cp: cannot create directory '/var/solr/data/zac': No such file
+          # or directory". `args:` only overrides the image's own default
+          # CMD, leaving docker-entrypoint.sh in place to do that setup first.
+          args: ["solr-precreate", "zac"]
           env:
             - name: SOLR_JAVA_MEM
               value: "-Xms256m -Xmx512m -XX:ActiveProcessorCount=2"

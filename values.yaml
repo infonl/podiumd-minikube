@@ -56,7 +56,7 @@ monitoringLogging:
   # someone deletes them by hand (`kubectl delete deployment,svc,ingress,cm
   # grafana otel-collector prometheus tempo` for raw-templates leftovers
   # when switching *to* monitoringLogging, for example).
-  enabled: false
+  enabled: true
 
 # -----------------------------------------------------------------------
 # Raw templates this chart defines itself (Postgres/Redis/Keycloak/Solr/
@@ -253,13 +253,53 @@ podiumd:
       createZacCore: false
     solr-operator:
       enabled: false # podiumd's own override defaults this to true (unlike charts/zac's own quiet false default) - we use a plain Solr Deployment instead, see templates/solr.yaml
+    # Correcting an earlier wrong assumption here, found live while
+    # verifying monitoring-logging actually receives ZAC's traces: the
+    # bundled zac chart (1.0.251) does NOT hardcode OTEL_SDK_DISABLED/
+    # OTEL_EXPORTER_OTLP_ENDPOINT unconditionally - its own
+    # templates/config.yaml only renders either env var at all inside
+    # `{{- if index .Values "opentelemetry-collector" "enabled" }}`. With
+    # this false (as it was), ZAC's OTel SDK was silently disabled the
+    # entire time, regardless of metrics.enabled/monitoringLogging.enabled
+    # or the endpoint override below - confirmed live: zero OTEL_* keys in
+    # the rendered zac ConfigMap either way.
+    #
+    # Set true to unlock those two env vars - this is also the exact same
+    # key Chart.yaml's own `condition:` uses to decide whether to deploy
+    # the zac chart's *separate*, unrelated bundled otel-collector subchart
+    # (not the one in templates/metrics/ or monitoring-logging's own, which
+    # are what we actually want ZAC's traces to go to).
+    #
+    # fullnameOverride: without it, this subchart's default fullname
+    # (release name + chart name, both literally "opentelemetry-collector")
+    # collides exactly with monitoring-logging's own otel-collector
+    # Deployment name. This project applies via `kubectl apply`, not `helm
+    # install`/`upgrade` (see deploy.sh's own header for why), so same-name
+    # resources don't merge by release the way a real Helm release would -
+    # whichever one renders last in the manifest stream simply overwrites
+    # the other's live spec. Confirmed live: without this override, zac's
+    # own copy rendered after monitoring-logging's real one and would have
+    # silently replaced it, breaking the whole Loki/Tempo/Grafana pipeline
+    # it feeds.
+    #
+    # nodeSelector: `replicaCount: 0` looks like the obvious way to stop
+    # this unwanted Deployment from actually running anything, but isn't -
+    # confirmed live in this exact chart's own deployment.yaml: `replicas:`
+    # is only emitted at all `{{- if and (not autoscaling.enabled)
+    # (replicaCount) }}` - 0 is falsy in a Go template `if`, so the whole
+    # field gets omitted rather than rendering `replicas: 0`, and an
+    # omitted `replicas:` defaults to Kubernetes' own default of 1. An
+    # impossible nodeSelector achieves the same goal a different way - the
+    # Deployment exists (still enabled, so ZAC's own env vars above still
+    # render) but its pod sits permanently Pending, unschedulable on this
+    # single-node cluster, and never actually runs.
     opentelemetry-collector:
-      enabled: false # renders unexpectedly without this override (verified via --set) even though charts/zac's own default is false - this is a separate, unrelated bundled otel-collector subchart from the one in templates/metrics/, which is what we actually want ZAC's traces to go to instead
-    # The bundled zac chart version (1.0.251) hardcodes OTEL_SDK_DISABLED:
-    # "false" with no override, and would otherwise default
-    # OTEL_EXPORTER_OTLP_ENDPOINT to http://<release>-opentelemetry-collector:4317
-    # - the (disabled) bundled subchart above, not our own. Pointed at our
-    # own templates/metrics/ otel-collector Service instead (step 5). When
+      enabled: true
+      fullnameOverride: zac-unused-otel-collector
+      nodeSelector:
+        podiumd-minikube.local/never-schedule: "true"
+    # Pointed at our own templates/metrics/ otel-collector Service instead
+    # of the bundled (now zero-replica) one above (step 5). When
     # metrics.enabled is false this Service doesn't exist either, so ZAC's
     # JVM just harmlessly retries failed trace exports in the background
     # (noisy log warnings, no functional impact) - same previously-accepted
@@ -271,10 +311,10 @@ podiumd:
     # named "podiumd-minikube-opentelemetry-collector" (confirmed live via
     # `helm template` against that exact chart version), not "otel-
     # collector". Values.yaml can't express "pick one endpoint or the
-    # other" itself (not templated) - scripts/deploy.sh passes
+    # other" itself (not templated) - scripts/deploy.sh reads
+    # monitoringLogging.enabled itself and passes
     # `--set podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint=...`
-    # alongside `--set monitoringLogging.enabled=true` to override this
-    # default when both are turned on together.
+    # to override this default automatically when it's on.
     opentelemetry_zaakafhandelcomponent:
       endpoint: http://otel-collector:4317
     ingress:
