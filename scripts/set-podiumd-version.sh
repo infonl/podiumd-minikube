@@ -21,7 +21,8 @@
 #
 # Usage:
 #   ./scripts/set-podiumd-version.sh <version> [monitoring-logging-version]
-#   ./scripts/set-podiumd-version.sh --path <dir>
+#   ./scripts/set-podiumd-version.sh <version> --disable-monitoring-logging
+#   ./scripts/set-podiumd-version.sh --path <dir> [--disable-monitoring-logging]
 # List available published versions:
 #   helm search repo dimpact/podiumd -l
 #   helm search repo dimpact/monitoring-logging -l
@@ -54,13 +55,22 @@
 # this is just how the correlation was found once, by hand):
 #   git show podiumd-<version>:charts/monitoring-logging/Chart.yaml
 # That's how "1.0.13" (this repo's current default, in Chart.yaml) was
-# found for podiumd 4.8.1. If you don't pass the optional second
-# argument, monitoring-logging's version is left exactly as it is now -
-# this script won't guess.
+# found for podiumd 4.8.1.
+#
+# If you don't pass the optional second argument (or pass
+# --disable-monitoring-logging explicitly instead), monitoring-logging is
+# disabled: values.yaml's monitoringLogging.enabled is set to false, and its
+# Chart.yaml dependency entry (repository/version) is left completely
+# untouched - it's still declared, so `helm dependency update` still fetches
+# it below (per values.yaml's own condition:, Helm always downloads every
+# declared dependency regardless of its condition value - only *rendering*
+# is gated), it just won't be deployed/running. Passing a monitoring-logging
+# version has the opposite effect: it's set in Chart.yaml AND enabled.
 set -euo pipefail
 
 CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHART_YAML="${CHART_DIR}/Chart.yaml"
+VALUES_YAML="${CHART_DIR}/values.yaml"
 
 # Scopes a repository:/version: replacement to the named dependency's own
 # block only (awk state machine, not a blind file-wide sed) - two
@@ -85,38 +95,68 @@ set_dependency() {
   mv "${CHART_YAML}.tmp" "${CHART_YAML}"
 }
 
+# Scoped the same way as set_dependency above, but against values.yaml's
+# top-level monitoringLogging: block instead of a Chart.yaml dependency
+# block - flips only that block's own enabled: line.
+set_monitoring_logging_enabled() {
+  local val="$1"
+  awk -v val="${val}" '
+    /^monitoringLogging:$/ { in_block = 1; print; next }
+    in_block && /^[^[:space:]#]/ { in_block = 0 }
+    in_block && /^[[:space:]]+enabled:/ {
+      sub(/enabled:[[:space:]]*(true|false)/, "enabled: " val)
+      print; next
+    }
+    { print }
+  ' "${VALUES_YAML}" > "${VALUES_YAML}.tmp"
+  mv "${VALUES_YAML}.tmp" "${VALUES_YAML}"
+}
+
 if [[ "${1:-}" == "--path" ]]; then
-  LOCAL_PATH="${2:?Usage: set-podiumd-version.sh --path <dir>}"
+  LOCAL_PATH="${2:?Usage: set-podiumd-version.sh --path <dir> [--disable-monitoring-logging]}"
   [[ -d "${LOCAL_PATH}" ]] || { echo "Not a directory: ${LOCAL_PATH}" >&2; exit 1; }
   [[ -f "${LOCAL_PATH}/Chart.yaml" ]] || { echo "No Chart.yaml found in: ${LOCAL_PATH}" >&2; exit 1; }
   ABS_PATH="$(cd "${LOCAL_PATH}" && pwd)"
 
   set_dependency podiumd "file://${ABS_PATH}" "*"
 
-  MONITORING_LOGGING_PATH="$(dirname "${ABS_PATH}")/monitoring-logging"
-  if [[ -d "${MONITORING_LOGGING_PATH}" && -f "${MONITORING_LOGGING_PATH}/Chart.yaml" ]]; then
-    set_dependency monitoring-logging "file://${MONITORING_LOGGING_PATH}" "*"
-    echo "monitoring-logging dependency set to local path ${MONITORING_LOGGING_PATH} (sibling of podiumd's own --path)."
+  if [[ "${3:-}" == "--disable-monitoring-logging" ]]; then
+    set_monitoring_logging_enabled false
+    echo "monitoring-logging disabled (--disable-monitoring-logging) - values.yaml's monitoringLogging.enabled set to false; its Chart.yaml dependency entry left untouched, so it's still fetched by helm dependency update below, just not rendered/deployed."
   else
-    echo "WARNING: no sibling monitoring-logging/ directory found next to ${ABS_PATH} - left monitoring-logging's dependency unchanged." >&2
+    MONITORING_LOGGING_PATH="$(dirname "${ABS_PATH}")/monitoring-logging"
+    if [[ -d "${MONITORING_LOGGING_PATH}" && -f "${MONITORING_LOGGING_PATH}/Chart.yaml" ]]; then
+      set_dependency monitoring-logging "file://${MONITORING_LOGGING_PATH}" "*"
+      set_monitoring_logging_enabled true
+      echo "monitoring-logging dependency set to local path ${MONITORING_LOGGING_PATH} (sibling of podiumd's own --path); values.yaml's monitoringLogging.enabled set to true."
+    else
+      set_monitoring_logging_enabled false
+      echo "WARNING: no sibling monitoring-logging/ directory found next to ${ABS_PATH} - left monitoring-logging's Chart.yaml dependency unchanged, but set values.yaml's monitoringLogging.enabled to false." >&2
+    fi
   fi
 
   helm dependency update "${CHART_DIR}"
 
   echo "podiumd dependency set to local path ${ABS_PATH}; helm dependency update re-run."
 else
-  NEW_VERSION="${1:?Usage: set-podiumd-version.sh <version>|--path <dir>}"
-  NEW_MONITORING_LOGGING_VERSION="${2:-}"
+  NEW_VERSION="${1:?Usage: set-podiumd-version.sh <version> [monitoring-logging-version]|<version> --disable-monitoring-logging|--path <dir>}"
+  ARG2="${2:-}"
 
   set_dependency podiumd "@dimpact" "${NEW_VERSION}"
-  set_dependency monitoring-logging "@dimpact" "${NEW_MONITORING_LOGGING_VERSION}"
+
+  if [[ -n "${ARG2}" && "${ARG2}" != "--disable-monitoring-logging" ]]; then
+    set_dependency monitoring-logging "@dimpact" "${ARG2}"
+    set_monitoring_logging_enabled true
+  else
+    set_monitoring_logging_enabled false
+  fi
 
   helm dependency update "${CHART_DIR}"
 
   echo "podiumd dependency set to ${NEW_VERSION}; helm dependency update re-run."
-  if [[ -n "${NEW_MONITORING_LOGGING_VERSION}" ]]; then
-    echo "monitoring-logging dependency set to ${NEW_MONITORING_LOGGING_VERSION}."
+  if [[ -n "${ARG2}" && "${ARG2}" != "--disable-monitoring-logging" ]]; then
+    echo "monitoring-logging dependency set to ${ARG2}; values.yaml's monitoringLogging.enabled set to true."
   else
-    echo "monitoring-logging dependency version left unchanged - no automatic correlation exists between the two (see this script's own header for how to look up the exact co-released version by hand)."
+    echo "monitoring-logging disabled - values.yaml's monitoringLogging.enabled set to false. Its Chart.yaml dependency entry/version left untouched (still fetched by helm dependency update, just not rendered/deployed)."
   fi
 fi
