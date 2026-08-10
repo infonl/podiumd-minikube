@@ -139,7 +139,7 @@ if [[ "${1:-}" == "--path" ]]; then
 
   echo "podiumd dependency set to local path ${ABS_PATH}; helm dependency update re-run."
 else
-  NEW_VERSION="${1:?Usage: set-podiumd-version.sh <version> [monitoring-logging-version]|<version> --disable-monitoring-logging|--path <dir>}"
+  NEW_VERSION="${1:?Usage: set-podiumd-version.sh <version> [monitoring-logging-version]|<version> --disable-monitoring-logging|--path <dir> [--disable-monitoring-logging]}"
   ARG2="${2:-}"
 
   set_dependency podiumd "@dimpact" "${NEW_VERSION}"
