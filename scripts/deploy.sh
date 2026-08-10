@@ -43,6 +43,16 @@
 # its own header for why `helm template`, unlike `helm install`, never
 # renders a chart's `crds/` directory at all.
 #
+# After applying, also prunes any Deployment/StatefulSet/DaemonSet running
+# in the namespace that isn't part of this render at all (see
+# prune-orphaned-workloads.py's own header) - `kubectl apply` alone never
+# deletes resources that dropped out of the render (unlike `helm upgrade`),
+# so re-running this script with different profile/--set flags than
+# whatever's currently deployed would otherwise leave the old ones running
+# forever (e.g. toggling monitoringLogging.enabled leaves the other
+# implementation's Grafana/Tempo/otel-collector running right alongside the
+# new ones).
+#
 # Usage:
 #   ./scripts/deploy.sh            # core profile only (matches values.yaml's own default)
 #   ./scripts/deploy.sh --full     # every optional profile enabled too (objecten, objecttypen,
@@ -198,6 +208,10 @@ fi
 echo
 echo "Applying pabc-migrations (guarded - see scripts/apply-pabc-migrations.sh)..."
 "${CHART_DIR}/scripts/apply-pabc-migrations.sh"
+
+echo
+echo "Pruning Deployments/StatefulSets/DaemonSets not part of this render (see prune-orphaned-workloads.py)..."
+render | python3 "${CHART_DIR}/scripts/lib/prune-orphaned-workloads.py" "${NAMESPACE}"
 
 echo
 echo "Done. Next: ./scripts/setup-tunnel.sh for external reachability, or run"

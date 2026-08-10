@@ -2322,3 +2322,55 @@ target `up`, including the two explicit `additionalScrapeConfigs`
 logs for the right namespace. Not yet re-run against the full `tests/`
 pytest suite with this flag on - that's the next thing to do before calling
 this fully done.
+
+## deploy.sh: pruning workloads that dropped out of the render
+
+`kubectl apply` (this project's whole reason for not using `helm
+install`/`upgrade` - see deploy.sh's own header) never deletes anything -
+it only adds/updates whatever's in the current render. Toggling a profile
+or `monitoringLogging.enabled` off leaves its Deployments/StatefulSets/
+DaemonSets running forever, since nothing about the new render mentions
+them. Added `scripts/lib/prune-orphaned-workloads.py`, run as deploy.sh's
+last step: diffs the live cluster's Deployment/StatefulSet/DaemonSet
+against the current render's own set and deletes whatever's left over
+(cascades to their Pods via normal Kubernetes GC).
+
+Verified live (read-only dry-run against the real cluster, deploy.sh
+itself not actually re-run - see [[project-podiumd-minikube-cluster-caution]]):
+running the diff against the currently-deployed `--full
+--monitoring-logging` state surfaced two real findings before this was
+wired in for real:
+
+- **A genuine orphan, confirmed correct**: `Deployment/greenmail` - dead
+  leftover from before greenmail was replaced by mailpit (see that
+  commit), exactly the case this feature exists to catch.
+- **A false positive that had to be fixed first**: kube-prometheus-stack's
+  own operator creates `prometheus-<release>-kube-prom-prometheus` (a
+  StatefulSet) at runtime from a `Prometheus` custom resource - only the
+  CR itself is ever in the render, never the StatefulSet the operator
+  spawns from it. A naive kind+name diff flagged it as orphaned every
+  time, which would have deleted (then had the operator immediately
+  recreate) Prometheus's own StatefulSet on every single deploy.sh run.
+  Fixed by skipping any live object carrying a controller ownerReference -
+  the same reasoning Job/CronJob pruning was already excluded for
+  (CronJob-spawned Jobs are never themselves part of any render either),
+  generalized instead of special-cased per-kind.
+
+Job/CronJob are deliberately excluded from the prunable kinds entirely,
+not just filtered by owner ref: `pabc-migrations` is excluded from the
+render on purpose (see `exclude-pabc-migration-job.py`) and would look
+orphaned on *every* run if Job were included, deleting the very Job
+`apply-pabc-migrations.sh`'s own guard exists to protect; and
+`storage-permissions-fix` is already unconditionally deleted/recreated
+earlier in deploy.sh.
+
+Unrelated but hit while testing this live: the minikube container OOM-killed
+itself again (`OOMKilled: true`, exit 137) - same failure mode as the
+2026-07-15 crisis, this time on plain restart under the full
+`--monitoring-logging` load. Its docker memory cap was still 12GiB;
+raised to 20GiB (`docker update --memory=20g --memory-swap=20g minikube`)
+against the host's 31GiB/16GiB-free at the time and it started cleanly.
+Host disk is also sitting at ~90% capacity (9.8G free) - not yet a hard
+blocker, but close enough to flag if anything starts failing on disk space
+next.
+
