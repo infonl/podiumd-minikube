@@ -2427,3 +2427,57 @@ process + stale IP reproduced the original hang; after the fix, the same
 state correctly triggers a fresh `minikube tunnel` start, and once that's
 actually up, requests to Traefik succeed (`curl -H "Host: grafana.local"`
 returns real `200`s) and the full test file passes end to end.
+
+## reset-namespace.sh: emptying the namespace without deleting the cluster
+
+Added `scripts/reset-namespace.sh` - `teardown-cluster.sh` deletes the
+whole minikube VM, which is often more than needed just to get back to a
+clean slate for re-testing `deploy.sh` from scratch. Deletes the
+`podiumd-minikube` namespace (confirmation prompt + `--yes`, same UX as
+teardown-cluster.sh), then cleans up what a namespace delete alone never
+touches, since none of it is namespaced.
+
+Run for real against the live cluster (not just dry-run) and found two
+things worth recording:
+
+- **Expected**: the six `Retain`-policy PVs storage-hooks.yaml creates
+  (openzaak/openklant/opennotificaties/openarchiefbeheer/openformulieren/
+  objecten) survived the namespace deletion exactly as documented - `Retain`
+  means never auto-deleted, by design.
+- **Not expected**: every *dynamically*-provisioned PV (postgres, solr,
+  grafana x2, loki, tempo, kube-prom-prometheus - 7 total) got stuck in
+  `Released` too, despite having reclaim policy `Delete`. minikube's own
+  `storage-provisioner` pod is supposed to reclaim these automatically once
+  their PVC is gone - confirmed live it just didn't, for any of them, after
+  the namespace's cascading PVC deletion (that pod's own 7 restarts over 25
+  days suggest it's not entirely stable). Left alone this is silent
+  leftover cruft, not a functional blocker (a stale `Released` PV doesn't
+  stop a *new* PVC from getting a fresh dynamically-provisioned volume) -
+  but real disk usage nonetheless (confirmed live: ~24Gi of requested
+  capacity across the seven, though actual on-disk usage was far smaller,
+  116M, once found).
+
+Fixed by not hardcoding a PV name list at all - queries every PV's
+`spec.claimRef.namespace` instead and deletes any that point at
+`podiumd-minikube`, which catches both cases (the explicit Retain ones and
+whatever Delete ones the provisioner missed) with one mechanism, and
+degrades gracefully to "none found" if nothing needs it. Also clears the
+hostPath data under both `/data/podiumd-minikube` (storage-hooks.yaml's
+own PVs) and `/tmp/hostpath-provisioner/podiumd-minikube` (minikube's
+dynamic provisioner's own directory, confirmed live via one of the
+Released PVs' own `spec.hostPath.path`) on the minikube node itself -
+deleting a PV object never touches its backing directory.
+
+Also deletes monitoring-logging's own cluster-scoped RBAC/webhook objects
+via their `app.kubernetes.io/instance=podiumd-minikube` label (confirmed
+live present on all of them) - only fires if that dependency was ever
+enabled. Deliberately leaves the CRDs `apply-monitoring-logging-crds.sh`
+installs alone - they carry no such label (applied raw from the
+dependency's own tarball, never templated) and are harmless to leave
+installed regardless.
+
+Verified live end to end, twice: first run against the real cluster
+correctly emptied everything and surfaced the Released-PV gap above; after
+fixing it, a second run against the now-already-empty cluster exited
+cleanly and idempotently ("(none found)" for stale PVs, "No resources
+found" for cluster-scoped RBAC).
