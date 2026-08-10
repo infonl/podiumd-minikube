@@ -106,23 +106,34 @@ for the actual number, and `kubectl describe node minikube`'s own
 Kubernetes scheduling level (usually lower than real usage, since not
 every container sets both).
 
-Measured on a full `deploy.sh --full` (every optional profile,
-`monitoringLogging.enabled=true` — the heavier loki/alloy/kube-prometheus-
-stack implementation of the `metrics` profile), against an idle-ish
-cluster (no active load beyond the apps' own background/health-check
-traffic), on a 20Gi-capped minikube container:
+Measured on a full `deploy.sh --full` (every optional profile) against an
+idle-ish cluster (no active load beyond the apps' own background/health-
+check traffic), on a 20Gi-capped minikube container, with and without
+`monitoringLogging.enabled` for comparison:
 
-| | Requests | Limits | Real (docker stats) |
-|---|---|---|---|
-| CPU | 3465m / 8 (43%) | 2650m / 8 (33%) | 64–86% (bursty) |
-| Memory | 10058Mi / 32Gi (31%) | 8308Mi / 32Gi (25%) | ~17.8Gi / 20Gi (**~89%**) |
+| | `monitoringLogging.enabled=true` | `monitoringLogging.enabled=false` |
+|---|---|---|
+| CPU requests | 3465m / 8 (43%) | 3260m / 8 (40%) |
+| CPU limits | 2650m / 8 (33%) | 200m / 8 (2%) |
+| Memory requests | 10058Mi / 32Gi (31%) | 9416Mi / 32Gi (29%) |
+| Memory limits | 8308Mi / 32Gi (25%) | 5652Mi / 32Gi (17%) |
+| CPU, real (docker stats) | 64–86% (bursty) | 30–229% (bursty) |
+| Memory, real (docker stats) | ~17.8Gi / 20Gi (**~89%**) | ~17.0Gi / 20Gi (**~85%**) |
 
-**`monitoringLogging.enabled` is the single biggest lever to reduce this
-footprint** — it adds roughly a dozen extra pods (Loki, Alloy,
-kube-prometheus-stack, Prometheus Pushgateway) on top of the
-Tempo/Grafana/otel-collector functionality the default raw-templates
-implementation already provides. If you're not specifically testing that
-implementation, disable it with:
+**`monitoringLogging.enabled` is still the single biggest lever available**
+to reduce this footprint, but the *real* saving is more modest than the
+dozen-fewer-pods headline suggests — only ~4 percentage points / ~0.8Gi in
+practice, measured the same way (settled ~5 minutes post-deploy) on both
+sides. Most of what that flag adds (kube-state-metrics, prometheus-
+operator, node-exporter, Pushgateway) is genuinely lightweight; the real
+weight is Loki + Alloy + Grafana + kube-prometheus-stack's own Prometheus,
+and even those are already re-tuned for a single-node box (see "What's
+running" above). The *limits* column drops far more dramatically than real
+usage does - limits are ceilings, not actual consumption, so don't read
+that column as the expected savings.
+
+If you're not specifically testing the monitoring-logging implementation,
+disable it with:
 
 ```bash
 ./scripts/set-podiumd-version.sh <version> --disable-monitoring-logging
@@ -131,9 +142,13 @@ implementation, disable it with:
 (or edit `values.yaml`'s `monitoringLogging.enabled` directly) and
 redeploy — see "What's running" above for what that trades away
 (Loki/Alloy's log-shipping pipeline has no raw-templates equivalent at
-all). No single running process was found to be a leak or runaway when
-this was last measured — the ~89% memory figure above is the sum of ~40
-normal pods, not a bug.
+all). No single running process was found to be a leak or runaway in
+either state — both real-usage figures above are the sum of ~35-40 normal
+pods, not a bug. `deploy.sh` cleans up the *other* implementation's
+leftover resources automatically either direction, including
+Prometheus/PrometheusRule/ServiceMonitor/PodMonitor custom resources (see
+`prune-orphaned-workloads.py`'s own header for why those needed separate
+handling from plain Deployments/StatefulSets/DaemonSets).
 
 ## Scripts
 
