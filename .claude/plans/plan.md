@@ -2481,3 +2481,38 @@ correctly emptied everything and surfaced the Released-PV gap above; after
 fixing it, a second run against the now-already-empty cluster exited
 cleanly and idempotently ("(none found)" for stale PVs, "No resources
 found" for cluster-scoped RBAC).
+
+## deploy.sh --monitoring-logging: a flag with no purpose once the version arg went mandatory
+
+`set-podiumd-version.sh`'s second argument (the monitoring-logging one)
+used to be genuinely optional - omit it and monitoring-logging silently
+stayed disabled, which was easy to do by accident. Once that was fixed
+(mandatory now: an explicit monitoring-logging version, or
+`--disable-monitoring-logging`), `values.yaml`'s `monitoringLogging.enabled`
+became a reliably-set, persistent piece of state - at which point
+`deploy.sh --monitoring-logging` turned out to be redundant: it just forced
+`monitoringLogging.enabled=true` (and `metrics.enabled=true`) at deploy
+time, duplicating a decision that's already made and already persisted.
+Worse, having both a persistent value.yaml flag and a separate per-deploy
+CLI flag meant they could disagree - e.g. `set-podiumd-version.sh` sets it
+false, but a stale muscle-memory `--monitoring-logging` on the next
+`deploy.sh` call flips it back true for that one render.
+
+Fixed by removing the flag entirely. `deploy.sh` now reads
+`values.yaml`'s `monitoringLogging.enabled` directly (new shared helper,
+`scripts/lib/monitoring-logging-enabled.sh`, also used by
+`show-podiumd-version.sh` so both stay in agreement) and, if true,
+automatically does the two things that implementation needs at deploy time
+that Helm's own templates can't express on their own: applies
+monitoring-logging's CRDs first, and repoints ZAC's OTLP endpoint at its
+otel-collector Service. `metrics.enabled` stays fully independent, exactly
+as before (`--full` or an explicit `--set`) - `monitoringLogging.enabled`
+only ever picks *which* implementation backs that profile, never whether
+it's on.
+
+Verified all three cases live via an isolated logic harness (not the real
+`deploy.sh`, to avoid touching the actual shared cluster for a change
+that's pure argument-parsing): no flags with `monitoringLogging.enabled:
+true` in `values.yaml` correctly adds the OTLP override; adding `--full`
+on top still adds it; and a copy of `values.yaml` with it set to `false`
+correctly adds neither.

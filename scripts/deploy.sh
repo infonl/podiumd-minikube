@@ -57,13 +57,24 @@
 #   ./scripts/deploy.sh            # core profile only (matches values.yaml's own default)
 #   ./scripts/deploy.sh --full     # every optional profile enabled too (objecten, objecttypen,
 #                                  # opennotificaties, openarchiefbeheer, openformulieren, metrics, wiremock)
-#   ./scripts/deploy.sh --monitoring-logging   # metrics profile, backed by the monitoring-logging
-#                                  # dependency (loki/alloy/grafana/tempo/kube-prometheus-stack) instead
-#                                  # of templates/metrics/'s raw templates - see values.yaml's
-#                                  # monitoringLogging comment. Kept out of --full: it changes *which*
-#                                  # implementation backs the metrics profile, not an additional one, so
-#                                  # combine explicitly (--full --monitoring-logging) if you want both.
 #   ./scripts/deploy.sh --set some.other=value   # any extra --set flags are passed through
+#
+# Which implementation backs the metrics profile - templates/metrics/'s raw
+# resources, or the heavier monitoring-logging dependency
+# (loki/alloy/grafana/tempo/kube-prometheus-stack) - is NOT a deploy.sh flag.
+# It's read straight from values.yaml's own monitoringLogging.enabled (set
+# it persistently via scripts/set-podiumd-version.sh, or edit values.yaml by
+# hand) - a separate flag here would just be a second way to say the same
+# thing and could disagree with it. Whichever way it resolves, this script
+# automatically does the two things that implementation needs at deploy
+# time that Helm's own templates block can't express: its CRDs applied
+# first (see apply-monitoring-logging-crds.sh's own header for why `helm
+# template` never renders a chart's crds/ directory), and ZAC's OTLP
+# endpoint repointed at its otel-collector Service instead of the raw
+# templates' one. metrics.enabled itself is unaffected either way - still
+# its own independent flag (on by default with --full) - monitoringLogging
+# only decides *which* implementation runs once that profile is on, not
+# whether it's on at all.
 set -euo pipefail
 
 CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -71,41 +82,36 @@ RELEASE_NAME="podiumd-minikube"
 NAMESPACE="podiumd-minikube"
 
 source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
+source "${CHART_DIR}/scripts/lib/monitoring-logging-enabled.sh"
 
 EXTRA_SETS=()
-MONITORING_LOGGING_REQUESTED=false
-while [ "${1:-}" = "--full" ] || [ "${1:-}" = "--monitoring-logging" ]; do
-  case "${1}" in
-    --full)
-      shift
-      source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
-      EXTRA_SETS+=(
-        --set wiremock.enabled=true
-        --set objecten.enabled=true --set podiumd.objecten.enabled=true
-        "${OBJECTEN_SHAPE_SETS[@]}"
-        --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true
-        --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true
-        --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true
-        --set metrics.enabled=true
-      )
-      ;;
-    --monitoring-logging)
-      shift
-      MONITORING_LOGGING_REQUESTED=true
-      # The three flags values.yaml's own monitoringLogging comment says have
-      # to move together: the profile itself, the implementation switch, and
-      # ZAC's OTLP endpoint repointed at monitoring-logging's own
-      # otel-collector Service (named "<release>-opentelemetry-collector" by
-      # that chart's own fullname template, confirmed live via `helm
-      # template` against the real upstream chart).
-      EXTRA_SETS+=(
-        --set metrics.enabled=true
-        --set monitoringLogging.enabled=true
-        --set "podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint=http://${RELEASE_NAME}-opentelemetry-collector:4317"
-      )
-      ;;
-  esac
+while [ "${1:-}" = "--full" ]; do
+  shift
+  source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
+  EXTRA_SETS+=(
+    --set wiremock.enabled=true
+    --set objecten.enabled=true --set podiumd.objecten.enabled=true
+    "${OBJECTEN_SHAPE_SETS[@]}"
+    --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true
+    --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true
+    --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true
+    --set metrics.enabled=true
+  )
 done
+
+MONITORING_LOGGING_REQUESTED=false
+if monitoring_logging_enabled "${CHART_DIR}/values.yaml"; then
+  MONITORING_LOGGING_REQUESTED=true
+  # ZAC's OTLP endpoint repointed at monitoring-logging's own otel-collector
+  # Service (named "<release>-opentelemetry-collector" by that chart's own
+  # fullname template, confirmed live via `helm template` against the real
+  # upstream chart) - values.yaml's own monitoringLogging comment already
+  # covers metrics.enabled/monitoringLogging.enabled moving together; this
+  # is the one piece Helm's own templates can't derive on their own.
+  EXTRA_SETS+=(
+    --set "podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint=http://${RELEASE_NAME}-opentelemetry-collector:4317"
+  )
+fi
 # Remaining args (e.g. `--set some.other=value`, per this script's own
 # usage comment) are forwarded to every render() call below via "$@" -
 # render()'s own "$@" is its *call-site* args (`-s templates/...` for the

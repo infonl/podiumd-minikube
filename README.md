@@ -65,8 +65,9 @@ default `false` — `deploy.sh --full` turns all of them on):
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
 | `wiremock` | extra WireMock mappings (SmartDocuments/KVK/BAG) |
 
-`metrics` has two interchangeable implementations, picked with a second
-flag on top of `metrics.enabled=true`:
+`metrics` has two interchangeable implementations, picked by
+`values.yaml`'s `monitoringLogging.enabled` — not a `deploy.sh` flag, see
+below:
 
 - **Default** (`monitoringLogging.enabled=false`, unchanged): the four raw
   components above, defined directly in `templates/metrics/`.
@@ -78,13 +79,16 @@ flag on top of `metrics.enabled=true`:
   storage class). Adds Loki + Alloy (log aggregation/shipping) and
   kube-prometheus-stack + Prometheus Pushgateway on top of the same
   Tempo/Grafana/otel-collector functionality — meaningfully heavier
-  (roughly a dozen extra pods). Enable both flags at once with
-  `./scripts/deploy.sh --monitoring-logging` (implies `metrics.enabled=true`
-  and repoints ZAC's OTLP endpoint at the new otel-collector automatically —
-  see that flag's own `--help`-style comment in `deploy.sh`). Never runs
-  alongside the default implementation — enabling it turns the raw
-  `templates/metrics/` resources off to avoid two Grafanas/Tempos/
-  otel-collectors at once.
+  (roughly a dozen extra pods). Still needs `metrics.enabled=true` too
+  (independent flag, on by default with `--full`) — `monitoringLogging`
+  only picks the implementation, it doesn't turn the profile on by itself.
+  Set it persistently with `./scripts/set-podiumd-version.sh <version>
+  <monitoring-logging-version>` (or edit `values.yaml` directly);
+  `deploy.sh` then detects it automatically and repoints ZAC's OTLP
+  endpoint at the new otel-collector for you — see that script's own
+  `--help`-style comment. Never runs alongside the default implementation —
+  enabling it turns the raw `templates/metrics/` resources off to avoid two
+  Grafanas/Tempos/otel-collectors at once.
 
 Ingress hostnames (all `*.local`, reachable once the tunnel + `/etc/hosts`
 entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
@@ -97,7 +101,7 @@ entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
 | Script | What it does |
 |---|---|
 | `provision-cluster.sh` | Starts minikube (sized for the full stack), installs Traefik, pre-pulls/loads every image this chart references, runs `helm dependency update` |
-| `deploy.sh` | Renders and applies the chart (`--full` for every optional profile, `--monitoring-logging` to back the `metrics` profile with the heavier loki/alloy/grafana/tempo/kube-prometheus-stack dependency instead of the lightweight raw templates — see "What's running" above; combine both explicitly, it's not part of `--full`). Afterward, deletes any Deployment/StatefulSet/DaemonSet left in the namespace from an earlier run with different profile flags that isn't part of the current render at all — plain `kubectl apply` never removes resources that drop out of a render, so switching profiles (or `--monitoring-logging` on/off) would otherwise leave the old ones running alongside the new ones indefinitely |
+| `deploy.sh` | Renders and applies the chart (`--full` for every optional profile). Whether the `metrics` profile is backed by the heavier loki/alloy/grafana/tempo/kube-prometheus-stack dependency or the lightweight raw templates isn't a flag here — it's read straight from `values.yaml`'s `monitoringLogging.enabled` (see "What's running" above), and this script applies the two things that implementation needs automatically (its CRDs first, ZAC's OTLP endpoint repointed). Afterward, deletes any Deployment/StatefulSet/DaemonSet left in the namespace from an earlier run with different profile flags that isn't part of the current render at all — plain `kubectl apply` never removes resources that drop out of a render, so switching profiles (or toggling `monitoringLogging.enabled`) would otherwise leave the old ones running alongside the new ones indefinitely |
 | `setup-tunnel.sh` | Starts `minikube tunnel` so Traefik gets a real IP reachable from the host; idempotent, prints the `/etc/hosts` line either way |
 | `teardown-cluster.sh` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
 | `reset-namespace.sh` | Empties the `podiumd-minikube` namespace back to a clean slate without deleting the minikube cluster itself - every pod/Deployment/Service/PVC/Job in it, the six Retain-policy PersistentVolumes and their hostPath data storage-hooks.yaml creates, and monitoring-logging's own cluster-scoped RBAC/webhook objects (if that dependency was ever enabled). Wipes all seeded data, including PABC's migration data (asks for confirmation; `--yes` to skip) - run `deploy.sh` afterward to redeploy from scratch |
@@ -132,6 +136,7 @@ they're only ever piped into or sourced by the scripts above:
 | `disable-service-links.py` | Helm post-renderer piped into automatically by `deploy.sh` — sets `enableServiceLinks: false` on every workload pod spec, avoiding Kubernetes' auto-injected `<SERVICE_NAME>_PORT`-style env vars colliding with app-expected ones of the same name |
 | `exclude-pabc-migration-job.py` | Helm post-renderer piped into automatically by `deploy.sh` — drops the `pabc-migrations` Job from the general manifest apply, since `apply-pabc-migrations.sh` is the only safe way to (re)create it |
 | `detect-objecten-shape.sh` | Sourced automatically by `deploy.sh`/`provision-cluster.sh` — detects whether the currently-selected podiumd version still has `objecten`/`objecttypen` as two separate subcharts or has merged them into `openobject` (aliased to `objecten`), and emits the right `--set` flags for whichever shape is active, so switching podiumd versions via `set-podiumd-version.sh` (including `--path` to an unreleased checkout) keeps working either way |
+| `monitoring-logging-enabled.sh` | Sourced by `deploy.sh` and `show-podiumd-version.sh` — reads `values.yaml`'s `monitoringLogging.enabled` the same way in both places, so they can't drift out of sync about where that state lives |
 
 ## Testing
 

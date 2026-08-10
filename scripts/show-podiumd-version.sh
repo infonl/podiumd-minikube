@@ -30,6 +30,8 @@ CHART_YAML="${CHART_DIR}/Chart.yaml"
 CHART_LOCK="${CHART_DIR}/Chart.lock"
 VALUES_YAML="${CHART_DIR}/values.yaml"
 
+source "${CHART_DIR}/scripts/lib/monitoring-logging-enabled.sh"
+
 strip_value() {
   sed -E 's/^[^:]*:[[:space:]]*//; s/[[:space:]]*#.*$//; s/^"//; s/"$//'
 }
@@ -55,14 +57,6 @@ chart_lock_field() {
     /^- name: / { in_block = 0; next }
     in_block && $0 ~ ("^  " field ":") { print; exit }
   ' "${CHART_LOCK}" | strip_value
-}
-
-monitoring_logging_enabled() {
-  awk '
-    /^monitoringLogging:$/ { in_block = 1; next }
-    in_block && /^[^[:space:]#]/ { in_block = 0 }
-    in_block && /^[[:space:]]+enabled:/ { print; exit }
-  ' "${VALUES_YAML}" | strip_value
 }
 
 show_dependency() {
@@ -101,9 +95,8 @@ show_dependency podiumd
 echo
 show_dependency monitoring-logging
 
-enabled="$(monitoring_logging_enabled)"
 echo
-if [ "${enabled}" = "true" ]; then
+if monitoring_logging_enabled "${VALUES_YAML}"; then
   echo "monitoringLogging.enabled: true -> ENABLED, backing the metrics profile (values.yaml)"
 else
   echo "monitoringLogging.enabled: false -> DISABLED - not rendered, even though its chart is"

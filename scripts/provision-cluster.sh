@@ -187,7 +187,7 @@ fi
 
 echo
 echo "Cluster provisioned. Next steps:"
-echo "  1. ./scripts/deploy.sh (or ./scripts/deploy.sh --full for every optional profile,"
-echo "     add --monitoring-logging for the loki/alloy/grafana/tempo stack instead of the"
-echo "     metrics profile's raw templates)."
+echo "  1. ./scripts/deploy.sh (or ./scripts/deploy.sh --full for every optional profile;"
+echo "     the loki/alloy/grafana/tempo stack vs. the metrics profile's raw templates is"
+echo "     picked up automatically from values.yaml's monitoringLogging.enabled)."
 echo "  2. ./scripts/setup-tunnel.sh for external reachability."
