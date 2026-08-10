@@ -40,6 +40,20 @@ create `prometheus-<release>-kube-prom-prometheus` (a StatefulSet) from a
 of the render, never the StatefulSet it spawns - so without this check
 that StatefulSet would look "orphaned" and get deleted (then immediately
 recreated by the operator) on every single deploy.sh run.
+
+Prometheus/PrometheusRule/ServiceMonitor/PodMonitor are in PRUNABLE_KINDS
+for exactly the same reason a Deployment would be, not because they're
+special - confirmed live: disabling monitoringLogging.enabled dropped
+those CRs out of the render as expected, but left them (and, since nothing
+else owned them, the whole StatefulSet-per-Prometheus-CR chain above) live
+in the namespace - `kubectl apply` never deletes what drops out, same gap
+as the Deployment case this script already existed for. Each of these
+kinds is looked up defensively: their CRDs are only ever applied once
+monitoringLogging has been enabled at least once (see
+apply-monitoring-logging-crds.sh), and are deliberately never removed
+after (see reset-namespace.sh's own header) - but a setup that has *never*
+enabled it doesn't have them installed at all, and `kubectl get` on a
+truly unknown kind is a hard error, not an empty list.
 """
 import json
 import subprocess
@@ -47,7 +61,15 @@ import sys
 
 import yaml
 
-PRUNABLE_KINDS = ("Deployment", "StatefulSet", "DaemonSet")
+PRUNABLE_KINDS = (
+    "Deployment",
+    "StatefulSet",
+    "DaemonSet",
+    "Prometheus",
+    "PrometheusRule",
+    "ServiceMonitor",
+    "PodMonitor",
+)
 
 namespace = sys.argv[1]
 
@@ -62,8 +84,13 @@ pruned = []
 for kind in PRUNABLE_KINDS:
     result = subprocess.run(
         ["kubectl", "get", kind, "-n", namespace, "-o", "json"],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True,
     )
+    if result.returncode != 0:
+        if "the server doesn't have a resource type" in result.stderr:
+            continue
+        print(result.stderr, file=sys.stderr)
+        sys.exit(result.returncode)
     for item in json.loads(result.stdout)["items"]:
         name = item["metadata"]["name"]
         if (kind, name) in desired:
@@ -77,4 +104,4 @@ for kind in PRUNABLE_KINDS:
 if pruned:
     print("Pruned orphaned workload(s) not part of the current render: " + ", ".join(pruned))
 else:
-    print("No orphaned Deployment/StatefulSet/DaemonSet found - nothing to prune.")
+    print("No orphaned workload(s)/monitoring CR(s) found - nothing to prune.")
