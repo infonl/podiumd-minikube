@@ -1,4 +1,5 @@
-{{- if .Values.metrics.enabled }}
+{{/* These raw templates are the metrics profile's default implementation - superseded by the optional monitoring-logging dependency (templates from the "monitoring-logging" Chart.yaml dependency) when monitoringLogging.enabled is true, to avoid running two Grafanas/Tempos/otel-collectors at once. */}}
+{{- if and .Values.metrics.enabled (not .Values.monitoringLogging.enabled) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -27,6 +27,36 @@ openformulieren:
   enabled: false # also pulls in objecten + objecttypen + opennotificaties
 metrics:
   enabled: false
+monitoringLogging:
+  # Optional alternative implementation for the "metrics" profile - off by
+  # default (templates/metrics/'s raw templates stay the default). When
+  # true, supersedes those raw templates with the "monitoring-logging"
+  # Chart.yaml dependency's own grafana/tempo/opentelemetry-collector
+  # (+ optionally loki/alloy/kube-prometheus-stack/prometheus-pushgateway)
+  # subcharts instead - see the "monitoring-logging" block further down
+  # for how each is re-tuned for a single-node minikube box (that chart's
+  # own defaults assume a multi-node AKS cluster: Loki in distributed
+  # mode with ~17 pods + MinIO, Alloy pinned to an AKS-only node label,
+  # managed-csi storage classes, Keycloak OAuth, a production SMTP relay).
+  # Requires metrics.enabled=true too - this only decides *which*
+  # implementation backs that profile, it doesn't turn the profile on by
+  # itself. Needs podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint
+  # repointed at the new otel-collector Service name too when enabling
+  # this - see that key's own comment, and scripts/deploy.sh's handling
+  # of both together.
+  #
+  # Flipping this on an *already-deployed* cluster (either direction) always
+  # needs a manual cleanup pass afterward - confirmed live: deploy.sh applies
+  # via plain `kubectl apply`, which only ever adds/updates resources
+  # present in the current render, never deletes ones that dropped out of
+  # it (unlike `helm upgrade`, which diffs against the previous release).
+  # Toggling this leaves the *other* implementation's Deployments/Services/
+  # ConfigMaps/Ingress running right alongside the new ones - exactly the
+  # "two Grafanas at once" scenario this flag exists to prevent - until
+  # someone deletes them by hand (`kubectl delete deployment,svc,ingress,cm
+  # grafana otel-collector prometheus tempo` for raw-templates leftovers
+  # when switching *to* monitoringLogging, for example).
+  enabled: false
 
 # -----------------------------------------------------------------------
 # Raw templates this chart defines itself (Postgres/Redis/Keycloak/Solr/
@@ -234,6 +264,17 @@ podiumd:
     # JVM just harmlessly retries failed trace exports in the background
     # (noisy log warnings, no functional impact) - same previously-accepted
     # behavior, now also the actually-working case once metrics is on.
+    #
+    # When monitoringLogging.enabled is true instead, this raw Service
+    # doesn't exist (see templates/metrics/'s own supersession comment) -
+    # the monitoring-logging dependency's own otel-collector Service is
+    # named "podiumd-minikube-opentelemetry-collector" (confirmed live via
+    # `helm template` against that exact chart version), not "otel-
+    # collector". Values.yaml can't express "pick one endpoint or the
+    # other" itself (not templated) - scripts/deploy.sh passes
+    # `--set podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint=...`
+    # alongside `--set monitoringLogging.enabled=true` to override this
+    # default when both are turned on together.
     opentelemetry_zaakafhandelcomponent:
       endpoint: http://otel-collector:4317
     ingress:
@@ -982,3 +1023,405 @@ podiumd:
       existingClaim: openformulieren
       storageClassName: ""
       size: 10Gi
+
+# -----------------------------------------------------------------------
+# The monitoring-logging dependency and everything nested inside it -
+# optional alternative to templates/metrics/'s raw templates, see
+# monitoringLogging.enabled's own comment above. Re-tuned throughout for
+# a single-node minikube box - see each override's own comment for the
+# specific production assumption it replaces. Left everything else at
+# this chart's own upstream defaults.
+# -----------------------------------------------------------------------
+monitoring-logging:
+  grafana:
+    persistence:
+      storageClassName: standard
+      size: 2Gi
+    # Chart default runs an initContainer that chowns the whole PVC to
+    # grafana's own UID/GID on every pod start, but with only CAP_CHOWN (all
+    # other capabilities explicitly dropped, including CAP_DAC_OVERRIDE) -
+    # confirmed live: that's enough for a *fresh* volume (root:root, world-
+    # readable), but grafana itself creates its csv/pdf/png export dirs 0700
+    # at runtime after that first successful boot, and the same
+    # capability-limited chown can no longer even traverse those on any
+    # *later* restart ("Permission denied", pod stuck in Init:Error forever
+    # - not something that self-heals; every subsequent restart hits it
+    # again). fsGroup (already set at the pod level below via this chart's
+    # own default) reliably applies group ownership on minikube's `standard`
+    # StorageClass without needing this at all - confirmed live restarting
+    # the pod cleanly with this disabled.
+    initChownData:
+      enabled: false
+    # monitoring-logging's own bundled Prometheus datasource hardcodes its
+    # URL as "{{ .Release.Name }}-kube-prometheus-prometheus" - doesn't
+    # match what actually gets deployed: kube-prometheus-stack's own
+    # fullname helper truncates to 26 characters unconditionally (even with
+    # fullnameOverride set, so that can't fix this either), and
+    # "podiumd-minikube-kube-prometheus-stack" is well over that, so the
+    # real Service ends up "podiumd-minikube-kube-prom-prometheus" instead
+    # (confirmed live - Grafana's own datasource health check failed with a
+    # DNS lookup error against the hardcoded name). This whole list has to
+    # be repeated here, not just the one url field - it's a YAML list, and
+    # Helm value overrides replace lists wholly rather than merging them
+    # (unlike maps). loki/Tempo's own URLs are copied verbatim from
+    # monitoring-logging's own values.yaml (correct already - those two
+    # charts aren't affected by kube-prometheus-stack's own truncation).
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            editable: true
+            type: prometheus
+            uid: prometheus
+            readOnly: false
+            url: http://podiumd-minikube-kube-prom-prometheus:9090
+            access: proxy
+            isDefault: false
+          - name: loki
+            type: loki
+            uid: loki
+            readOnly: false
+            editable: true
+            access: proxy
+            isDefault: true
+            url: http://podiumd-minikube-loki-gateway
+            version: 1
+            jsonData:
+              timeout: 300
+              httpHeaderName1: "X-Scope-OrgID"
+            secureJsonData:
+              httpHeaderValue1: "1"
+          - name: Tempo
+            type: tempo
+            uid: tempo
+            readOnly: false
+            editable: true
+            access: proxy
+            isDefault: false
+            url: http://podiumd-minikube-tempo:3200
+            jsonData:
+              tracesToLogsV2:
+                datasourceUid: loki
+                filterByTraceID: true
+                filterBySpanID: false
+              tracesToMetrics:
+                datasourceUid: prometheus
+              serviceMap:
+                datasourceUid: prometheus
+              nodeGraph:
+                enabled: true
+    grafana.ini:
+      auth.generic_oauth:
+        enabled: false # no Keycloak client wired up for this dev tool - anonymous admin access instead, matching templates/metrics/grafana.yaml's current GF_AUTH_ANONYMOUS_* behavior
+      auth.anonymous:
+        enabled: true
+        org_role: Admin
+      auth:
+        disable_login_form: true
+      server:
+        domain: grafana.local
+        enforce_domain: false # avoids a redirect loop if reached by IP or a different hostname
+        root_url: http://grafana.local/
+      security:
+        cookie_secure: false # plain http://*.local, not https - same fix as openarchiefbeheer's identical cookie issue elsewhere in this file
+      smtp:
+        host: "mailpit:1025" # see templates/mailpit/ - every other app's email settings point here too
+        from_address: noreply@example.com
+    ingress:
+      enabled: true
+      ingressClassName: traefik
+      hosts:
+        - grafana.local
+      path: /
+      pathType: ImplementationSpecific
+  kube-prometheus-stack:
+    # Confirmed live: this specific ServiceMonitor sets a field
+    # (spec.endpoints[1].trackTimestampsStaleness) that the CRD schema
+    # actually installed (from this same dependency's own bundled "crds"
+    # subchart - see apply-monitoring-logging-crds.sh) doesn't recognize -
+    # a version-skew bug inside monitoring-logging's own dependency tree,
+    # not something introduced here. Rejected outright by the API server's
+    # strict decoding ("unknown field"), so kubelet metrics would never
+    # scrape anyway - disabling the ServiceMonitor is simpler than patching
+    # around a schema mismatch for a scrape target minikube's own single-node
+    # kubelet isn't the primary point of this profile regardless.
+    kubelet:
+      enabled: false
+    # These five create a Service explicitly namespaced to "kube-system"
+    # each (scraping the control-plane components that, on a "real" cluster,
+    # run there) - confirmed live that conflicts outright with deploy.sh's
+    # own single `kubectl apply -n podiumd-minikube -f -` covering the whole
+    # manifest ("the namespace from the provided object 'kube-system' does
+    # not match the namespace 'podiumd-minikube'"). Wouldn't usefully scrape
+    # anything on minikube regardless - its control-plane runs as static
+    # pods with no equivalent scrapeable Services of their own by default,
+    # so disabling loses nothing actually working, unlike kubelet above
+    # (that one's ServiceMonitor CRD-schema mismatch was the real blocker,
+    # not a namespace conflict - it might otherwise have worked).
+    coreDns:
+      enabled: false
+    kubeControllerManager:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+    kubeProxy:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    prometheus:
+      prometheusSpec:
+        retention: 1d # dev box, not a 7-day production retention window
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: standard
+              resources:
+                requests:
+                  storage: 2Gi
+        # Matches templates/metrics/prometheus.yaml's own scrape_configs
+        # exactly - zac's WildFly management port (see
+        # templates/metrics/service-zac-admin.yaml, unconditional on
+        # which metrics implementation is active - both need it) and
+        # Tempo's own metrics, neither of which this chart's default
+        # ServiceMonitor discovery would pick up on their own.
+        additionalScrapeConfigs:
+          - job_name: zac-admin
+            fallback_scrape_protocol: PrometheusText1.0.0
+            static_configs:
+              - targets: ["zac-admin:9990"]
+          - job_name: tempo
+            static_configs:
+              - targets: ["podiumd-minikube-tempo:3200"]
+  alloy:
+    # monitoring-logging's own umbrella values.yaml (not the alloy chart's
+    # own default, which is already {}) hardcodes an AKS-only node label
+    # (kubernetes.azure.com/agentpool: userpool) on the alloy DaemonSet -
+    # doesn't exist on minikube's single node, so the DaemonSet's desired
+    # count stays 0 forever without it. NOT overridden here - confirmed live
+    # that clearing an inherited map key this deep (root chart's own
+    # values.yaml -> monitoring-logging's own values.yaml -> alloy's own
+    # values.yaml) doesn't work on this project's pinned Helm v3.9.0 (see
+    # provision-cluster.sh's own comment on why that version's pinned):
+    # neither an empty map override (nodeSelector: {} - ordinary reason,
+    # Helm's per-key map merge contributes nothing from an empty map) nor a
+    # `null` on the exact key (works for a plain two-level override, but not
+    # reliably at this subchart-of-a-subchart nesting depth on this Helm
+    # version - confirmed --set *can* reach and overwrite the key's value,
+    # just not delete it). Simplest reliable fix instead: make minikube's
+    # node actually satisfy the selector - see provision-cluster.sh's own
+    # `kubectl label node` step.
+    #
+    alloy:
+      # monitoring-logging's own umbrella values.yaml hardcodes its entire
+      # log-collection pipeline as one literal River-config string here
+      # (not a separate structured "namespaces" values field - a
+      # `logCollectionNamespaces` key, tried here first, doesn't exist
+      # anywhere in this chart at all and was silently a no-op) - the
+      # `namespaces { names = [...] }` block inside is a *server-side* API
+      # watch filter (see its own comment), hardcoded to ["podiumd",
+      # "monitoring"], neither of which matches this project's actual
+      # namespace. Since it's a plain multi-line string value, the whole
+      # block has to be copied and re-specified to change that one line -
+      # otherwise identical to monitoring-logging's own default (including
+      # the loki_gateway endpoint, still correctly templated via
+      # {{ .Release.Name }} since configMap.content itself is tpl-processed).
+      configMap:
+        content: |
+          // Discover only this project's own namespace's pods.
+          // Server-side namespace filter: scopes the API watch, not just a relabel drop.
+          discovery.kubernetes "pods" {
+            role = "pod"
+
+            namespaces {
+              names = ["podiumd-minikube"]
+            }
+          }
+
+          // Relabel: keep only pods on this node, drop terminated pods,
+          // build the log path glob, add k8s metadata.
+          discovery.relabel "pod_logs" {
+            targets = discovery.kubernetes.pods.targets
+
+            // Only tail files for pods scheduled on this node
+            rule {
+              source_labels = ["__meta_kubernetes_pod_node_name"]
+              regex         = env("NODE_NAME")
+              action        = "keep"
+            }
+
+            // Drop pods in terminal phases
+            rule {
+              source_labels = ["__meta_kubernetes_pod_phase"]
+              regex         = "Pending|Succeeded|Failed|Completed"
+              action        = "drop"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_namespace"]
+              target_label  = "namespace"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_name"]
+              target_label  = "pod"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              target_label  = "container"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+              target_label  = "app"
+            }
+
+            // Build the log path glob — *.log captures all container restarts
+            // (0.log, 1.log, …). local.file_match below expands the glob into
+            // real file paths; without it, loki.source.file would os.Stat the
+            // literal "*.log" string and skip every target.
+            // Use ${n} notation: $n_ would include the underscore in the capture group reference.
+            rule {
+              source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_name", "__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+              separator     = "/"
+              regex         = "(.+)/(.+)/(.+)/(.+)"
+              replacement   = "/var/log/pods/${1}_${2}_${3}/${4}/*.log"
+              target_label  = "__path__"
+            }
+          }
+
+          // Resolve __path__ globs into concrete files (0.log, 1.log, …).
+          // sync_period determines how often new rotated files are picked up.
+          local.file_match "pod_logs" {
+            path_targets = discovery.relabel.pod_logs.output
+            sync_period  = "10s"
+          }
+
+          // Tail log files, strip CRI prefix (containerd format: timestamp stream flags log)
+          // and forward to Loki. Equivalent to Promtail's pipeline_stages: [cri: {}].
+          loki.source.file "pod_logs" {
+            targets    = local.file_match.pod_logs.targets
+            forward_to = [loki.process.cri.receiver]
+          }
+
+          loki.process "cri" {
+            forward_to = [loki.write.loki_gateway.receiver]
+
+            stage.cri {}
+          }
+
+          loki.write "loki_gateway" {
+            endpoint {
+              url       = "http://{{ .Release.Name }}-loki-gateway/loki/api/v1/push"
+              tenant_id = "1"
+            }
+          }
+  loki:
+    # Chart default (Distributed) runs ~17 separate microservice pods
+    # sized for horizontal scale a single-node dev box will never need -
+    # SingleBinary is the same functionality (log storage + query) on
+    # one pod, and drops the MinIO dependency below entirely.
+    deploymentMode: SingleBinary
+    singleBinary:
+      replicas: 1
+      persistence:
+        storageClassName: standard
+        size: 2Gi
+    minio:
+      enabled: false # only needed by Distributed mode's S3-backed storage
+    loki:
+      commonConfig:
+        # Chart default (3) assumes Distributed mode's normal multi-replica
+        # setup - with singleBinary.replicas: 1 above, every ring this feeds
+        # (ingester, compactor, scheduler, pattern-ingester) only ever has
+        # one real member, so the query path's own quorum math ("need N
+        # healthy out of replication_factor") always came up short and
+        # failed outright - confirmed live: every Loki query (even a plain
+        # label listing) errored "too many unhealthy instances in the ring",
+        # despite the ring itself correctly showing that one member ACTIVE.
+        # Ingestion (the write path) was never affected, only querying.
+        replication_factor: 1
+      storage:
+        type: filesystem # was s3 (pointed at the now-disabled minio)
+        object_store:
+          type: filesystem
+        filesystem:
+          chunks_directory: /var/loki/chunks
+          rules_directory: /var/loki/rules
+      schemaConfig:
+        configs:
+          - from: "2024-04-01"
+            store: tsdb
+            object_store: filesystem # chart default is s3, same reason as above
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+      compactor:
+        delete_request_store: filesystem # chart default is s3
+    resultsCache:
+      enabled: false # query-result caching - skippable at dev-scale query volume, not a functional loss
+    chunksCache:
+      enabled: false # same reasoning as resultsCache above
+    # backend/read/write/compactor and every microservice below are all
+    # Distributed-mode-only standalone pods - SingleBinary mode already runs
+    # all of this (ingestion, querying, compaction) inside its own single
+    # pod above, so every one of these has to stay at 0 or the chart's own
+    # templates/validate.yaml refuses to render (confirmed live: monitoring-
+    # logging's own umbrella values.yaml defaults to deploymentMode:
+    # Distributed and sets indexGateway/queryScheduler/queryFrontend/
+    # distributor/querier/ingester to 2-3 replicas each on that assumption -
+    # every one of those needs zeroing out too, not just backend/read/write/
+    # compactor, or validate.yaml's "single binary and distributed targets
+    # both active" check still fails).
+    backend:
+      replicas: 0
+    read:
+      replicas: 0
+    write:
+      replicas: 0
+    compactor:
+      replicas: 0
+    indexGateway:
+      replicas: 0
+    queryScheduler:
+      replicas: 0
+    queryFrontend:
+      replicas: 0
+    distributor:
+      replicas: 0
+    querier:
+      replicas: 0
+    ingester:
+      replicas: 0
+  tempo:
+    enabled: true # chart default is false - this project already has tracing active today (templates/metrics/tempo.yaml), keep it on when switching implementations
+    persistence:
+      storageClassName: standard
+      size: 2Gi
+  opentelemetry-collector:
+    # Wires the traces pipeline to Tempo - chart default has no traces
+    # pipeline at all (see that key's own upstream comment: "Apply
+    # values-enable-tempo.yaml to enable traces → Tempo"), matching
+    # monitoring-logging's own documented values-enable-tempo.yaml.
+    config:
+      exporters:
+        otlp/tempo:
+          endpoint: ${env:RELEASE_NAME}-tempo:4317
+          tls:
+            insecure: true
+        # Same "${env:RELEASE_NAME}-kube-prometheus-prometheus" mismatch as
+        # the grafana Prometheus datasource above (see that key's own
+        # comment for the full why) - this chart's default metrics pipeline
+        # already wires this exporter in, so without the fix ZAC's own OTLP
+        # metrics would silently fail to land in Prometheus at all (DNS
+        # lookup failure inside the collector, not a rendering error).
+        prometheusremotewrite:
+          endpoint: http://podiumd-minikube-kube-prom-prometheus:9090/api/v1/write
+      service:
+        pipelines:
+          traces:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [otlp/tempo]

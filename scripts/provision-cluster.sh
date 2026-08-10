@@ -77,6 +77,17 @@ fi
 # own header for why this can't be assumed to already be correct).
 source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
 
+# The optional monitoring-logging dependency's own alloy subchart (see
+# values.yaml's own monitoringLogging comment) hardcodes an AKS-only
+# nodeSelector on its DaemonSet (kubernetes.azure.com/agentpool: userpool) -
+# confirmed live that clearing it via a values.yaml/--set override doesn't
+# work reliably this deep in the subchart tree on this project's pinned Helm
+# v3.9.0 (see values.yaml's own alloy comment for the full story). Labeling
+# the node to actually satisfy the selector instead is simpler and doesn't
+# depend on Helm merge internals - harmless if monitoringLogging is never
+# enabled, so this always runs, not just when it's going to be used.
+kubectl label node minikube kubernetes.azure.com/agentpool=userpool --overwrite > /dev/null
+
 # --- 2. Traefik ---
 if kubectl get deployment traefik -n "${TRAEFIK_NAMESPACE}" > /dev/null 2>&1; then
   echo "Traefik already installed in namespace '${TRAEFIK_NAMESPACE}' - skipping."
@@ -105,6 +116,13 @@ helm dependency update "${CHART_DIR}" > /dev/null
 # and 4.8.1 bundle genuinely different nginx-unprivileged versions, for
 # example) - this way, whichever podiumd version is currently selected is
 # what actually gets pre-pulled, every time.
+#
+# monitoringLogging.enabled=true is included here even though it's not part
+# of scripts/deploy.sh --full's own default set (see that script's own
+# comment - it's a separate, explicit opt-in) - this render only decides
+# what gets pre-pulled, so including it means those images (loki/alloy/
+# grafana/tempo/kube-prometheus-stack) are already loaded if someone enables
+# it later, without needing to re-run this script.
 echo "Deriving the image list from the currently-selected podiumd version..."
 source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
 mapfile -t images < <(
@@ -116,6 +134,7 @@ mapfile -t images < <(
     --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true \
     --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true \
     --set metrics.enabled=true \
+    --set monitoringLogging.enabled=true \
     2>/dev/null \
   | python3 "${CHART_DIR}/scripts/lib/strip-image-digests.py" \
   | grep -oE '^\s*image:\s*"?[^"[:space:]]+' \
@@ -168,5 +187,7 @@ fi
 
 echo
 echo "Cluster provisioned. Next steps:"
-echo "  1. ./scripts/deploy.sh (or ./scripts/deploy.sh --full for every optional profile)."
+echo "  1. ./scripts/deploy.sh (or ./scripts/deploy.sh --full for every optional profile,"
+echo "     add --monitoring-logging for the loki/alloy/grafana/tempo stack instead of the"
+echo "     metrics profile's raw templates)."
 echo "  2. ./scripts/setup-tunnel.sh for external reachability."

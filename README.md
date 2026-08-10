@@ -62,8 +62,29 @@ default `false` — `deploy.sh --full` turns all of them on):
 | `openarchiefbeheer` | Open Archiefbeheer (web + nginx + worker + beat) |
 | `opennotificaties` | Open Notificaties + RabbitMQ |
 | `openformulieren` | Open Formulieren (+ transitively needs `objecten`, `objecttypen`, `opennotificaties` enabled too — matches compose's own profile nesting) |
-| `metrics` | otel-collector, Tempo, Prometheus, Grafana |
+| `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
 | `wiremock` | extra WireMock mappings (SmartDocuments/KVK/BAG) |
+
+`metrics` has two interchangeable implementations, picked with a second
+flag on top of `metrics.enabled=true`:
+
+- **Default** (`monitoringLogging.enabled=false`, unchanged): the four raw
+  components above, defined directly in `templates/metrics/`.
+- **`monitoringLogging.enabled=true`**: supersedes those four with the
+  optional `monitoring-logging` Helm dependency instead — the same PodiumD
+  chart used in production, re-tuned here for a single-node minikube box
+  (`SingleBinary` Loki instead of `Distributed`+MinIO, no AKS node
+  selectors, anonymous Grafana admin instead of Keycloak OAuth, `standard`
+  storage class). Adds Loki + Alloy (log aggregation/shipping) and
+  kube-prometheus-stack + Prometheus Pushgateway on top of the same
+  Tempo/Grafana/otel-collector functionality — meaningfully heavier
+  (roughly a dozen extra pods). Enable both flags at once with
+  `./scripts/deploy.sh --monitoring-logging` (implies `metrics.enabled=true`
+  and repoints ZAC's OTLP endpoint at the new otel-collector automatically —
+  see that flag's own `--help`-style comment in `deploy.sh`). Never runs
+  alongside the default implementation — enabling it turns the raw
+  `templates/metrics/` resources off to avoid two Grafanas/Tempos/
+  otel-collectors at once.
 
 Ingress hostnames (all `*.local`, reachable once the tunnel + `/etc/hosts`
 entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
@@ -76,10 +97,10 @@ entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
 | Script | What it does |
 |---|---|
 | `provision-cluster.sh` | Starts minikube (sized for the full stack), installs Traefik, pre-pulls/loads every image this chart references, runs `helm dependency update` |
-| `deploy.sh` | Renders and applies the chart (`--full` for every optional profile) |
+| `deploy.sh` | Renders and applies the chart (`--full` for every optional profile, `--monitoring-logging` to back the `metrics` profile with the heavier loki/alloy/grafana/tempo/kube-prometheus-stack dependency instead of the lightweight raw templates — see "What's running" above; combine both explicitly, it's not part of `--full`) |
 | `setup-tunnel.sh` | Starts `minikube tunnel` so Traefik gets a real IP reachable from the host; idempotent, prints the `/etc/hosts` line either way |
 | `teardown-cluster.sh` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
-| `set-podiumd-version.sh <version>` | Swaps the `podiumd` Helm dependency to a different version (`helm search repo dimpact/podiumd -l` to list available ones). `set-podiumd-version.sh --path <dir>` points it at a local podiumd chart checkout instead (e.g. for testing unreleased podiumd changes) via a `file://` dependency — re-check the four intentional image-tag pins in `values.yaml` afterward either way, per that script's own comment |
+| `set-podiumd-version.sh <version> [monitoring-logging-version]` | Swaps the `podiumd` Helm dependency to a different version (`helm search repo dimpact/podiumd -l` to list available ones), and optionally the `monitoring-logging` dependency alongside it — the two are independently-versioned charts in the same monorepo with no formula relating them, so the second argument is optional and left untouched if omitted (see the script's own header for how to look up the exact co-released version by hand). `set-podiumd-version.sh --path <dir>` points `podiumd` at a local chart checkout instead (e.g. for testing unreleased podiumd changes) via a `file://` dependency, and automatically points `monitoring-logging` at the sibling `monitoring-logging/` directory next to it too — re-check the four intentional image-tag pins in `values.yaml` afterward either way, per that script's own comment |
 | `apply-pabc-migrations.sh` | The **only** safe way to (re)create the `pabc-migrations` Job — it's not idempotent (clears PABC's database before reseeding), so this refuses to run against an already-seeded database unless `--force` is passed |
 | `seed-fixtures.sh` | Loads demo/fixture data into objecten/objecttypen (or `openobject`, whichever shape is currently selected — see `set-podiumd-version.sh`) via `manage.py loaddata`, matching docker-compose's own `*-import` containers for these apps. Run manually after `deploy.sh` once the objecten profile is up — safe to re-run |
 

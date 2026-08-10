@@ -2077,3 +2077,248 @@ WireMock's proxy role too (e.g. a plain nginx/Envoy config for
 brp-personen-wiremock's 2 header-gated proxy routes instead of a JVM) -
 a bigger, separate change, not attempted here. No files changed in this
 investigation.
+
+## monitoringLogging: optional alternative metrics/logging implementation
+
+Added the `dimpact-samenwerking/helm-charts` monorepo's `monitoring-logging`
+chart (Loki, Alloy, Grafana, kube-prometheus-stack, Prometheus Pushgateway,
+Tempo, OpenTelemetry Collector - the same one PodiumD itself uses in
+production) as a new, **optional** `Chart.yaml` dependency, gated behind a
+new `monitoringLogging.enabled` flag. Off by default: `templates/metrics/`'s
+existing raw templates stay exactly as they were, unchanged, and are the
+default whenever `metrics.enabled=true`. When `monitoringLogging.enabled=true`
+too, the new dependency's own grafana/tempo/otel-collector/kube-prometheus-
+stack/loki/alloy/prometheus-pushgateway subcharts supersede those raw
+templates instead - never both at once (see `templates/metrics/*.yaml`'s own
+`{{- if and .Values.metrics.enabled (not .Values.monitoringLogging.enabled) }}`
+guard, added to each). `scripts/deploy.sh --monitoring-logging` turns on both
+the flag and its coordinated `--set` overrides (metrics.enabled,
+monitoringLogging.enabled, ZAC's OTLP endpoint) together - deliberately kept
+out of `--full`'s own set, since this changes *which* implementation backs
+the metrics profile rather than adding a new one.
+
+This is the heavier of the two options discussed with the user up front
+(full stack, all 7 components, re-tuned for minikube resource efficiency -
+`SingleBinary` Loki instead of `Distributed`+MinIO, no AKS node-selector/
+storage-class assumptions, anonymous Grafana admin instead of Keycloak
+OAuth) rather than a trimmed one that drops Loki/Alloy/MinIO - the user
+picked "option 1" explicitly after seeing the resource estimate for both.
+
+`scripts/set-podiumd-version.sh` was extended to move `monitoring-logging`'s
+dependency alongside `podiumd`'s: `--path <dir>` now also points
+`monitoring-logging` at the sibling `monitoring-logging/` directory next to
+whatever podiumd path was given (both charts live side by side in every
+`dimpact-samenwerking/helm-charts` checkout seen so far); plain `<version>`
+mode takes an optional second argument for `monitoring-logging`'s own
+version, since the two charts are independently versioned in the same
+monorepo with no formula relating them - the only way to find the exact
+co-released version for a given podiumd release is `git show
+podiumd-<version>:charts/monitoring-logging/Chart.yaml` in that monorepo
+checkout, done once by hand to pick 1.0.13 as this repo's default alongside
+podiumd 4.8.1, documented (not automated - stays a one-time lookup, not a
+live cross-repo reference) in that script's own header.
+
+### Deploying and verifying this live surfaced a long chain of real bugs
+
+Rendering (`helm template`) alone looked clean early on, but actually
+deploying live to the shared minikube cluster (`./scripts/deploy.sh --full
+--monitoring-logging`) surfaced problem after problem that no render-only
+check would have caught - each fixed in turn, in the order found:
+
+1. **Loki's own validate.yaml rejected the render outright** the first time:
+   `compactor.replicas: 1` (copied from a wrong assumption) alongside
+   `singleBinary.replicas: 1` trips Loki's own "single binary and
+   distributed targets both active" guard - `compactor` is one of several
+   Distributed-mode-only components (along with `backend`/`read`/`write`
+   and, it turned out, `indexGateway`/`queryScheduler`/`queryFrontend`/
+   `distributor`/`querier`/`ingester` too, all defaulted to 2-3 replicas by
+   monitoring-logging's own umbrella values.yaml since *it* defaults to
+   `deploymentMode: Distributed`) - every one of those needed forcing to 0.
+
+2. **`kubectl apply`, unlike `helm upgrade`, never prunes** - switching
+   `monitoringLogging.enabled` in either direction leaves the *other*
+   implementation's Deployments/Services/ConfigMaps/Ingress running
+   alongside the new ones (confirmed live: the 21-day-old raw-template
+   grafana/tempo/otel-collector/prometheus were still running fine
+   alongside the new `podiumd-minikube-*`-prefixed ones after the first
+   switch-over, exactly the "two Grafanas at once" scenario the flag exists
+   to prevent) until manually deleted. Documented as a caveat in
+   `values.yaml`'s own `monitoringLogging` comment - no automatic fix
+   attempted (would need real pruning logic, out of scope here).
+
+3. **Missing images.** `provision-cluster.sh` wasn't re-run after adding the
+   dependency, so none of monitoring-logging's own images were pre-pulled -
+   15 images needed pulling/loading by hand the first time (kube-state-
+   metrics, node-exporter, alloy, grafana, loki, tempo, k8s-sidecar,
+   busybox, nginx-unprivileged, kube-webhook-certgen, otel-collector-contrib,
+   prometheus-operator/prometheus/pushgateway). `provision-cluster.sh`'s own
+   image-derivation render now includes `monitoringLogging.enabled=true` so
+   this is pre-pulled automatically going forward, even for users who never
+   enable the flag themselves (a separate, explicit opt-in per
+   `deploy.sh --monitoring-logging`'s own comment).
+
+4. **Grafana's `initChownData` initContainer permanently breaks itself
+   after its own first successful boot.** It runs with `capabilities: {add:
+   [CHOWN], drop: [ALL]}` - enough to `chown` a *fresh* volume (root:root,
+   world-readable) but not enough to even traverse the `csv`/`pdf`/`png`
+   export directories Grafana itself creates `0700` at runtime afterward
+   (lacks `CAP_DAC_OVERRIDE`/`CAP_DAC_READ_SEARCH`, so "root" can't bypass
+   permission bits) - every restart *after* the first hits "Permission
+   denied" and sits in `Init:Error` forever, not something that self-heals.
+   Fixed by disabling `initChownData` entirely - confirmed live that the
+   pod-level `fsGroup: 472` (already set by the chart's own default) is
+   enough on its own, restarting cleanly with the initContainer off.
+
+5. **`helm template` never renders a chart's `crds/` directory** - only
+   `helm install`/`helm upgrade` install CRDs automatically, and this
+   project never runs either (the whole reason for `kubectl apply` instead,
+   see `deploy.sh`'s own header: Helm's release record would exceed
+   Kubernetes' 3MB API request-size limit). Every
+   Prometheus/PrometheusRule/ServiceMonitor/PodMonitor object failed with
+   "no matches for kind ... ensure CRDs are installed first" - invisible at
+   first because of finding #9 below. Fixed with a new
+   `scripts/lib/apply-monitoring-logging-crds.sh`: extracts
+   `charts/monitoring-logging-*.tgz` (already fetched by `helm dependency
+   update`, no live cross-repo reference) to a temp dir, finds every file
+   whose content declares `kind: CustomResourceDefinition` (filtering by
+   content, not by guessing which nested `crds/` directory convention
+   applies - they're scattered across kube-prometheus-stack's own nested
+   "crds" subchart, alloy's, and loki's bundled rollout-operator/grafana-
+   agent-operator subcharts, at several different nesting depths), and
+   `kubectl apply --server-side`s all of them (some of kube-prometheus-
+   stack's own CRDs are large enough to hit the same client-side apply
+   annotation limit as finding #7 below). `deploy.sh --monitoring-logging`
+   now runs this before the main manifest apply.
+
+6. **A stale operator process never notices CRDs installed later.**
+   controller-runtime-based operators (kube-prometheus-stack's Prometheus
+   Operator here) check CRD availability once at their own startup and
+   don't retry live - since the operator pod in this session had already
+   started *before* finding #5 was fixed, it needed a one-time manual
+   restart (`kubectl delete pod -l app=kube-prometheus-stack-operator`) to
+   actually start reconciling the `Prometheus` CR into a real StatefulSet.
+   Not a template/values fix - only relevant because CRDs were added
+   mid-session after the operator was already running; a fresh deploy from
+   scratch (CRDs applied before the operator Deployment is ever created)
+   wouldn't hit this.
+
+7. **`kubectl apply`'s client-side `last-applied-configuration` annotation
+   caps out at 262144 bytes** - monitoring-logging's own bundled Grafana
+   dashboards ConfigMap (`templates/metrics-dashboards.yaml`, packing 9
+   full dashboard JSON exports into one object via `.Files.Get`) blows past
+   that on its own, well under Kubernetes' own much higher per-object size
+   limit (the object itself is perfectly valid - only kubectl's own
+   annotation-based 3-way-merge bookkeeping rejects it: "metadata.annotations:
+   Too long"). First (wrong) diagnosis assumed the ConfigMap was missing
+   entirely and needed a hand-rolled stand-in - it wasn't; the chart
+   already creates it correctly, just too big for plain `kubectl apply`.
+   Fixed with a new `scripts/lib/split-large-configmaps.py` post-renderer:
+   pulls any ConfigMap over 200000 bytes out of the main stream into a side
+   file, applied separately via `kubectl apply --server-side` (which
+   doesn't use that annotation at all) right after the main apply.
+
+8. **Helm test hooks left a permanently-failed Pod behind.**
+   `<release>-grafana-test` (`helm.sh/hook: test`) has no real Helm release
+   to ever run it properly under this project's `kubectl apply`-only model
+   (same root cause as pabc-migrations' own exclusion) - applied as a plain
+   resource, it's a Pod that runs once, fails (no readiness/DNS guarantees
+   at the moment `kubectl apply` happens to create it), and then sits in
+   `Error` forever, which would fail `tests/test_pods.py`'s "every pod is
+   Running/Succeeded" check. Fixed with a new
+   `scripts/lib/exclude-helm-test-hooks.py` post-renderer, dropping any
+   resource annotated `helm.sh/hook: test` (deliberately *not* excluding
+   pre-install/post-install hooks too - some of those, like the admission-
+   webhook cert-generation Jobs below, need to actually run).
+
+9. **`deploy.sh`'s own error-detection only ever recognized ONE specific
+   error shape** (`grep -c "error when applying patch"`, matching just the
+   expected "spec is immutable" storage-hooks case) - every genuinely new
+   failure in this whole investigation (findings #5, #10, #11 below) used
+   different wording and slipped through *uncounted*, since the count still
+   matched `expected_errors` by coincidence. A first attempt to fix this by
+   computing failures structurally (total rendered resources minus
+   successful `created`/`configured`/`unchanged` result lines) itself
+   undercounted for a reason not fully run down. Landed instead on matching
+   every known error-line *shape* directly: server-side rejections all
+   start `Error from server (`; client-side ones (kubectl refuses before
+   reaching the API server - missing CRDs, cross-namespace conflicts) don't
+   share that prefix, so a second pattern
+   (`no matches for kind|does not match the namespace|ensure CRDs are
+   installed|cannot be handled as`) catches those. Not exhaustive against
+   every conceivable future error shape, but no longer silently trusts a
+   coincidental count match either.
+
+10. **A version-skew bug inside monitoring-logging's own dependency tree**
+    (not introduced here): its `kubelet` ServiceMonitor sets
+    `spec.endpoints[1].trackTimestampsStaleness`, a field the CRD schema
+    actually bundled in that same dependency's own "crds" subchart doesn't
+    recognize - rejected outright by the API server's strict decoding.
+    Fixed by disabling `kube-prometheus-stack.kubelet.enabled` - minikube's
+    own control plane runs as static pods with no scrapeable kubelet
+    Service of its own anyway, so nothing real was lost.
+
+11. **Five more kube-prometheus-stack Services hardcoded to `kube-system`**
+    (`coreDns`, `kubeControllerManager`, `kubeEtcd`, `kubeProxy`,
+    `kubeScheduler` - scraping the control-plane components that, on a
+    "real" cluster, run there) - conflicts outright with `deploy.sh`'s own
+    single `kubectl apply -n podiumd-minikube -f -` covering the whole
+    manifest at once ("the namespace from the provided object 'kube-system'
+    does not match the namespace 'podiumd-minikube'"). Disabled all five -
+    wouldn't have scraped anything real on minikube regardless.
+
+12. **Loki's query path failed on every single query** ("too many unhealthy
+    instances in the ring"), while the write path worked fine throughout -
+    `loki.commonConfig.replication_factor` defaults to 3, assuming
+    Distributed mode's normal multi-replica setup; with
+    `singleBinary.replicas: 1`, every ring it feeds (ingester, compactor,
+    scheduler, pattern-ingester) only ever has one real member, so the
+    query path's own quorum math ("need N healthy out of replication_factor
+    total") always came up short even though that one member was genuinely
+    `ACTIVE` the whole time. Fixed by setting
+    `loki.commonConfig.replication_factor: 1`.
+
+13. **Alloy shipped zero logs the entire session** - not a crash, just
+    silently zero targets discovered. Root cause: an *invented* values key.
+    An earlier pass (before this file's own findings-in-order list starts)
+    added a `monitoringLogging.alloy.logCollectionNamespaces` override,
+    assuming such a structured field existed - it never did, anywhere in
+    this chart; Alloy's entire log-collection pipeline is one literal
+    River-config *string* (`alloy.alloy.configMap.content`) hardcoding
+    `namespaces { names = ["podiumd", "monitoring"] }` as a server-side API
+    watch filter, and Helm silently drops values keys nothing references,
+    so the invented override was a no-op the whole time with no error ever
+    raised. Fixed by actually overriding `configMap.content` with the same
+    River config, copied verbatim except that one line
+    (`names = ["podiumd-minikube"]`) - confirmed only fixable this way since
+    it's a plain string value, not a structured list Helm could merge.
+
+Two more of these (findings #4/alloy's own AKS-only nodeSelector,
+`kubernetes.azure.com/agentpool: userpool`) turned out to share the exact
+same underlying limitation as finding #9's investigation revealed in
+passing: clearing a map key this deep in a subchart-of-a-subchart tree
+(root chart's own values.yaml → monitoring-logging's own values.yaml →
+alloy's own values.yaml) doesn't reliably work via `null` on this project's
+pinned Helm v3.9.0, confirmed live across several isolated tests - neither
+an empty-map override nor a `null` on the exact key clears it, even though
+`--set` can reach and *overwrite* the same key's value just fine. Rather
+than fight that further, the nodeSelector case was solved by making
+minikube's own node satisfy the selector instead
+(`kubectl label node minikube kubernetes.azure.com/agentpool=userpool`, now
+in `provision-cluster.sh`, unconditionally - harmless if monitoringLogging
+is never enabled).
+
+### Verified live, end to end
+
+After all of the above: `helm template` renders cleanly in both modes
+(default off = raw templates only, `monitoringLogging.enabled=true` = new
+stack only, confirmed no leftover AKS/managed-csi/kube-system assumptions);
+a full `deploy.sh --full --monitoring-logging` applies with zero
+unrecognized errors and every pod `Running`/`Completed`; Grafana is reachable
+at `http://grafana.local/` and all three datasources (Prometheus, Loki,
+Tempo) report healthy; Prometheus's own `/api/v1/targets` shows every scrape
+target `up`, including the two explicit `additionalScrapeConfigs`
+(`zac-admin`, `tempo`); Loki's query path returns real results (not just a
+"success" envelope with no data); Alloy actually discovers and forwards pod
+logs for the right namespace. Not yet re-run against the full `tests/`
+pytest suite with this flag on - that's the next thing to do before calling
+this fully done.

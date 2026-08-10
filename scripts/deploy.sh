@@ -4,7 +4,8 @@
 # scripts/provision-cluster.sh points at as its own next step.
 #
 # Uses `helm template | strip-image-digests.py | disable-service-links.py |
-# exclude-pabc-migration-job.py | kubectl apply`, not `helm install`/`helm
+# exclude-pabc-migration-job.py | exclude-helm-test-hooks.py |
+# split-large-configmaps.py | kubectl apply`, not `helm install`/`helm
 # upgrade`: Helm's own release record embeds the entire
 # resolved chart (including the ~3.87MB podiumd dependency), which exceeds
 # Kubernetes' hardcoded 3MB API request-size limit (see plan.md's step 4
@@ -24,10 +25,34 @@
 # own header) - and applied via that guarded script instead, as its own
 # explicit step below.
 #
+# Helm test hooks (e.g. monitoring-logging's own bundled grafana-test, when
+# monitoringLogging.enabled=true) are excluded for a third reason - see
+# exclude-helm-test-hooks.py's own header - there's no real Helm release for
+# `helm test` to ever run them properly, and applying one as a plain
+# resource just leaves a permanently-failed Pod behind.
+#
+# Large ConfigMaps (currently only monitoring-logging's own bundled Grafana
+# dashboards, when monitoringLogging.enabled=true) are excluded for a fourth,
+# unrelated reason - see split-large-configmaps.py's own header - and applied
+# via `kubectl apply --server-side` separately below instead, which doesn't
+# hit the same limit.
+#
+# When monitoringLogging.enabled=true, this also applies that dependency's
+# own CustomResourceDefinitions first (Prometheus/PrometheusRule/
+# ServiceMonitor/PodMonitor/...) via apply-monitoring-logging-crds.sh - see
+# its own header for why `helm template`, unlike `helm install`, never
+# renders a chart's `crds/` directory at all.
+#
 # Usage:
 #   ./scripts/deploy.sh            # core profile only (matches values.yaml's own default)
 #   ./scripts/deploy.sh --full     # every optional profile enabled too (objecten, objecttypen,
 #                                  # opennotificaties, openarchiefbeheer, openformulieren, metrics, wiremock)
+#   ./scripts/deploy.sh --monitoring-logging   # metrics profile, backed by the monitoring-logging
+#                                  # dependency (loki/alloy/grafana/tempo/kube-prometheus-stack) instead
+#                                  # of templates/metrics/'s raw templates - see values.yaml's
+#                                  # monitoringLogging comment. Kept out of --full: it changes *which*
+#                                  # implementation backs the metrics profile, not an additional one, so
+#                                  # combine explicitly (--full --monitoring-logging) if you want both.
 #   ./scripts/deploy.sh --set some.other=value   # any extra --set flags are passed through
 set -euo pipefail
 
@@ -38,19 +63,39 @@ NAMESPACE="podiumd-minikube"
 source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
 
 EXTRA_SETS=()
-if [ "${1:-}" = "--full" ]; then
-  shift
-  source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
-  EXTRA_SETS=(
-    --set wiremock.enabled=true
-    --set objecten.enabled=true --set podiumd.objecten.enabled=true
-    "${OBJECTEN_SHAPE_SETS[@]}"
-    --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true
-    --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true
-    --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true
-    --set metrics.enabled=true
-  )
-fi
+MONITORING_LOGGING_REQUESTED=false
+while [ "${1:-}" = "--full" ] || [ "${1:-}" = "--monitoring-logging" ]; do
+  case "${1}" in
+    --full)
+      shift
+      source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
+      EXTRA_SETS+=(
+        --set wiremock.enabled=true
+        --set objecten.enabled=true --set podiumd.objecten.enabled=true
+        "${OBJECTEN_SHAPE_SETS[@]}"
+        --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true
+        --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true
+        --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true
+        --set metrics.enabled=true
+      )
+      ;;
+    --monitoring-logging)
+      shift
+      MONITORING_LOGGING_REQUESTED=true
+      # The three flags values.yaml's own monitoringLogging comment says have
+      # to move together: the profile itself, the implementation switch, and
+      # ZAC's OTLP endpoint repointed at monitoring-logging's own
+      # otel-collector Service (named "<release>-opentelemetry-collector" by
+      # that chart's own fullname template, confirmed live via `helm
+      # template` against the real upstream chart).
+      EXTRA_SETS+=(
+        --set metrics.enabled=true
+        --set monitoringLogging.enabled=true
+        --set "podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint=http://${RELEASE_NAME}-opentelemetry-collector:4317"
+      )
+      ;;
+  esac
+done
 # Remaining args (e.g. `--set some.other=value`, per this script's own
 # usage comment) are forwarded to every render() call below via "$@" -
 # render()'s own "$@" is its *call-site* args (`-s templates/...` for the
@@ -58,11 +103,17 @@ fi
 # read again inside render() itself.
 EXTRA_ARGS=("$@")
 
+LARGE_CONFIGMAPS_FILE="$(mktemp)"
+trap 'rm -f "${LARGE_CONFIGMAPS_FILE}"' EXIT
+export LARGE_CONFIGMAPS_OUT="${LARGE_CONFIGMAPS_FILE}"
+
 render() {
   helm template "${RELEASE_NAME}" "${CHART_DIR}" -n "${NAMESPACE}" "${EXTRA_SETS[@]}" "${EXTRA_ARGS[@]}" "$@" \
     | python3 "${CHART_DIR}/scripts/lib/strip-image-digests.py" \
     | python3 "${CHART_DIR}/scripts/lib/disable-service-links.py" \
-    | python3 "${CHART_DIR}/scripts/lib/exclude-pabc-migration-job.py"
+    | python3 "${CHART_DIR}/scripts/lib/exclude-pabc-migration-job.py" \
+    | python3 "${CHART_DIR}/scripts/lib/exclude-helm-test-hooks.py" \
+    | python3 "${CHART_DIR}/scripts/lib/split-large-configmaps.py"
 }
 
 echo "Ensuring namespace '${NAMESPACE}' exists..."
@@ -85,6 +136,12 @@ if kubectl get job storage-permissions-fix -n "${NAMESPACE}" > /dev/null 2>&1; t
   kubectl wait --for=condition=complete job/storage-permissions-fix -n "${NAMESPACE}" --timeout=60s
 fi
 
+if [ "${MONITORING_LOGGING_REQUESTED}" = true ]; then
+  echo
+  echo "Applying monitoring-logging's own CRDs first (see apply-monitoring-logging-crds.sh's own comment for why this is needed)..."
+  "${CHART_DIR}/scripts/lib/apply-monitoring-logging-crds.sh"
+fi
+
 echo
 echo "Applying the full manifest..."
 set +e
@@ -101,7 +158,24 @@ echo "${apply_output}"
 # those to expect from the same render used above, rather than a hardcoded
 # number, so this stays correct regardless of which profiles are enabled.
 expected_errors=$(( $(render -s templates/storage-hooks.yaml | grep -c "^kind: PersistentVolume$") * 2 ))
-actual_errors="$(grep -c "error when applying patch" <<< "${apply_output}" || true)"
+# Counts every *kind* of apply failure seen so far, not just the immutable-
+# spec one - confirmed live that matching a single substring ("error when
+# applying patch") is fragile: other, genuinely different failures (a
+# ServiceMonitor rejected by a strict-decoding CRD-schema mismatch; a
+# PodMonitor whose own metadata.namespace is hardcoded to "kube-system",
+# conflicting with this script's own `-n podiumd-minikube`) use entirely
+# different wording and slipped through uncounted the same way the
+# CRDs-missing case first did. Server-side rejections all start "Error from
+# server (...)"; client-side ones (kubectl refuses before even reaching the
+# API server) don't share that prefix, hence the second pattern. (Tried
+# computing this structurally instead - total resources in the render minus
+# successful "created"/"configured"/"unchanged" result lines - but that
+# undercounted for a reason not fully run down; matching known error-line
+# shapes directly is more legible anyway.)
+actual_errors=$(( \
+  $(grep -c "^Error from server (" <<< "${apply_output}" || true) \
+  + $(grep -cE "no matches for kind|does not match the namespace|ensure CRDs are installed|cannot be handled as" <<< "${apply_output}" || true) \
+))
 
 echo
 if [ "${apply_exit}" -eq 0 ]; then
@@ -113,6 +187,12 @@ else
   echo "WARNING: ${actual_errors} apply error(s), expected exactly ${expected_errors} from" >&2
   echo "the known immutable-spec case - re-check the output above for something new." >&2
   exit 1
+fi
+
+if [ -s "${LARGE_CONFIGMAPS_FILE}" ]; then
+  echo
+  echo "Applying large ConfigMap(s) via --server-side (see split-large-configmaps.py's own comment)..."
+  kubectl apply --server-side -n "${NAMESPACE}" -f "${LARGE_CONFIGMAPS_FILE}"
 fi
 
 echo
