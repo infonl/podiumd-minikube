@@ -105,6 +105,13 @@ entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
 | `apply-pabc-migrations.sh` | The **only** safe way to (re)create the `pabc-migrations` Job — it's not idempotent (clears PABC's database before reseeding), so this refuses to run against an already-seeded database unless `--force` is passed |
 | `seed-fixtures.sh` | Loads demo/fixture data into objecten/objecttypen (or `openobject`, whichever shape is currently selected — see `set-podiumd-version.sh`) via `manage.py loaddata`, matching docker-compose's own `*-import` containers for these apps. Run manually after `deploy.sh` once the objecten profile is up — safe to re-run |
 
+`reset-namespace.sh` vs `teardown-cluster.sh`: use `reset-namespace.sh`
+to wipe app data and redeploy clean (faster - keeps the cluster,
+Traefik, and loaded images); reach for `teardown-cluster.sh` only when
+the cluster/VM itself is broken or you want a genuinely fresh minikube
+profile (slower to recover from - needs `provision-cluster.sh` again
+afterward, not just `deploy.sh`).
+
 `deploy.sh` already calls `apply-pabc-migrations.sh` itself as its own last
 step, every run — you don't need to run it by hand for a normal deploy,
 first or repeat. It's excluded from the general manifest apply on purpose
