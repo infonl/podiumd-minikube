@@ -96,6 +96,45 @@ entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
 `openarchiefbeheer-web`/`-ui`, `openformulieren-nginx`/`-web`, `grafana`,
 `mailpit`.
 
+## Resource usage
+
+No `metrics-server` is installed in this cluster, so `kubectl top` isn't
+available. Measure the same way this project's own live investigations
+have: `docker stats minikube --no-stream` (real usage, docker driver only)
+for the actual number, and `kubectl describe node minikube`'s own
+"Allocated resources" section for what's been requested/limited at the
+Kubernetes scheduling level (usually lower than real usage, since not
+every container sets both).
+
+Measured on a full `deploy.sh --full` (every optional profile,
+`monitoringLogging.enabled=true` — the heavier loki/alloy/kube-prometheus-
+stack implementation of the `metrics` profile), against an idle-ish
+cluster (no active load beyond the apps' own background/health-check
+traffic), on a 20Gi-capped minikube container:
+
+| | Requests | Limits | Real (docker stats) |
+|---|---|---|---|
+| CPU | 3465m / 8 (43%) | 2650m / 8 (33%) | 64–86% (bursty) |
+| Memory | 10058Mi / 32Gi (31%) | 8308Mi / 32Gi (25%) | ~17.8Gi / 20Gi (**~89%**) |
+
+**`monitoringLogging.enabled` is the single biggest lever to reduce this
+footprint** — it adds roughly a dozen extra pods (Loki, Alloy,
+kube-prometheus-stack, Prometheus Pushgateway) on top of the
+Tempo/Grafana/otel-collector functionality the default raw-templates
+implementation already provides. If you're not specifically testing that
+implementation, disable it with:
+
+```bash
+./scripts/set-podiumd-version.sh <version> --disable-monitoring-logging
+```
+
+(or edit `values.yaml`'s `monitoringLogging.enabled` directly) and
+redeploy — see "What's running" above for what that trades away
+(Loki/Alloy's log-shipping pipeline has no raw-templates equivalent at
+all). No single running process was found to be a leak or runaway when
+this was last measured — the ~89% memory figure above is the sum of ~40
+normal pods, not a bug.
+
 ## Scripts
 
 | Script | What it does |
