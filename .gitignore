@@ -23,3 +23,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+
+# Local machine config - direnv env overrides and a local kubeconfig
+# directory (KUBECONFIG=/home/kvv/.kube/config.d/minikube, seen live in
+# `minikube start` output - can hold cluster credentials, never commit)
+.envrc
+.kube/
