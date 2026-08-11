@@ -1099,13 +1099,50 @@ podiumd:
     configuration:
       job:
         enabled: false # see plan.md step 5 scope note - openformulieren-init's demo-data seeding (BRP service link, klantinteracties API group, importing the test form) isn't replicated here
+      # Unlike objecttypen/openzaak/opennotificaties, this chart never
+      # wires configuration.superuser to an actual user-creation mechanism
+      # (confirmed live: grepped every template in the vendored chart for
+      # "superuser" - zero hits outside a commented-out
+      # django-setup-configuration example) - these values are consumed by
+      # templates/openformulieren/create-superuser-job.yaml instead, a
+      # custom Job added for exactly this gap. See that Job's own header
+      # comment.
       superuser:
         username: admin
         password: admin
         email: admin@example.com
+    # See settings.djangoSettingsModule below for why the no2fa-settings
+    # mount exists - same ConfigMap+extraVolumes+extraVolumeMounts pattern
+    # already used for openzaak's/opennotificaties's/openarchiefbeheer's
+    # own docker_no2fa.py fix.
+    extraVolumes:
+      - name: no2fa-settings
+        configMap:
+          name: openformulieren-no2fa-settings
+    extraVolumeMounts:
+      - name: no2fa-settings
+        subPath: docker_no2fa.py
+        mountPath: /app/src/openforms/conf/docker_no2fa.py
+        readOnly: true
     settings:
       secretKey: openFormulierenSecretKey
       allowedHosts: openformulieren-nginx.local,openformulieren-web.local
+      # Chart default (true) makes session/CSRF cookies Secure-only -
+      # confirmed live, the browser silently drops both over our plain
+      # http://openformulieren-nginx.local ingress, failing django-admin
+      # login with a CSRF error before a single credential is even
+      # checked. Unlike openzaak/opennotificaties/objecttypen, this chart
+      # does expose a dedicated field for it (no extraEnvVars needed).
+      isHttps: false
+      # Confirmed live: DISABLE_2FA is only read by openforms.conf.dev,
+      # not the conf.docker->production->base chain this container
+      # actually uses, so there's no settings.disable2fa-equivalent field
+      # on this chart at all - without this override, a fresh superuser
+      # with no registered device hits a real "Tweestapsauthenticatie
+      # instellen" (set up two-step auth) wall instead of reaching the
+      # admin. Same docker_no2fa.py shim as
+      # openzaak/opennotificaties/objecttypen above.
+      djangoSettingsModule: openforms.conf.docker_no2fa
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
       email:

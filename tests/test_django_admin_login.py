@@ -30,11 +30,17 @@ from conftest import host_url, host_headers
 
 def _login(traefik_ip, hostname, username, password):
     session = requests.Session()
-    login_url = host_url(traefik_ip, "/admin/login/")
     headers = {**host_headers(hostname), "Referer": f"http://{hostname}/admin/login/"}
 
-    login_page = session.get(login_url, headers=headers, timeout=10)
+    # GET /admin/login/ and follow wherever it redirects (openformulieren
+    # splits into a separate /admin/classic-login/?next=/admin/ view) - the
+    # POST below must target that final URL, not the original one, or it
+    # 404s/re-redirects instead of submitting the form.
+    login_page = session.get(
+        host_url(traefik_ip, "/admin/login/"), headers=headers, timeout=10
+    )
     assert login_page.status_code == 200
+    login_url = login_page.url
 
     csrf_match = re.search(
         r'name="csrfmiddlewaretoken" value="([^"]+)"', login_page.text
@@ -47,6 +53,11 @@ def _login(traefik_ip, hostname, username, password):
         f"{hostname}: login page did not render the two-factor wizard's "
         "step field - did the form shape change?"
     )
+    # Some apps (openformulieren) pre-fill this from a ?next= query param
+    # on the redirected URL - extract it rather than hardcoding "", or
+    # submitting it empty can land on a different page post-login.
+    next_match = re.search(r'name="next" value="([^"]*)"', login_page.text)
+    next_value = next_match.group(1) if next_match else ""
 
     return session.post(
         login_url,
@@ -60,7 +71,7 @@ def _login(traefik_ip, hostname, username, password):
             "admin_login_view-current_step": step_match.group(1),
             "auth-username": username,
             "auth-password": password,
-            "next": "",
+            "next": next_value,
         },
         timeout=10,
     )
@@ -135,3 +146,24 @@ def test_opennotificaties_admin_login(traefik_ip, enabled_profiles):
         pytest.skip("'opennotificaties' profile is not deployed")
     response = _login(traefik_ip, "opennotificaties.local", "admin", "admin")
     _assert_logged_in(response, "admin", "opennotificaties.local")
+
+
+def test_openformulieren_admin_login(traefik_ip, enabled_profiles):
+    """
+    Optional profile - unlike the other three, this chart's own
+    configuration.superuser field is wired to nothing at all (confirmed
+    live: no template in the vendored chart references "superuser" outside
+    a commented-out example), so the admin account is instead created by
+    a custom Job (templates/openformulieren/create-superuser-job.yaml,
+    idempotent get_or_create + set_password). Also needs the same
+    isHttps + docker_no2fa.py shim fix as the others - same confirmed-live
+    2FA enforcement for a fresh superuser.
+
+    /admin/login/ redirects here to /admin/classic-login/?next=/admin/
+    (this app splits OIDC and classic login into separate views) -
+    _login()'s redirect-following handles that.
+    """
+    if not enabled_profiles.get("openformulieren"):
+        pytest.skip("'openformulieren' profile is not deployed")
+    response = _login(traefik_ip, "openformulieren-nginx.local", "admin", "admin")
+    _assert_logged_in(response, "admin", "openformulieren-nginx.local")

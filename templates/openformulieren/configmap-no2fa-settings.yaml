@@ -1,0 +1,10 @@
+{{- if .Values.podiumd.openformulieren.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openformulieren-no2fa-settings
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  docker_no2fa.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/openformulieren/docker_no2fa.py" | quote }}
+{{- end }}

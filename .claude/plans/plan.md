@@ -2793,8 +2793,51 @@ way), openzaak (always-on core, no skip), and opennotificaties (skips if
 its profile is off) - a shared `_login()` helper submits the two-factor
 wizard form's `admin_login_view-current_step` field correctly for all
 three, since the login form itself is real everywhere even where the
-second factor turns out not to be enforceable. Full suite re-run: 44
-passed, 3 skipped, 3 pre-existing failures unrelated to this work (the
-raw-templates Grafana pod 503ing on its own datasource/proxy endpoints -
-present before this session touched anything).
-(44 passed, 3 skipped, 0 failed).
+second factor turns out not to be enforceable. Full suite re-run clean
+aside from the raw-templates Grafana pod's own pre-existing, intermittent
+503s on its datasource/proxy endpoints (unrelated to this work, present
+before this session touched anything).
+
+### openformulieren: the actual superuser-creation gap
+
+Followed up on the deferred openformulieren fix. Applied the same
+isHttps/docker_no2fa.py cookie+2FA fix as the other three (package name
+`openforms`, same "Tweestapsauthenticatie instellen" wall confirmed live
+without it) - straightforward, matching precedent exactly.
+
+The real gap was the missing superuser mechanism. Added
+`templates/openformulieren/create-superuser-job.yaml`, a custom one-shot
+Job running a small vendored idempotent script
+(`vendor/.../openformulieren/create_superuser.py`, `get_or_create` +
+`set_password` so re-applying an already-succeeded, unchanged Job spec
+stays a safe no-op - no guard script needed, unlike pabc-migrations,
+since this is never destructive) via `manage.py shell < script.py`,
+reusing the same Secret/ConfigMap (`envFrom`) the Deployment itself uses
+for database connectivity.
+
+First attempt failed with a confusing `AUTH_USER_MODEL refers to model
+'auth.User' that has not been installed` instead of a plain
+`ModuleNotFoundError` - the Job inherits `DJANGO_SETTINGS_MODULE=
+openforms.conf.docker_no2fa` from the shared ConfigMap (needed by the
+*Deployment*), but never mounts that shim file itself (no reason to - the
+Job never touches a login view), so importing a settings module that
+doesn't exist on disk breaks Django's settings loading in a misleading
+way. Fixed by explicitly overriding `DJANGO_SETTINGS_MODULE` back to the
+real `openforms.conf.docker` in the Job's own `env:` (which takes
+precedence over the same-named `envFrom:` entry).
+
+Also found and fixed a real test regression from this Job: `test_pods.py`'s
+`ONE_SHOT_JOB_PREFIXES` allowlist didn't know about it yet, so the
+`Completed` (not `Ready`) superuser-creation pod started failing
+`test_long_running_pods_are_ready`. Added it alongside pabc-migrations/
+storage-permissions-fix/etc.
+
+Extended `tests/test_django_admin_login.py`'s shared `_login()` helper to
+follow redirects and POST to the *final* URL rather than the original
+`/admin/login/` - openformulieren is the first app here to split classic
+and OIDC login into separate views (`/admin/login/` 302s to
+`/admin/classic-login/?next=/admin/`), and also to extract the form's
+`next` hidden field rather than hardcoding it empty, since this app
+pre-fills it from that query param. Full suite re-run clean (same
+pre-existing Grafana intermittency aside): all four django-admin logins
+(objecttypen, openzaak, opennotificaties, openformulieren) now pass.
