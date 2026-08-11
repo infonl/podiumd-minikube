@@ -675,9 +675,33 @@ podiumd:
         # running the image's own init.sh - not replicated here; see
         # plan.md's step 5 notes on scope).
         enabled: false
+      # No compose equivalent to match (objecten isn't part of
+      # dimpact-zaakafhandelcomponent's docker-compose stack at all - see
+      # this block's own top comment). Unlike openformulieren/openklant/
+      # openarchiefbeheer, this chart's start.sh genuinely reads
+      # OBJECTS_SUPERUSER_USERNAME/EMAIL/PASSWORD at boot and creates the
+      # account itself (confirmed live) - same wiring as objecttypen's own
+      # superuser block, no custom Job needed here.
+      superuser:
+        username: admin
+        password: admin
+        email: admin@example.com
     settings:
       secretKey: objectenApiSecretKey
       allowedHosts: objecten.local
+      # Chart default (true) makes session/CSRF cookies Secure-only -
+      # confirmed live, the browser silently drops both over our plain
+      # http://objecten.local ingress, failing django-admin login with a
+      # CSRF error before a single credential is even checked.
+      isHttps: false
+      # Unlike most other apps fixed here, this works natively - confirmed
+      # live by reading open_api_framework.conf.base (the shared maykinmedia
+      # library objecten's own conf/base.py wildcard-imports from, same as
+      # openklant) directly inside the running pod: it reads DISABLE_2FA
+      # itself, in the real production settings chain, and sets
+      # MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS accordingly - no
+      # docker_no2fa.py-style shim needed here at all.
+      disable2fa: true
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
       email:

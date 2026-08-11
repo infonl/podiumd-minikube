@@ -2901,5 +2901,19 @@ skips if its profile is off) and `tests/test_pods.py`'s one-shot allowlist
 with both new Jobs. Full suite re-run clean (same pre-existing Grafana
 intermittency aside): all six django-admin logins in this stack
 (objecttypen, openzaak, opennotificaties, openformulieren, openklant,
-openarchiefbeheer) now pass - every django-admin-having app in this
-project has a real, tested credential login.
+openarchiefbeheer) now pass.
+
+Declared that "every django-admin-having app" was covered - it wasn't:
+missed **objecten** (objects-api), a genuinely separate app from
+objecttypen with its own admin. Checked it the same way and it turned out
+to be the simplest fix of all seven: this chart's `start.sh` already
+reads `OBJECTS_SUPERUSER_USERNAME/EMAIL/PASSWORD` at boot and creates the
+account itself (same wiring objecttypen already had), and its
+`conf/base.py` wildcard-imports the same shared `open_api_framework`
+library as openklant, so `settings.disable2fa: true` works natively too
+- just `isHttps`/`disable2fa`/`superuser` in values.yaml, no shim, no
+custom Job. Added `test_objecten_admin_login`. Full suite re-run clean,
+including the previously-flaky Grafana checks this time: 51 passed, 3
+skipped, 0 failed. All seven django-admin-having apps in this project
+(objecten, objecttypen, openzaak, opennotificaties, openformulieren,
+openklant, openarchiefbeheer) now have a real, tested credential login.

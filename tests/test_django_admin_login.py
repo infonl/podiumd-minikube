@@ -222,3 +222,25 @@ def test_openarchiefbeheer_admin_login(traefik_ip, enabled_profiles):
         pytest.skip("'openarchiefbeheer' profile is not deployed")
     response = _login(traefik_ip, "openarchiefbeheer-web.local", "admin", "admin")
     _assert_logged_in(response, "admin", "openarchiefbeheer-web.local")
+
+
+def test_objecten_admin_login(traefik_ip, enabled_profiles):
+    """
+    objecten's own admin (objects-api), distinct from objecttypen's -
+    unlike openformulieren/openklant/openarchiefbeheer, this chart's
+    start.sh genuinely reads OBJECTS_SUPERUSER_USERNAME/EMAIL/PASSWORD at
+    boot and creates the account itself (confirmed live), same wiring as
+    objecttypen's own superuser block - no custom Job needed. Also needs
+    no docker_no2fa.py shim: objecten's conf/base.py wildcard-imports the
+    same shared open_api_framework library as openklant, which reads
+    DISABLE_2FA directly in the real production settings chain.
+
+    Skips whenever `enabled_profiles` doesn't report a live `objecten`
+    pod - unlike objecttypen, this one exists (aliased or not) in both the
+    classic and openobject/merged podiumd shapes, so no shape-specific
+    skip reasoning is needed here, just the plain profile-off case.
+    """
+    if not enabled_profiles.get("objecten"):
+        pytest.skip("'objecten' profile is not deployed")
+    response = _login(traefik_ip, "objecten.local", "admin", "admin")
+    _assert_logged_in(response, "admin", "objecten.local")
