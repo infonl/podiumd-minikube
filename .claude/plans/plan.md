@@ -2712,4 +2712,89 @@ values.yaml's own comment on that key) and what most day-to-day dev
 sessions actually need. Still fully available via `set-podiumd-version.sh
 <version> <monitoring-logging-version>` for whoever needs to test that
 implementation specifically. Full suite re-run clean against this default
+
+## Django-admin credential logins: objecttypen, then openzaak/opennotificaties
+
+Started from a simple ask (access objecttypen's django-admin) and ended up
+finding + fixing the same underlying bug across four apps.
+
+**objecttypen**: no superuser existed at all (`configuration.superuser` was
+never set) and, once added, login still failed with a CSRF error - the
+chart's session/CSRF cookies default `Secure`-only (no dedicated
+`settings.isHttps`/cookie field on this chart, unlike others), so the
+browser silently drops both over our plain `http://objecttypen.local`
+ingress. Fixed via `extraEnvVars: IS_HTTPS=False`.
+
+Asked "are there other django-admin interfaces that need a test?" -
+checked every django-admin login in the stack the same way (actually
+submitting credentials, not just checking the login page returns 200) and
+found **openzaak, opennotificaties, and openformulieren already have
+superuser credentials configured (matching compose) but their admin login
+is currently broken by the exact same class of bug** - none of them had
+ever actually been logged into via credentials before (only OIDC-based
+ZAC-through-Keycloak and page-reachability checks existed).
+
+Initially assumed objecttypen only needed the cookie fix (a plain POST
+landed on the dashboard immediately) and mistakenly credited that to also
+setting `settings.disable2fa: true`. **That premise was wrong twice over**:
+first, direct inspection of each app's actual installed source *inside the
+running pods* (`kubectl exec ... cat .../conf/*.py`) showed `DISABLE_2FA`
+is only ever read by each app's own dev-only settings module
+(`conf.dev`/`conf.ci`), never by the `conf.docker -> production` chain
+these containers actually run - `settings.disable2fa` is a dead
+values.yaml field for every one of these apps, not just some. Second, the
+manual test that seemed to "prove" objecttypen was the exception
+(`kubectl set env deployment/x DISABLE_2FA-` then still logging in) was
+itself invalid: that command only removes an explicit `env:` entry, and
+can't suppress a value still arriving via `envFrom:` from the ConfigMap -
+so `DISABLE_2FA` was never actually absent during that test. A real
+`values.yaml`-driven redeploy with the key genuinely gone hit the same
+"Set up MFA" wall as the others. Lesson: prefer "confirmed live" checks
+that change what's actually deployed, not just what a currently-running
+pod's env looks like after an imperative patch.
+
+The real, working fix (matching `openarchiefbeheer`'s already-existing
+`docker_no2fa.py` from build-order step 5) is a small vendored Django
+settings module per app (`from <app>.conf.docker import *` plus
+`MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS = AUTHENTICATION_BACKENDS`), mounted
+over `conf/docker_no2fa.py` via the same ConfigMap+extraVolumes+
+extraVolumeMounts pattern, with `settings.djangoSettingsModule` pointed at
+it. Confirmed via `kubectl exec ... python3 -c "import debug_toolbar"`
+(`ModuleNotFoundError` in every one of these images) that switching
+`DJANGO_SETTINGS_MODULE` to the real `conf.dev` instead isn't an option -
+it unconditionally pulls in `django-debug-toolbar`, not installed in
+production images. Applied to objecttypen, openzaak, and opennotificaties;
+each app's actual Django project package differs from its profile name
+(`objecttypes`, `openzaak`, `nrc` respectively - found live via each
+pod's own `/app/src/*/conf/` layout, not guessed from the chart name).
+
+**openformulieren deliberately left unfixed.** Same `isHttps`/2FA-wall
+symptoms confirmed live, but a structurally different problem: this
+chart's `configuration.superuser` values.yaml key is wired to *nothing* -
+grepped every template in the chart, zero references - so the
+admin/admin credentials already sitting in values.yaml never create an
+actual user. Django's own `manage.py createsuperuser --noinput` works
+fine directly (confirmed via `kubectl exec`), so it's fixable, just needs
+a real Job/mechanism added, not a settings tweak - a big enough scope
+difference from the other three that bundling it in here would've meant
+either a rushed Job design or an untested one. Follow-up, not now. (One
+brief live mistake during this investigation: testing openformulieren's
+shim by `kubectl cp`-ing the settings file into the *running* pod, then
+switching `DJANGO_SETTINGS_MODULE` and restarting the Deployment,
+crash-looped the *new* pod - `kubectl cp` only touches the currently
+running pod's ephemeral filesystem, not what a fresh pod's image
+contains. Reverted immediately; no lasting effect since the values.yaml
+change was never made for this app.)
+
+Added `tests/test_django_admin_login.py` (replacing the objecttypen-only
+draft) covering objecttypen (skips on the openobject/merged podiumd shape
+or the profile being off - no separate subchart to test against either
+way), openzaak (always-on core, no skip), and opennotificaties (skips if
+its profile is off) - a shared `_login()` helper submits the two-factor
+wizard form's `admin_login_view-current_step` field correctly for all
+three, since the login form itself is real everywhere even where the
+second factor turns out not to be enforceable. Full suite re-run: 44
+passed, 3 skipped, 3 pre-existing failures unrelated to this work (the
+raw-templates Grafana pod 503ing on its own datasource/proxy endpoints -
+present before this session touched anything).
 (44 passed, 3 skipped, 0 failed).

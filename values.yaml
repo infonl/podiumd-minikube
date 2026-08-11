@@ -384,6 +384,24 @@ podiumd:
       # DisallowedHost 400 error page, since "openzaak.local" was never in
       # that list.
       allowedHosts: openzaak.local
+      # Chart default (true) makes session/CSRF cookies Secure-only -
+      # confirmed live, the browser silently drops both over our plain
+      # http://openzaak.local ingress, failing django-admin login with a
+      # CSRF error before a single credential is even checked. No compose
+      # equivalent to match (compose never exposes openzaak's admin login
+      # through a browser at all) - purely for local admin access.
+      isHttps: false
+      # Confirmed live: DISABLE_2FA is only read by openzaak.conf.dev/.ci,
+      # neither part of the conf.docker->production->includes.base chain
+      # this container actually uses, so settings.disable2fa is a dead
+      # values.yaml field for this chart - without this override, a fresh
+      # superuser with no registered device hits a real "Tweestapsauthenticatie
+      # instellen" (set up two-step auth) wall instead of reaching the
+      # admin. See the vendored docker_no2fa.py's own header for why
+      # DJANGO_SETTINGS_MODULE=openzaak.conf.dev isn't an option either
+      # (pulls in django-debug-toolbar, not installed in this production
+      # image) - same fix already used for openarchiefbeheer.
+      djangoSettingsModule: openzaak.conf.docker_no2fa
       # Chart default is "localhost:25" - a compose-only value that's just
       # a no-op inside this pod in Kubernetes. Pointed at mailpit (see
       # templates/mailpit/) instead, matching compose's own openzaak-mail
@@ -420,6 +438,9 @@ podiumd:
       - name: fake-test-document
         configMap:
           name: openzaak-fake-test-document
+      - name: no2fa-settings
+        configMap:
+          name: openzaak-no2fa-settings
     extraVolumeMounts:
       - name: fake-test-document
         mountPath: /app/private-media/uploads/2023/10/fake-test-document.pdf
@@ -430,6 +451,10 @@ podiumd:
       - name: fake-test-document
         mountPath: /app/private-media/uploads/2023/12/fake-test-document.pdf
         subPath: fake-test-document.pdf
+      - name: no2fa-settings
+        subPath: docker_no2fa.py
+        mountPath: /app/src/openzaak/conf/docker_no2fa.py
+        readOnly: true
     ingress:
       enabled: true
       className: traefik
@@ -711,14 +736,36 @@ podiumd:
     extraEnvVars:
       - name: IS_HTTPS
         value: "False"
+    # See settings.djangoSettingsModule below for why this mount exists -
+    # same ConfigMap+extraVolumes+extraVolumeMounts pattern already used
+    # for openzaak's/opennotificaties'/openarchiefbeheer's own
+    # docker_no2fa.py fix.
+    extraVolumes:
+      - name: no2fa-settings
+        configMap:
+          name: objecttypen-no2fa-settings
+    extraVolumeMounts:
+      - name: no2fa-settings
+        subPath: docker_no2fa.py
+        mountPath: /app/src/objecttypes/conf/docker_no2fa.py
+        readOnly: true
     settings:
       secretKey: objecttypesApiSecretKey
       allowedHosts: objecttypen.local
-      # Confirmed live: chart default (false) makes django-admin login a
-      # django-two-factor-auth wizard (extra "admin_login_view-current_step"
-      # form field) instead of a plain username/password form. Disabling
-      # it is enough to log in with just the superuser credentials above.
-      disable2fa: true
+      # Confirmed live (the hard way - an earlier version of this comment
+      # claimed objecttypen never enforces 2FA at all, based on a manual
+      # test that turned out to be invalid: `kubectl set env ... KEY-` only
+      # removes an explicit env: entry, it can't suppress a value still
+      # coming from this ConfigMap via envFrom, so that "proof" was
+      # actually still running with DISABLE_2FA=True the whole time). A
+      # real values.yaml-driven redeploy with the key genuinely absent
+      # does hit a "Set up MFA" wall for a fresh superuser with no
+      # registered device - DISABLE_2FA is only read by objecttypes'
+      # own conf.dev, not the conf.docker->production chain this container
+      # actually uses. Same docker_no2fa.py shim as
+      # openzaak/opennotificaties/openforms below (see
+      # settings.djangoSettingsModule).
+      djangoSettingsModule: objecttypes.conf.docker_no2fa
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
       email:
@@ -774,6 +821,16 @@ podiumd:
     settings:
       secretKey: opennotificatiesApiSecretKey
       allowedHosts: opennotificaties.local
+      # See openzaak's own isHttps comment above - same chart-default
+      # (Secure-only cookies dropped by the browser over plain http://,
+      # confirmed live), same fix.
+      isHttps: false
+      # See openzaak's own djangoSettingsModule comment above - same
+      # DISABLE_2FA-only-lives-in-conf.dev gap, confirmed live against the
+      # same "Tweestapsauthenticatie instellen" wall (opennotificaties'
+      # actual Django project package is "nrc", not "opennotificaties" -
+      # confirmed against the running pod's own /app/src/nrc/conf/ layout).
+      djangoSettingsModule: nrc.conf.docker_no2fa
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
       email:
@@ -836,6 +893,18 @@ podiumd:
         value: rabbitmq
       - name: RABBITMQ_PORT
         value: "5672"
+    # See settings.djangoSettingsModule above for why this mount exists -
+    # same ConfigMap+extraVolumes+extraVolumeMounts pattern already used
+    # for openzaak's/openarchiefbeheer's own docker_no2fa.py fix.
+    extraVolumes:
+      - name: no2fa-settings
+        configMap:
+          name: opennotificaties-no2fa-settings
+    extraVolumeMounts:
+      - name: no2fa-settings
+        subPath: docker_no2fa.py
+        mountPath: /app/src/nrc/conf/docker_no2fa.py
+        readOnly: true
     ingress:
       enabled: true
       className: traefik
