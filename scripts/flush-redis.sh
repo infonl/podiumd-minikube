@@ -13,12 +13,18 @@
 #   DB 0: openzaak/openklant/objecten/objecttypen/opennotificaties cache+axes,
 #         PLUS openarchiefbeheer's cache+axes+choices AND its Celery
 #         broker/result-backend (all on db0 for that app - no separation)
-#   DB 1: openzaak/objecten Celery broker/result-backend, opennotificaties'
-#         configured-but-unused Celery db (its real broker is RabbitMQ)
-#   DB 2: openklant's configured-but-inactive Celery db (its worker stays
-#         at replicaCount 0), PLUS openformulieren's cache+axes+
-#         portalLocker AND its Celery broker/result-backend (all on db2 -
-#         same no-separation situation as openarchiefbeheer)
+#   DB 1: objecten's Celery broker/result-backend, opennotificaties'
+#         configured-but-unused Celery result-backend (its real broker is
+#         RabbitMQ)
+#   DB 2: openformulieren's cache+axes+portalLocker AND its Celery
+#         broker/result-backend (all on db2 - no separation for this app)
+#   DB 3: openzaak's Celery broker/result-backend - its own dedicated DB,
+#         not db1, specifically so its now-always-on worker (see
+#         values.yaml's own worker.replicaCount comment) doesn't compete
+#         with objecten's for the same queue
+#   DB 4: openklant's Celery broker/result-backend - same reasoning as db3,
+#         kept off db2 so its now-always-on worker doesn't compete with
+#         openformulieren's
 #
 # Default behaviour is a full FLUSHALL - clears every DB, cache and Celery
 # state alike. Pass --db N to flush a single DB instead if you specifically
@@ -51,14 +57,14 @@ if [ -n "${DB}" ]; then
   after="$(redis_cli -n "${DB}" DBSIZE)"
   echo "DB ${DB}: ${after} key(s) after flush."
 else
-  echo "Key counts before flush (DBs 0-2, the only ones any app here uses):"
-  for i in 0 1 2; do
+  echo "Key counts before flush (DBs 0-4, the only ones any app here uses):"
+  for i in 0 1 2 3 4; do
     echo "  DB ${i}: $(redis_cli -n "${i}" DBSIZE) key(s)"
   done
   redis_cli FLUSHALL > /dev/null
   echo "Flushed all DBs."
   echo "Key counts after flush:"
-  for i in 0 1 2; do
+  for i in 0 1 2 3 4; do
     echo "  DB ${i}: $(redis_cli -n "${i}" DBSIZE) key(s)"
   done
 fi
