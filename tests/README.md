@@ -56,6 +56,7 @@ exclusive implementations of the same profile, so `test_metrics.py` and
 | `test_pods.py` | Every pod is `Running`/`Succeeded`, every long-running container is `Ready`, the core stack is present |
 | `test_reachability.py` | Every Ingress hostname (core + profile-gated) returns its expected status code |
 | `test_login_flow.py` | The full OIDC login flow through `zac.local` — redirect to Keycloak, login form, credential submission, authorization code, callback, landing on the authenticated app shell |
+| `test_pkce.py` | PKCE (RFC 9700): pabc's own middleware always sends a `code_challenge`, Keycloak actually validates it end to end (login form → credentials → authorization code → callback), and zac's client is guarded against having PKCE re-enabled before ZAC itself supports it |
 | `test_browser.py` | Same login flow, but through a real (headless Chromium) browser via Playwright — proves the SPA actually renders/hydrates after login, not just that the HTTP redirect chain succeeds |
 | `test_database.py` | All expected Postgres databases exist, PostGIS is installed where needed, ZAC's own ZGW client credentials are seeded in Open Zaak |
 | `test_metrics.py` | Grafana's provisioned datasources and Prometheus's scrape targets are actually healthy (raw-templates implementation - skips if `monitoringLogging.enabled=true` instead) |
