@@ -79,6 +79,27 @@ here is a live reference — this project never reads
   (no values.yaml field for it - the chart's `zac` container env comes
   entirely from its own generated ConfigMap/Secret, so this needs a Helm
   post-renderer or an upstream chart change).
+  Also: seven new clients added (`openzaak`, `openklant`, `objecten`,
+  `objecttypen`, `opennotificaties`, `openformulieren`,
+  `openarchiefbeheer`) - none exist in the original imported realm at all,
+  since none of these apps' own django-admin login goes through OIDC by
+  default in this project (plain username/password, matching compose).
+  Added ahead of actually wiring each one up in `values.yaml`'s
+  `podiumd.<app>.configuration.data` (`oidc_db_config_admin_auth`), per the
+  production podiumd chart's own PKCE rollout plan (see
+  `docs/apps/keycloak/keycloak-security-updates.md`'s PKCE Enforcement
+  section, in the sibling `helm-charts` repo - not vendored here) - enabling
+  it for every component at once caused a real production incident
+  (HTTP 403 on every login page, some components' bundled
+  `mozilla_django_oidc` too old for PKCE) and was rolled back. `openzaak`
+  is the only one with `pkce.code.challenge.method: "S256"` set and an
+  actual `oidc_db_config_admin_auth` step wired up so far - confirmed live,
+  its bundled `mozilla_django_oidc` (5.0.2) supports it. The other five
+  real Django apps' clients are ready (secret, redirectUris) but their
+  `pkce.code.challenge.method` is left `""` and no `configuration.data`
+  step references them yet - `openarchiefbeheer`'s is reserved further
+  out still, since that app (v1.1.1, this project's current pin) has no
+  OIDC support in its chart at all yet.
 
 ## Newly authored (not copied from anywhere)
 

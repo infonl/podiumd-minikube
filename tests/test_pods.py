@@ -10,6 +10,7 @@ ONE_SHOT_JOB_PREFIXES = (
     "pabc-migrations",
     "storage-permissions-fix",
     "openarchiefbeheer-config",
+    "openzaak-config",
     # ZAC's own bundled CronJobs (periodic signaleren/sig-del housekeeping) -
     # found live: their completed pods report ready=false once terminated,
     # same as any other one-shot Job, but weren't in this allowlist yet.

@@ -366,12 +366,111 @@ podiumd:
       enabled: false # defaults to true with literal placeholder credentials (<openzaak_client_id>/<openzaak_secret>) that would just fail repeatedly, and would try to create its own test zaaktype/catalog - our vendored SQL fixtures already seed this exact data, matching compose
     configuration:
       job:
-        # Verified live: with no configuration.data set (matching compose,
-        # which doesn't use django-setup-configuration for openzaak at all),
-        # this Job's own management command exits with "CommandError: No
-        # steps enabled, aborting." - disabling it entirely rather than
-        # leaving a permanently-failing Job around.
-        enabled: false
+        # Was disabled (with no configuration.data set, matching compose,
+        # which doesn't use django-setup-configuration for openzaak at
+        # all) - the Job's own management command used to exit with
+        # "CommandError: No steps enabled, aborting." Now enabled for the
+        # oidc_db_config_admin_auth step below (browser OIDC login for
+        # openzaak's own django-admin, as an addition on top of compose
+        # parity, not a replacement for the plain-login path it already
+        # has).
+        enabled: true
+      # Adds Keycloak OIDC login as an *additional* way into openzaak's
+      # django-admin, on top of the plain username/password login above -
+      # see vendor/dimpact-zaakafhandelcomponent/keycloak/
+      # zaakafhandelcomponent-realm.json's own "openzaak" client for the
+      # Keycloak side (secret must match
+      # configuration.secrets.keycloak_client_secret below) and NOTES.md's
+      # own entry on it for the rollout rationale.
+      #
+      # PKCE (RFC 9700 requires it for every authorization-code-flow
+      # client): NOT enabled here, and the Keycloak client's own
+      # pkce.code.challenge.method is deliberately left "" (not "S256") to
+      # match - confirmed live, this pinned openzaak image (1.29.1) bundles
+      # mozilla-django-oidc-db 2.0.1, which has zero PKCE support at all
+      # (no `oidc_use_pkce` field anywhere in its setup-configuration
+      # pydantic models, not even an unused DB column - checked the
+      # installed package's own source directly, not just its changelog).
+      # Setting oidc_use_pkce: true here fails validation outright
+      # ("Extra inputs are not permitted"); enforcing PKCE on the Keycloak
+      # client while the app can never send a code_challenge would instead
+      # fail every login with "Missing parameter: code_challenge_method" -
+      # the exact same failure mode already hit for ZAC (see this file's
+      # own zac.enablePkce comment) and the same class of incident
+      # documented in the sibling podiumd chart's own
+      # docs/apps/keycloak/keycloak-security-updates.md (PKCE Enforcement
+      # section) for enabling this before every component actually
+      # supports it. Revisit once openzaak bundles a newer
+      # mozilla-django-oidc-db release.
+      data: |-
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+          - identifier: keycloak-provider
+            oidc_use_nonce: true
+            oidc_nonce_size: 32
+            oidc_state_size: 32
+            # Explicit endpoints, not endpoint_config.oidc_op_discovery_endpoint:
+            # this step's own pydantic model accepts either shape (both
+            # validated fine here - "Valid configuration settings found for
+            # all steps"), but the *execution* step re-validates the same
+            # URLs through a plain Django URLField, which is stricter than
+            # pydantic's AnyUrl and (confirmed live, isolated in a shell)
+            # rejects a bare single-label Service hostname like
+            # "http://keycloak:8080/..." outright ("Voer een geldige URL
+            # in.") - it has no dot and isn't in Django's own "localhost"
+            # exception. The fully-qualified in-cluster DNS name satisfies
+            # it; explicit endpoints chosen over discovery only because
+            # they don't depend on Keycloak's own discovery document being
+            # fetchable/well-formed at setup-configuration-job time.
+            endpoint_config:
+              oidc_op_authorization_endpoint: http://keycloak.podiumd-minikube.svc.cluster.local:8080/realms/zaakafhandelcomponent/protocol/openid-connect/auth
+              oidc_op_token_endpoint: http://keycloak.podiumd-minikube.svc.cluster.local:8080/realms/zaakafhandelcomponent/protocol/openid-connect/token
+              oidc_op_user_endpoint: http://keycloak.podiumd-minikube.svc.cluster.local:8080/realms/zaakafhandelcomponent/protocol/openid-connect/userinfo
+              oidc_op_jwks_endpoint: http://keycloak.podiumd-minikube.svc.cluster.local:8080/realms/zaakafhandelcomponent/protocol/openid-connect/certs
+          items:
+          - identifier: admin-oidc
+            enabled: true
+            oidc_rp_client_id: openzaak
+            oidc_rp_client_secret: {value_from: {env: keycloak_client_secret}}
+            oidc_rp_scopes_list:
+            - openid
+            - email
+            - profile
+            oidc_rp_sign_algo: RS256
+            oidc_provider_identifier: keycloak-provider
+            userinfo_claims_source: id_token
+            options:
+              user_settings:
+                claim_mappings:
+                  username:
+                  - sub
+                  first_name:
+                  - given_name
+                  email:
+                  - email
+                username_case_sensitive: true
+              # sync: false - no Keycloak group in the vendored realm maps
+              # to openzaak roles yet, so group-based provisioning is
+              # skipped entirely for now; make_users_staff: true is what
+              # actually grants any OIDC-authenticated user access to
+              # /admin/ in the meantime.
+              groups_settings:
+                sync: false
+                make_users_staff: true
+      secrets:
+        # Must match the "openzaak" client's own "secret" field in
+        # vendor/dimpact-zaakafhandelcomponent/keycloak/
+        # zaakafhandelcomponent-realm.json exactly.
+        keycloak_client_secret: keycloakOpenzaakClientSecret
+      # false, matching the Keycloak client's own pkce.code.challenge.method
+      # ("" not "S256") - see this block's own data comment above for why.
+      # Only meaningful at all if this project ever switches to podiumd's
+      # own keycloak-operator-managed realm instead of the vendored static
+      # realm.json import (keycloak-operator.enabled is false here - see
+      # that key's own comment) - inert otherwise.
+      pkceEnabled: false
+      oidcUrl: http://openzaak.local
       # Matches docker-compose.yaml's DJANGO_SUPERUSER_PASSWORD/
       # OPENZAAK_SUPERUSER_USERNAME/OPENZAAK_SUPERUSER_EMAIL exactly. Found
       # live: left unset, the container never creates the 'admin' user our
