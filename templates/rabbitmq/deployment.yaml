@@ -1,15 +1,17 @@
 {{/*
-Compose's own rabbitmq service is gated on the "opennotificaties"/
-"openformulieren" profiles (the latter transitively enables opennotificaties
-too, per docs) - opennotificaties.settings.celery.brokerUrl points at it
-directly (amqp://guest:guest@rabbitmq:5672//), unlike every other app here
-which uses the shared Redis instead. openformulieren itself never actually
-uses rabbitmq (confirmed against its own compose env block - all redis) so
-gating on podiumd.opennotificaties.enabled alone is correct: turning on the
-openformulieren profile means also turning on opennotificaties manually
-(see openformulieren.enabled's own comment), which brings this along too.
+Only needed for opennotificaties versions before 1.16.0 - that release
+dropped RabbitMQ as a dependency in favor of Celery Beat + database-
+persisted schedules (see values.yaml's own opennotificaties.image.tag
+comment for the ADR link). podiumd 4.8.4's bundled opennotificaties is
+past that line, so the current default (opennotificaties.rabbitmqEnabled:
+false) doesn't deploy this at all - but this project also needs to keep
+working against podiumd 4.7.x (see set-podiumd-version.sh), whose bundled
+opennotificaties predates 1.16.0 and still needs a real broker. Gated on
+an explicit flag rather than deleted: flip opennotificaties.rabbitmqEnabled
+to true (and see that same comment for the other settings that need to
+move back to it) when selecting a podiumd version old enough to need it.
 */}}
-{{- if .Values.podiumd.opennotificaties.enabled }}
+{{- if and .Values.podiumd.opennotificaties.enabled .Values.opennotificaties.rabbitmqEnabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

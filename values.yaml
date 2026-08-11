@@ -21,6 +21,11 @@ objecten:
   enabled: false
 opennotificaties:
   enabled: false
+  # Only relevant for podiumd versions old enough to bundle a pre-1.16.0
+  # opennotificaties (see podiumd.opennotificaties.image.tag's own
+  # comment, and templates/rabbitmq/deployment.yaml's own header) - leave
+  # false for the current default (podiumd 4.8.4).
+  rabbitmqEnabled: false
 openarchiefbeheer:
   enabled: false
 openformulieren:
@@ -872,14 +877,39 @@ podiumd:
   opennotificaties:
     enabled: false
     replicaCount: 1
-    # Found live: chart default (1.16.0) differs from compose's pinned
-    # version (1.15.0).
-    image:
-      tag: "1.15.0"
+    # No image.tag pin - use whatever the currently-selected podiumd
+    # version's bundled chart defaults to (currently 1.16.0, via podiumd
+    # 4.8.4). Unlike openzaak/objecten/openformulieren, this isn't a
+    # compatibility pin, it's deliberately tracking upstream: 1.16.0
+    # dropped RabbitMQ as a dependency in favor of Celery Beat + database-
+    # persisted schedules (see open-notificaties' own CHANGELOG.rst entry
+    # for 1.16.0 and its linked ADR).
+    #
+    # This project also needs to keep working against podiumd 4.7.x (see
+    # set-podiumd-version.sh), whose bundled opennotificaties predates
+    # 1.16.0 and still needs RabbitMQ - re-check this whole block when
+    # selecting a version that old, and flip these back together:
+    #   - top-level opennotificaties.rabbitmqEnabled: true (deploys
+    #     templates/rabbitmq/deployment.yaml)
+    #   - worker.replicaCount: 1, beat.replicaCount: 0 (no Beat container
+    #     pre-1.16.0 - it never sent anything, RabbitMQ did)
+    #   - settings.celery.brokerUrl/publishBrokerUrl:
+    #     amqp://guest:guest@rabbitmq:5672// (and .../%2F for the latter)
+    #   - settings.celery.resultBackend/settings.messageBroker.celeryResultBackend:
+    #     back to whichever unused redis:6379/N index is free (see
+    #     openzaak/openklant's own worker.replicaCount comments for why
+    #     that matters - competing Celery consumers on a shared broker db
+    #     silently steal each other's tasks)
+    #   - extraEnvVars: RABBITMQ_HOST=rabbitmq, RABBITMQ_PORT="5672" -
+    #     the worker's own /wait_for_rabbitmq.sh entrypoint script reads
+    #     these separately from CELERY_BROKER_URL and defaults to
+    #     localhost without them, stuck retrying forever (only visible as
+    #     a recurring liveness-probe kill/restart cycle, not an obvious
+    #     crash) - confirmed live.
     worker:
-      replicaCount: 1 # compose runs opennotificaties-celery as a real worker
+      replicaCount: 1 # still needed either way - notifications are sent via a Celery worker
     beat:
-      replicaCount: 0 # compose has no opennotificaties beat container
+      replicaCount: 1 # required as of 1.16.0 - it's what actually sends scheduled/retried notifications now, not RabbitMQ (see this block's own top comment for pre-1.16.0)
     flower:
       enabled: false # already the chart default; explicit for clarity
     tags:
@@ -932,12 +962,20 @@ podiumd:
         # leaving that leak in place.
         oidc: redis:6379/0
       celery:
-        # Compose points this at rabbitmq, not redis - the only one of
-        # these apps that does.
-        brokerUrl: amqp://guest:guest@rabbitmq:5672//
+        # 1.16.0 dropped RabbitMQ (see image.tag's own comment above) -
+        # CELERY_BROKER_URL/PUBLISH_BROKER_URL point at the shared Redis
+        # instead now, same as every other app here.
+        #
+        # DB 5, not the more obvious 1 - objecten's own worker already
+        # brokers on db1 (openzaak/openklant's own worker db collision
+        # with objecten/openformulieren, and the resulting move to db3/
+        # db4, is documented on their own values.yaml blocks above) - db5
+        # is the first index none of this chart's other Celery workers
+        # (objecten=1, openformulieren=2, openzaak=3, openklant=4) use.
+        brokerUrl: redis://redis:6379/5
         # PUBLISH_BROKER_URL has its own dedicated field (confirmed live
-        # against secret.yaml) - matches compose's own value exactly.
-        publishBrokerUrl: amqp://guest:guest@rabbitmq:5672/%2F
+        # against secret.yaml) - matches brokerUrl now that both are Redis.
+        publishBrokerUrl: redis://redis:6379/5
         # CELERY_RESULT_BACKEND is defined TWICE on this chart: once here
         # (feeding configmap.yaml's tags.redis-false branch) and once via
         # settings.messageBroker.celeryResultBackend below (feeding
@@ -948,26 +986,9 @@ podiumd:
         # to the same value so it's correct either way. Leaving only one
         # set left the other object rendering podiumd's own untouched
         # production default (redis-ha-master...) instead of ours.
-        resultBackend: redis://redis:6379/1
+        resultBackend: redis://redis:6379/5
       messageBroker:
-        celeryResultBackend: redis://redis:6379/1
-    # Found live: this comment used to claim RABBITMQ_HOST/RABBITMQ_PORT
-    # weren't needed since CELERY_BROKER_URL/PUBLISH_BROKER_URL already
-    # carry the full connection string - true for the Django app itself,
-    # but wrong for the *worker* container specifically: its image bundles
-    # its own /wait_for_rabbitmq.sh entrypoint script, run before the
-    # celery process ever starts, which reads these two vars completely
-    # separately (`rabbit_host=${RABBITMQ_HOST:-localhost}`,
-    # `rabbit_port=${RABBITMQ_PORT:-5672}`) and defaults to localhost
-    # without them - meaning the worker never actually started at all,
-    # stuck retrying forever (only visible as a recurring liveness-probe
-    # kill/restart cycle, not an obvious crash). No dedicated values.yaml
-    # field exists for either on this chart, so set via extraEnvVars.
-    extraEnvVars:
-      - name: RABBITMQ_HOST
-        value: rabbitmq
-      - name: RABBITMQ_PORT
-        value: "5672"
+        celeryResultBackend: redis://redis:6379/5
     # See settings.djangoSettingsModule above for why this mount exists -
     # same ConfigMap+extraVolumes+extraVolumeMounts pattern already used
     # for openzaak's/openarchiefbeheer's own docker_no2fa.py fix.
