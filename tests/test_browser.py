@@ -12,6 +12,8 @@ docstring for how to reset them if this fails on a credential error
 rather than a rendering one.
 """
 
+from playwright.sync_api import expect
+
 TEST_USERNAME = "beheerder1newiam"
 TEST_PASSWORD = "beheerder1newiam"
 
@@ -28,7 +30,14 @@ def test_dashboard_renders_after_login(page):
 
     # Visible, hydrated navigation content - not just the initial
     # <zac-root> shell markup, which HTTP-only checks can't tell apart
-    # from a genuinely broken/blank SPA.
-    assert page.get_by_text("Dashboard").first.is_visible()
-    assert page.get_by_text("Cases").first.is_visible()
-    assert page.get_by_text("Tasks").first.is_visible()
+    # from a genuinely broken/blank SPA. `expect(...).to_be_visible()`,
+    # not a bare `.is_visible()` assert: found live that "Dashboard" renders
+    # synchronously in the app shell, but "Cases"/"Tasks" render slightly
+    # later, after an async permissions call resolves - a one-shot
+    # `.is_visible()` right after `wait_for_url` races that render and its
+    # outcome depends on incidental page-load speed (cold vs warm JS
+    # bundle cache), not a page defect. `expect(...)` polls until it's
+    # actually true (or its own timeout) instead of checking once.
+    expect(page.get_by_text("Dashboard").first).to_be_visible()
+    expect(page.get_by_text("Cases").first).to_be_visible()
+    expect(page.get_by_text("Tasks").first).to_be_visible()
