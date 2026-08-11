@@ -15,6 +15,7 @@ own* message shows up.
 import uuid
 
 import requests
+from playwright.sync_api import expect
 
 from conftest import NAMESPACE, host_headers, host_url, kubectl
 
@@ -59,4 +60,9 @@ def test_sent_mail_visible_in_mailpit_webui(page):
     _send_test_mail(marker)
 
     page.goto("http://mailpit.local/")
-    assert page.get_by_text(marker).first.is_visible()
+    # expect(...).to_be_visible(), not a bare .is_visible() assert: same
+    # race as test_browser.py's own dashboard check found live - mailpit's
+    # SPA fetches its message list asynchronously after the initial page
+    # load, so a one-shot check right after goto() depends on incidental
+    # timing instead of the message actually having rendered yet.
+    expect(page.get_by_text(marker).first).to_be_visible()
