@@ -29,3 +29,12 @@ __pycache__/
 # `minikube start` output - can hold cluster credentials, never commit)
 .envrc
 .kube/
+
+# This developer's own local podiumd/monitoring-logging version selection
+# - written by scripts/set-podiumd-version.sh, read by
+# scripts/lib/podiumd-dependency.sh. Deliberately never committed:
+# Chart.yaml no longer holds a real version for either dependency at all
+# (see its own comment there), specifically so a personal "let me test a
+# different version" choice never shows up as a shared-file diff the way
+# editing Chart.yaml directly used to.
+.podiumd-versions.yaml

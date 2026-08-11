@@ -5,7 +5,9 @@
 #   2. installs Traefik, pinned to a version compatible with older `helm`
 #      binaries (see the version note below) - a cluster prerequisite this
 #      chart deliberately doesn't manage itself
-#   3. runs `helm dependency update` so the podiumd chart tarball is present
+#   3. runs `helm dependency update` (via scripts/lib/podiumd-dependency.sh,
+#      so a local scripts/set-podiumd-version.sh override is respected too)
+#      so the podiumd chart tarball is present
 #   4. pre-pulls and loads every image this chart can reference into
 #      minikube - its inner Docker has no internet access at all, so any
 #      image not already loaded fails to pull once a pod actually needs it
@@ -118,9 +120,15 @@ fi
 
 # --- 3. helm dependency ---
 # Must run before deriving the image list below - that render needs the
-# podiumd chart tarball to already be present.
+# podiumd chart tarball to already be present. Goes through
+# sync_podiumd_dependencies rather than a plain `helm dependency update`
+# call, so .podiumd-versions.yaml (see scripts/set-podiumd-version.sh) is
+# respected here too, not just in deploy.sh - exits with a clear message
+# if you haven't run that script yet (Chart.yaml no longer holds a real
+# version to fall back to at all).
 echo "Running helm dependency update..."
-helm dependency update "${CHART_DIR}" > /dev/null
+source "${CHART_DIR}/scripts/lib/podiumd-dependency.sh"
+sync_podiumd_dependencies
 
 # --- 4. images ---
 # The image list is derived by actually rendering the chart with every

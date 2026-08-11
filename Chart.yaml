@@ -9,14 +9,24 @@ appVersion: "1.0.0"
 dependencies:
   - name: podiumd
     repository: "@dimpact"
-    version: "4.8.4"  # podiumd version - see scripts/set-podiumd-version.sh to change
+    # Placeholder only - never used to actually fetch anything. The real
+    # version lives in .podiumd-versions.yaml (gitignored) - run
+    # ./scripts/set-podiumd-version.sh to set it; deploy.sh/
+    # provision-cluster.sh refuse to proceed with a clear message if
+    # you haven't yet. See scripts/lib/podiumd-dependency.sh's own header
+    # for why this field is never populated with a real version at all
+    # (a `helm dependency update` run without going through that script
+    # first - bypassing deploy.sh/set-podiumd-version.sh entirely - would
+    # fail against this placeholder rather than silently fetching some
+    # unrelated default).
+    version: "0.0.0-set-via-podiumd-versions-yaml"
     condition: podiumd.enabled
   - name: monitoring-logging
     repository: "@dimpact"
-    # Optional, off by default - see scripts/set-podiumd-version.sh's own
-    # header for how this correlates with the podiumd version above (no
-    # formula - both live in the same dimpact-samenwerking/helm-charts
-    # monorepo, versioned independently; 1.0.14 is what was actually
-    # checked in alongside podiumd 4.8.3's own tag).
-    version: "1.0.14"  # monitoring-logging version - see scripts/set-podiumd-version.sh to change
+    # Optional (see values.yaml's own monitoringLogging.enabled comment),
+    # but still needs a real version recorded in .podiumd-versions.yaml
+    # either way - Helm always fetches every declared dependency
+    # regardless of its condition: value, only *rendering* is gated. Same
+    # placeholder-only note as podiumd's own version field above.
+    version: "0.0.0-set-via-podiumd-versions-yaml"
     condition: monitoringLogging.enabled

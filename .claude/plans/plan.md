@@ -3051,3 +3051,97 @@ the collision is actually gone, not just quiet. Added
 `openzaak-worker`/`openklant-worker` to `test_pods.py`'s
 `test_core_profile_pod_present` list, matching their new always-on
 status. Full suite: 51 passed, 3 skipped, 0 failed.
+
+## Moving podiumd/monitoring-logging version selection out of Chart.yaml
+
+Asked to store both dependencies' versions in a separate, gitignored YAML
+file instead of `Chart.yaml`, with `deploy.sh` reading from it and
+`Chart.yaml` never changing when the version does.
+
+Verified the one fact this whole design rests on before writing any code:
+does `helm template`/`install` re-validate a loaded subchart's version
+against the parent `Chart.yaml`'s own declared dependency constraint?
+Tested directly - hand-edited `Chart.yaml`'s podiumd version to a
+nonsense "9.9.9" with the real fetched dependency still at 4.8.3 in
+`charts/`, and `helm template` rendered clean using the physically-present
+4.8.3 chart regardless. Confirmed: that field is consulted by `helm
+dependency update`/`build` only, never at render time. This makes
+temporarily rewriting `Chart.yaml` to the real desired version, running
+`helm dependency update`, then restoring `Chart.yaml`'s original content
+completely safe - the already-fetched `charts/*.tgz` stays exactly as
+fetched either way.
+
+Initial design kept `Chart.yaml`'s existing committed version as a
+"shared default, used when no override exists" - the user redirected mid-
+implementation: `Chart.yaml` should hold no real version at all, ever;
+`.podiumd-versions.yaml` should be the *only* source, and every entry
+point should refuse with a clear "run set-podiumd-version.sh" message if
+it's missing, rather than silently falling back to anything. Simpler, and
+avoids a subtler problem the fallback design had: `Chart.lock` is also
+git-tracked, and `helm dependency update` always rewrites it to reflect
+whatever was *actually* resolved - meaning even with `Chart.yaml` itself
+reverted after every sync, a local override would still leak into
+`Chart.lock` as an uncommitted diff unless that's reverted too. Both
+`Chart.yaml` and `Chart.lock` get backed up and restored around every
+`helm dependency update` call now.
+
+`Chart.yaml`'s two dependency `version:` fields are now literal
+placeholders (`"0.0.0-set-via-podiumd-versions-yaml"`) - a plain `helm
+dependency update` run by someone who bypasses this project's scripts
+entirely fails loudly against that placeholder instead of silently
+fetching some unrelated real release.
+
+monitoring-logging still needs a real, fetchable version in
+`.podiumd-versions.yaml` even when `--disable-monitoring-logging` is
+chosen - Helm fetches every declared dependency regardless of its
+`condition:` value (already known from this project's earlier
+`set-podiumd-version.sh` work), so there's no way to skip recording a
+real version for it. Added a guard in `set-podiumd-version.sh`: the very
+first time someone chooses `--disable-monitoring-logging` before any
+monitoring-logging version has ever been recorded, it refuses with the
+exact command to run first, rather than either silently picking something
+or letting the generic sync-time error surface confusingly from inside
+the same command that's supposed to be setting things up.
+
+A second real bug surfaced while writing `sync_podiumd_dependencies`,
+caught before it could ship: calling the per-dependency fetch function
+sequentially (edit podiumd's block, fetch, revert; then edit monitoring-
+logging's block, fetch, revert) is wrong - `helm dependency update`
+always re-resolves *every* declared dependency in one pass, so the
+second call's own edit-then-revert cycle would transiently put
+`Chart.yaml` back to podiumd's *placeholder* value while fetching
+monitoring-logging, silently re-fetching (and clobbering) podiumd at the
+wrong version. Fixed by editing both dependencies' blocks together before
+a single combined `helm dependency update` call, then one combined revert
+- not one edit/fetch/revert cycle per dependency.
+
+Verified end-to-end, live, not just read through: (1) no
+`.podiumd-versions.yaml` at all - `show-podiumd-version.sh`/`deploy.sh`
+both refuse with the expected message; (2) registry mode
+(`set-podiumd-version.sh 4.8.3 1.0.14`) - `charts/podiumd-4.8.3.tgz`
+fetched, `Chart.yaml`/`Chart.lock` show zero diff from their committed
+baseline afterward, `helm template` renders using the 4.8.3 chart
+(confirmed via its own `helm.sh/chart` label); (3) re-running `deploy.sh
+--full` immediately after skipped the network round-trip entirely (no
+`helm dependency update` output at all) since the target tarball was
+already present; (4) `--path` mode against a real local podiumd/
+monitoring-logging checkout - correctly re-packaged fresh, `Chart.yaml`/
+`Chart.lock` still showed zero diff afterward. Along the way, confirmed
+(the hard way, via a genuine mistake mid-session) that this project's
+existing `podiumd` version alone doesn't explain the `opennotificaties`
+`ImagePullBackOff` gap found earlier - checked the actually-fetched
+4.8.3 tarball's own bundled `opennotificaties` chart directly and found
+it *also* pins `image.tag: "1.16.1"`, not the older cached 1.15.0 - this
+is a pre-existing, version-independent image-cache gap (this minikube's
+local cache predates whatever podiumd version first introduced that
+pin), not something introduced by or fixable via this dependency-version
+work. Left unfixed for now, flagged separately - fixing it means either
+re-running `provision-cluster.sh`'s image pre-pull step or a manual
+`docker pull` + `minikube image load` for that one image.
+
+Full suite: 53 passed, 3 skipped, 2 failed (both the known
+`opennotificaties` image-pull gap above) - the one additional failure
+seen mid-session (`test_prometheus_scrape_targets_healthy`) reconfirmed
+as transient by hand immediately after (pods healthy, a fresh curl
+against the same endpoint returned 200), not a regression from this
+work.

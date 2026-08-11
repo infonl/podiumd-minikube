@@ -19,10 +19,18 @@
 #
 # Unlike deploy.sh's rendered manifest, loading fixture data has to run
 # *after* the target pod exists and has migrated - not something a
-# `kubectl apply` can express - so this is a separate, manually-run script,
-# same reasoning as apply-pabc-migrations.sh being separate from deploy.sh.
-# Safe to re-run: `loaddata` upserts by PK, and the superuser-creation step
-# below is guarded by an existence check.
+# `kubectl apply` can express - so this is a separate script, called
+# automatically at the end of deploy.sh whenever the 'objecten' Deployment
+# is actually part of this render (see that script's own comment on this),
+# but also safe/useful to run manually any time.
+#
+# Safe to re-run - genuinely idempotent, not just non-destructive: each
+# seed() call checks whether its target model already has any rows before
+# doing anything else, and skips straight past the wait/copy/loaddata work
+# entirely if so ("if not done before" - the actual behavior deploy.sh's
+# own automatic call relies on, not just a side-effect of `loaddata`
+# upserting by PK). The superuser-creation step is separately guarded by
+# its own existence check, same as before.
 #
 # Supports both podiumd shapes (see scripts/lib/detect-objecten-shape.sh):
 #   - classic: objecten and objecttypen are two separate subcharts with
@@ -57,11 +65,30 @@ source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
 KNOWN_OBJECTEN_BUG_SIGNATURE='column "service_id" of relation "core_objecttype" does not exist'
 
 seed() {
-  local deployment="$1" fixture="$2"
-  echo "Seeding '${deployment}' from ${fixture}..."
+  local deployment="$1" fixture="$2" app_label="$3" model_name="$4"
   kubectl wait --for=condition=available "deployment/${deployment}" -n "${NAMESPACE}" --timeout=180s
   local pod
   pod="$(kubectl get pod -n "${NAMESPACE}" -l "app.kubernetes.io/name=${deployment}" -o jsonpath='{.items[0].metadata.name}')"
+
+  # "Not done before" check: query the fixture's own primary model
+  # directly (via Django's app registry, not a hardcoded table/db name -
+  # works unchanged whether this is the classic shape's own database or
+  # the merged openobject one) rather than assuming loaddata's own exit
+  # code means anything about pre-existing data (it always reports
+  # "Installed N object(s)" and exits 0 whether the rows were new or
+  # upserted over identical existing ones).
+  local already_seeded
+  already_seeded="$(kubectl exec -n "${NAMESPACE}" "${pod}" -- python /app/src/manage.py shell -c "
+from django.apps import apps
+Model = apps.get_model('${app_label}', '${model_name}')
+print('yes' if Model.objects.exists() else 'no')
+" 2>/dev/null | tail -1)"
+  if [ "${already_seeded}" = "yes" ]; then
+    echo "'${deployment}' already has ${app_label}.${model_name} data - skipping (not re-seeding)."
+    return 0
+  fi
+
+  echo "Seeding '${deployment}' from ${fixture}..."
   kubectl cp "${fixture}" "${NAMESPACE}/${pod}:/tmp/demodata.json"
 
   local error_log
@@ -93,10 +120,10 @@ User.objects.filter(username='admin').exists() or User.objects.create_superuser(
 }
 
 if [ "${OBJECTEN_MERGED}" = true ]; then
-  seed objecten "${VENDOR_DIR}/openobject/demodata.json"
+  seed objecten "${VENDOR_DIR}/openobject/demodata.json" core Object
 else
-  seed objecten "${VENDOR_DIR}/objecten/demodata.json"
-  seed objecttypen "${VENDOR_DIR}/objecttypen/demodata.json"
+  seed objecten "${VENDOR_DIR}/objecten/demodata.json" core Object
+  seed objecttypen "${VENDOR_DIR}/objecttypen/demodata.json" core ObjectType
 fi
 
 echo

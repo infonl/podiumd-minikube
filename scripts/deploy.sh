@@ -3,6 +3,14 @@
 # configured against - the "render + apply the chart" step
 # scripts/provision-cluster.sh points at as its own next step.
 #
+# First syncs charts/*.tgz against .podiumd-versions.yaml - the only place
+# either dependency's version is recorded (Chart.yaml no longer holds a
+# real one at all) - refusing with a clear message if you haven't run
+# scripts/set-podiumd-version.sh yet. See
+# scripts/lib/podiumd-dependency.sh's own header for the full mechanism.
+# Chart.yaml/Chart.lock's own on-disk content is never left changed by
+# this.
+#
 # Uses `helm template | strip-image-digests.py | disable-service-links.py |
 # exclude-pabc-migration-job.py | exclude-helm-test-hooks.py |
 # split-large-configmaps.py | kubectl apply`, not `helm install`/`helm
@@ -53,6 +61,13 @@
 # implementation's Grafana/Tempo/otel-collector running right alongside the
 # new ones).
 #
+# Then, if the objecten profile is actually part of the (post-prune) live
+# state, automatically runs scripts/seed-fixtures.sh - safe to do on every
+# single deploy.sh run, not just the first, since that script's own seed()
+# calls are each independently idempotent (skip straight past the
+# wait/copy/loaddata work once their target model already has data - see
+# its own header).
+#
 # Usage:
 #   ./scripts/deploy.sh            # core profile only (matches values.yaml's own default)
 #   ./scripts/deploy.sh --full     # every optional profile enabled too (objecten, objecttypen,
@@ -87,6 +102,23 @@ NAMESPACE="podiumd-minikube"
 
 source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
 source "${CHART_DIR}/scripts/lib/monitoring-logging-enabled.sh"
+source "${CHART_DIR}/scripts/lib/podiumd-dependency.sh"
+
+# Ensures charts/*.tgz matches .podiumd-versions.yaml before anything
+# below reads from it - including detect-objecten-shape.sh just below,
+# which inspects the actual podiumd tarball's contents to tell the
+# classic/merged shapes apart. Exits with a clear message if that file
+# doesn't have an entry for both dependencies yet (see
+# scripts/set-podiumd-version.sh). Fixed a real, previously-silent gap
+# too: a podiumd version bump committed to Chart.yaml/Chart.lock (back
+# when those files still held the real version) used to only take effect
+# once someone happened to run `helm dependency update` by hand
+# afterward - confirmed live, this deploy.sh used to render against a
+# stale, already-fetched older version otherwise, with no warning at
+# all. Cheap to call unconditionally now: skips its own network
+# round-trip entirely once the target tarball is already present (see
+# sync_podiumd_dependencies's own header).
+sync_podiumd_dependencies
 
 EXTRA_SETS=()
 FORCE_PRUNE=false
@@ -246,6 +278,25 @@ fi
 echo
 echo "Pruning Deployments/StatefulSets/DaemonSets/Services/Secrets/Ingresses not part of this render (see prune-orphaned-workloads.py)..."
 render | python3 "${CHART_DIR}/scripts/lib/prune-orphaned-workloads.py" "${PRUNE_ARGS[@]}"
+
+# Checked against live cluster state, after pruning, not this invocation's
+# own --set flags: the 'objecten' Deployment name is authoritative for
+# "is the objecten profile actually part of what's deployed right now"
+# either podiumd shape (classic or merged - see
+# scripts/lib/detect-objecten-shape.sh), and correctly reflects a profile
+# this call just turned off (pruned above) as absent, without this script
+# needing its own separate copy of that enabled/disabled logic.
+# seed-fixtures.sh's own seed() calls are each independently idempotent
+# ("not done before" - see that script's own header), so calling it
+# unconditionally here on every deploy.sh run is safe and fast once
+# already seeded, not just on first deploy.
+echo
+if kubectl get deployment/objecten -n "${NAMESPACE}" > /dev/null 2>&1; then
+  echo "Seeding fixture data (see scripts/seed-fixtures.sh)..."
+  "${CHART_DIR}/scripts/seed-fixtures.sh"
+else
+  echo "'objecten' profile not deployed - skipping scripts/seed-fixtures.sh."
+fi
 
 echo
 echo "Done. Next: ./scripts/setup-tunnel.sh for external reachability, or run"
