@@ -58,6 +58,10 @@
 #   ./scripts/deploy.sh --full     # every optional profile enabled too (objecten, objecttypen,
 #                                  # opennotificaties, openarchiefbeheer, openformulieren, metrics, wiremock)
 #   ./scripts/deploy.sh --set some.other=value   # any extra --set flags are passed through
+#   ./scripts/deploy.sh --force-prune   # skip prune-orphaned-workloads.py's own refusal to
+#                                        # delete a suspiciously large number of resources -
+#                                        # see that script's own header for why it exists.
+#                                        # Combine with --full: "--full --force-prune"
 #
 # Which implementation backs the metrics profile - templates/metrics/'s raw
 # resources, or the heavier monitoring-logging dependency
@@ -85,18 +89,36 @@ source "${CHART_DIR}/scripts/lib/require-minikube-context.sh"
 source "${CHART_DIR}/scripts/lib/monitoring-logging-enabled.sh"
 
 EXTRA_SETS=()
-while [ "${1:-}" = "--full" ]; do
-  shift
-  source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
-  EXTRA_SETS+=(
-    --set wiremock.enabled=true
-    --set objecten.enabled=true --set podiumd.objecten.enabled=true
-    "${OBJECTEN_SHAPE_SETS[@]}"
-    --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true
-    --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true
-    --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true
-    --set metrics.enabled=true
-  )
+FORCE_PRUNE=false
+while true; do
+  case "${1:-}" in
+    --full)
+      shift
+      source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
+      EXTRA_SETS+=(
+        --set wiremock.enabled=true
+        --set objecten.enabled=true --set podiumd.objecten.enabled=true
+        "${OBJECTEN_SHAPE_SETS[@]}"
+        --set opennotificaties.enabled=true --set podiumd.opennotificaties.enabled=true
+        --set openarchiefbeheer.enabled=true --set podiumd.openarchiefbeheer.enabled=true
+        --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true
+        --set metrics.enabled=true
+      )
+      ;;
+    --force-prune)
+      # Forwarded to prune-orphaned-workloads.py's own --force - see its
+      # header for why it refuses a suspiciously large prune by default.
+      # Confirmed live to matter: running plain deploy.sh (core profile
+      # only) against a cluster actually running --full once deleted the
+      # entire optional-profile stack in one shot, the exact scenario that
+      # guard now exists to catch.
+      shift
+      FORCE_PRUNE=true
+      ;;
+    *)
+      break
+      ;;
+  esac
 done
 
 MONITORING_LOGGING_REQUESTED=false
@@ -216,9 +238,14 @@ echo
 echo "Applying pabc-migrations (guarded - see scripts/apply-pabc-migrations.sh)..."
 "${CHART_DIR}/scripts/apply-pabc-migrations.sh"
 
+PRUNE_ARGS=("${NAMESPACE}")
+if [ "${FORCE_PRUNE}" = true ]; then
+  PRUNE_ARGS+=(--force)
+fi
+
 echo
-echo "Pruning Deployments/StatefulSets/DaemonSets not part of this render (see prune-orphaned-workloads.py)..."
-render | python3 "${CHART_DIR}/scripts/lib/prune-orphaned-workloads.py" "${NAMESPACE}"
+echo "Pruning Deployments/StatefulSets/DaemonSets/Services/Secrets/Ingresses not part of this render (see prune-orphaned-workloads.py)..."
+render | python3 "${CHART_DIR}/scripts/lib/prune-orphaned-workloads.py" "${PRUNE_ARGS[@]}"
 
 echo
 echo "Done. Next: ./scripts/setup-tunnel.sh for external reachability, or run"

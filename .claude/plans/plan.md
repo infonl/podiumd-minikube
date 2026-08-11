@@ -2917,3 +2917,92 @@ including the previously-flaky Grafana checks this time: 51 passed, 3
 skipped, 0 failed. All seven django-admin-having apps in this project
 (objecten, objecttypen, openzaak, opennotificaties, openformulieren,
 openklant, openarchiefbeheer) now have a real, tested credential login.
+
+## Root-causing the Grafana 503 flakiness (it wasn't flakiness)
+
+The "previously-flaky Grafana checks" note above turned out to be luck,
+not a fix - the next full-suite run hit the same 503s again. Investigated
+properly instead of re-running and hoping: curled `grafana.local`
+in a tight loop (rock solid 200s in isolation - the bug needed something
+the full suite's exact state produced), checked Grafana's own logs (no
+errors at all - the request never made it there), then checked Traefik's:
+`kubectl get ingress -n podiumd-minikube` showed **two** Ingress objects
+both claiming `grafana.local` - the real one (→ `grafana` Service, port
+3000, a live pod) and a `podiumd-minikube-grafana` one left over from an
+earlier `monitoringLogging.enabled=true` test session, pointing at a
+Service with **zero endpoints** (its Deployment already correctly pruned,
+but the Service/Ingress themselves never were). Traefik load-balances
+between competing routers for the same host, so roughly half of all
+requests hit the dead one and got a real 503 - not flakiness, a
+deterministic routing bug that just looked random from outside.
+
+Root cause: `prune-orphaned-workloads.py` only ever covered Deployment/
+StatefulSet/DaemonSet (+ the monitoring CRs) - Service/Secret/Ingress were
+never in scope, so toggling `monitoringLogging.enabled` always left that
+class of leftover behind, silently, forever (confirmed live: a whole pile
+of them - `loki`/`alloy`/`kube-prometheus-stack` Services/Secrets - had
+been sitting there for 22+ hours). Extended `PRUNABLE_KINDS` to include
+Service/Secret/Ingress (deliberately NOT ConfigMap - `split-large-
+configmaps.py` pulls oversized ConfigMaps out of the main render stream
+entirely and applies them separately via `--server-side`, so they'd never
+appear in this script's "desired" set and would get deleted immediately
+after being applied, every run - documented as a known gap instead of
+silently fixed wrong).
+
+**Broke the cluster once proving this, immediately, the exact way the
+user asked to guard against next**: tested by running plain
+`./scripts/deploy.sh` (no `--full`) to see the fix work on a small case -
+forgetting the cluster was actually running `--full` from the whole
+session's prior work. `deploy.sh` (no flags) means core-profile-only, on
+purpose - the newly Service/Secret/Ingress-aware prune correctly (per its
+own now-broader mandate) deleted every optional-profile Deployment,
+Service, Secret, and Ingress in one shot: objecten, objecttypen,
+opennotificaties, openarchiefbeheer, openformulieren, the whole
+raw-templates metrics stack. Restored immediately via `deploy.sh --full`
+(prune reported "nothing to prune" - full round-trip confirmed clean).
+
+Added a real guard for this, not just a personal reminder to be more
+careful next time: `LARGE_PRUNE_THRESHOLD` in `prune-orphaned-workloads.py`
+now refuses to actually delete anything when the to-delete count exceeds
+10, printing what it *would* have pruned and requiring an explicit
+`--force` (forwarded from `deploy.sh --force-prune`) to proceed - a
+genuine profile mismatch (the exact accident above) or a genuine
+intentional large toggle (switching `monitoringLogging.enabled` prunes
+~10-50+ resources depending on direction) both hit this by design; the
+difference is now that the mismatch case gets a chance to be caught and
+aborted instead of silently executing.
+
+Verifying the fix immediately surfaced a second, independent bug it would
+otherwise have introduced silently: `prometheus-operated` (the
+kube-prometheus-stack operator's own headless Service for Prometheus peer
+discovery) showed up in the very first real to-delete list. Checked its
+`ownerReferences` before trusting the list - it genuinely has one, pointing
+at the `Prometheus` CR, but **without** `controller: true` set on it,
+which the existing (pre-dating this change) owner-check specifically
+required. Broadened the check to skip on *any* ownerReference, not just a
+controller one - confirmed this doesn't weaken protection anywhere else
+(every genuine leftover found this session had zero owner references at
+all, not merely non-controller ones). The `LARGE_PRUNE_THRESHOLD` guard
+caught this one before it could do damage (11 resources, over threshold,
+refused) - purely incidental, not something to rely on for correctness,
+which is why the ownerReference check itself got fixed too rather than
+left to the threshold alone.
+
+Verified end-to-end, both directions, for real: toggled
+`monitoringLogging.enabled` true → `deploy.sh --full` (correctly refused
+at 11 resources, `prometheus-operated` no longer among them; confirmed
+Grafana/Loki/Alloy/Prometheus/Tempo all `Running` and `grafana.local`
+serving 200s through the new implementation) → toggled back to false →
+`deploy.sh --full` (refused again, ~60 resources this time; `--force-prune`
+cleaned every one of them, including the `Prometheus` CR whose deletion
+correctly cascades `prometheus-operated` via Kubernetes' own garbage
+collection - not this script). Raw-templates Grafana confirmed back,
+single Ingress, zero `podiumd-minikube-*` leftovers, 15/15 requests
+returning 200. Found and manually cleaned up ~9 real ConfigMap stragglers
+along the way (the one kind this fix doesn't cover) - ordinary `tempo`/
+`tempo-config` ConfigMaps from the currently-active raw-templates
+Deployment were correctly left alone, confirmed by checking the
+Deployment's own age against the ConfigMap's.
+
+Full suite re-run clean: 51 passed, 3 skipped, 0 failed - the Grafana
+503s are gone for real this time, not by luck.

@@ -45,17 +45,22 @@ monitoringLogging:
   # this - see that key's own comment, and scripts/deploy.sh's handling
   # of both together.
   #
-  # Flipping this on an *already-deployed* cluster (either direction) always
-  # needs a manual cleanup pass afterward - confirmed live: deploy.sh applies
-  # via plain `kubectl apply`, which only ever adds/updates resources
-  # present in the current render, never deletes ones that dropped out of
-  # it (unlike `helm upgrade`, which diffs against the previous release).
-  # Toggling this leaves the *other* implementation's Deployments/Services/
-  # ConfigMaps/Ingress running right alongside the new ones - exactly the
-  # "two Grafanas at once" scenario this flag exists to prevent - until
-  # someone deletes them by hand (`kubectl delete deployment,svc,ingress,cm
-  # grafana otel-collector prometheus tempo` for raw-templates leftovers
-  # when switching *to* monitoringLogging, for example).
+  # Flipping this on an *already-deployed* cluster (either direction) leaves
+  # the *other* implementation's Deployments/Services/Secrets/Ingresses
+  # running right alongside the new ones at first - deploy.sh applies via
+  # plain `kubectl apply`, which only ever adds/updates resources present
+  # in the current render, never deletes ones that dropped out of it
+  # (unlike `helm upgrade`, which diffs against the previous release).
+  # scripts/lib/prune-orphaned-workloads.py's own next run cleans this up
+  # automatically now (confirmed live both directions) - no more manual
+  # `kubectl delete` needed. It refuses by default when the prune would be
+  # unusually large (as toggling this always is - the whole
+  # kube-prometheus-stack/loki/alloy footprint), so re-run deploy.sh with
+  # the same flags plus --force-prune to confirm it. ConfigMaps are the one
+  # exception that still needs checking by hand afterward (see that
+  # script's own header for why - split-large-configmaps.py's own
+  # server-side-apply path for large ConfigMaps like the bundled Grafana
+  # dashboards makes safely pruning that kind harder, not done here).
   enabled: false
 
 # -----------------------------------------------------------------------
