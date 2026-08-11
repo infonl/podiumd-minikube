@@ -9,7 +9,7 @@ appVersion: "1.0.0"
 dependencies:
   - name: podiumd
     repository: "@dimpact"
-    version: "4.8.3"  # podiumd version - see scripts/set-podiumd-version.sh to change
+    version: "4.8.4"  # podiumd version - see scripts/set-podiumd-version.sh to change
     condition: podiumd.enabled
   - name: monitoring-logging
     repository: "@dimpact"
