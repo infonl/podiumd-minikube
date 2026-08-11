@@ -1,0 +1,40 @@
+# Idempotent superuser creation, run via `manage.py shell < create_superuser.py`
+# from create-superuser-job.yaml.
+#
+# Same gap as openformulieren/openklant: this chart never wires
+# configuration.superuser to an actual user-creation mechanism at all -
+# confirmed by grepping every template in the vendored openarchiefbeheer
+# chart for "superuser": zero hits outside a commented-out
+# django-setup-configuration example (its OIDC-only superuser_group_names
+# option, not used here - oidc_db_config_enable stays false). Unlike
+# openformulieren/openklant, this app's cookie/2FA fixes were already done
+# in the original build (settings.cookie.*/djangoSettingsModule below) -
+# only the actual account creation was ever missing.
+# `manage.py createsuperuser --noinput` itself works fine (confirmed live
+# via `kubectl exec`), but isn't idempotent - it errors if the user already
+# exists, which would fail every deploy after the first. get_or_create +
+# set_password sidesteps that: this script succeeds identically whether the
+# user exists yet or not, so re-applying this Job's already-succeeded,
+# unchanged spec (a safe no-op, same as any other Job in this project)
+# never needs a guard script the way pabc-migrations does.
+import os
+
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+username = os.environ["DJANGO_SUPERUSER_USERNAME"]
+password = os.environ["DJANGO_SUPERUSER_PASSWORD"]
+email = os.environ.get("DJANGO_SUPERUSER_EMAIL", "")
+
+user, created = User.objects.get_or_create(
+    username=username,
+    defaults={"email": email, "is_staff": True, "is_superuser": True},
+)
+user.email = email
+user.is_staff = True
+user.is_superuser = True
+user.set_password(password)
+user.save()
+
+print(f"superuser '{username}' {'created' if created else 'already existed, updated'}")

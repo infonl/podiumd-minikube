@@ -2841,3 +2841,65 @@ and OIDC login into separate views (`/admin/login/` 302s to
 pre-fills it from that query param. Full suite re-run clean (same
 pre-existing Grafana intermittency aside): all four django-admin logins
 (objecttypen, openzaak, opennotificaties, openformulieren) now pass.
+
+### openklant and openarchiefbeheer: the last two django-admin gaps
+
+Checked every remaining django-admin login in the stack the same way
+again. Both openklant and openarchiefbeheer were still broken, same class
+of bug as before - but with two genuinely new wrinkles each.
+
+**openklant is structurally different from every other app fixed so
+far.** Reading `open_api_framework.conf.base` (a shared maykinmedia
+library `openklant.conf.base` wildcard-imports from) directly inside the
+running pod showed it reads `DISABLE_2FA` in the *real production*
+settings chain, not just a dev-only module - so a plain
+`settings.disable2fa: true` actually works natively here, no
+`docker_no2fa.py` shim needed at all. Confirmed this the hard way first:
+initially assumed it'd need the same shim as the others, started
+authoring `openklant/docker_no2fa.py`, then found `AUTHENTICATION_BACKENDS`
+genuinely isn't defined anywhere in `openklant`'s own source tree at all
+(would have made the shim itself crash with `NameError` on import) -
+tracing the wildcard-import chain (`base.py` → `open_api_framework.conf.base`)
+found where it actually lives, and that the shared library already
+has its own working `DISABLE_2FA` → `MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS`
+logic built in. Deleted the shim, live-tested `disable2fa: true` alone
+instead - worked immediately.
+
+**openarchiefbeheer only needed the superuser Job** - its cookie/2FA
+fixes were already done in the original build (step 5). Also corrected a
+misleading existing comment while in there: it claimed compose itself
+replicates the `docker_no2fa.py` fix; real compose actually just has a
+commented-out attempt with its own comment admitting it "errors with
+`ModuleNotFoundError: No module named 'debug_toolbar'`" and gives up,
+leaving 2FA enforced in real compose too - this project's shim is an
+original fix, not a port of one.
+
+Both needed a new Job (same idempotent `get_or_create`+`set_password`
+pattern as openformulieren's), but hit a real wrinkle openformulieren's
+own Job avoided by luck: neither app's `image.tag` is pinned in this
+repo's own `values.yaml` (only `openformulieren`'s is), so the Deployment
+resolves its tag from the subchart's own `AppVersion` fallback internally
+- a raw template outside that subchart can't replicate
+`.Chart.AppVersion` (it'd resolve to *this* chart's own AppVersion
+instead). Fixed via `.Subcharts.podiumd.Subcharts.<app>.Chart.AppVersion`,
+confirmed live against a throwaway debug template first (values.yaml's
+own comment on each Job explains why).
+
+Also found and fixed a real bug in the shared `_assert_logged_in()` test
+helper while verifying openarchiefbeheer: it checked for
+`id="logout-form"`, which turned out to be specific to the other three
+apps' template - openarchiefbeheer's admin renders a plain Dutch-locale
+GET link ("Afmelden") instead. Login had actually succeeded
+("Welkom, **admin**." in the page) but the test still failed. Switched
+to checking for the *absence* of the login form's own
+`name="auth-username"` field instead, which is universal regardless of
+locale or template variant.
+
+Extended `tests/test_django_admin_login.py` with both
+(`test_openklant_admin_login`, always-on/no skip; `test_openarchiefbeheer_admin_login`,
+skips if its profile is off) and `tests/test_pods.py`'s one-shot allowlist
+with both new Jobs. Full suite re-run clean (same pre-existing Grafana
+intermittency aside): all six django-admin logins in this stack
+(objecttypen, openzaak, opennotificaties, openformulieren, openklant,
+openarchiefbeheer) now pass - every django-admin-having app in this
+project has a real, tested credential login.

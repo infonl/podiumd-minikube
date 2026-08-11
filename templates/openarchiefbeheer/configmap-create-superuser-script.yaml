@@ -1,0 +1,10 @@
+{{- if .Values.podiumd.openarchiefbeheer.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openarchiefbeheer-create-superuser-script
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  create_superuser.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/openarchiefbeheer/create_superuser.py" | quote }}
+{{- end }}

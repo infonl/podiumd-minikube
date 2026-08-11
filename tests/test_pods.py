@@ -15,9 +15,11 @@ ONE_SHOT_JOB_PREFIXES = (
     # same as any other one-shot Job, but weren't in this allowlist yet.
     "zac-sig-del",
     "zac-signaleren",
-    # templates/openformulieren/create-superuser-job.yaml - see its own
-    # header for why this Job exists.
+    # templates/<app>/create-superuser-job.yaml - see each one's own header
+    # for why it exists.
     "openformulieren-create-superuser",
+    "openklant-create-superuser",
+    "openarchiefbeheer-create-superuser",
 )
 
 

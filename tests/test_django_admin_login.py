@@ -15,9 +15,18 @@ wizard (extra hidden "admin_login_view-current_step" field - a plain POST
 without it 400s with "ManagementForm data is missing or has been
 tampered with"), handled uniformly by _login() below. Every app here also
 genuinely *enforces* a second factor for a fresh superuser with no
-registered device - confirmed live per app - needing the same vendored
-docker_no2fa.py shim (MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS); see each
-app's own values.yaml settings.djangoSettingsModule comment.
+registered device - confirmed live per app - needing either the vendored
+docker_no2fa.py shim (MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS) or, for
+openklant specifically, a plain settings.disable2fa=true (that app's
+shared open_api_framework base library reads DISABLE_2FA directly in its
+real production settings chain, unlike the others); see each app's own
+values.yaml comment for which.
+
+Several apps here also have no working superuser-creation mechanism of
+their own at all (openformulieren/openklant/openarchiefbeheer - confirmed
+by grepping every template in each vendored chart for "superuser": zero
+hits beyond a commented-out example) - each gets a custom idempotent Job
+(templates/<app>/create-superuser-job.yaml) instead.
 """
 
 import re
@@ -84,7 +93,11 @@ def _assert_logged_in(response, username, hostname):
         "two-factor wizard step field is missing/wrong"
     )
     body = re.sub(r"\s+", " ", response.text)
-    assert f"<strong>{username}</strong>" in body and 'id="logout-form"' in body, (
+    # Not '/admin/logout/' or 'id="logout-form"': openarchiefbeheer's admin
+    # renders a plain Dutch-locale GET link ("Afmelden") instead of the
+    # POST form the other three use - so absence of the login form itself
+    # is the one signal that's actually universal across locale/template.
+    assert f"<strong>{username}</strong>" in body and 'name="auth-username"' not in body, (
         f"{hostname}: landed on a page that doesn't look like the "
         "logged-in admin dashboard - check for a wrong-credentials error, "
         "or a regressed docker_no2fa.py shim forcing a "
@@ -167,3 +180,45 @@ def test_openformulieren_admin_login(traefik_ip, enabled_profiles):
         pytest.skip("'openformulieren' profile is not deployed")
     response = _login(traefik_ip, "openformulieren-nginx.local", "admin", "admin")
     _assert_logged_in(response, "admin", "openformulieren-nginx.local")
+
+
+def test_openklant_admin_login(traefik_ip):
+    """
+    Always-on core app - like openformulieren, this chart's own
+    configuration.superuser field doesn't exist at all (confirmed live: no
+    template in the vendored chart references "superuser" outside a
+    commented-out example), so the admin account is instead created by a
+    custom Job (templates/openklant/create-superuser-job.yaml). Unlike
+    every other app here, no docker_no2fa.py shim is needed: openklant's
+    conf/base.py wildcard-imports from maykinmedia's shared
+    open_api_framework library, which reads DISABLE_2FA directly in the
+    real production settings chain (confirmed live by reading that
+    installed package's own source inside the running pod) - a plain
+    settings.disable2fa=true is enough.
+    """
+    response = _login(traefik_ip, "openklant.local", "admin", "admin")
+    _assert_logged_in(response, "admin", "openklant.local")
+
+
+def test_openarchiefbeheer_admin_login(traefik_ip, enabled_profiles):
+    """
+    Optional profile - the cookie/2FA fixes (settings.cookie.*,
+    djangoSettingsModule) were already done in the original build; only
+    the superuser account was ever missing (same "configuration.superuser
+    wired to nothing" gap as openformulieren/openklant, confirmed live the
+    same way). Real docker-compose never solves this either - its own
+    environment block has a commented-out attempt
+    (DJANGO_SETTINGS_MODULE=openarchiefbeheer.conf.dev + DISABLE_2FA=true)
+    with a comment saying it "errors with `ModuleNotFoundError: No module
+    named 'debug_toolbar'`" and gives up, leaving 2FA enforced in real
+    compose too - the vendored docker_no2fa.py here is this project's own
+    fix, not something replicated from upstream.
+
+    This app's admin renders a Dutch-locale GET logout link ("Afmelden"),
+    not the POST `id="logout-form"` the other three use - _assert_logged_in
+    checks for the login form's absence instead, which is universal.
+    """
+    if not enabled_profiles.get("openarchiefbeheer"):
+        pytest.skip("'openarchiefbeheer' profile is not deployed")
+    response = _login(traefik_ip, "openarchiefbeheer-web.local", "admin", "admin")
+    _assert_logged_in(response, "admin", "openarchiefbeheer-web.local")

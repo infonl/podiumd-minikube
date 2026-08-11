@@ -473,6 +473,17 @@ podiumd:
     configuration:
       job:
         enabled: false # same "No steps enabled, aborting" issue as openzaak - see its own comment above
+      # No compose equivalent to match (compose never sets openklant
+      # SUPERUSER credentials either) and, unlike openzaak/opennotificaties/
+      # objecttypen/openformulieren, this chart's values.yaml has no
+      # configuration.superuser field at all to begin with - these values
+      # are consumed by templates/openklant/create-superuser-job.yaml
+      # instead, a custom Job added for exactly this gap. See that Job's
+      # own header comment.
+      superuser:
+        username: admin
+        password: admin
+        email: admin@example.com
     flower:
       enabled: false
     worker:
@@ -489,6 +500,20 @@ podiumd:
     settings:
       # See openzaak's own allowedHosts comment above - same gap, same fix.
       allowedHosts: openklant.local
+      # Chart default (true) makes session/CSRF cookies Secure-only -
+      # confirmed live, the browser silently drops both over our plain
+      # http://openklant.local ingress, failing django-admin login with a
+      # CSRF error before a single credential is even checked.
+      isHttps: false
+      # Unlike openzaak/opennotificaties/objecttypen/openformulieren, this
+      # actually works natively - confirmed live by reading
+      # open_api_framework.conf.base (the shared maykinmedia library
+      # openklant's own conf/base.py wildcard-imports from) directly inside
+      # the running pod: it reads DISABLE_2FA itself, in the real
+      # production settings chain, and sets
+      # MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS accordingly - no
+      # docker_no2fa.py-style shim needed here at all.
+      disable2fa: true
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
       email:
@@ -984,13 +1009,30 @@ podiumd:
         api_configuration:
           selectielijst_service_identifier: selectielijst
         oidc_db_config_enable: false
-    # Compose overrides DJANGO_SETTINGS_MODULE to a custom docker_no2fa
-    # settings module (mounted from a vendored file) purely to disable
-    # enforced two-factor auth on the admin login form - upstream only
-    # reads DISABLE_2FA in a dev-only settings module that pulls in
-    # django-debug-toolbar (not installed in this production image), so
-    # that env var alone has no effect here. Replicated with the same
-    # ConfigMap+extraVolumes+extraVolumeMounts pattern already used for
+      # No compose equivalent to match (compose never sets openarchiefbeheer
+      # SUPERUSER credentials either - it only ever gets as far as a
+      # commented-out wish to disable 2FA, see settings.djangoSettingsModule
+      # below) and this chart's values.yaml has no configuration.superuser
+      # field at all to begin with - these values are consumed by
+      # templates/openarchiefbeheer/create-superuser-job.yaml instead, a
+      # custom Job added for exactly this gap. See that Job's own header
+      # comment.
+      superuser:
+        username: admin
+        password: admin
+        email: admin@example.com
+    # Real compose *tries* to disable 2FA the naive way
+    # (DJANGO_SETTINGS_MODULE=openarchiefbeheer.conf.dev + DISABLE_2FA=true,
+    # both left commented out in its own environment block) and gives up -
+    # its own comment there says this "errors with `ModuleNotFoundError: No
+    # module named 'debug_toolbar'`", leaving 2FA enforced in real compose
+    # too. This project's own docker_no2fa.py (vendored below) actually
+    # solves it: upstream only reads DISABLE_2FA in that dev-only settings
+    # module, which pulls in django-debug-toolbar (not installed in this
+    # production image) - so a small custom settings module that mirrors
+    # just the DISABLE_2FA handling, without the dev-only dependencies,
+    # mounted via the same ConfigMap+extraVolumes+extraVolumeMounts pattern
+    # already used for
     # openzaak's fake-test-document.pdf.
     settings:
       djangoSettingsModule: openarchiefbeheer.conf.docker_no2fa

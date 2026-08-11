@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openklant-create-superuser-script
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  create_superuser.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/openklant/create_superuser.py" | quote }}

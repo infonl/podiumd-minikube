@@ -1,0 +1,77 @@
+{{/*
+Runs vendor/dimpact-zaakafhandelcomponent/openarchiefbeheer/create_superuser.py
+against the same image/database/settings the openarchiefbeheer Deployment
+itself uses (same envFrom Secret/ConfigMap, named "openarchiefbeheer" by
+the chart's own fullname template) - see that script's own header for why
+this Job exists at all (this chart's values.yaml has no
+configuration.superuser field to begin with) and why it's safe to leave in
+the general, unguarded manifest apply unlike pabc-migrations: it's
+idempotent (get_or_create + set_password), so re-applying its
+already-succeeded, unchanged spec is a safe no-op like any other Job here.
+
+Overrides the ConfigMap's own DJANGO_SETTINGS_MODULE
+(openarchiefbeheer.conf.docker_no2fa, needed by the actual Deployment -
+see settings.djangoSettingsModule's own comment above) back to the real
+conf.docker: that shim's own module isn't mounted into this Job (no
+reason to - creating a user via the ORM never touches a login view or 2FA
+at all), and importing a DJANGO_SETTINGS_MODULE that doesn't exist on disk
+here breaks Django's settings loading in a confusing way (confirmed live
+for openformulieren's identical Job - manifests as "AUTH_USER_MODEL refers
+to model 'auth.User' that has not been installed", not a straightforward
+ModuleNotFoundError).
+
+image.tag isn't pinned in this repo's own values.yaml - falls back to the
+openarchiefbeheer subchart's own AppVersion via .Subcharts, matching
+exactly what that subchart's own Deployment template does internally with
+`.Values.image.tag | default .Chart.AppVersion` (that fallback can't be
+replicated with plain `.Chart.AppVersion` from here - it would resolve to
+*this* chart's own AppVersion instead).
+*/}}
+{{- if .Values.podiumd.openarchiefbeheer.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openarchiefbeheer-create-superuser
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "podiumd-minikube.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-superuser
+          image: "{{ .Values.podiumd.openarchiefbeheer.image.repository }}:{{ .Values.podiumd.openarchiefbeheer.image.tag | default .Subcharts.podiumd.Subcharts.openarchiefbeheer.Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.podiumd.openarchiefbeheer.image.pullPolicy }}
+          workingDir: /app
+          command:
+            - sh
+            - -c
+            - python src/manage.py shell < /app/create_superuser.py
+          envFrom:
+            - secretRef:
+                name: openarchiefbeheer
+            - configMapRef:
+                name: openarchiefbeheer
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: openarchiefbeheer.conf.docker
+            - name: DJANGO_SUPERUSER_USERNAME
+              value: {{ .Values.podiumd.openarchiefbeheer.configuration.superuser.username | quote }}
+            - name: DJANGO_SUPERUSER_PASSWORD
+              value: {{ .Values.podiumd.openarchiefbeheer.configuration.superuser.password | quote }}
+            - name: DJANGO_SUPERUSER_EMAIL
+              value: {{ .Values.podiumd.openarchiefbeheer.configuration.superuser.email | quote }}
+          volumeMounts:
+            - name: create-superuser-script
+              mountPath: /app/create_superuser.py
+              subPath: create_superuser.py
+              readOnly: true
+      volumes:
+        - name: create-superuser-script
+          configMap:
+            name: openarchiefbeheer-create-superuser-script
+{{- end }}
