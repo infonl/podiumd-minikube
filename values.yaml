@@ -683,6 +683,18 @@ podiumd:
     configuration:
       job:
         enabled: false # same fixture-import scope note as objecten above
+      # No compose equivalent to match (objecttypen isn't part of
+      # dimpact-zaakafhandelcomponent's docker-compose stack at all - see
+      # this block's own top comment). Same admin/admin/admin@example.com
+      # convention as opennotificaties's superuser block below purely for
+      # local django-admin access; wired the same way (Deployment's
+      # envFrom already pulls in this Secret/ConfigMap regardless of the
+      # job.enabled=false above, so this alone is enough - confirmed
+      # against objecttypen's own templates/{secret,configmap,deployment}.yaml).
+      superuser:
+        username: admin
+        password: admin
+        email: admin@example.com
     # podiumd's own umbrella override enables create_required_objecttypen_job
     # by default with placeholder credentials - same class of problem as
     # openzaak's create_required_catalogi_job (see that override's comment
@@ -690,9 +702,23 @@ podiumd:
     # instead of its own.
     create_required_objecttypen_job:
       enabled: false
+    # No dedicated values.yaml field for IS_HTTPS on this chart (unlike
+    # openarchiefbeheer's settings.cookie.*), so set via extraEnvVars -
+    # confirmed live: without this, SESSION_COOKIE_SECURE/CSRF_COOKIE_SECURE
+    # default true, and the browser silently drops both cookies over our
+    # plain http://objecttypen.local ingress, failing django-admin login
+    # with "CSRF verification failed" before a single credential is checked.
+    extraEnvVars:
+      - name: IS_HTTPS
+        value: "False"
     settings:
       secretKey: objecttypesApiSecretKey
       allowedHosts: objecttypen.local
+      # Confirmed live: chart default (false) makes django-admin login a
+      # django-two-factor-auth wizard (extra "admin_login_view-current_step"
+      # form field) instead of a plain username/password form. Disabling
+      # it is enough to log in with just the superuser credentials above.
+      disable2fa: true
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
       email:
