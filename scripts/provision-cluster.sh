@@ -18,6 +18,18 @@
 #   MINIKUBE_CPUS=8 MINIKUBE_MEMORY=24576 ./scripts/provision-cluster.sh
 set -euo pipefail
 
+# NOTE for Apple Silicon + colima: don't set DOCKER_DEFAULT_PLATFORM=linux/amd64
+# globally in this script. Doing so forces the minikube *node* container
+# itself to be amd64 - but minikube's own kubeadm/kubelet/kubectl binary
+# selection follows the minikube CLI's host GOARCH (arm64 on Apple Silicon),
+# not the node container's platform, so it copies arm64 binaries into an
+# amd64 rootfs and `kubeadm init` fails ("exec format error" / "no such file
+# or directory" - the arm64 binaries have no matching ELF interpreter in the
+# amd64 container). Confirmed live. Let the node be native arm64 (fast,
+# reliable) and only force amd64 on the workload images pulled in step 4
+# below - Kubernetes doesn't care that the node and pod images differ in
+# architecture as long as the shared kernel can execute both, which colima's
+# `--vz-rosetta` binfmt registration provides transparently.
 CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="minikube"
 
@@ -68,7 +80,11 @@ if minikube status -p "${PROFILE}" > /dev/null 2>&1; then
   fi
 else
   echo "Starting minikube (cpus=${MINIKUBE_CPUS}, memory=${MINIKUBE_MEMORY}MB)..."
-  minikube start -p "${PROFILE}" --cpus="${MINIKUBE_CPUS}" --memory="${MINIKUBE_MEMORY}"
+  # --driver=docker explicitly: left on "auto", minikube silently falls back
+  # to qemu2 on failure (see the DOCKER_DEFAULT_PLATFORM comment above) -
+  # forcing it here turns that into a loud failure instead of a cluster that
+  # looks fine but can't run this chart's images.
+  minikube start -p "${PROFILE}" --driver=docker --cpus="${MINIKUBE_CPUS}" --memory="${MINIKUBE_MEMORY}"
 fi
 
 # `minikube start` sets kubectl's current-context itself, but the
@@ -137,8 +153,8 @@ mapfile -t images < <(
     --set monitoringLogging.enabled=true \
     2>/dev/null \
   | python3 "${CHART_DIR}/scripts/lib/strip-image-digests.py" \
-  | grep -oE '^\s*image:\s*"?[^"[:space:]]+' \
-  | sed -E 's/^\s*image:\s*"?//' \
+  | grep -oE '^ *image: *"?[^"[:space:]]+' \
+  | sed -E 's/^ *image: *"?//' \
   | sort -u
 )
 echo "${#images[@]} image(s) referenced by this chart's fully-enabled render."
@@ -174,12 +190,29 @@ else
     batch=("${to_fetch[@]:i:BATCH_SIZE}")
     echo "Pulling batch: ${batch[*]}"
     for img in "${batch[@]}"; do
-      docker pull "${img}" &
+      # --platform: this project's images are amd64-only (see CLAUDE.md) -
+      # on an Apple Silicon host with a native-arch (arm64) minikube node,
+      # docker would otherwise default to pulling an arm64 variant (or fail
+      # outright for images with no arm64 build at all).
+      docker pull --platform linux/amd64 "${img}" &
     done
     wait
     echo "Loading batch into minikube: ${batch[*]}"
     for img in "${batch[@]}"; do
-      minikube image load -p "${PROFILE}" "${img}" &
+      # `minikube image load <image-ref>` (with or without --daemon) fails
+      # here with "unable to calculate manifest ... content digest ... not
+      # found": it tries to resolve the image's manifest as if the node's
+      # own architecture (arm64) has a matching variant, which an amd64-only
+      # image doesn't have. Saving to a plain tarball first and loading
+      # *that* sidesteps the arch-aware manifest lookup entirely - confirmed
+      # live this loads amd64 images cleanly onto the arm64 node (the node's
+      # containerd runs them fine via colima's Rosetta-backed emulation).
+      tar_path="$(mktemp -t "minikube-image-XXXXXX").tar"
+      (
+        docker save --platform linux/amd64 "${img}" -o "${tar_path}" \
+          && minikube image load -p "${PROFILE}" "${tar_path}"
+        rm -f "${tar_path}"
+      ) &
     done
     wait
   done
