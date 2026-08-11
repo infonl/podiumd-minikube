@@ -344,7 +344,11 @@ podiumd:
     flower:
       enabled: false
     worker:
-      replicaCount: 0 # compose only runs openzaak-celery under the opennotificaties/openformulieren profiles
+      # Compose only runs openzaak-celery under the opennotificaties/
+      # openformulieren profiles - kept on unconditionally here instead
+      # (deliberate divergence from compose parity), so it's available
+      # regardless of which other profiles happen to be enabled.
+      replicaCount: 1
     beat:
       replicaCount: 0 # compose never runs a separate openzaak beat/scheduler service at all
     # nginx.replicaCount left at its chart default (1) - compose runs
@@ -428,8 +432,17 @@ podiumd:
         default: redis:6379/0
         axes: redis:6379/0
       celery:
-        brokerUrl: redis://redis:6379/1
-        resultBackend: redis://redis:6379/1
+        # DB 3, not the more obvious 1 - objecten's own worker (already
+        # active) also brokers on db1, and Celery workers are competing
+        # consumers on whatever queue they share: with openzaak's worker
+        # now on too (see worker.replicaCount above), both would silently
+        # steal tasks meant for the other (confirmed live for the
+        # openklant/openformulieren db2 equivalent of this exact
+        # collision - "Received unregistered task of type ..." errors,
+        # discarded instead of processed). No other app here brokers on
+        # db3.
+        brokerUrl: redis://redis:6379/3
+        resultBackend: redis://redis:6379/3
     # Compose's openzaak.local service copies a vendored test PDF into
     # /app/private-media/uploads/2023/{10,11,12}/ before starting (see
     # copy-test-pdf-and-start-openzaak.sh, referenced by the
@@ -492,7 +505,10 @@ podiumd:
     flower:
       enabled: false
     worker:
-      replicaCount: 0 # compose runs openklant as a single bare container, no celery worker at all
+      # Compose runs openklant as a single bare container with no celery
+      # worker at all - kept on unconditionally here instead (deliberate
+      # divergence from compose parity).
+      replicaCount: 1
     # nginx.replicaCount left at its chart default (1), even though compose
     # runs openklant without one: verified directly that this chart's own
     # Ingress template hardwires its backend to the "<fullname>-nginx"
@@ -542,15 +558,20 @@ podiumd:
         default: redis:6379/0
         axes: redis:6379/0
       celery:
-        brokerUrl: redis://redis:6379/2
+        # DB 4, not the more obvious 2 - openformulieren's own worker
+        # (already active) also brokers on db2, and Celery workers are
+        # competing consumers on whatever queue they share: confirmed
+        # live, this exact collision made openklant's worker steal
+        # openformulieren's own scheduled tasks ("Received unregistered
+        # task of type 'openforms.forms.tasks.activate_forms'" - silently
+        # discarded instead of executed) the moment this worker was
+        # enabled. No other app here brokers on db4.
+        brokerUrl: redis://redis:6379/4
         # Set both: this chart's own configmap.yaml has a typo reading
         # "resultBackendl" (not "resultBackend") - found live while fixing
         # the same bug on openarchiefbeheer's chart (see that comment).
-        # Currently a no-op in practice since openklant's own celery
-        # worker is disabled (worker.replicaCount: 0 below) and nothing
-        # reads this value, but fixed for correctness/future-proofing.
-        resultBackend: redis://redis:6379/2
-        resultBackendl: redis://redis:6379/2
+        resultBackend: redis://redis:6379/4
+        resultBackendl: redis://redis:6379/4
     ingress:
       enabled: true
       className: traefik

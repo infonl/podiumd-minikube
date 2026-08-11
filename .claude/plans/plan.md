@@ -3006,3 +3006,48 @@ Deployment's own age against the ConfigMap's.
 
 Full suite re-run clean: 51 passed, 3 skipped, 0 failed - the Grafana
 503s are gone for real this time, not by luck.
+
+## Always-on openzaak/openklant workers - a real Celery queue collision found live
+
+Asked to always enable `worker.replicaCount` for openzaak and openklant
+(both were `0`, matching compose's own topology - openzaak's celery only
+ever runs under other profiles in compose, openklant never runs one at
+all). Flipped both to `1` and redeployed - pods came up `1/1 Running`
+immediately, looked done.
+
+Checked the workers' own logs anyway before calling it finished (habit
+that paid off): openklant-worker was logging `Received unregistered task
+of type 'openforms.forms.tasks.activate_forms'` - it was consuming and
+silently discarding openformulieren's own scheduled tasks. Root cause:
+openklant's `settings.celery.brokerUrl` and openformulieren's both point
+at the same `redis://redis:6379/2` - harmless while openklant's worker
+was disabled, but Celery workers sharing a broker are *competing
+consumers* on the same default `celery` queue, not independent - once
+both are active, each one can pop the *other's* messages off the queue,
+log "unregistered task", and drop them. Checked whether enabling
+openzaak's worker had the identical problem with objecten (both configured
+on db1) - no visible errors yet in either's logs at the time, but the
+absence of a log line doesn't mean the collision isn't live; competing
+consumers only clash on whichever task actually gets round-robined to the
+"wrong" one first, so a clean-looking log at one point in time proves
+nothing here. Reasoned about it from the shared-DB fact instead of waiting
+for it to eventually happen to manifest.
+
+Fixed by giving each newly-active worker its own DB no other app brokers
+on - openzaak → db3, openklant → db4 (audited every `redis:6379/N`
+occurrence in values.yaml first to confirm both were genuinely unused,
+not just "not obviously used"). `opennotificaties`'s own db1 assignment
+was deliberately left alone - confirmed it's only ever used as a
+result-backend for that app (its real broker is RabbitMQ), and a shared
+result-backend DB doesn't have the competing-consumer problem a shared
+*broker* DB does - results are looked up by unique task UUID, not
+consumed off a shared queue.
+
+Verified live, not just "no errors this time": openklant-worker's own
+`mingle` log line flipped from `sync with 1 nodes` (finding
+openformulieren-worker as a queue-neighbor) to `all alone` (genuinely
+isolated) after the DB reassignment - the clearest possible confirmation
+the collision is actually gone, not just quiet. Added
+`openzaak-worker`/`openklant-worker` to `test_pods.py`'s
+`test_core_profile_pod_present` list, matching their new always-on
+status. Full suite: 51 passed, 3 skipped, 0 failed.
