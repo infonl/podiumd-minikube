@@ -100,6 +100,22 @@ here is a live reference — this project never reads
   step references them yet - `openarchiefbeheer`'s is reserved further
   out still, since that app (v1.1.1, this project's current pin) has no
   OIDC support in its chart at all yet.
+  Also: the pre-existing `pabc` client's `pkce.code.challenge.method` set
+  to `"S256"` (previously absent - Keycloak's own default is "not
+  required"). Unlike every Django app here, safe to enable unconditionally
+  - confirmed live (curling `pabc.local/api/challenge` directly) that
+  PABC's own ASP.NET Core OpenIdConnect middleware already sends a real
+  `code_challenge`/`code_challenge_method=S256` on every login attempt
+  regardless of this setting (no `Oidc__*` env var controls it - it's just
+  always on by default in this framework version). Confirmed live end to
+  end that Keycloak now enforcing it doesn't break anything: a full
+  browser navigation through the captured authorization URL, real
+  credentials, and the code exchange all complete cleanly with no
+  PKCE-related error. See `values.yaml`'s own `podiumd.pabc.settings.oidc.pkceEnabled`
+  comment for a *separate*, unrelated finding from the same investigation
+  (PABC's own hardcoded `CookieSecurePolicy.Always` blocks the actual
+  session from ever being established over this project's HTTP-only
+  ingress, PKCE or not) - a known limitation, not fixed here.
 
 ## Newly authored (not copied from anywhere)
 

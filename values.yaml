@@ -746,6 +746,49 @@ podiumd:
         clientSecret: pabcClientSecret
         functioneelBeheerderRole: administrator
         requireHttps: false # defaults to true - would reject our HTTP-only Keycloak's tokens entirely; matches compose's own Oidc__RequireHttps: "false"
+        # Unlike openzaak (see values.yaml's own zac.enablePkce and
+        # podiumd.openzaak.configuration.data comments for that story),
+        # confirmed live safe here: curling /api/challenge directly shows
+        # PABC's ASP.NET Core OpenIdConnect middleware (.NET 8) already
+        # sends a real code_challenge/code_challenge_method=S256 on every
+        # login attempt unconditionally - there's no Oidc__* env var for
+        # it because it's just always on by default in this framework
+        # version, not something this project turned on. Enabling
+        # enforcement on the Keycloak client side (see vendor/
+        # dimpact-zaakafhandelcomponent/keycloak/
+        # zaakafhandelcomponent-realm.json's own "pabc" client) is a pure
+        # formality here, not a functional change - the app was already
+        # sending it, Keycloak just wasn't requiring it yet. Only
+        # meaningful at all if this project ever switches to podiumd's
+        # own keycloak-operator-managed realm instead of the vendored
+        # static realm.json import (keycloak-operator.enabled is false
+        # here) - inert otherwise, kept accurate for when that changes.
+        #
+        # PKCE itself confirmed working end to end: with the Keycloak
+        # client's pkce.code.challenge.method set to S256, a real browser
+        # navigation to the captured authorization URL (code_challenge and
+        # all) lands cleanly on Keycloak's login form, and submitting valid
+        # credentials completes the code exchange and 302s back through
+        # /signin-oidc - no PKCE-related error at any point.
+        #
+        # Known separate limitation (not related to PKCE, found chasing a
+        # full login verification): the actual session never gets
+        # established after that redirect, because PABC's own
+        # AuthenticationExtensions.cs hardcodes
+        # `options.Cookie.SecurePolicy`/`options.NonceCookie.SecurePolicy`/
+        # `options.CorrelationCookie.SecurePolicy` to `CookieSecurePolicy.Always`
+        # - unlike every other app in this project (which all expose an
+        # isHttps/cookie.sessionCookieSecure-style override), there is no
+        # config surface for this at all, checked directly against PABC's
+        # own source (github.com/Platform-Autorisatie-Beheer-Component/
+        # PABC-API, PABC.Server/Auth/AuthenticationExtensions.cs). The
+        # browser silently drops all three Secure cookies over this
+        # project's plain-HTTP ingress, so the OIDC nonce/correlation
+        # cookies never make it back on the callback regardless of PKCE.
+        # The only real fix is genuine TLS termination in front of
+        # pabc.local specifically - deliberately not done here, since this
+        # whole cluster is HTTP-only by design (see CLAUDE.md).
+        pkceEnabled: true
       keycloakAdmin:
         clientId: pabc-admin-client
         clientSecret: pabcAdminClientSecret
