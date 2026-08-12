@@ -5,10 +5,7 @@ docker-compose dev stack (ZAC + its ZGW dependencies: Open Zaak, Open
 Klant, PABC, Objecten, Objecttypen, Open Notificaties, Open
 Archiefbeheer, Open Formulieren) for local development on minikube.
 
-For the *why* behind every design decision here — dependency choices,
-resource-footprint tradeoffs, and every bug found and fixed along the
-way — see [`.claude/plans/plan.md`](.claude/plans/plan.md). This README
-covers the *how*.
+This README covers the *how*: provisioning, deploying, and the test suite.
 
 ## Prerequisites
 
@@ -230,8 +227,7 @@ exists to raise it in current Kubernetes versions). One consequence: Helm's
 install/upgrade hooks never fire, since they need a live Helm release that
 this workflow never creates — `deploy.sh` handles the one place that
 matters (`templates/storage-hooks.yaml`'s PV/PVC pre-provisioning) by
-applying that file before the rest of the manifest instead. Full details in
-`plan.md`'s step 4 notes.
+applying that file before the rest of the manifest instead.
 
 ## Troubleshooting
 
@@ -258,5 +254,4 @@ vendor/dimpact-zaakafhandelcomponent/  # physical copies of file assets from tha
 scripts/                               # cluster lifecycle + deploy-time tooling (see table above)
 scripts/lib/                           # mostly internal helpers, plus two exceptions (see table above)
 tests/                                 # live-cluster pytest suite
-.claude/plans/plan.md                  # full design + build log
 ```
