@@ -6,7 +6,7 @@
 # Confirmed live (2026-08-05/06): kubectl's current-context silently
 # drifted to an unrelated real Azure AKS cluster mid-session - root cause
 # never fully determined. A `deploy.sh` run and a non-idempotent Job
-# delete/recreate (apply-pabc-migrations.sh) landed on that cluster's own
+# delete/recreate (scripts/lib/apply-pabc-migrations.sh) landed on that cluster's own
 # `podiumd-minikube` namespace before anyone noticed, breaking its
 # postgres Deployment. This project only ever targets the local `minikube`
 # profile - never assume a context set correctly earlier in a session is

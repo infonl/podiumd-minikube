@@ -42,10 +42,10 @@
 #     into the same "objecten" Deployment name either way (see H.1 in
 #     that migration doc for why the name stays "objecten").
 #
-# Usage: ./scripts/seed-fixtures.sh
+# Usage: ./scripts/lib/seed-fixtures.sh
 set -euo pipefail
 
-CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NAMESPACE="podiumd-minikube"
 VENDOR_DIR="${CHART_DIR}/vendor/dimpact-zaakafhandelcomponent"
 

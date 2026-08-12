@@ -30,7 +30,7 @@
 # (see set-podiumd-version.sh --path) with no meaningful version to key off.
 #
 # Also exports OBJECTEN_MERGED (true/false) - a plain boolean other
-# scripts can branch on directly (see scripts/seed-fixtures.sh) without
+# scripts can branch on directly (see scripts/lib/seed-fixtures.sh) without
 # re-deriving it or parsing OBJECTEN_SHAPE_SETS themselves.
 PODIUMD_TGZ="$(ls "${CHART_DIR}"/charts/podiumd-*.tgz 2>/dev/null | head -1)"
 # Deliberately not `tar ... | grep -q ...`: under `set -o pipefail` (as in

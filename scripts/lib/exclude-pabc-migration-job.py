@@ -13,7 +13,7 @@ never created yet) when that unfiltered apply ran, plain `kubectl apply`
 would silently create + run it with no guard at all - even against a
 database that already has real data added since the last successful run.
 
-`scripts/apply-pabc-migrations.sh` is the one place allowed to (re)create
+`scripts/lib/apply-pabc-migrations.sh` is the one place allowed to (re)create
 this Job - it checks first and refuses without `--force`. `deploy.sh` calls
 it as its own explicit, later step instead of relying on the general
 manifest apply to create it implicitly. See that script's own header for

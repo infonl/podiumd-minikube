@@ -29,7 +29,7 @@
 #
 # The pabc-migrations Job is excluded from this general apply for a
 # different reason - not immutability, but because it's genuinely
-# destructive to create unguarded (see scripts/apply-pabc-migrations.sh's
+# destructive to create unguarded (see scripts/lib/apply-pabc-migrations.sh's
 # own header) - and applied via that guarded script instead, as its own
 # explicit step below.
 #
@@ -62,7 +62,7 @@
 # new ones).
 #
 # Then, if the objecten profile is actually part of the (post-prune) live
-# state, automatically runs scripts/seed-fixtures.sh - safe to do on every
+# state, automatically runs scripts/lib/seed-fixtures.sh - safe to do on every
 # single deploy.sh run, not just the first, since that script's own seed()
 # calls are each independently idempotent (skip straight past the
 # wait/copy/loaddata work once their target model already has data - see
@@ -194,7 +194,7 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 # are enabled (see storage-hooks.yaml) - Jobs are immutable, so re-running
 # this script with a *different* set of profiles than whatever's currently
 # deployed would otherwise fail outright on this one resource. Unlike
-# pabc-migrations (see scripts/apply-pabc-migrations.sh's own guard, and
+# pabc-migrations (see scripts/lib/apply-pabc-migrations.sh's own guard, and
 # why it exists), this Job is safe to unconditionally delete and recreate
 # any time - it only ever does an idempotent chmod, nothing it could lose.
 kubectl delete job storage-permissions-fix -n "${NAMESPACE}" --ignore-not-found
@@ -267,8 +267,8 @@ if [ -s "${LARGE_CONFIGMAPS_FILE}" ]; then
 fi
 
 echo
-echo "Applying pabc-migrations (guarded - see scripts/apply-pabc-migrations.sh)..."
-"${CHART_DIR}/scripts/apply-pabc-migrations.sh"
+echo "Applying pabc-migrations (guarded - see scripts/lib/apply-pabc-migrations.sh)..."
+"${CHART_DIR}/scripts/lib/apply-pabc-migrations.sh"
 
 PRUNE_ARGS=("${NAMESPACE}")
 if [ "${FORCE_PRUNE}" = true ]; then
@@ -292,10 +292,10 @@ render | python3 "${CHART_DIR}/scripts/lib/prune-orphaned-workloads.py" "${PRUNE
 # already seeded, not just on first deploy.
 echo
 if kubectl get deployment/objecten -n "${NAMESPACE}" > /dev/null 2>&1; then
-  echo "Seeding fixture data (see scripts/seed-fixtures.sh)..."
-  "${CHART_DIR}/scripts/seed-fixtures.sh"
+  echo "Seeding fixture data (see scripts/lib/seed-fixtures.sh)..."
+  "${CHART_DIR}/scripts/lib/seed-fixtures.sh"
 else
-  echo "'objecten' profile not deployed - skipping scripts/seed-fixtures.sh."
+  echo "'objecten' profile not deployed - skipping scripts/lib/seed-fixtures.sh."
 fi
 
 echo

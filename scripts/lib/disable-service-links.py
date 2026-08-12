@@ -32,7 +32,7 @@ updates freely - only the Jobs it later spawns are immutable): a Job's own
 `spec.template` is immutable once created, so patching it here would make
 `kubectl apply` fail outright on any already-existing Job whose rendered
 spec doesn't yet have this field - including `pabc-migrations-1`, which
-`scripts/apply-pabc-migrations.sh` deliberately protects from being
+`scripts/lib/apply-pabc-migrations.sh` deliberately protects from being
 casually deleted and recreated (see that script for why: this Job clears
 PABC's database before reseeding it, every time it runs). None of this
 chart's own one-shot Jobs (`storage-permissions-fix`,

@@ -20,11 +20,11 @@
 # is the guard for that one dangerous case.
 #
 # Usage:
-#   ./scripts/apply-pabc-migrations.sh          # refuses if Pabc already has data
-#   ./scripts/apply-pabc-migrations.sh --force   # wipes and reseeds anyway
+#   ./scripts/lib/apply-pabc-migrations.sh          # refuses if Pabc already has data
+#   ./scripts/lib/apply-pabc-migrations.sh --force   # wipes and reseeds anyway
 set -euo pipefail
 
-CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NAMESPACE="podiumd-minikube"
 JOB_NAME="pabc-migrations-1"
 FORCE=false

@@ -25,7 +25,8 @@ collection - that's what actually "stops the pods".
 Job/CronJob are deliberately left out of PRUNABLE_KINDS: pabc-migrations is
 excluded from this render entirely (see exclude-pabc-migration-job.py) and
 would look "orphaned" on every single run if included here, deleting the
-very Job apply-pabc-migrations.sh's own guard exists to protect;
+very Job scripts/lib/apply-pabc-migrations.sh's own guard exists to
+protect;
 storage-permissions-fix is already unconditionally deleted/recreated
 earlier in deploy.sh; and CronJob-spawned Job instances (zac-sig-del,
 zac-signaleren) are never themselves part of any render - only the owning

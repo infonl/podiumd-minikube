@@ -1,5 +1,5 @@
 """
-Verifies scripts/apply-pabc-migrations.sh actually prevents the destructive
+Verifies scripts/lib/apply-pabc-migrations.sh actually prevents the destructive
 scenario it exists for: the pabc-migrations Job clears PABC's database
 before reloading its seed dataset every time it's created (confirmed live,
 not idempotent), so recreating it against an already-seeded database must
@@ -22,7 +22,7 @@ import pytest
 from conftest import NAMESPACE, kubectl
 
 SCRIPT_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "scripts", "apply-pabc-migrations.sh"
+    os.path.dirname(__file__), "..", "scripts", "lib", "apply-pabc-migrations.sh"
 )
 JOB_NAME = "pabc-migrations-1"
 

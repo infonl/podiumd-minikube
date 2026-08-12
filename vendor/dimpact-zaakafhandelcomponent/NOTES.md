@@ -33,7 +33,7 @@ here is a live reference — this project never reads
 - `metrics/{otel-collector,tempo,prometheus,grafana-datasources}.yaml`
   ← `scripts/docker-compose/imports/{otel-collector,tempo,prometheus,grafana}/*.yaml`.
 - `objecten/demodata.json`, `objecttypen/demodata.json`, `openobject/demodata.json`
-  — Django fixtures used by `scripts/seed-fixtures.sh` (`manage.py loaddata`),
+  — Django fixtures used by `scripts/lib/seed-fixtures.sh` (`manage.py loaddata`),
   matching docker-compose's own `*-import` one-shot containers.
   **Exception to this file's pinned commit** (these three predate/postdate
   it): `objecten/demodata.json` ← `scripts/docker-compose/imports/objects-api/fixtures/demodata.json`
@@ -47,7 +47,7 @@ here is a live reference — this project never reads
   `scripts/docker-compose/imports/open-object/fixtures/demodata.json` at
   that same commit `a98d5ae2b`, i.e. the merged app's own combined fixture.
   Kept as three separate files (not reconciled into one) because
-  `scripts/seed-fixtures.sh` needs to support both podiumd shapes: classic
+  `scripts/lib/seed-fixtures.sh` needs to support both podiumd shapes: classic
   (`objecten`+`objecttypen` as two separate subcharts/databases - use the
   first two) and merged (`openobject`, one subchart serving both APIs -
   use the third).
