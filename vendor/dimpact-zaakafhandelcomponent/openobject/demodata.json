@@ -3781,7 +3781,7 @@
       "label": "Open Notificaties",
       "slug": "open-notificaties",
       "api_type": "nrc",
-      "api_root": "http://opennotificaties:8000/api/v1/",
+      "api_root": "http://opennotificaties:80/api/v1/",
       "client_id": "objectsapi",
       "secret": "opennotificatiesObjectsSecret",
       "auth_type": "zgw",
