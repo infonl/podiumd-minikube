@@ -23,6 +23,10 @@ This README covers the *how*: provisioning, deploying, and the test suite.
   and warns if it's below 16Gi, with the exact command to raise it live
   (see "Troubleshooting" below)
 - Python 3 + `pip` if you want to run the test suite
+- **Apple Silicon Mac with no Docker Desktop**: see [`mac.md`](mac.md) for
+  the one-time colima setup this project's tooling needs instead — the
+  `minikube --driver=docker` prerequisite above assumes a real Docker
+  daemon, which colima provides in place of Docker Desktop
 
 ## Quick start
 
