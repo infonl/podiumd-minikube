@@ -5,28 +5,16 @@ docker-compose dev stack (ZAC + its ZGW dependencies: Open Zaak, Open
 Klant, PABC, Objecten, Objecttypen, Open Notificaties, Open
 Archiefbeheer, Open Formulieren) for local development on minikube.
 
-This README covers the *how*: provisioning, deploying, and the test suite.
-
 ## Prerequisites
 
 - [minikube](https://minikube.sigs.k8s.io/), Docker, `kubectl`, `helm`
-  (see `scripts/provision-cluster.sh` for the exact Traefik chart version
-  this project is compatible with if your `helm` binary is old)
-- Enough free RAM/CPU on the host for a sized-up minikube VM (default
-  6 CPUs / 16Gi — see below). This isn't just a recommendation: the full
-  stack (all optional profiles, ~35 pods) has been observed live pushing an
-  under-provisioned cluster into severe CPU/memory thrashing that makes the
-  whole API server unresponsive. `provision-cluster.sh` only applies this
-  sizing when it *creates* a profile — if you already have a `minikube`
-  profile running from before (e.g. from an older version of this project),
-  it checks the running container's actual memory allocation on every run
-  and warns if it's below 16Gi, with the exact command to raise it live
-  (see "Troubleshooting" below)
+  (see `scripts/provision-cluster.sh` for the Traefik chart version pin if
+  your `helm` binary is old)
+- 6 CPUs / 16Gi free for the minikube VM (default sizing) — see
+  Troubleshooting if the cluster becomes sluggish
 - Python 3 + `pip` if you want to run the test suite
 - **Apple Silicon Mac with no Docker Desktop**: see [`mac.md`](mac.md) for
-  the one-time colima setup this project's tooling needs instead — the
-  `minikube --driver=docker` prerequisite above assumes a real Docker
-  daemon, which colima provides in place of Docker Desktop
+  the colima setup this project's tooling needs instead
 
 ## Quick start
 
@@ -38,166 +26,113 @@ This README covers the *how*: provisioning, deploying, and the test suite.
 ./scripts/setup-tunnel.sh           # starts `minikube tunnel`, prints the /etc/hosts line to add
 ```
 
-`set-podiumd-version.sh` is not optional, on a fresh clone: `Chart.yaml`
-never holds a real podiumd/monitoring-logging version at all, just a
-placeholder — the actual version lives entirely in `.podiumd-versions.yaml`
-(gitignored, created by this script). `deploy.sh`/`provision-cluster.sh`
-both refuse with a clear message if you haven't run it yet. See
-`scripts/lib/podiumd-dependency.sh`'s own header for why (in short: every
-developer's own version choice used to show up as an uncommitted, or
-accidentally committed, `Chart.yaml`/`Chart.lock` diff before this).
+`set-podiumd-version.sh` is required on a fresh clone — `Chart.yaml` holds
+no real podiumd/monitoring-logging version, just a placeholder; the actual
+version lives in `.podiumd-versions.yaml` (gitignored, created by this
+script). `deploy.sh`/`provision-cluster.sh` both refuse with a clear
+message if you haven't run it yet.
 
-Then add the printed line to `/etc/hosts` (the script gives you the exact
-`sudo tee -a` command), and open `http://zac.local` in a browser — it
-redirects to Keycloak, and back to the authenticated app on login.
+Then add the printed line to `/etc/hosts` and open `http://zac.local` in a
+browser — it redirects to Keycloak, and back to the authenticated app on
+login.
 
 Leave off `--full` on `deploy.sh` to deploy just the core profile (ZAC,
-Open Zaak, Open Klant, PABC, Postgres/Redis/Solr/Keycloak/WireMock) —
-matches `values.yaml`'s own default, mirroring compose's own
-no-profile-flags behavior.
+Open Zaak, Open Klant, PABC, Postgres/Redis/Solr/Keycloak/WireMock),
+matching `values.yaml`'s own default.
 
 ## What's running
 
 **Core (always on):** zac, openzaak, openklant, pabc, brp-personen-mock,
 postgres, redis, solr, keycloak, wiremock, mailpit (SMTP test server —
-every app's email settings point at it, unauthenticated, regardless of
-which optional profiles are on).
+every app's email settings point at it).
 
-**Optional profiles** (each is its own `values.yaml` top-level flag,
-default `false` — `deploy.sh --full` turns all of them on):
+**Optional profiles** (each its own `values.yaml` flag, off by default —
+`deploy.sh --full` turns all of them on):
 
 | Profile | Adds |
 |---|---|
-| `objecten` | Objecten API + its celery worker (Objecttypen has no top-level flag of its own — `deploy.sh --full` enables it alongside `objecten` via `podiumd.objecttypen.enabled` directly) |
+| `objecten` | Objecten API + celery worker (Objecttypen has no flag of its own — `--full` enables it alongside `objecten`) |
 | `openarchiefbeheer` | Open Archiefbeheer (web + nginx + worker + beat) |
 | `opennotificaties` | Open Notificaties + RabbitMQ |
-| `openformulieren` | Open Formulieren (+ transitively needs `objecten`, `objecttypen`, `opennotificaties` enabled too — matches compose's own profile nesting) |
+| `openformulieren` | Open Formulieren (transitively needs `objecten`, `objecttypen`, `opennotificaties`) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
 | `wiremock` | extra WireMock mappings (SmartDocuments/KVK/BAG) |
 
-`metrics` has two interchangeable implementations, picked by
-`values.yaml`'s `monitoringLogging.enabled` — not a `deploy.sh` flag, see
-below:
+`metrics` has two implementations, picked by `values.yaml`'s
+`monitoringLogging.enabled` (not a `deploy.sh` flag):
 
-- **Default** (`monitoringLogging.enabled=false`, unchanged): the four raw
-  components above, defined directly in `templates/metrics/`.
-- **`monitoringLogging.enabled=true`**: supersedes those four with the
-  optional `monitoring-logging` Helm dependency instead — the same PodiumD
-  chart used in production, re-tuned here for a single-node minikube box
-  (`SingleBinary` Loki instead of `Distributed`+MinIO, no AKS node
-  selectors, anonymous Grafana admin instead of Keycloak OAuth, `standard`
-  storage class). Adds Loki + Alloy (log aggregation/shipping) and
-  kube-prometheus-stack + Prometheus Pushgateway on top of the same
-  Tempo/Grafana/otel-collector functionality — meaningfully heavier
-  (roughly a dozen extra pods). Still needs `metrics.enabled=true` too
-  (independent flag, on by default with `--full`) — `monitoringLogging`
-  only picks the implementation, it doesn't turn the profile on by itself.
-  Set it persistently with `./scripts/set-podiumd-version.sh <version>
-  <monitoring-logging-version>` (or edit `values.yaml` directly);
-  `deploy.sh` then detects it automatically and repoints ZAC's OTLP
-  endpoint at the new otel-collector for you — see that script's own
-  `--help`-style comment. Never runs alongside the default implementation —
-  enabling it turns the raw `templates/metrics/` resources off to avoid two
-  Grafanas/Tempos/otel-collectors at once.
+- **Default** (`false`): the four raw components above.
+- **`true`**: swaps them for the `monitoring-logging` Helm dependency —
+  the same chart used in production, re-tuned for a single-node box. Adds
+  Loki + Alloy + kube-prometheus-stack + Pushgateway on top — meaningfully
+  heavier (~a dozen extra pods). Still needs `metrics.enabled=true` too.
+  Set it with `./scripts/set-podiumd-version.sh <version>
+  <monitoring-logging-version>`; `deploy.sh` handles the rest (CRDs, ZAC's
+  OTLP endpoint) automatically. Never runs alongside the default
+  implementation.
 
-Ingress hostnames (all `*.local`, reachable once the tunnel + `/etc/hosts`
-entry are set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`,
-`solr`, `objecten`, `objecttypen`, `opennotificaties`,
+Ingress hostnames (all `*.local`, once the tunnel + `/etc/hosts` entry are
+set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`, `solr`,
+`objecten`, `objecttypen`, `opennotificaties`,
 `openarchiefbeheer-web`/`-ui`, `openformulieren-nginx`/`-web`, `grafana`,
 `mailpit`.
 
 ## Resource usage
 
-No `metrics-server` is installed in this cluster, so `kubectl top` isn't
-available. Measure the same way this project's own live investigations
-have: `docker stats minikube --no-stream` (real usage, docker driver only)
-for the actual number, and `kubectl describe node minikube`'s own
-"Allocated resources" section for what's been requested/limited at the
-Kubernetes scheduling level (usually lower than real usage, since not
-every container sets both).
+No `metrics-server` is installed, so `kubectl top` isn't available — use
+`docker stats minikube --no-stream` (real usage) and `kubectl describe
+node minikube` (requested/limited).
 
-Measured on a full `deploy.sh --full` (every optional profile) against an
-idle-ish cluster (no active load beyond the apps' own background/health-
-check traffic), on a 20Gi-capped minikube container, with and without
-`monitoringLogging.enabled` for comparison:
+Measured on a full `deploy.sh --full`, idle-ish, 20Gi-capped container:
 
-| | `monitoringLogging.enabled=true` | `monitoringLogging.enabled=false` |
+| | `monitoringLogging.enabled=true` | `=false` |
 |---|---|---|
 | CPU requests | 3465m / 8 (43%) | 3260m / 8 (40%) |
 | CPU limits | 2650m / 8 (33%) | 200m / 8 (2%) |
 | Memory requests | 10058Mi / 32Gi (31%) | 9416Mi / 32Gi (29%) |
 | Memory limits | 8308Mi / 32Gi (25%) | 5652Mi / 32Gi (17%) |
-| CPU, real (docker stats) | 64–86% (bursty) | 30–229% (bursty) |
-| Memory, real (docker stats) | ~17.8Gi / 20Gi (**~89%**) | ~17.0Gi / 20Gi (**~85%**) |
+| Memory, real | ~17.8Gi / 20Gi (**~89%**) | ~17.0Gi / 20Gi (**~85%**) |
 
-**`monitoringLogging.enabled` is still the single biggest lever available**
-to reduce this footprint, but the *real* saving is more modest than the
-dozen-fewer-pods headline suggests — only ~4 percentage points / ~0.8Gi in
-practice, measured the same way (settled ~5 minutes post-deploy) on both
-sides. Most of what that flag adds (kube-state-metrics, prometheus-
-operator, node-exporter, Pushgateway) is genuinely lightweight; the real
-weight is Loki + Alloy + Grafana + kube-prometheus-stack's own Prometheus,
-and even those are already re-tuned for a single-node box (see "What's
-running" above). The *limits* column drops far more dramatically than real
-usage does - limits are ceilings, not actual consumption, so don't read
-that column as the expected savings.
-
-If you're not specifically testing the monitoring-logging implementation,
-disable it with:
+`monitoringLogging.enabled` is the biggest lever to reduce footprint, but
+the real saving is modest (~4pp / ~0.8Gi) compared to the *limits* column,
+which are ceilings, not actual consumption. Disable it with:
 
 ```bash
 ./scripts/set-podiumd-version.sh <version> --disable-monitoring-logging
 ```
 
-(or edit `values.yaml`'s `monitoringLogging.enabled` directly) and
-redeploy — see "What's running" above for what that trades away
-(Loki/Alloy's log-shipping pipeline has no raw-templates equivalent at
-all). No single running process was found to be a leak or runaway in
-either state — both real-usage figures above are the sum of ~35-40 normal
-pods, not a bug. `deploy.sh` cleans up the *other* implementation's
-leftover resources automatically either direction, including
-Prometheus/PrometheusRule/ServiceMonitor/PodMonitor custom resources (see
-`prune-orphaned-workloads.py`'s own header for why those needed separate
-handling from plain Deployments/StatefulSets/DaemonSets).
+`deploy.sh` cleans up the other implementation's leftover resources
+automatically either direction.
 
 ## Scripts
 
 | Script | What it does |
 |---|---|
-| `provision-cluster.sh` | Starts minikube (sized for the full stack), installs Traefik, pre-pulls/loads every image this chart references, runs `helm dependency update` |
-| `deploy.sh [--force-prune]` | First syncs `charts/*.tgz` against `.podiumd-versions.yaml` (see `set-podiumd-version.sh` below) — refuses with a clear message if you haven't run that script yet. Then renders and applies the chart (`--full` for every optional profile). Whether the `metrics` profile is backed by the heavier loki/alloy/grafana/tempo/kube-prometheus-stack dependency or the lightweight raw templates isn't a flag here — it's read straight from `values.yaml`'s `monitoringLogging.enabled` (see "What's running" above), and this script applies the two things that implementation needs automatically (its CRDs first, ZAC's OTLP endpoint repointed). Afterward, deletes any Deployment/StatefulSet/DaemonSet/Service/Secret/Ingress left in the namespace from an earlier run with different profile flags that isn't part of the current render at all — plain `kubectl apply` never removes resources that drop out of a render, so switching profiles (or toggling `monitoringLogging.enabled`) would otherwise leave the old ones running alongside the new ones indefinitely (confirmed live: this is exactly what caused Traefik to intermittently 503 on `grafana.local` — two competing Ingress objects for the same host, one pointing at a long-dead Service). That cleanup refuses by default when it would delete an unusually large number of resources (toggling `monitoringLogging.enabled` always qualifies) rather than risk deleting more than intended — pass `--force-prune` to confirm it's really wanted. ConfigMaps are the one kind this cleanup doesn't cover (see `prune-orphaned-workloads.py`'s own header for why) — check for stragglers by hand after toggling `monitoringLogging.enabled`. Then applies `pabc-migrations` via `scripts/lib/apply-pabc-migrations.sh` (see below) — every run, not just the first. Finally, if the `objecten` profile ends up part of the render, automatically runs `scripts/lib/seed-fixtures.sh` (see below) — safe/fast on every run too, since each fixture it loads is independently skipped once already present |
-| `setup-tunnel.sh` | Starts `minikube tunnel` so Traefik gets a real IP reachable from the host; idempotent, prints the `/etc/hosts` line either way |
+| `provision-cluster.sh` | Starts minikube (sized for the full stack), installs Traefik, pre-pulls every image, runs `helm dependency update` |
+| `deploy.sh [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
+| `setup-tunnel.sh` | Starts `minikube tunnel`; idempotent |
 | `teardown-cluster.sh` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
-| `reset-namespace.sh` | Empties the `podiumd-minikube` namespace back to a clean slate without deleting the minikube cluster itself - every pod/Deployment/Service/PVC/Job in it, the six Retain-policy PersistentVolumes and their hostPath data storage-hooks.yaml creates, and monitoring-logging's own cluster-scoped RBAC/webhook objects (if that dependency was ever enabled). Wipes all seeded data, including PABC's migration data (asks for confirmation; `--yes` to skip) - run `deploy.sh` afterward to redeploy from scratch |
-| `set-podiumd-version.sh <version> <monitoring-logging-version\|--disable-monitoring-logging>` | Sets the `podiumd` Helm dependency's version (`helm search repo dimpact/podiumd -l` to list available ones), and the `monitoring-logging` dependency's alongside it — the two are independently-versioned charts in the same monorepo with no formula relating them (see the script's own header for how to look up the exact co-released version by hand). Written to `.podiumd-versions.yaml` (gitignored) — **not** `Chart.yaml`, which no longer holds a real version for either dependency at all, specifically so a personal version choice never shows up as a shared-file diff — then immediately fetches it (`charts/*.tgz`). The second argument is mandatory, on purpose — no implicit default: pass a monitoring-logging version to set it/enable it, or `--disable-monitoring-logging` to disable it (Helm still fetches every declared dependency regardless of `condition:`, so a real version must already be recorded for it from an earlier run — this refuses with a clear fix if none has ever been set). `set-podiumd-version.sh --path <dir>` points `podiumd` at a local chart checkout instead (e.g. for testing unreleased podiumd changes), re-packaged fresh on every `deploy.sh`/`provision-cluster.sh` run so local edits show up without re-running this script — and automatically points `monitoring-logging` at the sibling `monitoring-logging/` directory next to it too — re-check the four intentional image-tag pins in `values.yaml` afterward either way, per that script's own comment |
-| `show-podiumd-version.sh` | Prints what `set-podiumd-version.sh` currently has set, per dependency, straight from `.podiumd-versions.yaml` (the only place either version is recorded), plus whether it's actually been fetched into `charts/*.tgz` yet, plus `values.yaml`'s `monitoringLogging.enabled` flag |
-| `show-port-mappings.sh` | Prints how host traffic actually reaches each currently-deployed app: not a per-service host port like docker-compose (every hostname is multiplexed onto Traefik's single LoadBalancer port 80 by HTTP Host header instead), so this reads the live cluster's Ingress objects and shows each hostname's backend `Service:port` (resolved to a real port number) plus a one-line description of what kind of traffic it is. Also flags any hostname claimed by more than one Ingress object (a real leftover-resource smell, e.g. from toggling `monitoringLogging.enabled` without the manual cleanup pass) |
-| `expose-postgres.sh [local-port]` | Port-forwards the single shared Postgres instance to `localhost:5432` (or a different local port, e.g. if you already run Postgres locally) for a GUI tool (pgAdmin, DBeaver, ...) — prints the `postgres`/`postgres` superuser credentials and every database name on that instance (every app's database lives on this one server, not one server per app). Idempotent — running it again while already forwarding just reprints the connection info instead of starting a duplicate |
-| `flush-redis.sh [--db N]` | Flushes the shared Redis instance every app's cache lives on (and, for openarchiefbeheer/openformulieren specifically, Celery broker/results too — same DB, no separation between the two). There's no way to flush a single app's cache alone: DB numbers are shared across multiple apps (see the script's own header for exactly which). Defaults to `FLUSHALL` (every DB); pass `--db N` to flush just one DB instead. Prints key counts before/after either way |
+| `reset-namespace.sh` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
+| `set-podiumd-version.sh <version> <monitoring-logging-version\|--disable-monitoring-logging>` | Sets both Helm dependency versions in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. `--path <dir>` points `podiumd` at a local checkout instead, auto-detecting a sibling `monitoring-logging/` directory |
+| `show-podiumd-version.sh` | Prints the current version selection and fetch status per dependency |
+| `show-port-mappings.sh` | Prints how host traffic reaches each deployed app (Ingress hostname → backend Service:port) |
+| `expose-postgres.sh [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |
+| `flush-redis.sh [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
 
-`reset-namespace.sh` vs `teardown-cluster.sh`: use `reset-namespace.sh`
-to wipe app data and redeploy clean (faster - keeps the cluster,
-Traefik, and loaded images); reach for `teardown-cluster.sh` only when
-the cluster/VM itself is broken or you want a genuinely fresh minikube
-profile (slower to recover from - needs `provision-cluster.sh` again
-afterward, not just `deploy.sh`).
+`reset-namespace.sh` vs `teardown-cluster.sh`: use `reset-namespace.sh` to
+wipe app data and redeploy clean (keeps the cluster/Traefik/images);
+`teardown-cluster.sh` only when the cluster itself is broken.
 
-`scripts/lib/` mostly holds internal helpers that are never run directly —
-piped into or sourced by the scripts above — with two exceptions,
-`apply-pabc-migrations.sh` and `seed-fixtures.sh`: both are also called
-automatically by `deploy.sh` on every run, but still have their own usage
-and are safe/useful to run by hand directly too:
+`scripts/lib/` holds internal helpers plus two scripts also safe to run
+by hand directly:
 
 | Script | What it does |
 |---|---|
-| `apply-pabc-migrations.sh` | The **only** safe way to (re)create the `pabc-migrations` Job — it's not idempotent (clears PABC's database before reseeding), so this refuses to run against an already-seeded database unless `--force` is passed. `deploy.sh` already calls it itself as its own step every run — you don't need to run it by hand for a normal deploy, first or repeat. It's excluded from the general manifest apply on purpose (that Job clears PABC's database before reloading its seed dataset every time it *runs*, so letting a plain unguarded `kubectl apply` recreate it — which would happen silently if it were ever missing — isn't safe). You'd only ever run it directly yourself in the one case `deploy.sh`'s own call refuses: the Job is missing but PABC's database already has real data, and you need to decide whether `--force` (wipe and reseed) is really intended |
-| `seed-fixtures.sh` | Loads demo/fixture data into objecten/objecttypen (or `openobject`, whichever shape is currently selected — see `set-podiumd-version.sh`) via `manage.py loaddata`, matching docker-compose's own `*-import` containers for these apps. Run automatically by `deploy.sh` whenever the `objecten` profile is part of the render (also safe/useful to run by hand any time) — genuinely idempotent, not just non-destructive: each fixture's own model is checked for existing rows first, so an already-seeded app is skipped without the wait/copy/loaddata work at all |
-| `strip-image-digests.py` | Helm post-renderer piped into automatically by `deploy.sh`/`provision-cluster.sh` — strips `@sha256:...` suffixes so images resolve to the tag-only references pre-loaded into minikube (which has no outbound network access) |
-| `disable-service-links.py` | Helm post-renderer piped into automatically by `deploy.sh` — sets `enableServiceLinks: false` on every workload pod spec, avoiding Kubernetes' auto-injected `<SERVICE_NAME>_PORT`-style env vars colliding with app-expected ones of the same name |
-| `exclude-pabc-migration-job.py` | Helm post-renderer piped into automatically by `deploy.sh` — drops the `pabc-migrations` Job from the general manifest apply, since `apply-pabc-migrations.sh` is the only safe way to (re)create it |
-| `detect-objecten-shape.sh` | Sourced automatically by `deploy.sh`/`provision-cluster.sh` — detects whether the currently-selected podiumd version still has `objecten`/`objecttypen` as two separate subcharts or has merged them into `openobject` (aliased to `objecten`), and emits the right `--set` flags for whichever shape is active, so switching podiumd versions via `set-podiumd-version.sh` (including `--path` to an unreleased checkout) keeps working either way |
-| `monitoring-logging-enabled.sh` | Sourced by `deploy.sh` and `show-podiumd-version.sh` — reads `values.yaml`'s `monitoringLogging.enabled` the same way in both places, so they can't drift out of sync about where that state lives |
-| `podiumd-dependency.sh` | Sourced by `deploy.sh`/`provision-cluster.sh`/`set-podiumd-version.sh`/`show-podiumd-version.sh` — reads/writes `.podiumd-versions.yaml` and syncs `charts/*.tgz` to match it, temporarily editing `Chart.yaml`/`Chart.lock` around a `helm dependency update` call and restoring both to their exact prior content afterward either way (confirmed live: `helm template`/`install` never re-validate a loaded subchart's version against `Chart.yaml`'s own declared constraint at all, only `helm dependency update`/`build` do) |
+| `apply-pabc-migrations.sh` | The only safe way to (re)create the `pabc-migrations` Job — refuses against an already-seeded database unless `--force` |
+| `seed-fixtures.sh` | Loads demo fixture data into objecten/objecttypen — idempotent, skips apps already seeded |
+| `podiumd-dependency.sh` | Reads/writes `.podiumd-versions.yaml`, syncs `charts/*.tgz` |
+| `detect-objecten-shape.sh`, `monitoring-logging-enabled.sh` | Sourced helpers for shape detection / reading `monitoringLogging.enabled` |
+| `strip-image-digests.py`, `disable-service-links.py`, `exclude-pabc-migration-job.py` | Helm post-renderers piped in by `deploy.sh` |
 
 ## Testing
 
@@ -210,45 +145,32 @@ cd tests
 pytest
 ```
 
-`.venv` only needs creating once; after that, just `source .venv/bin/activate`
-before running `pytest` again. `playwright install chromium` also only
-needs running once per venv (downloads a Chromium build for the
-browser-based test).
-
 Live-cluster integration tests, not unit tests — see
-[`tests/README.md`](tests/README.md) for full coverage, prerequisites, and
-caveats (notably: one test in `test_pabc_migrations_guard.py` deliberately
-mutates and restores real cluster state to prove a safety guard actually
-works). Tests for profiles that aren't currently deployed auto-skip.
+[`tests/README.md`](tests/README.md) for full coverage and caveats. Tests
+for profiles that aren't currently deployed auto-skip.
 
 ## Why not `helm install`?
 
-This project uses `helm template | strip-image-digests.py | kubectl apply`
-instead of `helm install`/`helm upgrade`. Helm's own release record embeds
-the entire resolved chart — including the ~3.87MB `podiumd` dependency —
-which exceeds Kubernetes' hardcoded 3MB API request-size limit (no flag
-exists to raise it in current Kubernetes versions). One consequence: Helm's
-install/upgrade hooks never fire, since they need a live Helm release that
-this workflow never creates — `deploy.sh` handles the one place that
-matters (`templates/storage-hooks.yaml`'s PV/PVC pre-provisioning) by
-applying that file before the rest of the manifest instead.
+Helm's own release record embeds the entire resolved chart — including
+the ~3.87MB `podiumd` dependency — which exceeds Kubernetes' 3MB API
+request-size limit. This project uses `helm template | kubectl apply`
+instead, which means Helm's install/upgrade hooks never fire —
+`deploy.sh` handles the one place that matters
+(`templates/storage-hooks.yaml`'s PV/PVC pre-provisioning) as a separate
+step instead.
 
 ## Troubleshooting
 
-**Cluster becomes sluggish or unresponsive (`kubectl` hangs or times out on
-TLS handshake), especially after switching between profile combinations a
-few times.** Usually an under-provisioned minikube VM thrashing under the
-full stack's real memory pressure, not an application bug — check with
-`docker stats minikube` (for the docker driver) or `minikube ssh -- free -h`.
-`provision-cluster.sh` checks for this on every run and warns if the running
-profile is below its recommended 16Gi, but only for profiles it can inspect
-via the docker driver. To raise it live, without restarting anything:
+**Cluster becomes sluggish or unresponsive, especially after switching
+profile combinations a few times.** Usually an under-provisioned minikube
+VM thrashing under memory pressure — check with `docker stats minikube`
+or `minikube ssh -- free -h`. Raise it live without restarting:
+
 ```bash
 docker update --memory=16g --memory-swap=-1 minikube
 ```
-This doesn't persist across `minikube delete` — that recreates the container
-fresh from `MINIKUBE_MEMORY`, so it's a one-time fix per existing profile,
-not something you need to repeat.
+
+This doesn't persist across `minikube delete`.
 
 ## Project structure
 
