@@ -1,0 +1,10 @@
+{{- if .Values.podiumd.objecten.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: objecten-no-solo-cache-settings
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  docker_no_solo_cache.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/objecten/docker_no_solo_cache.py" | quote }}
+{{- end }}

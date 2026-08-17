@@ -1,0 +1,11 @@
+{{- if .Values.podiumd.objecttypen.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: objecttypen-productaanvraag-fixture
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  demodata.json: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/objecttypen/demodata.json" | quote }}
+  publish_versions.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/objecttypen/publish_versions.py" | quote }}
+{{- end }}

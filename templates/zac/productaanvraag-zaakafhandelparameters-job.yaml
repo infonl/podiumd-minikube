@@ -1,0 +1,87 @@
+{{/*
+Runs vendor/dimpact-zaakafhandelcomponent/zac/seed_productaanvraag_zaakafhandelparameters.py
+against ZAC's own REST API - see that script's own header for why this is a
+custom Job at all (ZAC has no setup_configuration-style declarative
+mechanism of its own, unlike every Django app elsewhere in this flow) and
+why it's safe to leave in the general, unguarded manifest apply unlike
+pabc-migrations: it's a plain GET-then-PUT update, not a destructive
+recreate - re-applying this Job's already-succeeded, unchanged spec is a
+safe no-op like any other Job here.
+
+Uses a plain python:3-alpine image, not ZAC's own (a WildFly/Kotlin image
+with no Python or shell scripting story) or any of the Django apps' own
+images (unrelated to ZAC's REST API, would be a confusing image choice for
+what this Job actually does) - stdlib-only script, no extra packages to
+install.
+
+BEHEERDER_USERNAME/PASSWORD: this project's own vendored Keycloak realm's
+"beheerder1newiam" test user (same credentials tests/test_login_flow.py
+already uses) - every zaakafhandelparameters endpoint requires a real
+user with the beheerder PABC role, not just a valid token, so a
+client_credentials service-account grant doesn't work here even though one
+would be simpler to wire.
+*/}}
+{{- if .Values.podiumd.zac.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zac-productaanvraag-zaakafhandelparameters
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "podiumd-minikube.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed-zaakafhandelparameters
+          image: python:3.13-alpine
+          command:
+            - python
+            - /app/seed_productaanvraag_zaakafhandelparameters.py
+          env:
+            - name: KEYCLOAK_TOKEN_URL
+              value: "{{ .Values.podiumd.zac.auth.server }}/realms/{{ .Values.podiumd.zac.auth.realm }}/protocol/openid-connect/token"
+            - name: KEYCLOAK_CLIENT_ID
+              value: {{ .Values.podiumd.zac.auth.clientId | quote }}
+            - name: KEYCLOAK_CLIENT_SECRET
+              value: {{ .Values.podiumd.zac.auth.secret | quote }}
+            - name: BEHEERDER_USERNAME
+              value: beheerder1newiam
+            - name: BEHEERDER_PASSWORD
+              value: beheerder1newiam
+            - name: ZAC_BASE_URL
+              value: http://zac/rest
+            - name: OPENZAAK_BASE_URL
+              value: http://openzaak.podiumd-minikube
+            - name: ZGW_JWT_CLIENT_ID
+              value: {{ .Values.podiumd.zac.zgwApis.clientId | quote }}
+            - name: ZGW_JWT_SECRET
+              value: {{ .Values.podiumd.zac.zgwApis.secret | quote }}
+            - name: CATALOGUS_DOMEIN
+              value: "ALG"
+            - name: CATALOGUS_RSIN
+              value: "002564440"
+            - name: ZAAKTYPE_IDENTIFICATIE
+              value: {{ .Values.podiumd.zac.productaanvraag.zaaktypeIdentificatie | quote }}
+            - name: CASE_DEFINITION_KEY
+              value: {{ .Values.podiumd.zac.productaanvraag.caseDefinitionKey | quote }}
+            - name: DEFAULT_GROEP_ID
+              value: {{ .Values.podiumd.zac.productaanvraag.defaultGroepId | quote }}
+            - name: NIET_ONTVANKELIJK_RESULTAAT_NAAM
+              value: {{ .Values.podiumd.zac.productaanvraag.nietOntvankelijkResultaatNaam | quote }}
+            - name: PRODUCTAANVRAAGTYPE
+              value: {{ .Values.podiumd.zac.productaanvraag.productaanvraagtype | quote }}
+          volumeMounts:
+            - name: seed-script
+              mountPath: /app/seed_productaanvraag_zaakafhandelparameters.py
+              subPath: seed_productaanvraag_zaakafhandelparameters.py
+              readOnly: true
+      volumes:
+        - name: seed-script
+          configMap:
+            name: zac-productaanvraag-seed-script
+{{- end }}

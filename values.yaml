@@ -189,11 +189,41 @@ podiumd:
         port: "1025"
         username: ""
         password: ""
+    # Dotted Service DNS form (not the bare "openzaak" this file's own naming
+    # convention comment above would suggest), deliberately deviating from
+    # it here: OpenZaak echoes back self-referencing resource URLs (e.g. a
+    # catalogus's own "url") built from whatever host ZAC connects with, and
+    # some of those URLs get round-tripped as query filters (e.g.
+    # /catalogi/api/v1/zaaktypen?catalogus=<url>) that OpenZaak re-validates
+    # with Django's URLValidator - which rejects single-label hostnames like
+    # bare "openzaak" ("Voer een geldige URL in."), confirmed live by running
+    # that exact validator inside the openzaak pod. openzaak's own
+    # ALLOWED_HOSTS already includes this dotted form alongside the bare one
+    # (a podiumd/zac chart default) - this is what it's there for.
     zgwApis:
-      url: http://openzaak/
+      url: http://openzaak.podiumd-minikube/
       clientId: zac_client
       secret: openzaakZaakafhandelcomponentClientSecret
     notificationsSecretKey: openNotificatiesApiSecretKey
+    # Not a podiumd/zac chart value at all - this project's own grouping for
+    # templates/zac/productaanvraag-zaakafhandelparameters-job.yaml's env
+    # vars (that custom Job is the only thing that reads this block). Gives
+    # zaaktypeIdentificatie valid zaakafhandelparameters (case definition +
+    # default group + "niet-ontvankelijk" resultaat - see
+    # ZaaktypeCmmnConfiguration.isValide() in the ZAC source for why all
+    # three are required before ZAC can start a zaak of this type at all)
+    # and points its own productaanvraagtype at the value used below by
+    # podiumd.openformulieren's own form-import Job, so ProductaanvraagService
+    # matches an incoming productaanvraag object to this zaaktype. Confirmed
+    # live end-to-end (form submit -> objects API -> opennotificaties -> ZAC
+    # creates a zaak) before being made declarative here - see plan.md's
+    # productaanvraag-flow entry.
+    productaanvraag:
+      zaaktypeIdentificatie: zaaktype-test-1
+      caseDefinitionKey: generiek-zaakafhandelmodel
+      defaultGroepId: behandelaars-test-2
+      nietOntvankelijkResultaatNaam: Geweigerd
+      productaanvraagtype: productaanvraag-test-zaaktype-1
     klantinteractiesApi:
       url: http://openklant
       token: fakeToken
@@ -842,12 +872,21 @@ podiumd:
     tags:
       redis: false
     configuration:
+      enabled: true
       job:
-        # No configuration.data set (matching compose, which seeds fixture
-        # data through a separate one-shot "objecten-api-import" container
-        # running the image's own init.sh - not replicated here; see
-        # plan.md's step 5 notes on scope).
-        enabled: false
+        # Declaratively wires the Objects API side of the productaanvraag
+        # flow (openformulieren -> objects API -> opennotificaties -> ZAC):
+        # its own link to Objecttypen API and to Open Notificaties, the
+        # productaanvraag objecttype reference, and the read/write tokens
+        # ZAC and openformulieren authenticate with. Confirmed live
+        # end-to-end against a real minikube cluster before being made
+        # declarative here (see plan.md's productaanvraag-flow entry).
+        #
+        # Deliberately doesn't replicate compose's own "objecten-api-import"
+        # container beyond this one objecttype - that container also seeds
+        # unrelated demo objecttypes (Boom/Straatverlichting/taak/formio)
+        # nothing in this chart consumes.
+        enabled: true
       # No compose equivalent to match (objecten isn't part of
       # dimpact-zaakafhandelcomponent's docker-compose stack at all - see
       # this block's own top comment). Unlike openformulieren/openklant/
@@ -859,6 +898,96 @@ podiumd:
         username: admin
         password: admin
         email: admin@example.com
+      # objecttypen-api: dotted Service DNS form, not bare "objecttypen" -
+      # same URLValidator gotcha as ZAC's own zgwApis.url above (Django
+      # rejects single-label hostnames on any field that round-trips a URL
+      # this API hands back) - confirmed live the same way.
+      #
+      # opennotificaties-nrc + notifications_config: lets this Objects API
+      # instance publish an "object created" notification whenever a
+      # productaanvraag object is written - the trigger the whole flow
+      # starts from. Credentials (client_id=objectsapi) match the
+      # vng_api_common_credentials entry registered on opennotificaties's
+      # own configuration.data above.
+      #
+      # objecttypes_config: registers (not creates - the schema itself is
+      # seeded by templates/objecttypen/productaanvraag-objecttype-job.yaml,
+      # since Objecttypen API's own setup_configuration has no step for
+      # creating an objecttype/version, only tokens - confirmed by reading
+      # its bundled objecttypes/setup_configuration/steps/ directly) this
+      # Objects API's own reference to that objecttype, by UUID + which
+      # service serves it.
+      #
+      # tokenauth: fakeZacObjectsToken matches podiumd.zac.objectenApi.token
+      # above (zac.local's own existing config, never previously valid since
+      # no token row existed until this) - fakeOpenFormulierenObjectsToken
+      # is what podiumd.openformulieren's own objects_api service below
+      # authenticates with. Both is_superuser: true - a dev-only shortcut
+      # (bypasses per-objecttype token_permission grants entirely) matching
+      # every other fake-credential-with-full-access pattern already used
+      # throughout this file (e.g. openzaak's own Applicatie rows).
+      data: |-
+        zgw_consumers_config_enable: True
+        zgw_consumers:
+          services:
+            - identifier: objecttypen-api
+              label: Objecttypen API
+              api_root: http://objecttypen.podiumd-minikube/api/v2/
+              api_type: orc
+              auth_type: api_key
+              header_key: Authorization
+              header_value: Token objectenToObjecttypenToken
+
+            - identifier: opennotificaties-nrc
+              label: Open Notificaties
+              api_root: http://opennotificaties.podiumd-minikube/api/v1/
+              api_type: nrc
+              auth_type: zgw
+              client_id: objectsapi
+              secret: opennotificatiesObjectsSecret
+
+        notifications_config_enable: true
+        notifications_config:
+          notifications_api_service_identifier: opennotificaties-nrc
+
+        objecttypes_config_enable: true
+        objecttypes:
+          items:
+            - service_identifier: objecttypen-api
+              uuid: 021f685e-9482-4620-b157-34cd4003da6b
+              name: Productaanvraag-Dimpact
+
+        tokenauth_config_enable: true
+        tokenauth:
+          items:
+            - identifier: zac
+              token: fakeZacObjectsToken
+              contact_person: ZAC
+              email: zac@example.com
+              application: ZAC
+              is_superuser: true
+            - identifier: open-formulieren
+              token: fakeOpenFormulierenObjectsToken
+              contact_person: Open Formulieren
+              email: openformulieren@example.com
+              application: Open Formulieren
+              is_superuser: true
+    # See templates/objecten/configmap-no-solo-cache-settings.yaml's own
+    # header for why this shim exists (django-solo's own cache for
+    # NotificationsConfig intermittently going stale, confirmed live while
+    # building the productaanvraag flow) - same
+    # ConfigMap+extraVolumes+extraVolumeMounts pattern already used
+    # elsewhere in this file for a docker_no2fa.py-style settings override,
+    # just fixing a different upstream gap.
+    extraVolumes:
+      - name: no-solo-cache-settings
+        configMap:
+          name: objecten-no-solo-cache-settings
+    extraVolumeMounts:
+      - name: no-solo-cache-settings
+        subPath: docker_no_solo_cache.py
+        mountPath: /app/src/objects/conf/docker_no_solo_cache.py
+        readOnly: true
     settings:
       secretKey: objectenApiSecretKey
       allowedHosts: objecten.local
@@ -867,6 +996,7 @@ podiumd:
       # http://objecten.local ingress, failing django-admin login with a
       # CSRF error before a single credential is even checked.
       isHttps: false
+      djangoSettingsModule: objects.conf.docker_no_solo_cache
       # Unlike most other apps fixed here, this works natively - confirmed
       # live by reading open_api_framework.conf.base (the shared maykinmedia
       # library objecten's own conf/base.py wildcard-imports from, same as
@@ -928,8 +1058,19 @@ podiumd:
     # No worker/beat/flower/redis blocks exist on this chart at all - it's
     # a stateless API with no celery use.
     configuration:
+      enabled: true
       job:
-        enabled: false # same fixture-import scope note as objecten above
+        # Only creates the two read tokens below - Objecttypen API's own
+        # bundled setup_configuration has no step for creating an
+        # objecttype/version itself (confirmed by reading its bundled
+        # objecttypes/setup_configuration/steps/ directly: token_auth is the
+        # only one registered), so the productaanvraag objecttype's own
+        # schema is seeded by
+        # templates/objecttypen/productaanvraag-objecttype-job.yaml instead,
+        # a custom Job added for exactly this gap (same pattern as
+        # templates/openformulieren/create-superuser-job.yaml's own header
+        # comment explains for a different one of these gaps).
+        enabled: true
       # No compose equivalent to match (objecttypen isn't part of
       # dimpact-zaakafhandelcomponent's docker-compose stack at all - see
       # this block's own top comment). Same admin/admin/admin@example.com
@@ -942,6 +1083,26 @@ podiumd:
         username: admin
         password: admin
         email: admin@example.com
+      # Read tokens for the two consumers of the productaanvraag objecttype
+      # schema: podiumd.objecten (to validate/serve object data against it)
+      # and podiumd.openformulieren (its own admin UI needs to list
+      # objecttypes/versions when building a form's registration backend).
+      # Values match what those two blocks' own zgw_consumers services
+      # authenticate with.
+      data: |-
+        tokenauth_config_enable: true
+        tokenauth:
+          items:
+            - identifier: objects-api
+              token: objectenToObjecttypenToken
+              contact_person: podiumd-minikube
+              email: objecten@example.com
+              application: Objects API
+            - identifier: open-formulieren
+              token: openFormulierenToObjecttypenToken
+              contact_person: Open Formulieren
+              email: openformulieren@example.com
+              application: Open Formulieren
     # podiumd's own umbrella override enables create_required_objecttypen_job
     # by default with placeholder credentials - same class of problem as
     # openzaak's create_required_catalogi_job (see that override's comment
@@ -1057,14 +1218,97 @@ podiumd:
     tags:
       redis: false
     configuration:
+      enabled: true
       job:
-        enabled: false # see plan.md step 5 scope note - opennotificaties-init's setup-configuration data isn't replicated here
+        # Wires the "objecten" kanaal + a ZAC abonnement declaratively via
+        # this chart's own bundled setup_configuration Job - the productaanvraag
+        # flow (openformulieren -> objects API -> opennotificaties -> ZAC)
+        # needs this to create a zaak from a submitted form without any
+        # manual post-deploy step. Confirmed live end-to-end against a real
+        # minikube cluster (see plan.md's productaanvraag-flow entry) before
+        # being made declarative here.
+        enabled: true
       superuser:
         # Matches compose's OPENNOTIFICATIES_SUPERUSER_USERNAME/_EMAIL and
         # DJANGO_SUPERUSER_PASSWORD exactly.
         username: admin
         password: admin
         email: admin@example.com
+      # Deliberately narrow scope: only the "objecten" kanaal/abonnement
+      # (needed for the productaanvraag flow) plus the Autorisaties API link
+      # that abonnement's own authorization check depends on - not the full
+      # docker-compose reference config (zaaktypen/zaken/documenten/
+      # besluittypen/besluiten kanalen, the openzaak/open-formulieren/
+      # open-notificaties zgw_consumers services). Those exist to let
+      # openzaak/openklant publish their own notifications, which nothing in
+      # this chart currently consumes - adding them unused would just be
+      # more surface area to keep in sync with openzaak's own vendored JWT
+      # secrets for no live benefit. Revisit if a future profile needs them.
+      #
+      # autorisaties-api: confirmed live this is NOT optional - opennotificaties
+      # defaults to the public https://autorisaties-api.vng.cloud when no
+      # local Autorisaties API service is configured, and every incoming
+      # notification-publish request (even to the "objecten" kanaal) gets a
+      # live 403 from that default before ever reaching our own abonnement.
+      # client_id/secret here match openzaak's own vendored
+      # vng_api_common_jwtsecret row for "open-notificaties" (see
+      # vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/openzaak/
+      # 01-setup-zac-config.sql) - already fully authorized there
+      # (heeft_alle_autorisaties: true), no openzaak-side change needed.
+      #
+      # objectsapi credential: lets the Objects API (podiumd.objecten's own
+      # notifications_config below) authenticate its outgoing
+      # "object created" notification into this Notificaties API - matched
+      # by identifier/secret on both sides, no Autorisaties API round trip
+      # needed for this one (vng_api_common_credentials is opennotificaties'
+      # own self-contained JWT secret store, confirmed live sufficient for
+      # this direction).
+      data: |-
+        oidc_db_config_enable: False
+
+        zgw_consumers_config_enable: True
+        zgw_consumers:
+          services:
+            - identifier: autorisaties-api
+              label: Autorisaties API
+              api_root: http://openzaak.podiumd-minikube/autorisaties/api/v1/
+              api_type: ac
+              auth_type: zgw
+              client_id: open-notificaties
+              secret: opennotificatiesAutorisatieApiSecret
+              user_id: open-notificaties
+              user_representation: Open Notificaties
+
+        autorisaties_api_config_enable: True
+        autorisaties_api:
+          authorizations_api_service_identifier: autorisaties-api
+
+        vng_api_common_credentials_config_enable: True
+        vng_api_common_credentials:
+          items:
+            # Credentials for the Objects API (podiumd.objecten) to send notifications
+            - identifier: objectsapi
+              secret: opennotificatiesObjectsSecret
+
+        notifications_kanalen_config_enable: true
+        notifications_kanalen_config:
+          items:
+            - naam: objecten
+              documentatie_link: http://objecten.podiumd-minikube/ref/kanalen/#/objecten
+              filters:
+                - object_type
+
+        notifications_abonnementen_config_enable: true
+        notifications_abonnementen_config:
+          items:
+            # Fixed uuid so re-running setup_configuration (idempotent, per
+            # its own --help text) always updates the same abonnement
+            # rather than accumulating duplicates.
+            - uuid: fb4e3474-18c8-474b-94ae-980850ea4a7f
+              callback_url: http://zac.podiumd-minikube/rest/notificaties
+              auth: openNotificatiesApiSecretKey
+              kanalen:
+                - naam: objecten
     settings:
       secretKey: opennotificatiesApiSecretKey
       allowedHosts: opennotificaties.local
@@ -1352,8 +1596,26 @@ podiumd:
     tags:
       redis: false
     configuration:
+      enabled: true
       job:
-        enabled: false # see plan.md step 5 scope note - openformulieren-init's demo-data seeding (BRP service link, klantinteracties API group, importing the test form) isn't replicated here
+        # Wires the ZGW services (openzaak zaken/documenten/catalogi) and the
+        # Objects API group this project's own productaanvraag flow uses -
+        # NOT compose's own openformulieren-init scope (BRP service link,
+        # klantinteracties API group), which this chart's own
+        # configuration.data below deliberately doesn't replicate (nothing
+        # here consumes either yet). Confirmed live end-to-end (form submit
+        # -> objects API -> opennotificaties -> ZAC creates a zaak) against
+        # a real minikube cluster before being made declarative here - see
+        # plan.md's productaanvraag-flow entry.
+        #
+        # The form itself (Form/FormDefinition/FormStep/
+        # FormRegistrationBackend) isn't configurable through this job at
+        # all - setup_configuration has no concept of forms, only
+        # services/API groups (confirmed by reading every step registered
+        # in this image's own settings.SETUP_CONFIGURATION_STEPS) - see
+        # templates/openformulieren/productaanvraag-form-job.yaml instead,
+        # a custom Job added for exactly that gap.
+        enabled: true
       # Unlike objecttypen/openzaak/opennotificaties, this chart never
       # wires configuration.superuser to an actual user-creation mechanism
       # (confirmed live: grepped every template in the vendored chart for
@@ -1366,6 +1628,85 @@ podiumd:
         username: admin
         password: admin
         email: admin@example.com
+      # openzaak-*: dotted Service DNS form, not bare "openzaak" - same
+      # URLValidator gotcha as ZAC's own zgwApis.url above, confirmed live
+      # the same way (a self-referencing catalogus/zaaktype/
+      # informatieobjecttype URL round-tripped through a validated field
+      # elsewhere fails on a single-label hostname). client_id/secret match
+      # openzaak's own vendored Applicatie/JWT-secret rows for
+      # "open-formulieren" (see
+      # vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/openzaak/
+      # 01-setup-zac-config.sql) - already fully authorized there, no
+      # openzaak-side change needed.
+      #
+      # objects-api/objecttypes-api: this chart's own read/write access to
+      # the productaanvraag objecttype schema and to Objects API itself -
+      # tokens match podiumd.objecten's own tokenauth entries and
+      # podiumd.objecttypen's own tokenauth entries above.
+      #
+      # local-objects-api group: catalogue_domain/rsin match ZAC's own
+      # "ALG"/"002564440" catalogus (the podiumd/zac chart's own hardcoded
+      # CATALOGUS_DOMEIN default - confirmed live via the running zac pod's
+      # own env, not something this values.yaml sets itself) - the
+      # productaanvraag form's registration backend (wired by the custom
+      # form-import Job below) resolves case/document types against this
+      # same catalogue.
+      data: |-
+        zgw_consumers_config_enable: True
+        zgw_consumers:
+          services:
+            - identifier: openzaak-zaken
+              label: Open Zaak - Zaken API
+              api_root: http://openzaak.podiumd-minikube/zaken/api/v1/
+              api_type: zrc
+              auth_type: zgw
+              client_id: open-formulieren
+              secret: openFormulierenOpenzaakClientSecret
+
+            - identifier: openzaak-documenten
+              label: Open Zaak - Documenten API
+              api_root: http://openzaak.podiumd-minikube/documenten/api/v1/
+              api_type: drc
+              auth_type: zgw
+              client_id: open-formulieren
+              secret: openFormulierenOpenzaakClientSecret
+
+            - identifier: openzaak-catalogi
+              label: Open Zaak - Catalogi API
+              api_root: http://openzaak.podiumd-minikube/catalogi/api/v1/
+              api_type: ztc
+              auth_type: zgw
+              client_id: open-formulieren
+              secret: openFormulierenOpenzaakClientSecret
+
+            - identifier: objects-api
+              label: Objects API
+              api_root: http://objecten.podiumd-minikube/api/v2/
+              api_type: orc
+              auth_type: api_key
+              header_key: Authorization
+              header_value: Token fakeOpenFormulierenObjectsToken
+
+            - identifier: objecttypes-api
+              label: Objecttypen API
+              api_root: http://objecttypen.podiumd-minikube/api/v2/
+              api_type: orc
+              auth_type: api_key
+              header_key: Authorization
+              header_value: Token openFormulierenToObjecttypenToken
+
+        objects_api_config_enable: True
+        objects_api:
+          groups:
+            - identifier: local-objects-api
+              name: Local Objects API
+              objects_service_identifier: objects-api
+              objecttypes_service_identifier: objecttypes-api
+              documenten_service_identifier: openzaak-documenten
+              catalogi_service_identifier: openzaak-catalogi
+              catalogue_domain: ALG
+              catalogue_rsin: "002564440"
+              organisatie_rsin: "002564440"
     # See settings.djangoSettingsModule below for why the no2fa-settings
     # mount exists - same ConfigMap+extraVolumes+extraVolumeMounts pattern
     # already used for openzaak's/opennotificaties's/openarchiefbeheer's

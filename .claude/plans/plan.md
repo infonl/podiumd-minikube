@@ -3145,3 +3145,121 @@ seen mid-session (`test_prometheus_scrape_targets_healthy`) reconfirmed
 as transient by hand immediately after (pods healthy, a fresh curl
 against the same endpoint returned 200), not a regression from this
 work.
+
+## The productaanvraag flow: a form submission creating a zaak automatically
+
+Asked to set up "test zaaktype 1" in ZAC and Open Formulieren so a case can
+be created via a form - specifically via the *productaanvraag* flow
+(Open Formulieren's `objects_api` registration backend writing a
+Productaanvraag-Dimpact object to the Objects API, not the more direct
+`zgw-create-zaak` backend), so `objecten`/`objecttypen`/`opennotificaties`
+all have to talk to each other correctly. First built and verified live
+by hand end to end (`kubectl exec`/`curl` against every piece), then made
+fully declarative so a fresh `provision-cluster.sh` + `deploy.sh --full`
+reproduces it with no manual step at all.
+
+**What's now declarative:**
+
+- `podiumd.opennotificaties.configuration.data` - the `objecten` kanaal, an
+  Autorisaties API link back to openzaak (its own abonnement-authorization
+  check defaults to the public `https://autorisaties-api.vng.cloud` and
+  403s every publish otherwise - confirmed live), the `objectsapi` client
+  credential, and a ZAC abonnement on that kanaal.
+- `podiumd.objecten.configuration.data` - its own links to Objecttypen API
+  and Open Notificaties, a *reference* to the productaanvraag objecttype
+  (not the schema itself - see below), and read/write tokens for ZAC and
+  Open Formulieren.
+- `podiumd.objecttypen.configuration.data` - read tokens for Objects API
+  and Open Formulieren.
+- `podiumd.openformulieren.configuration.data` - openzaak's
+  zaken/documenten/catalogi services, Objects/Objecttypen services, and
+  the `local-objects-api` Objects API group.
+
+**Three custom Jobs fill the gaps none of the above cover** (all
+idempotent, safe in the unguarded `kubectl apply` flow, same as every
+other Job in this project):
+
+- `templates/objecttypen/productaanvraag-objecttype-job.yaml` - the
+  productaanvraag objecttype/version schema itself has no
+  setup_configuration step anywhere (confirmed by reading
+  `objecttypes/setup_configuration/steps/` directly - only tokens are
+  supported). Turned out a fixture for exactly this
+  (`vendor/dimpact-zaakafhandelcomponent/objecttypen/demodata.json`,
+  6 objecttypes including the real Productaanvraag-Dimpact schema) was
+  already vendored in this repo, just never wired to anything - this Job
+  `loaddata`s it (`--exclude=token.tokenauth`, since tokens are handled by
+  values.yaml instead) and publishes every version (the fixture ships them
+  all as `status: draft`, which Objects API's own object-create validation
+  silently refuses to resolve).
+- `templates/zac/productaanvraag-zaakafhandelparameters-job.yaml` - ZAC
+  has no setup_configuration-equivalent at all (a WildFly/Kotlin app, not
+  Django). Calls ZAC's own `/rest/zaakafhandelparameters` REST API
+  directly (GET the generated default, patch in a case definition/default
+  group/niet-ontvankelijk resultaat/productaanvraagtype, PUT it back) as a
+  real user (`beheerder1newiam`, direct Keycloak grant) - every endpoint
+  asserts a real PABC beheerder role, a client_credentials service account
+  doesn't satisfy that.
+- `templates/openformulieren/productaanvraag-form-job.yaml` - forms aren't
+  configurable through setup_configuration at all. Creates the
+  Form/FormDefinition/FormStep/FormRegistrationBackend via
+  `manage.py shell`, using the `objects_api` backend (not `zgw-create-zaak`)
+  so it round-trips through the same Objects API -> Open Notificaties ->
+  ZAC chain a real productaanvraag does.
+
+`podiumd.zac.productaanvraag.productaanvraagtype` is the single shared
+value both the ZAC job and the form-import job read - can't drift between
+the two sides of the match.
+
+**Two real bugs found live, both fixed properly rather than worked around:**
+
+1. Django's `URLValidator` rejects single-label hostnames (`openzaak`,
+   `objecttypen`, ...) - fine for a straight HTTP connection, but breaks
+   any self-referencing resource URL that gets round-tripped through a
+   validated field later (e.g. `/catalogi/api/v1/zaaktypen?catalogus=<url>`).
+   Every internal service-to-service URL added for this flow uses the
+   dotted `<service>.podiumd-minikube` Service DNS form instead of the
+   bare name this file's own naming-convention comment would otherwise
+   suggest - `openzaak.podiumd-minikube`, `objecten.podiumd-minikube`,
+   `objecttypen.podiumd-minikube`, `opennotificaties.podiumd-minikube`,
+   `zac.podiumd-minikube`. Confirmed live: each one's own ALLOWED_HOSTS
+   already includes this dotted form as a podiumd chart default -
+   deliberately unused until now.
+2. A genuine, reproducible-but-not-on-demand caching bug: django-solo's
+   own cache (`SOLO_CACHE="default"`, `SOLO_CACHE_TIMEOUT=300`, set in the
+   shared `open_api_framework` library and never overridden anywhere in
+   these images) for `notifications_api_common.NotificationsConfig`
+   intermittently returns a stale `notifications_api_service=None` from
+   Redis while the database row is, every time checked directly, correct.
+   Hit this twice in real live testing (Objects API once, then openzaak
+   itself once, both raising "Not notifying, Notifications API
+   configuration is broken or absent." as a 500 on the exact create
+   request the whole flow depends on) but couldn't nail a single
+   deterministic reproduction afterward despite trying sequential,
+   concurrent, direct-to-pod, and through-Traefik requests. Fixed by
+   disabling the cache entirely for both apps rather than depending on
+   correctly diagnosing one specific third-party-library race:
+   `vendor/dimpact-zaakafhandelcomponent/objecten/docker_no_solo_cache.py`
+   (a new settings shim, same ConfigMap+extraVolumes+extraVolumeMounts
+   pattern as every existing `docker_no2fa.py`) and `SOLO_CACHE = None`
+   bundled into openzaak's *existing* `docker_no2fa.py` shim rather than
+   adding a second one. The extra DB round trip this adds is a single
+   indexed PK lookup - negligible. Only fixed for the two apps confirmed
+   to actually hit it (both squarely in this flow's critical path,
+   openzaak's also affecting core zaak creation generally, not just this
+   feature) - not spread speculatively to every other app using the same
+   library without confirmed need.
+
+**Verification:** `tests/test_productaanvraag_flow.py` (new) - checks the
+three custom Jobs succeeded, the opennotificaties kanaal/abonnement exist
+(the four bundled config Jobs all self-delete within seconds via their own
+`ttlSecondsAfterFinished: 0` default, so their *effects* are checked
+instead of the Jobs themselves), the productaanvraag objecttype is
+registered and published, ZAC's zaakafhandelparameters are valide, Open
+Formulieren's registration backend validates live against the real
+Catalogi/Objecttypen APIs, and - the real thing, not a proxy for it - POSTs
+an actual productaanvraag object and polls until a matching zaak appears.
+Also extended `test_pods.py`'s one-shot-Job allowlist for the three new
+custom Jobs. Full suite (after both SOLO_CACHE fixes, run repeatedly to
+confirm no more intermittent failures): 62 passed, 3 skipped, 1
+pre-existing failure unrelated to this work (`zac-sig-del`/`zac-signaleren`
+CronJob pods already failing before this work started).

@@ -1,0 +1,10 @@
+{{- if .Values.podiumd.zac.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zac-productaanvraag-seed-script
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  seed_productaanvraag_zaakafhandelparameters.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/zac/seed_productaanvraag_zaakafhandelparameters.py" | quote }}
+{{- end }}

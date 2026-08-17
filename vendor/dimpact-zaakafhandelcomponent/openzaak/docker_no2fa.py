@@ -21,3 +21,17 @@
 from openzaak.conf.docker import *  # noqa: F401,F403
 
 MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS = AUTHENTICATION_BACKENDS  # noqa: F405
+
+# Unrelated second fix bundled into this same shim (simpler than adding a
+# second ConfigMap+extraVolumeMounts pair just for this) - see
+# vendor/dimpact-zaakafhandelcomponent/objecten/docker_no_solo_cache.py's own
+# header for the full story of what this fixes and why (django-solo's cache
+# for notifications_api_common's own NotificationsConfig singleton
+# intermittently going stale). Confirmed live here too, and with real
+# consequences for openzaak specifically: POST /zaken/api/v1/zaken (i.e.
+# ZAC creating any zaak at all, not just through the productaanvraag flow)
+# raises "Not notifying, Notifications API configuration is broken or
+# absent." straight through as a 500 whenever this happens, since
+# openzaak's own zaak creation triggers its own "zaken" channel notification
+# the same way Objects API's object creation does.
+SOLO_CACHE = None

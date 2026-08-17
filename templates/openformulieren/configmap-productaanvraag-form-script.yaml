@@ -1,0 +1,10 @@
+{{- if .Values.podiumd.openformulieren.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openformulieren-productaanvraag-form-script
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  create_productaanvraag_form.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/openformulieren/create_productaanvraag_form.py" | quote }}
+{{- end }}

@@ -1,0 +1,79 @@
+{{/*
+Runs vendor/dimpact-zaakafhandelcomponent/openformulieren/create_productaanvraag_form.py
+against the same image/database this app's own Deployment uses - see that
+script's own header for why forms need a custom Job at all (setup_configuration
+has no concept of forms) and why it's safe to leave in the general,
+unguarded manifest apply unlike pabc-migrations: update_or_create by
+slug/key, re-applying this Job's already-succeeded, unchanged spec is a
+safe no-op like any other Job here.
+
+Depends on podiumd.openformulieren's own bundled configuration Job having
+already created the "local-objects-api" ObjectsAPIGroupConfig this form's
+registration backend references - no explicit ordering between the two
+(this whole chart applies everything in one batch, see scripts/deploy.sh's
+own header for why it's `kubectl apply`, not `helm install`/`upgrade`), but
+this Job's own backoffLimit/restartPolicy-driven retries give the other Job
+time to succeed first, same as every other cross-app dependency in this
+chart (e.g. pabc-migrations depending on pabc itself being up).
+*/}}
+{{- if .Values.podiumd.openformulieren.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openformulieren-productaanvraag-form
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "podiumd-minikube.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: productaanvraag-form
+          image: "{{ .Values.podiumd.openformulieren.image.repository }}:{{ .Values.podiumd.openformulieren.image.tag }}"
+          imagePullPolicy: {{ .Values.podiumd.openformulieren.image.pullPolicy }}
+          workingDir: /app
+          command:
+            - sh
+            - -c
+            - python src/manage.py shell < /app/create_productaanvraag_form.py
+          envFrom:
+            - secretRef:
+                name: openformulieren
+            - configMapRef:
+                name: openformulieren
+          env:
+            # See templates/openformulieren/create-superuser-job.yaml's own
+            # identical comment - the no2fa settings shim mounted into the
+            # real Deployment isn't mounted into this Job.
+            - name: DJANGO_SETTINGS_MODULE
+              value: openforms.conf.docker
+            - name: FORM_SLUG
+              value: test-zaaktype-1
+            - name: FORM_NAME
+              value: "Test zaaktype 1 - melding indienen"
+            - name: OBJECTS_API_GROUP_IDENTIFIER
+              value: local-objects-api
+            - name: PRODUCTAANVRAAG_OBJECTTYPE_UUID
+              value: "021f685e-9482-4620-b157-34cd4003da6b"
+            # Shared with podiumd.zac.productaanvraag.productaanvraagtype
+            # (single source of truth) - this is the value ZAC's own
+            # ProductaanvraagService matches an incoming productaanvraag
+            # object's "type" field against.
+            - name: PRODUCTAANVRAAGTYPE
+              value: {{ .Values.podiumd.zac.productaanvraag.productaanvraagtype | quote }}
+            - name: ORGANISATIE_RSIN
+              value: "002564440"
+          volumeMounts:
+            - name: productaanvraag-form-script
+              mountPath: /app/create_productaanvraag_form.py
+              subPath: create_productaanvraag_form.py
+              readOnly: true
+      volumes:
+        - name: productaanvraag-form-script
+          configMap:
+            name: openformulieren-productaanvraag-form-script
+{{- end }}

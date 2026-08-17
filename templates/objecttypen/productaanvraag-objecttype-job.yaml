@@ -1,0 +1,68 @@
+{{/*
+Seeds the productaanvraag flow's objecttype schema (and five unrelated demo
+objecttypes bundled in the same vendored fixture - Boom/Straatverlichting/
+Melding/taak/formio, harmless to load alongside) into Objecttypen API via
+`manage.py loaddata`, since - unlike every other piece of the productaanvraag
+flow's configuration - this app's own bundled setup_configuration Job has no
+step for creating an objecttype/version at all, only tokens (confirmed by
+reading objecttypes/setup_configuration/steps/ directly inside the running
+image). --exclude=token.tokenauth: this project's own tokens for that same
+fixture's two consumers are already declared via
+podiumd.objecttypen.configuration.data's tokenauth_config above (different
+identifiers/token values) - loading the fixture's own token rows too would
+just leave four redundant tokens instead of two.
+
+Safe to leave in the general, unguarded manifest apply unlike pabc-migrations:
+`loaddata` upserts by the fixture's own explicit pks, and the follow-up
+publish_versions.py fixup is a plain idempotent .update() - re-applying this
+Job's already-succeeded, unchanged spec is a safe no-op like any other Job
+here.
+*/}}
+{{- if .Values.podiumd.objecttypen.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: objecttypen-productaanvraag-objecttype
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "podiumd-minikube.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: productaanvraag-objecttype
+          image: "{{ .Values.podiumd.objecttypen.image.repository }}:{{ .Values.podiumd.objecttypen.image.tag }}"
+          imagePullPolicy: {{ .Values.podiumd.objecttypen.image.pullPolicy }}
+          workingDir: /app
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              python src/manage.py loaddata --exclude=token.tokenauth /app/fixtures/demodata.json
+              python src/manage.py shell < /app/fixtures/publish_versions.py
+          envFrom:
+            - secretRef:
+                name: objecttypen
+            - configMapRef:
+                name: objecttypen
+          env:
+            # See templates/openformulieren/create-superuser-job.yaml's own
+            # identical comment - the no2fa settings shim mounted into the
+            # real Deployment isn't mounted into this Job, and loaddata/the
+            # ORM never touch a login view or 2FA at all.
+            - name: DJANGO_SETTINGS_MODULE
+              value: objecttypes.conf.docker
+          volumeMounts:
+            - name: productaanvraag-fixture
+              mountPath: /app/fixtures/
+              readOnly: true
+      volumes:
+        - name: productaanvraag-fixture
+          configMap:
+            name: objecttypen-productaanvraag-fixture
+{{- end }}
