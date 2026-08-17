@@ -3175,22 +3175,34 @@ reproduces it with no manual step at all.
   zaken/documenten/catalogi services, Objects/Objecttypen services, and
   the `local-objects-api` Objects API group.
 
-**Three custom Jobs fill the gaps none of the above cover** (all
+**Two custom Jobs fill two of the gaps none of the above cover** (both
 idempotent, safe in the unguarded `kubectl apply` flow, same as every
-other Job in this project):
+other Job in this project). A third gap - the productaanvraag
+objecttype/version schema itself has no setup_configuration step anywhere
+(confirmed by reading `objecttypes/setup_configuration/steps/` directly -
+only tokens are supported) - was *not* filled with a third custom Job:
+mid-build, a teammate's own concurrent work
+(`scripts/lib/seed-fixtures.sh`, now auto-run by `deploy.sh` whenever the
+`objecten` profile is deployed) turned out to already `loaddata` the exact
+same vendored fixture
+(`vendor/dimpact-zaakafhandelcomponent/objecttypen/demodata.json`, 6
+objecttypes including the real Productaanvraag-Dimpact schema - it was
+sitting in this repo unwired to anything before either piece of work
+used it) for its own, unrelated reason. Found this via a real rebase
+conflict (both branches touched `plan.md`'s own tail) while pushing this
+work, not before - a first draft of this feature *did* add a third,
+separately-loaddata-ing Job, which would have raced the other script for
+control of the same `ObjectVersion.status` field (the fixture ships every
+version as `status: draft`; whichever of the two loaddata calls happened
+to run last would silently win, and only one of them - this feature's own
+first draft - ever flipped `draft` to `published`, which Objects API's own
+object-create validation requires). Reconciled by deleting that Job
+entirely and instead adding the "flip every version to published" fixup as
+one extra step inside `seed-fixtures.sh` itself, immediately after its own
+existing `objecttypen` `loaddata` call - a single authoritative place for
+this fixture to be loaded, no ordering race possible between two
+mechanisms doing the same thing.
 
-- `templates/objecttypen/productaanvraag-objecttype-job.yaml` - the
-  productaanvraag objecttype/version schema itself has no
-  setup_configuration step anywhere (confirmed by reading
-  `objecttypes/setup_configuration/steps/` directly - only tokens are
-  supported). Turned out a fixture for exactly this
-  (`vendor/dimpact-zaakafhandelcomponent/objecttypen/demodata.json`,
-  6 objecttypes including the real Productaanvraag-Dimpact schema) was
-  already vendored in this repo, just never wired to anything - this Job
-  `loaddata`s it (`--exclude=token.tokenauth`, since tokens are handled by
-  values.yaml instead) and publishes every version (the fixture ships them
-  all as `status: draft`, which Objects API's own object-create validation
-  silently refuses to resolve).
 - `templates/zac/productaanvraag-zaakafhandelparameters-job.yaml` - ZAC
   has no setup_configuration-equivalent at all (a WildFly/Kotlin app, not
   Django). Calls ZAC's own `/rest/zaakafhandelparameters` REST API
@@ -3250,7 +3262,7 @@ the two sides of the match.
    library without confirmed need.
 
 **Verification:** `tests/test_productaanvraag_flow.py` (new) - checks the
-three custom Jobs succeeded, the opennotificaties kanaal/abonnement exist
+two custom Jobs succeeded, the opennotificaties kanaal/abonnement exist
 (the four bundled config Jobs all self-delete within seconds via their own
 `ttlSecondsAfterFinished: 0` default, so their *effects* are checked
 instead of the Jobs themselves), the productaanvraag objecttype is
@@ -3258,8 +3270,11 @@ registered and published, ZAC's zaakafhandelparameters are valide, Open
 Formulieren's registration backend validates live against the real
 Catalogi/Objecttypen APIs, and - the real thing, not a proxy for it - POSTs
 an actual productaanvraag object and polls until a matching zaak appears.
-Also extended `test_pods.py`'s one-shot-Job allowlist for the three new
-custom Jobs. Full suite (after both SOLO_CACHE fixes, run repeatedly to
-confirm no more intermittent failures): 62 passed, 3 skipped, 1
-pre-existing failure unrelated to this work (`zac-sig-del`/`zac-signaleren`
-CronJob pods already failing before this work started).
+Also extended `test_pods.py`'s one-shot-Job allowlist for the two new
+custom Jobs. Rebuilt entirely from a fresh `.podiumd-versions.yaml` +
+`deploy.sh --full` after rebasing onto the teammate's concurrent
+`seed-fixtures.sh`/Chart.yaml-version-selection work above, to confirm the
+reconciled version (not just the pre-reconciliation one) actually works.
+Full suite: 63 passed, 3 skipped, 1 pre-existing failure unrelated to this
+work (`zac-sig-del`/`zac-signaleren` CronJob pods already failing before
+this work started).

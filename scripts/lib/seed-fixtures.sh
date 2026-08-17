@@ -124,6 +124,25 @@ if [ "${OBJECTEN_MERGED}" = true ]; then
 else
   seed objecten "${VENDOR_DIR}/objecten/demodata.json" core Object
   seed objecttypen "${VENDOR_DIR}/objecttypen/demodata.json" core ObjectType
+
+  # objecttypen/demodata.json's own ObjectVersion rows (including the
+  # productaanvraag flow's own Productaanvraag-Dimpact schema - see
+  # values.yaml's own podiumd.objecten.configuration.data comment) all ship
+  # with status: draft. Harmless for the five other, unused demo
+  # objecttypes bundled in the same fixture, but a real problem for that
+  # one: Objects API's own object-create validation only resolves a
+  # *published* version, confirmed live. Run unconditionally (not gated by
+  # seed()'s own "already seeded" check above) - cheap, idempotent
+  # (.exclude(status="published").update(...) is a no-op once everything
+  # already is), and correct regardless of whether this deploy actually
+  # re-ran the loaddata above or found it already done.
+  objecttypen_pod="$(kubectl get pod -n "${NAMESPACE}" -l "app.kubernetes.io/name=objecttypen" -o jsonpath='{.items[0].metadata.name}')"
+  kubectl exec -n "${NAMESPACE}" "${objecttypen_pod}" -- python /app/src/manage.py shell -c "
+from django.apps import apps
+ObjectVersion = apps.get_model('core', 'ObjectVersion')
+updated = ObjectVersion.objects.exclude(status='published').update(status='published')
+print(f'published {updated} object version(s)')
+"
 fi
 
 echo

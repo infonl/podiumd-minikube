@@ -911,12 +911,12 @@ podiumd:
       # own configuration.data above.
       #
       # objecttypes_config: registers (not creates - the schema itself is
-      # seeded by templates/objecttypen/productaanvraag-objecttype-job.yaml,
-      # since Objecttypen API's own setup_configuration has no step for
-      # creating an objecttype/version, only tokens - confirmed by reading
-      # its bundled objecttypes/setup_configuration/steps/ directly) this
-      # Objects API's own reference to that objecttype, by UUID + which
-      # service serves it.
+      # seeded into Objecttypen API by scripts/lib/seed-fixtures.sh's own
+      # objecttypen loaddata call, since Objecttypen API's own
+      # setup_configuration has no step for creating an objecttype/version,
+      # only tokens - confirmed by reading its bundled
+      # objecttypes/setup_configuration/steps/ directly) this Objects API's
+      # own reference to that objecttype, by UUID + which service serves it.
       #
       # tokenauth: fakeZacObjectsToken matches podiumd.zac.objectenApi.token
       # above (zac.local's own existing config, never previously valid since
@@ -1064,12 +1064,13 @@ podiumd:
         # bundled setup_configuration has no step for creating an
         # objecttype/version itself (confirmed by reading its bundled
         # objecttypes/setup_configuration/steps/ directly: token_auth is the
-        # only one registered), so the productaanvraag objecttype's own
-        # schema is seeded by
-        # templates/objecttypen/productaanvraag-objecttype-job.yaml instead,
-        # a custom Job added for exactly this gap (same pattern as
-        # templates/openformulieren/create-superuser-job.yaml's own header
-        # comment explains for a different one of these gaps).
+        # only one registered). The productaanvraag objecttype's own schema
+        # is seeded separately, by scripts/lib/seed-fixtures.sh's own
+        # objecttypen loaddata call (already covers the vendored
+        # objecttypen/demodata.json fixture this schema lives in - that
+        # script also flips every version it loads from draft to published,
+        # since Objects API's own object-create validation only resolves a
+        # published version).
         enabled: true
       # No compose equivalent to match (objecttypen isn't part of
       # dimpact-zaakafhandelcomponent's docker-compose stack at all - see

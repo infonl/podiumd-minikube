@@ -24,14 +24,14 @@ ONE_SHOT_JOB_PREFIXES = (
     # The four subchart-bundled setup_configuration Jobs the productaanvraag
     # flow's own declarative wiring turns on (see each app's own
     # podiumd.<app>.configuration.data comment in values.yaml), plus the
-    # three custom ones this project adds for the pieces that mechanism
-    # doesn't cover (see templates/{objecttypen,zac,openformulieren}/
-    # productaanvraag-*.yaml).
+    # two custom ones this project adds for the pieces that mechanism
+    # doesn't cover (see templates/{zac,openformulieren}/productaanvraag-*.yaml -
+    # the third gap, the productaanvraag objecttype's own schema, is seeded
+    # by scripts/lib/seed-fixtures.sh instead, not a Job at all).
     "objecten-config",
     "objecttypen-config",
     "opennotificaties-config",
     "openformulieren-config",
-    "objecttypen-productaanvraag-objecttype",
     "zac-productaanvraag-zaakafhandelparameters",
     "openformulieren-productaanvraag-form",
 )

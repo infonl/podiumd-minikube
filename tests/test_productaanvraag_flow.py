@@ -3,14 +3,14 @@ End-to-end verification of the productaanvraag flow: a form submission ->
 Objects API -> Open Notificaties -> ZAC creating a zaak of zaaktype-test-1
 automatically, with no manual post-deploy step. This is the same flow
 verified live (by hand) while building it - see values.yaml's own
-podiumd.zac.productaanvraag comment and
-templates/{objecttypen,zac,openformulieren}/productaanvraag-*.yaml for the
-pieces this module exercises, and .claude/plans/plan.md's own
-"productaanvraag flow" entry for the story of how each piece was found and
-wired.
+podiumd.zac.productaanvraag comment,
+templates/{zac,openformulieren}/productaanvraag-*.yaml, and
+scripts/lib/seed-fixtures.sh's own objecttypen loaddata step for the pieces
+this module exercises, and .claude/plans/plan.md's own "productaanvraag
+flow" entry for the story of how each piece was found and wired.
 
 Every piece here is provisioned purely from values.yaml + this chart's own
-custom Jobs - no test in this module depends on any state left over from
+scripts/Jobs - no test in this module depends on any state left over from
 manual `kubectl exec` verification.
 """
 
@@ -60,19 +60,22 @@ ZGW_JWT_SECRET = "openzaakZaakafhandelcomponentClientSecret"
 BEHEERDER_USERNAME = "beheerder1newiam"
 BEHEERDER_PASSWORD = "beheerder1newiam"
 
-# The three custom Jobs this project adds for the pieces no bundled
+# The two custom Jobs this project adds for the pieces no bundled
 # setup_configuration mechanism covers (see each one's own template header) -
-# checked by name below. The four subchart-bundled config Jobs
-# (objecten-config/objecttypen-config/opennotificaties-config/
-# openformulieren-config) are NOT included here: their own subchart default
-# is ttlSecondsAfterFinished: 0, so Kubernetes deletes them within seconds
-# of succeeding (confirmed live) - by the time this suite runs, they're
-# already gone regardless of whether they worked. Their effects are
-# verified directly instead (the opennotificaties kanaal/abonnement check
-# below, the objecttype/token checks, and the full-flow test, which
-# couldn't pass at all if any of the four hadn't run correctly).
+# checked by name below. The third gap (the productaanvraag objecttype's
+# own schema) isn't a Job at all - it's seeded by
+# scripts/lib/seed-fixtures.sh, checked directly further down instead
+# (test_productaanvraag_objecttype_is_registered_and_published). The four
+# subchart-bundled config Jobs (objecten-config/objecttypen-config/
+# opennotificaties-config/openformulieren-config) are NOT included here
+# either: their own subchart default is ttlSecondsAfterFinished: 0, so
+# Kubernetes deletes them within seconds of succeeding (confirmed live) -
+# by the time this suite runs, they're already gone regardless of whether
+# they worked. Their effects are verified directly instead (the
+# opennotificaties kanaal/abonnement check below, the objecttype/token
+# checks, and the full-flow test, which couldn't pass at all if any of the
+# four hadn't run correctly).
 EXPECTED_SUCCEEDED_JOBS = (
-    "objecttypen-productaanvraag-objecttype",
     "zac-productaanvraag-zaakafhandelparameters",
     "openformulieren-productaanvraag-form",
 )
@@ -224,9 +227,9 @@ def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement():
 
 def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip):
     """
-    templates/objecttypen/productaanvraag-objecttype-job.yaml's own loaddata
-    step, verified against the real Objecttypen API rather than just
-    trusting the Job's exit code.
+    scripts/lib/seed-fixtures.sh's own objecttypen loaddata (+ its
+    draft-to-published fixup), verified against the real Objecttypen API
+    rather than just trusting the script's exit code.
     """
     response = requests.get(
         host_url(traefik_ip, f"/api/v2/objecttypes/{PRODUCTAANVRAAG_OBJECTTYPE_UUID}"),
@@ -250,7 +253,7 @@ def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip):
     assert versions.status_code == 200
     assert any(v["status"] == "published" for v in versions.json()["results"]), (
         "expected at least one published version - "
-        "publish_versions.py's own fixup should have flipped every draft "
+        "seed-fixtures.sh's own fixup should have flipped every draft "
         "version this fixture defines"
     )
 
