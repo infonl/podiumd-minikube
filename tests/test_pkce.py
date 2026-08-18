@@ -5,32 +5,67 @@ podiumd.openzaak.configuration.data, and podiumd.zac.image.tag comments, and
 vendor/dimpact-zaakafhandelcomponent/NOTES.md's entries on all three, for the
 full story of what's enabled, what isn't, and why.
 
-zac used to be the deliberate negative case here (its client's
-pkce.code.challenge.method was left "" on purpose - ZAC itself didn't
-support PKCE with the podiumd-4.8-bundled zac chart, see NOTES.md). Bumping
-zac to chart 1.0.289/app 5.4.2 (past PR #6490, "feat: add configurable PKCE
-support for the OIDC authorization code flow" - see podiumd.zac.image.tag's
-own values.yaml comment for why that bump needs a local --path checkout
-until podiumd 4.9 is released) changed that: confirmed live that ZAC's own
-container now genuinely sends a code_challenge unconditionally, the same
-way pabc's ASP.NET Core middleware already did, so the Keycloak client's
-own pkce.code.challenge.method was flipped to "S256" to match (both the
-vendored realm.json, for future fresh imports, and the *already-imported*
-live realm via the Admin API - Keycloak only imports a realm once, editing
-the JSON file alone doesn't affect an already-existing one, confirmed live
-the same way the earlier "bad request connecting to zac.local" incident
-in plan.md was fixed).
+zac is the deliberate negative case here *by default* - its client's
+pkce.code.challenge.method is kept "" (ZAC itself doesn't support PKCE
+with whatever zac chart podiumd 4.8.x bundles, see NOTES.md). Bumping zac
+to chart 1.0.289/app 5.4.2 (past PR #6490, "feat: add configurable PKCE
+support for the OIDC authorization code flow") flips that - confirmed
+live that ZAC's own container then genuinely sends a code_challenge
+unconditionally, the same way pabc's ASP.NET Core middleware already
+does - but that chart bump needs a local --path checkout (see
+podiumd.zac.image.tag's own values.yaml comment for the exact recipe)
+until podiumd 4.9 is released, so it's gated behind top-level
+zac.experimentalPkce (off by default - see
+scripts/lib/zac-experimental-pkce.sh). Whichever side that flag is on,
+scripts/lib/fixup-zac-pkce-realm.py and scripts/lib/sync-zac-pkce-realm.sh
+both keep the Keycloak client's own pkce.code.challenge.method in sync
+with it - both the vendored realm.json, for future fresh imports, and the
+*already-imported* live realm via the Admin API, since Keycloak only
+imports a realm once and editing the JSON file alone never affects an
+already-existing one (confirmed live the same way the earlier "bad
+request connecting to zac.local" incident in plan.md was fixed).
+test_zac_client_now_sends_a_pkce_code_challenge below skips entirely when
+the switch is off, since with it off ZAC deliberately never sends a
+challenge at all.
 """
 
 from urllib.parse import parse_qs, urlparse
 
+import pytest
 import requests
+
+from conftest import NAMESPACE, kubectl
 
 PABC_HOST = "pabc.local"
 ZAC_HOST = "zac.local"
 KEYCLOAK_HOST = "keycloak.local"
 PABC_USERNAME = "pabcadmin"
 PABC_PASSWORD = "pabcadmin"
+
+
+def _zac_experimental_pkce_live():
+    """
+    Whether the zac 5.4.2/PKCE experiment (top-level zac.experimentalPkce
+    in values.yaml, off by default - see scripts/lib/zac-experimental-pkce.sh)
+    is actually active on the currently-deployed cluster. Checked against
+    the live zac ConfigMap rather than re-reading values.yaml locally -
+    this suite otherwise only ever asserts against deployed state, and
+    zac-experimental-pkce.sh uses this exact same signal (AUTH_ENABLE_PKCE
+    presence in the zac chart's own rendered config) to decide whether the
+    currently-selected podiumd version's zac chart supports PKCE at all.
+    """
+    return (
+        kubectl(
+            "get",
+            "configmap",
+            "zac",
+            "-n",
+            NAMESPACE,
+            "-o",
+            "jsonpath={.data.AUTH_ENABLE_PKCE}",
+        ).strip()
+        == "true"
+    )
 
 
 def _via_traefik(traefik_ip, absolute_url):
@@ -188,7 +223,17 @@ def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
     own test_full_login_flow_reaches_authenticated_app already exercises
     that end to end (real credentials, real code exchange, lands on the
     authenticated app shell) and would fail here too if PKCE broke it.
+
+    Only meaningful with zac.experimentalPkce actually on (off by default -
+    see scripts/lib/zac-experimental-pkce.sh) - skips otherwise, since with
+    it off ZAC deliberately doesn't send a challenge and the Keycloak
+    client deliberately doesn't require one (scripts/lib/fixup-zac-pkce-realm.py
+    / sync-zac-pkce-realm.sh both keep those two in sync either way, this
+    just isn't the experiment being tested here).
     """
+    if not _zac_experimental_pkce_live():
+        pytest.skip("zac.experimentalPkce is off on this cluster")
+
     initial = requests.get(
         f"http://{traefik_ip}/",
         headers={"Host": ZAC_HOST},

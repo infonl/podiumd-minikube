@@ -3673,36 +3673,6 @@
     }
   },
   {
-    "model": "token.tokenauth",
-    "pk": 2,
-    "fields": {
-      "identifier": "zaakafhandelcomponent",
-      "token": "fakeZacObjectsToken",
-      "contact_person": "zac",
-      "email": "test@example.com",
-      "organization": "Test",
-      "application": "ZAC",
-      "administration": "Test",
-      "last_modified": "2020-12-23T11:43:16.820Z",
-      "created": "2020-12-22T16:27:00.751Z"
-    }
-  },
-  {
-    "model": "token.tokenauth",
-    "pk": 3,
-    "fields": {
-      "identifier": "openformulieren",
-      "token": "fakeOpenFormulierenObjectsToken",
-      "contact_person": "openformulieren",
-      "email": "openformulieren@example.com",
-      "organization": "Test",
-      "application": "OpenFormulieren",
-      "administration": "Test",
-      "last_modified": "2020-12-23T11:43:16.820Z",
-      "created": "2020-12-22T16:27:00.751Z"
-    }
-  },
-  {
     "model": "token.permission",
     "pk": 1,
     "fields": {
@@ -3727,51 +3697,6 @@
       "token_auth": 1,
       "mode": "read_and_write",
       "object_type": 4
-    }
-  },
-  {
-    "model": "token.permission",
-    "pk": 4,
-    "fields": {
-      "token_auth": 2,
-      "mode": "read_and_write",
-      "object_type": 4
-    }
-  },
-  {
-    "model": "token.permission",
-    "pk": 5,
-    "fields": {
-      "token_auth": 3,
-      "mode": "read_and_write",
-      "object_type": 4
-    }
-  },
-  {
-    "model": "token.permission",
-    "pk": 6,
-    "fields": {
-      "token_auth": 2,
-      "mode": "read_and_write",
-      "object_type": 5
-    }
-  },
-  {
-    "model": "token.permission",
-    "pk": 7,
-    "fields": {
-      "token_auth": 2,
-      "mode": "read_and_write",
-      "object_type": 6
-    }
-  },
-  {
-    "model": "token.permission",
-    "pk": 8,
-    "fields": {
-      "token_auth": 2,
-      "mode": "read_and_write",
-      "object_type": 1
     }
   },
   {

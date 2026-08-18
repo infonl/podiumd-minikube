@@ -149,6 +149,12 @@ sync_podiumd_dependencies
 # it later, without needing to re-run this script.
 echo "Deriving the image list from the currently-selected podiumd version..."
 source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
+# Included here too (not just deploy.sh) so the zac 5.4.2 image is already
+# pre-pulled if zac.experimentalPkce happens to be on when this runs - see
+# that script's own header. Refuses with a clear message instead of
+# silently pre-pulling the wrong image if it's on without a PKCE-aware
+# zac chart selected.
+source "${CHART_DIR}/scripts/lib/zac-experimental-pkce.sh"
 mapfile -t images < <(
   helm template podiumd-minikube "${CHART_DIR}" -n podiumd-minikube \
     --set wiremock.enabled=true \
@@ -159,6 +165,7 @@ mapfile -t images < <(
     --set openformulieren.enabled=true --set podiumd.openformulieren.enabled=true \
     --set metrics.enabled=true \
     --set monitoringLogging.enabled=true \
+    "${ZAC_PKCE_SETS[@]}" \
     2>/dev/null \
   | python3 "${CHART_DIR}/scripts/lib/strip-image-digests.py" \
   | grep -oE '^ *image: *"?[^"[:space:]]+' \

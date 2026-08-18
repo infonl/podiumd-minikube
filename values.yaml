@@ -12,6 +12,20 @@
 # -----------------------------------------------------------------------
 zac:
   enabled: true # "zac" profile - on by default so the app is visible
+  # Off by default. Gates the teammate's zac 5.4.2/chart 1.0.289 PKCE
+  # experiment (see podiumd.zac.image.tag's own comment below,
+  # scripts/lib/zac-experimental-pkce.sh, and NOTES.md's PKCE entry for
+  # the full history) - keeps the experiment fully opt-in instead of
+  # silently required just because this values.yaml carries the override.
+  # Turning this on ALSO requires the currently-selected podiumd version
+  # to actually bundle a zac chart with AUTH_ENABLE_PKCE support (e.g. via
+  # a hand-bumped local `--path` checkout, per that comment) -
+  # scripts/lib/zac-experimental-pkce.sh refuses deploy.sh with a clear
+  # message rather than silently reproducing the exact incident this
+  # experiment already caused once (Keycloak requiring PKCE, an
+  # PKCE-unaware zac chart never sending it, every login broken) if it
+  # detects that isn't the case.
+  experimentalPkce: false
 wiremock:
   enabled: false # extra wiremock mappings (smartdocuments/kvk/bag) - was "itest", renamed since that's all this flag does now
   # mailpit (SMTP test server) moved out of this profile - it's now
@@ -143,10 +157,12 @@ podiumd:
       enabled: false
     autoscaling:
       enabled: false
-    # EXPERIMENTAL, tied to a local-only podiumd dependency bump - not
-    # something `set-podiumd-version.sh 4.8.4 <ml-version>` alone
-    # reproduces. PodiumD 4.9's own release notes (Dimpact Confluence, "PDF
-    # versie 4.9") pin zac at chart 1.0.289/app 5.4.2 (both *real, published*
+    # No image.tag override here by default (top-level zac.experimentalPkce
+    # is false) - chart default applies. EXPERIMENTAL, tied to a
+    # local-only podiumd dependency bump - not something
+    # `set-podiumd-version.sh 4.8.4 <ml-version>` alone reproduces.
+    # PodiumD 4.9's own release notes (Dimpact Confluence, "PDF versie
+    # 4.9") pin zac at chart 1.0.289/app 5.4.2 (both *real, published*
     # versions - unlike an earlier local-only experiment with unreleased
     # 1.0.287/5.4.0, back when PR #6490 - "feat: add configurable PKCE
     # support for the OIDC authorization code flow" - had only just merged),
@@ -169,28 +185,23 @@ podiumd:
     # like every other version choice there - re-run the above after any
     # fresh clone or `.podiumd-versions.yaml` loss.)
     #
-    # This image.tag override is still needed even with that chart bump:
-    # its own image.tag default (empty, falling back to .Chart.AppVersion,
-    # "5.4") is NOT the same image as 5.4.2 - confirmed via `docker manifest
-    # inspect` that ghcr.io/infonl/zaakafhandelcomponent:5.4 and :5.4.2 have
-    # different digests (5.4 is frozen at the first 5.4.x patch, not a
-    # rolling alias).
-    #
-    # Confirmed live this pans out end to end, not just that it boots: the
-    # chart's own config.yaml template now has a real AUTH_ENABLE_PKCE line
-    # (absent in 1.0.251), so auth.enablePkce below (previously a harmless
-    # no-op) now makes ZAC send a real code_challenge - the vendored realm's
-    # own PKCE requirement for this client was flipped back on to match (see
-    # that field's own comment, NOTES.md's PKCE entry, and
-    # tests/test_pkce.py's test_zac_client_now_sends_a_pkce_code_challenge).
-    #
-    # Revert this whole block (image.tag override + the realm's PKCE
-    # requirement, if this experiment doesn't otherwise pan out) once a real
-    # podiumd release bundles zac chart 1.0.289 (or newer) as its own
-    # default - or drop this comment once .podiumd-versions.yaml itself can
-    # just say "4.9" again.
-    image:
-      tag: "5.4.2"
+    # Once that chart bump is in place, set top-level zac.experimentalPkce
+    # to true - scripts/lib/zac-experimental-pkce.sh then does the rest on
+    # every deploy.sh run: injects this tag override (chart default,
+    # empty/falling back to .Chart.AppVersion "5.4", is NOT the same image
+    # as 5.4.2 - confirmed via `docker manifest inspect` that
+    # ghcr.io/infonl/zaakafhandelcomponent:5.4 and :5.4.2 have different
+    # digests, 5.4 is frozen at the first 5.4.x patch, not a rolling
+    # alias), patches the vendored realm's own PKCE requirement for this
+    # client back on to match (see auth.enablePkce's own comment below,
+    # and scripts/lib/fixup-zac-pkce-realm.py), and reconciles that same
+    # setting into the *already-imported* live Keycloak realm (Keycloak
+    # only ever imports once - see
+    # scripts/lib/sync-zac-pkce-realm.sh's own header for why a values/
+    # ConfigMap change alone never reaches an already-provisioned
+    # cluster). Confirmed live this pans out end to end, not just that it
+    # boots - see NOTES.md's PKCE entry and
+    # tests/test_pkce.py's test_zac_client_now_sends_a_pkce_code_challenge.
     javaOptions: "-Xms512m -Xmx1024m -XX:ActiveProcessorCount=2"
     contextUrl: http://zac.local
     db:
@@ -204,25 +215,18 @@ podiumd:
       clientId: zaakafhandelcomponent
       secret: keycloakZaakafhandelcomponentClientSecret
       sslRequired: none
-      # Originally a silent no-op: the zac chart bundled inside podiumd 4.8.x
-      # (1.0.251) has no AUTH_ENABLE_PKCE line in its config.yaml template at
-      # all, and PKCE support in ZAC itself (PR #6490) was unreleased in any
-      # image tag. Found live in step 4 that this being a no-op is NOT
-      # harmless as assumed - the vendored realm's "zaakafhandelcomponent"
-      # client required PKCE (pkce.code.challenge.method: S256) at the time,
-      # so Keycloak rejected every login outright; fixed then by clearing
-      # that attribute to "" on the Keycloak side instead.
-      #
-      # Now genuinely active: podiumd.zac.image.tag's own comment bumps zac
-      # to chart 1.0.289/app 5.4.2 (past PR #6490) via a local --path
-      # checkout (podiumd 4.9 itself, which would bundle this by default,
-      # isn't released yet - see PodiumD 4.9's own Dimpact Confluence release
-      # notes). Confirmed live this setting now makes ZAC send a real
-      # code_challenge/code_challenge_method=S256 on every login - the
-      # realm's own pkce.code.challenge.method was flipped back to "S256" to
-      # match (vendored here, and patched into the *already-imported* live
-      # realm via the Admin API - see NOTES.md's PKCE note and
-      # tests/test_pkce.py's own test_zac_client_now_sends_a_pkce_code_challenge).
+      # Left unconditionally true regardless of top-level
+      # zac.experimentalPkce - a silent no-op on any zac chart without
+      # AUTH_ENABLE_PKCE support (matches compose's own intent, harmless
+      # either way - see this project's build history for how that was
+      # confirmed). What actually gates real PKCE end to end is the
+      # *realm's own* pkce.code.challenge.method requirement, not this
+      # value - scripts/lib/fixup-zac-pkce-realm.py and
+      # scripts/lib/sync-zac-pkce-realm.sh both key off
+      # zac.experimentalPkce for that instead (see podiumd.zac.image.tag's
+      # own comment above for the full mechanism, and NOTES.md's PKCE
+      # entry for the incident that requirement caused once already, back
+      # when it was flipped on with no matching PKCE-aware chart deployed).
       enablePkce: true
     keycloak:
       adminClient:

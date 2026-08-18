@@ -120,7 +120,14 @@ source "${CHART_DIR}/scripts/lib/podiumd-dependency.sh"
 # sync_podiumd_dependencies's own header).
 sync_podiumd_dependencies
 
-EXTRA_SETS=()
+# zac is core/always-on (unlike objecten's own --full-gated shape
+# detection below) - this runs unconditionally, on every deploy.sh
+# invocation, --full or not. Sets ZAC_EXPERIMENTAL_PKCE (exported, read
+# by fixup-zac-pkce-realm.py below and sync-zac-pkce-realm.sh further
+# down) and ZAC_PKCE_SETS (folded into EXTRA_SETS next).
+source "${CHART_DIR}/scripts/lib/zac-experimental-pkce.sh"
+
+EXTRA_SETS=("${ZAC_PKCE_SETS[@]}")
 FORCE_PRUNE=false
 # Default/exported so it's always defined for
 # fixup-merged-objecten-shape.py's own os.environ lookup below,
@@ -191,6 +198,7 @@ render() {
     | python3 "${CHART_DIR}/scripts/lib/exclude-helm-test-hooks.py" \
     | python3 "${CHART_DIR}/scripts/lib/exclude-zac-bundled-otel-collector.py" \
     | python3 "${CHART_DIR}/scripts/lib/fixup-merged-objecten-shape.py" \
+    | python3 "${CHART_DIR}/scripts/lib/fixup-zac-pkce-realm.py" \
     | python3 "${CHART_DIR}/scripts/lib/split-large-configmaps.py"
 }
 
@@ -272,6 +280,9 @@ if [ -s "${LARGE_CONFIGMAPS_FILE}" ]; then
   echo "Applying large ConfigMap(s) via --server-side (see split-large-configmaps.py's own comment)..."
   kubectl apply --server-side -n "${NAMESPACE}" -f "${LARGE_CONFIGMAPS_FILE}"
 fi
+
+echo
+"${CHART_DIR}/scripts/lib/sync-zac-pkce-realm.sh"
 
 echo
 echo "Applying pabc-migrations (guarded - see scripts/lib/apply-pabc-migrations.sh)..."

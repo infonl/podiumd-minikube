@@ -96,6 +96,31 @@ here is a live reference — this project never reads
   round trip (real credentials, code exchange, authenticated app shell)
   still completes cleanly - see `tests/test_pkce.py`'s
   `test_zac_client_now_sends_a_pkce_code_challenge`.
+
+  **Update (made switchable, off by default)**: the whole zac 5.4.2/PKCE
+  experiment above depends on a local-only, hand-bumped podiumd `--path`
+  checkout (podiumd 4.9 itself still isn't released) - having it always
+  on just because this values.yaml carries the override meant every
+  deploy silently required that manual checkout step, with no way to opt
+  out short of hand-editing values.yaml/this realm.json back. Gated
+  behind a new top-level `zac.experimentalPkce` (off by default) instead -
+  `scripts/lib/zac-experimental-pkce.sh` reads it and refuses deploy.sh
+  with a clear message if it's on without a PKCE-aware zac chart actually
+  selected (checked by inspecting the vendored podiumd tarball directly,
+  the same way `scripts/lib/detect-objecten-shape.sh` detects its own
+  shape - not a version-number guess). `scripts/lib/fixup-zac-pkce-realm.py`
+  now patches this file's own `pkce.code.challenge.method` back to `""`
+  post-render whenever the switch is off (this file itself still carries
+  `"S256"` unconditionally - values.yaml can't branch a vendored file's
+  content on a flag, same reason `fixup-merged-objecten-shape.py` exists
+  for `objecten.configuration.data`), and
+  `scripts/lib/sync-zac-pkce-realm.sh` reconciles that same value into the
+  *live*, already-imported realm on every deploy - the exact Admin-API
+  patch described above, now automatic and idempotent instead of a
+  one-off manual fix. `tests/test_pkce.py`'s own
+  `test_zac_client_now_sends_a_pkce_code_challenge` skips entirely when
+  the switch is off.
+
   Also: seven new clients added (`openzaak`, `openklant`, `objecten`,
   `objecttypen`, `opennotificaties`, `openformulieren`,
   `openarchiefbeheer`) - none exist in the original imported realm at all,

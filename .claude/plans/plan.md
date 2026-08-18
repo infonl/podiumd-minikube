@@ -3683,3 +3683,99 @@ edit, with no error or warning anywhere, is easy to miss.
 **Full suite after all of the above: 66 passed, 5 skipped (all
 expected - monitoringLogging off, objecttypen profile off on merged
 shape), 0 failed.**
+
+## Making the zac 5.4.2/PKCE experiment switchable (off by default), and what verifying that on a real fresh deploy turned up
+
+Asked to gate the teammate's zac 5.4.2/PKCE experiment (from the PodiumD
+4.9 catch-up entry above) behind an explicit, off-by-default switch,
+rather than it silently applying just because values.yaml happened to
+carry the override. Landed on `zac.experimentalPkce` (top-level, next to
+the existing `zac.enabled`) as the one flag, with three things keyed off
+it:
+
+- `scripts/lib/zac-experimental-pkce.sh` - reads the flag, and refuses
+  deploy.sh outright (clear message, not a silent misconfiguration) if
+  it's on without the currently-selected podiumd version's zac chart
+  actually supporting `AUTH_ENABLE_PKCE` - checked by inspecting the
+  vendored podiumd tarball directly (same trick as
+  `detect-objecten-shape.sh`), since this only ever runs against an
+  unpublished/hand-bumped local `--path` checkout with no real version to
+  key off. Produces the `--set podiumd.zac.image.tag=5.4.2` override only
+  when on (values.yaml's own hardcoded copy of that override removed).
+- `scripts/lib/fixup-zac-pkce-realm.py` - new post-renderer, patches the
+  vendored realm's own "zaakafhandelcomponent" client
+  `pkce.code.challenge.method` back to `""` when the switch is off (the
+  checked-in realm.json keeps `"S256"` unconditionally - same
+  "one file, patched post-render for the other state" pattern as
+  `fixup-merged-objecten-shape.py`).
+- `scripts/lib/sync-zac-pkce-realm.sh` - new, runs on every deploy.sh
+  unconditionally (zac/keycloak are both core). Reconciles that same
+  attribute into the *live*, already-imported Keycloak realm via
+  `kcadm.sh` - necessary because Keycloak's `--import-realm` only ever
+  imports a realm that doesn't already exist yet, and this project's
+  Keycloak persists to the shared Postgres instance (not ephemeral), so
+  that's true indefinitely after the first import. Without this, flipping
+  the switch on an already-provisioned cluster would silently do nothing
+  to the running realm - the exact gap that produced today's earlier
+  manual `kcadm.sh` fix in the first place.
+
+`tests/test_pkce.py`'s own `test_zac_client_now_sends_a_pkce_code_challenge`
+now skips (rather than failing) when the switch is off, checked against
+the live zac ConfigMap's `AUTH_ENABLE_PKCE` presence - the same signal
+`zac-experimental-pkce.sh` uses - not against local values.yaml, matching
+this suite's own "assert against deployed state" convention.
+
+### Verifying the "off" default on a genuinely fresh deploy surfaced two more real, unrelated bugs
+
+Rather than trust the switch from source-reading alone, verified it end
+to end - which meant a real fresh deploy, since this cluster's zac had
+already run the 5.4.2 experiment for a while under the previous session.
+That surfaced two separate, pre-existing problems neither related to the
+switch itself:
+
+1. **Flowable's own schema migration is one-way, and the experiment had
+   already crossed that line.** The 5.4.2 pod's newer Flowable engine had
+   upgraded `zac`'s own Postgres schema from `7.2.0.2` to `8.0.0.0` sometime
+   during the prior session - confirmed via `flowable.act_ge_property`'s
+   own `schema.version`/`schema.history` rows. Once that happens, an older
+   zac image (what the switch now correctly reverts to) can never start
+   again against that same database (`Could not update Flowable database
+   schema: unknown version from database: '8.0.0.0'`) - Flowable has no
+   downgrade path. Kubernetes' own rollout safety net kept the old,
+   working 5.4.2 pod serving traffic throughout (the new 5.1.0 pod just
+   never became ready, rather than causing an outage), but the rollback
+   itself was permanently stuck. Resolved by asking Kees, who chose a full
+   `reset-namespace.sh` + fresh `deploy.sh --full` over a narrower
+   schema-only wipe - confirmed clean afterward (fresh Flyway/Flowable
+   bootstrap, zac starts on 5.1.0 with no schema conflict).
+2. **A latent seed-order race in `openobject/demodata.json`, never
+   exercised before because this project's own dev cluster had never done
+   a truly fresh `objecten` deploy since the token-identifier rename
+   (`zaakafhandelcomponent`->`zac`, `openformulieren`->`open-formulieren`)
+   landed.** The vendored fixture still had its own `token.tokenauth` rows
+   (pk=2/3, old identifiers) creating the *same token values*
+   (`fakeZacObjectsToken`, `fakeOpenFormulierenObjectsToken`) that
+   values.yaml's own declarative `objecten.configuration.data` tokenauth
+   items already create under the renamed identifiers - `objecten-config`'s
+   Job (running first) created them declaratively, then
+   `seed-fixtures.sh`'s own `loaddata` immediately hit `IntegrityError:
+   ... duplicate key value violates unique constraint
+   "token_tokenauth_token_d0421f81_uniq"` trying to insert its own,
+   now-fully-redundant copies. Every earlier deploy in this whole session
+   skipped this exact code path (`seed()`'s own idempotency check: skip
+   `loaddata` entirely once `core.Object` already has *any* data - true
+   on every reused cluster this session touched, never true on a truly
+   fresh one). Fixed by deleting the two dead rows (and their five
+   `token.permission` grants, `token_auth` 2/3) from the vendored fixture
+   directly - confirmed nothing else in this project references the old
+   identifiers, and the declarative tokens are `is_superuser: true`
+   already, making the fixture's own fine-grained per-object-type grants
+   redundant on top of being duplicate. A first attempt at this edit via
+   `json.dump()` reformatted the *entire* file's array indentation as a
+   side effect (every compact `["x"]` became one-item-per-line) - reverted
+   and redid it as a surgical text edit of just the seven rows instead, to
+   keep the vendored file's own diff legible.
+
+**Full suite after all of the above, on the freshly reset namespace: 65
+passed, 6 skipped (all expected - monitoringLogging off, objecttypen
+profile off on merged shape, PKCE switch off), 0 failed.**
