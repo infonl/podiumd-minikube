@@ -121,6 +121,21 @@ User.objects.filter(username='admin').exists() or User.objects.create_superuser(
 
 if [ "${OBJECTEN_MERGED}" = true ]; then
   seed objecten "${VENDOR_DIR}/openobject/demodata.json" core Object
+
+  # openobject/demodata.json's own ObjectTypeVersion rows (the merged
+  # shape's own model name for what classic calls ObjectVersion - same
+  # productaanvraag flow, same draft-vs-published gotcha) also ship with
+  # status: draft (confirmed live: pk=4/object_type=4, the
+  # Productaanvraag-Dimpact version, is one of them) - same fixup as
+  # classic's own below, just against "objecten" itself (merged has no
+  # separate objecttypen pod to exec into) and the renamed model.
+  objecten_pod="$(kubectl get pod -n "${NAMESPACE}" -l "app.kubernetes.io/name=objecten" -o jsonpath='{.items[0].metadata.name}')"
+  kubectl exec -n "${NAMESPACE}" "${objecten_pod}" -- python /app/src/manage.py shell -c "
+from django.apps import apps
+ObjectTypeVersion = apps.get_model('core', 'ObjectTypeVersion')
+updated = ObjectTypeVersion.objects.exclude(status='published').update(status='published')
+print(f'published {updated} objecttype version(s)')
+"
 else
   seed objecten "${VENDOR_DIR}/objecten/demodata.json" core Object
   seed objecttypen "${VENDOR_DIR}/objecttypen/demodata.json" core ObjectType

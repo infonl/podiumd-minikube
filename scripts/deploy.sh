@@ -122,11 +122,17 @@ sync_podiumd_dependencies
 
 EXTRA_SETS=()
 FORCE_PRUNE=false
+# Default/exported so it's always defined for
+# fixup-merged-objecten-shape.py's own os.environ lookup below,
+# even on a plain (non---full) run where detect-objecten-shape.sh never
+# runs at all.
+export OBJECTEN_MERGED=false
 while true; do
   case "${1:-}" in
     --full)
       shift
       source "${CHART_DIR}/scripts/lib/detect-objecten-shape.sh"
+      export OBJECTEN_MERGED
       EXTRA_SETS+=(
         --set wiremock.enabled=true
         --set objecten.enabled=true --set podiumd.objecten.enabled=true
@@ -184,6 +190,7 @@ render() {
     | python3 "${CHART_DIR}/scripts/lib/exclude-pabc-migration-job.py" \
     | python3 "${CHART_DIR}/scripts/lib/exclude-helm-test-hooks.py" \
     | python3 "${CHART_DIR}/scripts/lib/exclude-zac-bundled-otel-collector.py" \
+    | python3 "${CHART_DIR}/scripts/lib/fixup-merged-objecten-shape.py" \
     | python3 "${CHART_DIR}/scripts/lib/split-large-configmaps.py"
 }
 

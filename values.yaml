@@ -19,6 +19,15 @@ wiremock:
   # settings point at it regardless of which optional profiles are on.
 objecten:
   enabled: false
+  # Which podiumd objecten shape is currently selected (see
+  # set-podiumd-version.sh's --path header, and
+  # scripts/lib/detect-objecten-shape.sh) - classic (separate objecttypen
+  # subchart) vs merged (single "openobject" chart, aliased back to this
+  # same "objecten" key, no objecttypen subchart at all). Set automatically
+  # by deploy.sh/provision-cluster.sh from that detection on every run -
+  # not meant to be set by hand. Only consumed by our own
+  # templates/objecten/service-objecttypen-alias.yaml so far.
+  merged: false
 opennotificaties:
   enabled: false
   # Only relevant for podiumd versions old enough to bundle a pre-1.16.0
@@ -490,6 +499,53 @@ podiumd:
       # supports it. Revisit once openzaak bundles a newer
       # mozilla-django-oidc-db release.
       data: |-
+        # openzaak's own outbound notifications (published whenever it
+        # creates/updates a zaak/besluit/document, not the productaanvraag
+        # flow's own objecten->opennotificaties->zac path above, which is
+        # unrelated) were never wired here at all - compose itself doesn't
+        # use django-setup-configuration for openzaak (see this block's own
+        # job.enabled comment), so nothing ever set this. Found live: with
+        # notifications_api_service unset, openzaak's own
+        # notifications_api_common post-create hook raises
+        # "Not notifying, Notifications API configuration is broken or
+        # absent" as an uncaught 500 on the *whole* zaak-create request -
+        # the zaak row is still written, but ZAC's own createZaak call sees
+        # the 500 and aborts the productaanvraag flow right after, even
+        # though nothing else in that flow depends on this notification
+        # being delivered anywhere. Also found live: this alone wasn't
+        # enough - django-solo's own cache for this exact singleton
+        # intermittently served a stale, unconfigured copy even once the
+        # database row was correct (see
+        # vendor/dimpact-zaakafhandelcomponent/openzaak/docker_no2fa.py's
+        # own SOLO_CACHE=None fix for that, already in place - the pod
+        # just needed restarting once to pick it up, since that file is a
+        # subPath ConfigMap mount and those never live-update).
+        #
+        # openzaak's own kanalen (zaken, besluiten, ...) still need
+        # registering with opennotificaties separately, since
+        # setup_configuration has no step for that - `manage.py
+        # register_kanalen` would do it, but that's an authenticated HTTP
+        # call against opennotificaties itself, and 403'd live (this
+        # plain vng_api_common_credentials entry has no matching
+        # Autorisatie granting kanaal-management scope). Registered
+        # declaratively instead, straight on opennotificaties' own
+        # notifications_kanalen_config below - see that block's own
+        # comment.
+        zgw_consumers_config_enable: true
+        zgw_consumers:
+          services:
+            - identifier: notifications-api
+              label: Notificaties API
+              api_root: http://opennotificaties.podiumd-minikube/api/v1/
+              api_type: nrc
+              auth_type: zgw
+              client_id: openzaak
+              secret: opennotificatiesOpenzaakSecret
+
+        notifications_config_enable: true
+        notifications_config:
+          notifications_api_service_identifier: notifications-api
+
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
           providers:
@@ -1021,6 +1077,20 @@ podiumd:
           notifications_api_service_identifier: opennotificaties-nrc
 
         objecttypes_config_enable: true
+        # service_identifier here is classic-shape syntax (objects-api
+        # <4.0.0's ObjectTypesConfigurationStep requires it - a real,
+        # separate Objecttypes API to reference by service). Merged shape
+        # (open-object >=4.0.0, "OBJECTEN_MERGED" in
+        # detect-objecten-shape.sh) dropped the field entirely - Objects
+        # and Objecttypes are now one API, so there's nothing external
+        # left to reference - and its own step model rejects it outright
+        # (Pydantic extra_forbidden) rather than ignoring it, confirmed
+        # against that version's own
+        # setup_configuration/models/objecttypes.py. Left in here anyway
+        # (this block has to satisfy whichever shape is NOT the one
+        # deploy.sh strips it for) - scripts/lib/fixup-merged-objecten-shape.py
+        # strips it back out of the rendered ConfigMap, but only when
+        # OBJECTEN_MERGED=true (see deploy.sh's render() pipeline).
         objecttypes:
           items:
             - service_identifier: objecttypen-api
@@ -1360,6 +1430,12 @@ podiumd:
             # Credentials for the Objects API (podiumd.objecten) to send notifications
             - identifier: objectsapi
               secret: opennotificatiesObjectsSecret
+            # Credentials for openzaak (podiumd.openzaak) to send its own
+            # zaak/besluit/document notifications - see values.yaml's own
+            # podiumd.openzaak.configuration.data notifications_config
+            # comment for the bug this fixes.
+            - identifier: openzaak
+              secret: opennotificatiesOpenzaakSecret
 
         notifications_kanalen_config_enable: true
         notifications_kanalen_config:
@@ -1368,6 +1444,33 @@ podiumd:
               documentatie_link: http://objecten.podiumd-minikube/ref/kanalen/#/objecten
               filters:
                 - object_type
+            # openzaak's own outbound notifications (see values.yaml's own
+            # podiumd.openzaak.configuration.data notifications_config
+            # comment for the bug this fixes) publish to these six kanalen
+            # (notifications_api_common.kanalen.KANAAL_REGISTRY, confirmed
+            # live against the actual running pod) whenever it
+            # creates/updates the matching resource - registering them
+            # here (this is where a Kanaal actually lives in the ZGW
+            # notifications model, on the *receiving* Notifications API
+            # side, not the publisher) rather than via openzaak's own
+            # `manage.py register_kanalen` (an authenticated HTTP call
+            # against opennotificaties itself - 403'd live, its plain
+            # vng_api_common_credentials entry above has no matching
+            # Autorisatie granting kanaal-management scope, unlike this
+            # declarative route which never crosses that boundary).
+            # Registering all six, not just "zaken" - notifications_config
+            # only really needed the one for today's bug, but every other
+            # resource type's own create/update hook hits the identical
+            # "kanaal missing" failure the moment notifications_config
+            # exists at all, previously never exercised because nothing
+            # ever created any of these via openzaak's REST API (only via
+            # the vendored SQL fixture, which bypasses this hook entirely).
+            - naam: zaken
+            - naam: besluittypen
+            - naam: zaaktypen
+            - naam: informatieobjecttypen
+            - naam: documenten
+            - naam: autorisaties
 
         notifications_abonnementen_config_enable: true
         notifications_abonnementen_config:

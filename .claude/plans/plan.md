@@ -3381,3 +3381,305 @@ registry) - `minikube image load` accepts its output the same as a
 Full suite (including `test_browser.py`): 65 passed, 3 skipped, 0 failed -
 even the pre-existing `zac-sig-del`/`zac-signaleren` CronJob failure from
 the previous entry cleared up on its own (old failed pod history aged out).
+
+## Pointing podiumd at a local `dimpact-samenwerking/alt_helm-charts` checkout surfaced three more real bugs (merged objecten shape)
+
+Testing an unreleased podiumd checkout via `set-podiumd-version.sh --path
+~/development/werk/infonl-dimpact/dimpact-samenwerking/alt_helm-charts/charts/podiumd
+--disable-monitoring-logging` (that checkout declares podiumd 4.9.0) moved
+this cluster from the classic objecten/objecttypen shape to the merged
+`openobject` shape for the first time since the productaanvraag flow above
+was built - `deploy.sh --full` on that shape surfaced three real, distinct
+bugs, none of them latent in the classic shape:
+
+1. **`objecttypes.items[].service_identifier` is `extra_forbidden` on
+   merged.** open-object >=4.0.0 merged Objects and Objecttypes into one
+   API - its own `ObjectTypesConfigurationStep` dropped the field
+   entirely and now rejects it outright instead of ignoring it (confirmed
+   against that version's own
+   `setup_configuration/models/objecttypes.py`), so the whole
+   `objecten-config` Job failed at validation, before any step ran -
+   silently skipping the rest of the productaanvraag wiring in that same
+   Job (zgw_consumers services, notifications_config, tokenauth) too.
+   values.yaml's own block still has to satisfy classic shape (that step's
+   model there makes the field mandatory) - fixed by leaving it in
+   values.yaml and stripping it back out of the rendered
+   `objecten-configuration` ConfigMap post-render, merged-shape-only, via
+   the new `scripts/lib/fixup-merged-objecten-shape.py` (wired
+   into `deploy.sh`'s `render()` pipeline, gated on a new `OBJECTEN_MERGED`
+   env var `detect-objecten-shape.sh` now exports).
+2. **The dropped `objecttypen` subchart leaves its own Service name
+   dangling.** Merged shape has no separate objecttypen subchart at all
+   (per `detect-objecten-shape.sh`'s own existing comment), so
+   `prune-orphaned-workloads.py` correctly deletes its `objecttypen`
+   Service on the first `--full` deploy after switching - but every
+   existing `http://objecttypen.podiumd-minikube/...` reference (this
+   chart's own `objecten.configuration.data`, and potentially other apps'
+   zgw_consumers entries) is left pointing at a name that no longer
+   resolves. Fixed with a plain DNS CNAME, not a config-value chase: new
+   `templates/objecten/service-objecttypen-alias.yaml`, an `ExternalName`
+   Service named `objecttypen` pointing at `objecten.<namespace>.svc.cluster.local`,
+   rendered only when merged (`objecten.merged=true`, also set by
+   `detect-objecten-shape.sh`) - every existing reference keeps working
+   unchanged, on either shape.
+3. **Unrelated to the shape switch, but blocked by it in the same Job:**
+   the `token_auth` step's `update_or_create(identifier=...)` failed on a
+   `UniqueViolation` on the `token` column itself for both the `zac` and
+   `open-formulieren` tokens. Root cause: stale rows already in this
+   cluster's `objects` Postgres DB from *before* those two identifiers
+   were renamed from `zaakafhandelcomponent`/`openformulieren` to
+   `zac`/`open-formulieren` in an earlier commit - the rename was never
+   accompanied by a DB fixup, so `update_or_create` couldn't find the old
+   row by the new identifier and collided inserting a "new" one with the
+   same token value instead. Fixed once, live, with a plain `UPDATE
+   token_tokenauth SET identifier=... WHERE identifier=...` for both rows
+   (this cluster's own disposable fixture data, not a code change - a
+   fresh `objects` DB would never hit this).
+
+All three fixed and reverified end to end: `objecten-config` Job
+completes cleanly (`Successfully executed step` for all four steps),
+`getent hosts objecttypen.podiumd-minikube` resolves to the `objecten`
+Service's ClusterIP from inside the cluster, and a full `deploy.sh --full`
+rerun afterward needed zero further fixes. Not yet re-verified against
+classic shape after these changes (no classic-shape podiumd version was
+deployed live this session) - `objecten.merged` defaults to `false` and
+`fixup-merged-objecten-shape.py` no-ops unless `OBJECTEN_MERGED=true`,
+so classic should be unaffected, but worth a real deploy against a
+published (non-merged) podiumd version before trusting that blindly.
+
+**Also found, not fixed (pre-existing, unrelated to the shape switch):**
+the minikube node has no general internet egress to Docker Hub
+(`registry-1.docker.io` times out - `curl` exit 28 - confirmed via
+`minikube ssh`; `registry.k8s.io` fails the same way on `minikube start`).
+`templates/zac/productaanvraag-zaakafhandelparameters-job.yaml`'s
+`python:3.13-alpine` init container had never been pulled on this node
+before and sits in permanent `ImagePullBackOff` as a result - every other
+image already cached from earlier pulls is unaffected. Worth revisiting
+(e.g. an image already known-cached, or pre-pulling it in
+`provision-cluster.sh`'s own image-list step) if this keeps biting.
+
+## Extending the test suite to actually cover merged shape surfaced three more real bugs
+
+Asked directly whether DNS names (including `objecttypen`) were actually
+tested. Answer at the time: only partially -
+`tests/test_zgw_service_reachability.py` checked `objecttypen-api`'s
+reachability, but only via `objecten`'s *own* zgw_consumers rows - it
+never queried `openformulieren`'s separate `objecttypes-api` row pointing
+at the same hostname, and `tests/test_productaanvraag_flow.py` required
+the classic-only `objecttypen` profile flag to even run at all, so it
+silently skipped every one of its 7 tests under merged shape without
+anyone noticing - the exact flow this session had just been fixing was
+never actually re-verified end to end.
+
+Generalized both:
+
+- `test_zgw_service_reachability.py` now parametrizes over every app that
+  registers its own `zgw_consumers.Service` rows (`objecten`,
+  `opennotificaties`, `openarchiefbeheer`, `openformulieren`), not just
+  `objecten`. Doing so surfaced a *different*, pre-existing, unrelated gap:
+  `opennotificaties`/`openarchiefbeheer` both register genuinely external
+  reference APIs (`autorisaties-api.vng.cloud`, `selectielijst.openzaak.nl`)
+  that this offline minikube box was never going to reach regardless of
+  any in-cluster DNS wiring - added `_is_in_cluster_hostname()` to skip
+  those specifically (single-label or `*.podiumd-minikube` hosts only get
+  checked), rather than either failing on them or dropping reachability
+  checking entirely.
+- `test_productaanvraag_flow.py`'s `REQUIRED_PROFILES` dropped
+  `"objecttypen"` (merged shape's own flow works fully without that
+  profile existing at all), and
+  `test_productaanvraag_objecttype_is_registered_and_published` now picks
+  its Ingress host and auth token per shape instead of hardcoding
+  classic's.
+
+Actually running the productaanvraag flow suite against merged shape for
+the first time (it had only ever run against classic before, per this same
+file's "productaanvraag flow" entry) found two more real, merged-only bugs
+beyond the three already fixed above:
+
+1. **openformulieren's own `objecttypes-api` zgw_consumers entry
+   authenticates with a token that never existed outside classic shape.**
+   `openFormulierenToObjecttypenToken` was only ever registered in
+   classic's separate objecttypen app's own token table
+   (`podiumd.objecttypen.configuration.data`, itself only rendered on
+   classic shape) - merged shape's unified Objects/Objecttypes token table
+   only ever gets `fakeOpenFormulierenObjectsToken`. Every read against
+   the (now-working, DNS-alias-resolved) `objecttypen.podiumd-minikube`
+   host 401'd as a result. Fixed in the same
+   `scripts/lib/fixup-merged-objecten-shape.py` post-renderer (renamed
+   from `fixup-merged-objecten-configuration.py` now that it patches a
+   second ConfigMap too) - rewrites that one service entry's
+   `header_value` to the token that actually exists, merged-only.
+2. **The DNS alias resolves, but Django's `ALLOWED_HOSTS` still rejects
+   the Host header.** Confirmed live: `objecten`'s own `ALLOWED_HOSTS`
+   env var (`podiumd.objecten.settings.allowedHosts` in values.yaml,
+   comma-joined with the chart's own auto-added bare-name/FQDN forms) only
+   ever listed `objecten`'s own names - a request with Host header
+   `objecttypen.podiumd-minikube` got Django's generic `Bad Request (400)`
+   DisallowedHost page even though the CNAME resolved fine and routed to
+   the right pod. A DNS alias alone was never going to be enough for an
+   app that validates its own Host header. Fixed in
+   `scripts/lib/detect-objecten-shape.sh`'s merged branch: overrides
+   `podiumd.objecten.settings.allowedHosts` to values.yaml's own value plus
+   `objecttypen,objecttypen.podiumd-minikube` - commas need `\,` escaping
+   in a Helm `--set` value (bare commas split into separate key=value
+   pairs instead - confirmed live, first attempt errored with `key
+   "objecttypen" has no value`), and the whole `--set arg=val` has to be
+   single-quoted in the bash array literal too, or bash strips the
+   backslash before helm ever sees it.
+3. **seed-fixtures.sh's merged branch never ran the
+   draft-to-published fixup at all.** Classic's branch runs an
+   unconditional `ObjectVersion.objects.exclude(status="published").update(...)`
+   fixup after seeding (see this file's own "productaanvraag flow" entry
+   for why - Objects API's create-validation only resolves a *published*
+   version) - the merged branch's `if OBJECTEN_MERGED` block only ever
+   called `seed objecten .../openobject/demodata.json core Object` and
+   skipped that fixup entirely. `openobject/demodata.json` ships the exact
+   same problem under merged's own renamed model
+   (`core.objecttypeversion`, not `core.objectversion`) - confirmed live,
+   the Productaanvraag-Dimpact version (pk=4/object_type=4) was seeded
+   `status: draft`, so its own `/versions` endpoint never showed a
+   published one. Added the equivalent fixup to the merged branch, against
+   `objecten`'s own pod (merged has no separate objecttypen pod to exec
+   into) and the renamed model.
+
+All three re-verified live: `openformulieren`'s objecttypes-api reachability
+check now returns 200 instead of 401, `objecten`'s `ALLOWED_HOSTS` env var
+includes `objecttypen`/`objecttypen.podiumd-minikube` and the same request
+that 400'd now 200s, and re-running `seed-fixtures.sh` published 3
+objecttype versions. Full suite after all fixes: 62 passed, 5 skipped
+(3 monitoringLogging-off skips, 1 objecttypen-profile-off skip in
+test_django_admin_login.py, 1 same in test_reachability.py - all expected
+on this shape), 4 failed - all four tracing to the same single,
+already-documented, pre-existing cause: this minikube node currently has
+no outbound DNS resolution at all (`minikube ssh -- curl
+https://registry-1.docker.io/...` *and* `https://infonl.github.io` both
+now fail to resolve, not just Docker Hub specifically as first suspected -
+broader than initially scoped, still a node/environment characteristic
+unrelated to any podiumd-shape work here, not something fixed this
+session).
+
+## Fixing the outbound DNS/egress gap for real, on the host
+
+The pre-existing "minikube node has no outbound DNS resolution" issue
+flagged above was not actually a minikube/Docker networking bug at all -
+it was this host's own hand-written `/etc/nftables.conf` (Docker's
+`firewall-backend: nftables` setting, per `/etc/docker/daemon.json`, means
+Docker relies entirely on this file's own rules rather than injecting its
+own iptables NAT chains). Diagnosed and fixed live, two separate gaps in
+that one file:
+
+1. The `forward` chain's `policy drop` only ever allowed
+   `iifname "docker0" oifname "docker0"` and `iifname "br-*" oifname
+   "br-*"` (container-to-container on the *same* bridge, explicitly
+   commented "Docker ICC") - nothing let a container reach *out* through
+   the real interface at all. Added `iifname { "docker0", "br-*" } accept`.
+2. The `postrouting` NAT table's masquerade rule was entirely commented
+   out, and once restored, only matched `ip saddr 172.17.0.1/16` -
+   `docker0`'s own subnet specifically, not minikube's own custom bridge
+   subnet (`192.168.49.0/24`) or any other user-defined bridge network.
+   Needed `iifname "br-*" oifname != "br-*" counter masquerade` alongside
+   the existing `docker0` line - first attempt used `oifname "br-*"`
+   (same shape as the ICC-only forward rule, matching same-bridge traffic,
+   a no-op for actual egress) before landing on the right one.
+
+Kees applied both edits directly (root-owned system file, out of scope
+for this project's own repo) via `sudo nft -f /etc/nftables.conf` -
+reloads the ruleset in place, doesn't restart Docker (`docker.service` is
+`PartOf=nftables.service`, which a full `systemctl restart nftables`
+would cascade into, disrupting every running container needlessly).
+Confirmed live end to end: `python:3.13-alpine` (previously stuck in
+permanent `ImagePullBackOff`, the "found, not fixed" item above) now
+pulls cleanly, and the previously-skipped-by-necessity seed Job that
+needs it completes.
+
+## Wiring openzaak's own outbound notifications - the last real gap
+
+With DNS fixed, the productaanvraag flow's own full end-to-end test
+(`test_full_productaanvraag_flow_creates_a_zaak`) still failed - a
+completely different, unrelated bug surfaced only once ZAC's own
+`createZaak` call could actually complete for the first time: OpenZaak's
+own `notifications_api_common.NotificationsConfig.notifications_api_service`
+was `None` - never wired declaratively anywhere in this chart at all
+(compose itself doesn't use django-setup-configuration for openzaak - see
+this block's own `job.enabled` comment predating this fix). OpenZaak's
+own post-create notification hook raises "Not notifying, Notifications
+API configuration is broken or absent" as an *uncaught 500 on the whole
+create-zaak request* when this is unset - the zaak row still gets
+written, but ZAC sees the 500 and aborts, even though nothing in the
+productaanvraag flow actually depends on this notification being
+delivered anywhere. This is a real, general gap - `openzaak`'s own
+`POST /zaken/api/v1/zaken` (or any besluit/document creation) has
+presumably *always* 500'd this way via its REST API; nothing before today
+had ever exercised that path live, since the vendored SQL fixture seeds
+zaken directly into Postgres, bypassing the hook entirely.
+
+Fixed declaratively in two places:
+
+- `values.yaml`'s `podiumd.openzaak.configuration.data`: added the
+  `zgw_consumers` "notifications-api" Service (pointing at opennotificaties,
+  `client_id: openzaak`) and `notifications_config_enable`/
+  `notifications_config` - following the exact commented-out example
+  already present in podiumd's own upstream chart values (openzaak
+  supports this out of the box, it just had never been turned on here).
+- `values.yaml`'s `podiumd.opennotificaties...vng_api_common_credentials`:
+  added the matching `identifier: openzaak` credential, and
+  `notifications_kanalen_config`: registered all six of openzaak's own
+  kanalen (`zaken`, `besluittypen`, `zaaktypen`, `informatieobjecttypen`,
+  `documenten`, `autorisaties` - confirmed live against
+  `notifications_api_common.kanalen.KANAAL_REGISTRY` in the running pod),
+  not just the one ("zaken") today's bug needed - every other resource
+  type's own create/update hook hits the identical "kanaal missing"
+  failure the moment `notifications_config` exists at all, and none of
+  them had ever been exercised via openzaak's REST API before either.
+  Tried `openzaak`'s own `manage.py register_kanalen` management command
+  first (an authenticated HTTP call *against* opennotificaties) - 403'd
+  live, since the plain credential above has no Autorisatie granting
+  kanaal-management scope. Registering kanalen is really an
+  opennotificaties-side action anyway (that's where the `Kanaal` resource
+  actually lives, on the receiving side, not the publisher's) - the
+  declarative `notifications_kanalen_config` route sidesteps the whole
+  permission question entirely.
+
+### A second, genuinely nasty bug found chasing this down: django-solo's cache going stale
+
+Even with the database row correctly configured (confirmed repeatedly via
+direct `psql`), `get_solo()` kept intermittently returning
+`notifications_api_service=None` anyway - the exact same class of bug
+`vendor/dimpact-zaakafhandelcomponent/objecten/docker_no_solo_cache.py`
+already documents fixing for Objects API during this same flow's original
+build (django-solo's own `SOLO_CACHE="default"`/`SOLO_CACHE_TIMEOUT=300`
+defaults, from `open_api_framework.conf.base`, never overridden anywhere
+in the base image). Wasted real effort re-diagnosing this from scratch
+(flushing Redis, writing a whole poll-and-clear provisioning script) before
+discovering **openzaak's own vendored `docker_no2fa.py` already had
+`SOLO_CACHE = None` appended** - a teammate had already found and fixed
+this exact bug for openzaak specifically, concurrently, and it was already
+sitting in both the vendor file and the live ConfigMap (confirmed via
+`kubectl get configmap openzaak-no2fa-settings`, last updated 7 days
+before this session).
+
+The gap was never the fix itself - it was that the fix never reached the
+*running* pod: that ConfigMap is mounted via `subPath`
+(`extraVolumeMounts` in values.yaml), and **`subPath` ConfigMap mounts
+never live-update in Kubernetes**, regardless of how long the ConfigMap
+itself has held the correct content - only a pod recreation re-mounts the
+current file. This specific openzaak pod had been running since long
+before that ConfigMap update and was simply never restarted. One
+`kubectl delete pod` (Deployment recreated it immediately) picked up the
+already-correct mounted file, confirmed via
+`settings.SOLO_CACHE == None` inside the fresh pod - fully resolved, no
+code change needed at all. Deleted the poll-and-clear script + its
+deploy.sh wiring written while chasing this the hard way - dead weight
+now that the real fix (already-committed, just needed a restart) is in
+effect.
+
+**Lesson for next time hitting an unexplained stale-singleton-config bug
+on any of these apps**: check `vendor/.../<app>/docker_no2fa.py` for an
+existing `SOLO_CACHE = None` fix and whether the *running pod* actually
+postdates the ConfigMap's last change, before re-diagnosing from
+scratch - `subPath` mounts silently going stale after a values.yaml/vendor
+edit, with no error or warning anywhere, is easy to miss.
+
+**Full suite after all of the above: 66 passed, 5 skipped (all
+expected - monitoringLogging off, objecttypen profile off on merged
+shape), 0 failed.**

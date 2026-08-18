@@ -80,7 +80,14 @@ EXPECTED_SUCCEEDED_JOBS = (
     "openformulieren-productaanvraag-form",
 )
 
-REQUIRED_PROFILES = ("objecten", "objecttypen", "opennotificaties", "openformulieren")
+# "objecttypen" deliberately excluded: on the merged/openobject shape (see
+# scripts/lib/detect-objecten-shape.sh) there is no separate objecttypen
+# subchart/pod/Ingress at all - its functionality lives inside "objecten"
+# itself - so requiring it here would skip this entire module every time
+# merged shape is deployed, even though the flow works fully either way
+# (confirmed live). test_productaanvraag_objecttype_is_registered_and_published
+# below picks the right ingress host per shape instead of assuming classic.
+REQUIRED_PROFILES = ("objecten", "opennotificaties", "openformulieren")
 
 
 @pytest.fixture(autouse=True)
@@ -225,17 +232,35 @@ def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement():
     assert "http://zac.podiumd-minikube/rest/notificaties" in callback_urls.splitlines()
 
 
-def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip):
+def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enabled_profiles):
     """
     scripts/lib/seed-fixtures.sh's own objecttypen loaddata (+ its
     draft-to-published fixup), verified against the real Objecttypen API
     rather than just trusting the script's exit code.
+
+    Host header depends on shape: classic has a separate objecttypen
+    Ingress (OBJECTTYPEN_HOST); merged has no objecttypen Ingress at all -
+    that same /api/v2/objecttypes/... path is served by objecten's own
+    Ingress instead (OBJECTEN_HOST) since it's the same app now. Unlike
+    the internal Service DNS name (PRODUCTAANVRAAG_OBJECTTYPE_INTERNAL_HOST
+    above - kept working on both shapes via
+    templates/objecten/service-objecttypen-alias.yaml), this is only a
+    human/test-facing convenience route, not baked into any app's own
+    persisted config - no alias needed, just pick the host that actually
+    exists.
     """
+    host = OBJECTTYPEN_HOST if enabled_profiles.get("objecttypen") else OBJECTEN_HOST
+    # Same token substitution as scripts/lib/fixup-merged-objecten-shape.py's
+    # own openformulieren-configuration fixup, and for the same reason:
+    # "openFormulierenToObjecttypenToken" only ever existed in classic
+    # shape's separate objecttypen app's own token table - merged shape's
+    # unified Objects/Objecttypes token table only ever gets OBJECTEN_TOKEN.
+    token = "openFormulierenToObjecttypenToken" if enabled_profiles.get("objecttypen") else OBJECTEN_TOKEN
     response = requests.get(
         host_url(traefik_ip, f"/api/v2/objecttypes/{PRODUCTAANVRAAG_OBJECTTYPE_UUID}"),
         headers={
-            **host_headers(OBJECTTYPEN_HOST),
-            "Authorization": "Token openFormulierenToObjecttypenToken",
+            **host_headers(host),
+            "Authorization": f"Token {token}",
         },
         timeout=15,
     )
@@ -245,8 +270,8 @@ def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip):
     versions = requests.get(
         host_url(traefik_ip, f"/api/v2/objecttypes/{PRODUCTAANVRAAG_OBJECTTYPE_UUID}/versions"),
         headers={
-            **host_headers(OBJECTTYPEN_HOST),
-            "Authorization": "Token openFormulierenToObjecttypenToken",
+            **host_headers(host),
+            "Authorization": f"Token {token}",
         },
         timeout=15,
     )
