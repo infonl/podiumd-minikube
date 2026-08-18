@@ -3779,3 +3779,18 @@ switch itself:
 **Full suite after all of the above, on the freshly reset namespace: 65
 passed, 6 skipped (all expected - monitoringLogging off, objecttypen
 profile off on merged shape, PKCE switch off), 0 failed.**
+
+**Known gap, told directly rather than discovered live: the switch's
+*on* state can't currently be tested at all** - the local podiumd chart
+checkout with zac bumped to 1.0.289 that the original PodiumD 4.9
+catch-up entry verified against isn't reachable right now, and (checked
+live) the zac chart repo's own git history has no branch with that bump
+either, only the published chart artifact itself. Only the *off* default
+is verified end to end here; `zac-experimental-pkce.sh`,
+`fixup-zac-pkce-realm.py`, and `sync-zac-pkce-realm.sh` are each correct
+in isolation (read the flag correctly, patch the right field, target the
+right value) but the full on-path integration is unverified until a real
+PKCE-capable zac chart checkout exists to test against again - see
+values.yaml's own podiumd.zac.image.tag comment and NOTES.md's PKCE
+entry, both updated to say so explicitly rather than carry the earlier,
+now-stale "confirmed live" claim forward unqualified.

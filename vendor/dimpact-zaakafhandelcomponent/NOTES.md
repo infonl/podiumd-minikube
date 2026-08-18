@@ -121,6 +121,16 @@ here is a live reference — this project never reads
   `test_zac_client_now_sends_a_pkce_code_challenge` skips entirely when
   the switch is off.
 
+  The switch's *off* state (the default) is fully verified end to end,
+  including on a genuinely fresh deploy - see plan.md. Its *on* state is
+  not, currently: the local chart checkout the "Update (PodiumD 4.9
+  release prep)" entry above was verified against isn't available right
+  now, and the zac chart repo doesn't have a git branch with that bump
+  either - only each piece of the switch mechanism itself (detection,
+  the realm patch, the live sync) has been tested in isolation. Treat
+  `zac.experimentalPkce: true` as untested until a real chart checkout
+  with zac 1.0.289+ is reachable again to verify against.
+
   Also: seven new clients added (`openzaak`, `openklant`, `objecten`,
   `objecttypen`, `opennotificaties`, `openformulieren`,
   `openarchiefbeheer`) - none exist in the original imported realm at all,

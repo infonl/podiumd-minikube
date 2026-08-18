@@ -199,9 +199,18 @@ podiumd:
     # only ever imports once - see
     # scripts/lib/sync-zac-pkce-realm.sh's own header for why a values/
     # ConfigMap change alone never reaches an already-provisioned
-    # cluster). Confirmed live this pans out end to end, not just that it
-    # boots - see NOTES.md's PKCE entry and
-    # tests/test_pkce.py's test_zac_client_now_sends_a_pkce_code_challenge.
+    # cluster).
+    #
+    # The teammate who built this confirmed it live end to end at the
+    # time (see NOTES.md's PKCE entry), against a local chart checkout
+    # that isn't currently available - re-verifying the *on* state of
+    # this switch (as opposed to the switch mechanism itself, which is:
+    # each piece above tested individually, and zac.experimentalPkce's
+    # own default-off state confirmed end to end on a fresh deploy - see
+    # plan.md) is blocked until that checkout (or a real podiumd 4.9
+    # release bundling zac 1.0.289+) is actually reachable again. Don't
+    # take "on" being wired up here as proof it currently works - only
+    # that it's ready to, once it can be tested.
     javaOptions: "-Xms512m -Xmx1024m -XX:ActiveProcessorCount=2"
     contextUrl: http://zac.local
     db:
