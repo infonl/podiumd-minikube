@@ -1,18 +1,25 @@
 """
-PKCE (RFC 9700) verification for the two Keycloak clients that have it
-actually enabled - see values.yaml's own podiumd.pabc.settings.oidc.pkceEnabled
-and podiumd.openzaak.configuration.data comments, and
-vendor/dimpact-zaakafhandelcomponent/NOTES.md's entries on both, for the
+PKCE (RFC 9700) verification for the three Keycloak clients that have it
+actually enabled - see values.yaml's own podiumd.pabc.settings.oidc.pkceEnabled,
+podiumd.openzaak.configuration.data, and podiumd.zac.image.tag comments, and
+vendor/dimpact-zaakafhandelcomponent/NOTES.md's entries on all three, for the
 full story of what's enabled, what isn't, and why.
 
-pabc first, since it's the one that's actually safe end to end (its own
-ASP.NET Core middleware already sends a code_challenge unconditionally -
-enforcing it on the Keycloak side was confirmed live not to break
-anything). zac is the deliberate negative case: its client's
-pkce.code.challenge.method is still "" on purpose (ZAC itself doesn't
-support PKCE with the currently-pinned image - see NOTES.md), so this
-module also guards that nobody re-enables it by accident before ZAC
-actually supports it.
+zac used to be the deliberate negative case here (its client's
+pkce.code.challenge.method was left "" on purpose - ZAC itself didn't
+support PKCE with the podiumd-4.8-bundled zac chart, see NOTES.md). Bumping
+zac to chart 1.0.289/app 5.4.2 (past PR #6490, "feat: add configurable PKCE
+support for the OIDC authorization code flow" - see podiumd.zac.image.tag's
+own values.yaml comment for why that bump needs a local --path checkout
+until podiumd 4.9 is released) changed that: confirmed live that ZAC's own
+container now genuinely sends a code_challenge unconditionally, the same
+way pabc's ASP.NET Core middleware already did, so the Keycloak client's
+own pkce.code.challenge.method was flipped to "S256" to match (both the
+vendored realm.json, for future fresh imports, and the *already-imported*
+live realm via the Admin API - Keycloak only imports a realm once, editing
+the JSON file alone doesn't affect an already-existing one, confirmed live
+the same way the earlier "bad request connecting to zac.local" incident
+in plan.md was fixed).
 """
 
 from urllib.parse import parse_qs, urlparse
@@ -164,17 +171,23 @@ def test_pabc_pkce_login_accepted_by_keycloak(traefik_ip):
     )
 
 
-def test_zac_client_does_not_send_pkce_yet(traefik_ip):
+def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
     """
-    Guards the *other* side of the same story: ZAC's own Keycloak client
-    still has pkce.code.challenge.method: "" on purpose (ZAC itself doesn't
-    support PKCE with the currently-pinned image tag - see
-    vendor/dimpact-zaakafhandelcomponent/NOTES.md's own entry on this and
-    values.yaml's zac.enablePkce comment). If this starts failing, it means
-    someone re-enabled it on the Keycloak client without also confirming
-    ZAC's image was bumped past PR #6490 and AUTH_ENABLE_PKCE was set -
-    doing just the Keycloak side alone breaks every ZAC login outright
-    ("invalid_request: Missing parameter: code_challenge_method").
+    The other side of the same story, now flipped: ZAC's own image (chart
+    1.0.289/app 5.4.2, past PR #6490) genuinely sends a code_challenge on
+    every authorization request, confirmed live. If this starts failing,
+    either the AUTH_ENABLE_PKCE env var stopped being set (see
+    values.yaml's own podiumd.zac.auth.enablePkce comment) or the image was
+    rolled back to a pre-PKCE version without also reverting the Keycloak
+    client's own pkce.code.challenge.method back to "" - leaving those two
+    out of sync breaks every ZAC login outright ("invalid_request: Missing
+    parameter: code_challenge_method").
+
+    Doesn't replay the full form-submission round trip like
+    test_pabc_pkce_login_accepted_by_keycloak does - test_login_flow.py's
+    own test_full_login_flow_reaches_authenticated_app already exercises
+    that end to end (real credentials, real code exchange, lands on the
+    authenticated app shell) and would fail here too if PKCE broke it.
     """
     initial = requests.get(
         f"http://{traefik_ip}/",
@@ -184,7 +197,12 @@ def test_zac_client_does_not_send_pkce_yet(traefik_ip):
     )
     assert initial.status_code == 302
     auth_location = initial.headers["Location"]
-    assert "code_challenge" not in auth_location
+    assert KEYCLOAK_HOST in auth_location
+    assert "client_id=zaakafhandelcomponent" in auth_location
+
+    params = parse_qs(urlparse(auth_location).query)
+    assert params.get("code_challenge_method") == ["S256"]
+    assert len(params.get("code_challenge", [""])[0]) > 0
 
 
 def _extract_form_action(html):

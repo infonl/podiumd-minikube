@@ -3278,3 +3278,106 @@ reconciled version (not just the pre-reconciliation one) actually works.
 Full suite: 63 passed, 3 skipped, 1 pre-existing failure unrelated to this
 work (`zac-sig-del`/`zac-signaleren` CronJob pods already failing before
 this work started).
+
+## PodiumD 4.9 release-notes catch-up
+
+Asked to check PodiumD 4.9's own release notes (Dimpact Confluence, still
+"IN VOORBEREIDING"/"NIET BEGONNEN" as a real release) and update components
+to the versions listed there, altering values where the release notes
+themselves call for it. Confirmed via `helm search repo dimpact/podiumd -l`
+that only up to 4.8.4 is actually published - nothing bundled *through*
+the podiumd dependency (openklant's chart, objecten's chart, etc.) can be
+version-bumped as a whole yet, only individual app image tags this
+project already overrides independently of chart version.
+
+**Deliberately scoped out, per explicit instruction and the release notes'
+own warnings:**
+
+- **Open Klant** (2.15.0 → 2.17.0 in the notes) - the notes themselves say
+  *"LET OP: de update van OK naar 2.16 of hoger kan nog niet want er zitten
+  breaking changes in"* - not touched at all.
+- **Objecten API's 4.1.1** - not a patch, a full merge of Objecttypen API
+  into Objecten API (data migration + a DNS CNAME requirement) - the
+  classic→merged "Open Object" shape this project's own
+  `detect-objecten-shape.sh`/`seed-fixtures.sh` already anticipate but
+  haven't done. Bumped to the latest *3.x* patch instead (3.6.2 - the
+  highest chart-published app version in that series; the chart itself
+  stays at 2.12.1, no newer 3.x chart release exists) and objecttypen kept
+  enabled, staying on the classic split shape.
+
+**Four independent image-tag bumps** (all within podiumd 4.8.4's existing
+bundled charts or this project's own raw templates - fully reproducible by
+anyone via the normal `set-podiumd-version.sh` flow, no `--path` needed).
+Each one's upstream CHANGELOG checked first for schema/migration risk
+(this project's own vendored fixture SQL is schema-sensitive for
+openzaak/objecten specifically) before bumping - all four turned out to be
+bugfix/security-only releases:
+
+- Open Formulieren 3.5.4 → 3.5.5 (one patch behind docker-compose.yaml's
+  own, independently-newer 3.5.6 pin).
+- Open Zaak 1.29.1 → 1.29.3.
+- Objecten 3.6.1 → 3.6.2 (see above).
+- Keycloak 26.6.4 → 26.7.1 (this project's own raw template pin, not a
+  podiumd-bundled chart at all).
+
+**ZAC 1.0.251 → 1.0.289 (app 5.0.1 → 5.4.2), the one genuinely experimental
+piece** - unlike the four above, podiumd 4.8.4 doesn't bundle this newer
+zac chart at all, and podiumd 4.9 (which would) isn't published. Reused
+the exact same `--path` local-checkout technique as an earlier
+now-reverted PKCE experiment mentioned above, but this time against *real,
+published* versions instead of an interim unreleased state - cloned
+`Dimpact-Samenwerking/helm-charts` fresh into a scratch dir (not the
+existing local checkout at `~/IdeaProjects/helm-charts`, which was mid-use
+on a teammate's own feature branch with its own uncommitted changes -
+asked first, isolated clone was the answer), bumped just its zac dependency
+version, `helm dependency update`d, then pointed this project's own
+`--path` at it. Also needed an explicit `image.tag: "5.4.2"` override even
+after the chart bump - confirmed via `docker manifest inspect` that
+`ghcr.io/infonl/zaakafhandelcomponent:5.4` (the chart's own
+`.Chart.AppVersion`-derived default) and `:5.4.2` are different digests,
+the former frozen at the first 5.4.x patch.
+
+This finally closes out the PKCE story from the "Self-referential URLs"/
+NOTES.md entries above: PR #6490 landed in this exact chart bump, so
+`auth.enablePkce` (previously a documented, harmless no-op - the old
+chart's own `config.yaml` template had no `AUTH_ENABLE_PKCE` line at all)
+is now genuinely active. Confirmed live: ZAC's own authorization redirect
+now carries a real `code_challenge`/`code_challenge_method=S256`. Flipped
+the vendored realm's own PKCE requirement for this client back to
+`"S256"` to match - and, since Keycloak only imports a realm once (editing
+the JSON file alone doesn't touch an already-existing realm, the same gap
+the earlier "bad request connecting to zac.local" incident hit), patched
+it into the *already-imported* live realm via the Admin API too. Full
+login round trip (real credentials, code exchange, authenticated app
+shell) still completes cleanly with PKCE now required.
+`tests/test_pkce.py`'s own negative guard
+(`test_zac_client_does_not_send_pkce_yet`) flipped to a positive
+confirmation (`test_zac_client_now_sends_a_pkce_code_challenge`) to match.
+
+Committed as clearly-marked EXPERIMENTAL (matching the pattern the earlier
+PKCE attempt used) with the exact `--path` reproduction recipe in
+`values.yaml`'s own comment: `.podiumd-versions.yaml` is gitignored/
+personal by this project's own design, so nothing here is reproducible by
+just cloning the repo and running the normal `set-podiumd-version.sh 4.8.4
+<ml-version>` flow - a teammate who does that gets zac chart 1.0.251 (no
+`AUTH_ENABLE_PKCE` support) forced to run image 5.4.2, against a realm that
+now *requires* PKCE, which would break every login for them. Revert
+`podiumd.zac.image.tag`'s override and the realm's PKCE requirement
+together once a real podiumd release bundles zac 1.0.289 by default.
+
+**A genuine, reproducible Apple-Silicon+colima environment bug found
+along the way** (now documented in `mac.md`): `docker save --platform
+linux/amd64 <ref> -o x.tar` silently produced a ~13KB stub tarball (just a
+manifest/config blob, no layer data, exit code 0) for two of the six newly
+pulled images specifically (`maykinmedia/objects-api:3.6.2`,
+`openzaak/open-zaak:1.29.3` - the other four saved fine) - re-pulling,
+re-tagging, and removing-then-re-pulling the image all reproduced the same
+stub, ruling out a caching artifact. Worked around with `crane pull
+--platform linux/amd64 <ref> x.tar` (bypasses Docker/containerd's own
+export path entirely, fetching a proper OCI tarball straight from the
+registry) - `minikube image load` accepts its output the same as a
+`docker save` one.
+
+Full suite (including `test_browser.py`): 65 passed, 3 skipped, 0 failed -
+even the pre-existing `zac-sig-del`/`zac-signaleren` CronJob failure from
+the previous entry cleared up on its own (old failed pod history aged out).

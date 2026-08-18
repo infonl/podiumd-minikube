@@ -79,6 +79,23 @@ here is a live reference — this project never reads
   (no values.yaml field for it - the chart's `zac` container env comes
   entirely from its own generated ConfigMap/Secret, so this needs a Helm
   post-renderer or an upstream chart change).
+
+  **Update (PodiumD 4.9 release prep)**: done. `podiumd.zac.image.tag`
+  bumped to `5.4.2` (chart 1.0.289, past PR #6490) - `AUTH_ENABLE_PKCE`
+  already had a values.yaml field by this point
+  (`podiumd.zac.auth.enablePkce: true`, harmless no-op until now, see that
+  field's own comment) since the chart itself grew a proper
+  `config.yaml` line for it in the interim, so no post-renderer was needed
+  after all. This one attribute reverted back to `"S256"` here (fresh
+  imports) and patched into the already-imported live realm via the Admin
+  API (Keycloak only imports a realm once - editing this file alone
+  doesn't affect a realm that already exists, the same gap the
+  `zac.local` `/etc/hosts` line above already needed the same workaround
+  for). Confirmed live: ZAC's own authorization redirect now carries a
+  real `code_challenge`/`code_challenge_method=S256`, and the full login
+  round trip (real credentials, code exchange, authenticated app shell)
+  still completes cleanly - see `tests/test_pkce.py`'s
+  `test_zac_client_now_sends_a_pkce_code_challenge`.
   Also: seven new clients added (`openzaak`, `openklant`, `objecten`,
   `objecttypen`, `opennotificaties`, `openformulieren`,
   `openarchiefbeheer`) - none exist in the original imported realm at all,

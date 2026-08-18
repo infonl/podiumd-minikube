@@ -103,6 +103,24 @@ Two bugs specific to this architecture combination are already fixed in
    tarball first (`docker save --platform linux/amd64 ... -o x.tar` then
    `minikube image load x.tar`) sidesteps that arch-aware manifest lookup
    entirely.
+3. **`docker save --platform linux/amd64 <ref> -o x.tar` sometimes silently
+   produces a ~13KB stub tarball instead of the real image** (only a
+   `manifest.json`/config blob, no actual layer data) for *some*
+   cross-arch-pulled images under colima's containerd-snapshotter storage
+   driver - reproduced live for `maykinmedia/objects-api:3.6.2` and
+   `openzaak/open-zaak:1.29.3` specifically (four other images bumped in
+   the same session saved fine), with no error and exit code 0, so a
+   naive script would silently `minikube image load` garbage. Re-pulling,
+   re-tagging, or removing-then-re-pulling the image didn't help - this is
+   a `docker`/`containerd` bug in this environment, not a caching
+   artifact. Workaround: `crane pull --platform linux/amd64 <ref> x.tar`
+   (`brew install crane`) instead of `docker save` - fetches a proper OCI
+   tarball straight from the registry, bypassing the local Docker/containerd
+   export path entirely, and `minikube image load` accepts its output the
+   same as a `docker save` tarball. Worth trying first if
+   `provision-cluster.sh`'s own `docker save`+`minikube image load` step
+   fails for a *specific* image tag with no obvious cause (check the saved
+   tarball's size before assuming the load itself is broken).
 
 ## `minikube start --driver=docker`, explicitly
 

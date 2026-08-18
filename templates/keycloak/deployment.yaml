@@ -20,7 +20,12 @@ spec:
       enableServiceLinks: false
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:26.6.4
+          # Bumped to 26.7.1 per PodiumD 4.9's own release notes (Dimpact
+          # Confluence) - mostly security/CVE fixes upstream (admin
+          # fine-grained-permission bypasses, a JWE request-object signature
+          # check, SAML broker login), nothing that touches --import-realm
+          # or PKCE enforcement behavior this project depends on.
+          image: quay.io/keycloak/keycloak:26.7.1
           args: ["start-dev", "--import-realm"]
           env:
             - name: KC_BOOTSTRAP_ADMIN_USERNAME

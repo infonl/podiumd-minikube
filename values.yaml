@@ -134,6 +134,54 @@ podiumd:
       enabled: false
     autoscaling:
       enabled: false
+    # EXPERIMENTAL, tied to a local-only podiumd dependency bump - not
+    # something `set-podiumd-version.sh 4.8.4 <ml-version>` alone
+    # reproduces. PodiumD 4.9's own release notes (Dimpact Confluence, "PDF
+    # versie 4.9") pin zac at chart 1.0.289/app 5.4.2 (both *real, published*
+    # versions - unlike an earlier local-only experiment with unreleased
+    # 1.0.287/5.4.0, back when PR #6490 - "feat: add configurable PKCE
+    # support for the OIDC authorization code flow" - had only just merged),
+    # but PodiumD 4.9 itself is unreleased ("NIET BEGONNEN" on that same
+    # page) - `helm search repo dimpact/podiumd -l` confirms only up to
+    # 4.8.4 exists. Until it ships, getting zac 1.0.289 requires a local
+    # `--path` checkout of the podiumd chart with its own zac dependency
+    # bumped by hand:
+    #
+    #   git clone --depth 1 --branch main \
+    #     git@github.com:Dimpact-Samenwerking/helm-charts.git /tmp/helm-charts
+    #   cd /tmp/helm-charts/charts/podiumd
+    #   sed -i '' 's/version: 1.0.251 # ZAC 5.0.1 helm release/version: 1.0.289 # ZAC 5.4.2 helm release/' Chart.yaml
+    #   helm repo add zac https://infonl.github.io/dimpact-zaakafhandelcomponent/  # if not already added
+    #   helm dependency update .
+    #   cd <this repo>
+    #   ./scripts/set-podiumd-version.sh --path /tmp/helm-charts/charts/podiumd --disable-monitoring-logging
+    #
+    # (.podiumd-versions.yaml records the --path itself, gitignored/personal
+    # like every other version choice there - re-run the above after any
+    # fresh clone or `.podiumd-versions.yaml` loss.)
+    #
+    # This image.tag override is still needed even with that chart bump:
+    # its own image.tag default (empty, falling back to .Chart.AppVersion,
+    # "5.4") is NOT the same image as 5.4.2 - confirmed via `docker manifest
+    # inspect` that ghcr.io/infonl/zaakafhandelcomponent:5.4 and :5.4.2 have
+    # different digests (5.4 is frozen at the first 5.4.x patch, not a
+    # rolling alias).
+    #
+    # Confirmed live this pans out end to end, not just that it boots: the
+    # chart's own config.yaml template now has a real AUTH_ENABLE_PKCE line
+    # (absent in 1.0.251), so auth.enablePkce below (previously a harmless
+    # no-op) now makes ZAC send a real code_challenge - the vendored realm's
+    # own PKCE requirement for this client was flipped back on to match (see
+    # that field's own comment, NOTES.md's PKCE entry, and
+    # tests/test_pkce.py's test_zac_client_now_sends_a_pkce_code_challenge).
+    #
+    # Revert this whole block (image.tag override + the realm's PKCE
+    # requirement, if this experiment doesn't otherwise pan out) once a real
+    # podiumd release bundles zac chart 1.0.289 (or newer) as its own
+    # default - or drop this comment once .podiumd-versions.yaml itself can
+    # just say "4.9" again.
+    image:
+      tag: "5.4.2"
     javaOptions: "-Xms512m -Xmx1024m -XX:ActiveProcessorCount=2"
     contextUrl: http://zac.local
     db:
@@ -147,23 +195,25 @@ podiumd:
       clientId: zaakafhandelcomponent
       secret: keycloakZaakafhandelcomponentClientSecret
       sslRequired: none
-      # Verified against the actual zac chart version bundled inside podiumd
-      # 4.8.1 (1.0.251, older than this repo's current charts/zac): its
-      # config.yaml template has no AUTH_ENABLE_PKCE line at all - this
-      # setting is a silent no-op on the currently-pinned podiumd version.
-      # Left set anyway since it's harmless and matches compose's own intent;
-      # takes effect automatically if a newer podiumd version bundles a zac
-      # chart that supports it.
+      # Originally a silent no-op: the zac chart bundled inside podiumd 4.8.x
+      # (1.0.251) has no AUTH_ENABLE_PKCE line in its config.yaml template at
+      # all, and PKCE support in ZAC itself (PR #6490) was unreleased in any
+      # image tag. Found live in step 4 that this being a no-op is NOT
+      # harmless as assumed - the vendored realm's "zaakafhandelcomponent"
+      # client required PKCE (pkce.code.challenge.method: S256) at the time,
+      # so Keycloak rejected every login outright; fixed then by clearing
+      # that attribute to "" on the Keycloak side instead.
       #
-      # Found live in step 4: this being a no-op is NOT harmless as assumed -
-      # the vendored realm's "zaakafhandelcomponent" client requires PKCE
-      # (pkce.code.challenge.method: S256, added upstream alongside PR #6490,
-      # unreleased in any ZAC image tag yet), so with PKCE support actually
-      # absent from this pinned image, Keycloak rejected every single login
-      # with "invalid_request: Missing parameter: code_challenge_method".
-      # Fixed on the Keycloak side instead - see
-      # vendor/dimpact-zaakafhandelcomponent/NOTES.md's PKCE note for the
-      # realm patch and revert-when-upgrading instructions.
+      # Now genuinely active: podiumd.zac.image.tag's own comment bumps zac
+      # to chart 1.0.289/app 5.4.2 (past PR #6490) via a local --path
+      # checkout (podiumd 4.9 itself, which would bundle this by default,
+      # isn't released yet - see PodiumD 4.9's own Dimpact Confluence release
+      # notes). Confirmed live this setting now makes ZAC send a real
+      # code_challenge/code_challenge_method=S256 on every login - the
+      # realm's own pkce.code.challenge.method was flipped back to "S256" to
+      # match (vendored here, and patched into the *already-imported* live
+      # realm via the Admin API - see NOTES.md's PKCE note and
+      # tests/test_pkce.py's own test_zac_client_now_sends_a_pkce_code_challenge).
       enablePkce: true
     keycloak:
       adminClient:
@@ -374,8 +424,15 @@ podiumd:
     # 1.29.1, so the version matters for compatibility, not just parity.
     # openklant's bundled default (2.15.0) already matches compose exactly -
     # no override needed there.
+    # Bumped to 1.29.3 per PodiumD 4.9's own release notes (Dimpact
+    # Confluence) - one patch ahead of docker-compose.yaml's own still-pinned
+    # 1.29.1. Confirmed via the upstream CHANGELOG.rst that 1.29.2/1.29.3 are
+    # bugfix/security-only releases (no new data migrations - the last one,
+    # in 1.29.0, is already included since we're moving forward from 1.29.1,
+    # past it), so this shouldn't affect our vendored fixture SQL's own
+    # schema assumptions.
     image:
-      tag: "1.29.1"
+      tag: "1.29.3"
     flower:
       enabled: false
     worker:
@@ -856,12 +913,25 @@ podiumd:
   objecten:
     enabled: false
     replicaCount: 1
-    # Found live: chart default (3.6.0) differs from compose's pinned
-    # version (3.6.1) - matches the fixture/API shape our vendored SQL
+    # Found live: chart default (3.6.0) differs from the version this
+    # project pins - matches the fixture/API shape our vendored SQL
     # expects. No digest suffix (unlike some other apps here) so no
     # separate digest-stripping fix is needed for this one.
+    # Bumped to 3.6.2 per PodiumD 4.9's own release notes (Dimpact
+    # Confluence) - deliberately the latest *3.x* patch, not that release's
+    # own 4.1.1: 4.x merges Objecttypen API into Objecten API entirely (a
+    # real classic->merged "Open Object" migration - see
+    # scripts/lib/detect-objecten-shape.sh/seed-fixtures.sh's own comments
+    # for the shape this project would need to switch to first), not
+    # something to fold into a routine version bump. docker-compose.yaml
+    # itself has already fully moved to the merged open-object:4.0.2 image
+    # (no classic objecten/objecttypen image pins left there at all) - this
+    # project's own objecten.image.tag comparison is against PodiumD's
+    # release notes now, not compose, until that migration happens here too.
+    # Chart version itself unchanged (2.12.1, still the latest for the 3.x
+    # app series) - only the app image has a newer 3.6.2 patch tag.
     image:
-      tag: "3.6.1"
+      tag: "3.6.2"
     worker:
       # Compose runs objecten-api-celery as a real worker - unlike
       # openzaak/openklant's workers (which compose never runs at all), this
@@ -1580,12 +1650,19 @@ podiumd:
     # own "openformulieren" profile transitively enables all three - see
     # top-level openformulieren.enabled's comment).
     replicaCount: 1
-    # Found live: chart default (3.4.9) differs from compose's pinned
-    # version (3.5.4) - a genuine version pin, unlike nginx's own
-    # digest-qualified default just below, which is handled by
+    # Found live: chart default (3.4.9) differs from both compose's own
+    # pinned version and this one - a genuine version pin, unlike nginx's
+    # own digest-qualified default just below, which is handled by
     # scripts/strip-image-digests.py instead of a hardcoded tag here.
+    # Bumped to 3.5.5 per PodiumD 4.9's own release notes (Dimpact
+    # Confluence) - one patch behind docker-compose.yaml's own 3.5.6 (which
+    # moved independently ahead of PodiumD's own tracked version); no
+    # migration/schema changes between 3.5.4 and 3.5.5 per the upstream
+    # CHANGELOG.rst (bugfixes only - broken table markup, formio validation,
+    # templating fixes; two optional one-off data-repair scripts mentioned
+    # there don't apply to this project's own single 2-field test form).
     image:
-      tag: "3.5.4"
+      tag: "3.5.5"
     nginx:
       replicaCount: 1 # compose runs openformulieren-nginx
     worker:
