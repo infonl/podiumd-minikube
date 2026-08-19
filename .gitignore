@@ -38,3 +38,8 @@ __pycache__/
 # different version" choice never shows up as a shared-file diff the way
 # editing Chart.yaml directly used to.
 .podiumd-versions.yaml
+
+# johnb00 live-cluster test credentials - Keycloak test-user password set
+# via the Admin API for tests-johnb00/ (see tests-johnb00/README.md), never
+# committed.
+tests-johnb00/.env.johnb00

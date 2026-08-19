@@ -1,0 +1,79 @@
+"""
+Pod health checks - adapted from ../tests/test_pods.py for johnb00's real
+pod set (checked live via `kubectl get pods -n podiumd`).
+
+core_pod_prefix differences from the minikube reference:
+  - "postgres"/"solr" dropped: johnb00 has no in-cluster Postgres (external
+    Azure Flexible Server) and no bare "solr" pod (only zac's own bundled
+    "zac-solr-solrcloud-*", which isn't a standalone core service the way
+    minikube's shared solr pod is).
+  - "wiremock" dropped: not deployed on johnb00.
+  - "mailpit" kept: deployed this session (values/johnb00/mailpit.yaml).
+  - "redis" -> "redis-ha": johnb00 uses the shared redis-ha subchart.
+
+Confirmed live and NOT suppressed here (a genuine, already-flagged,
+non-blocking issue - see this session's report, not a suite-adaptation
+bug): the `image-prepull` DaemonSet's pods are stuck
+Pending/CrashLoopBackOff on every node (the generic prepull init-container
+command assumes every image has a shell; the OPA image doesn't). This
+correctly makes `test_no_pods_in_bad_phase`/`test_long_running_pods_are_
+ready` fail - that's this test suite doing its job, not something to
+special-case away.
+"""
+
+import pytest
+
+ONE_SHOT_JOB_PREFIXES = (
+    "pabc-migrations",
+    "podiumd-realm-import",
+    "keycloak-realm-import",
+    # redis-ha's own periodic CronJob that re-labels the current master -
+    # confirmed live: short-lived, already gone (TTL'd) by the time a
+    # second `kubectl get pods` was run moments later.
+    "redis-ha-label-master",
+)
+
+
+def is_one_shot(name):
+    return any(name == prefix or name.startswith(prefix + "-") for prefix in ONE_SHOT_JOB_PREFIXES)
+
+
+def test_no_pods_in_bad_phase(pods):
+    bad = [p for p in pods if p["phase"] not in ("Running", "Succeeded")]
+    assert not bad, f"pods not Running/Succeeded: {[p['name'] for p in bad]}"
+
+
+def test_long_running_pods_are_ready(pods):
+    not_ready = []
+    for pod in pods:
+        if is_one_shot(pod["name"]):
+            continue
+        for status in pod["container_statuses"]:
+            if not status.get("ready", False):
+                not_ready.append(f"{pod['name']}/{status['name']}")
+    assert not not_ready, f"containers not ready: {not_ready}"
+
+
+@pytest.mark.parametrize(
+    "core_pod_prefix",
+    [
+        "redis-ha",
+        "keycloak",
+        "mailpit",
+        "brp-personen-mock",
+        "openzaak",
+        "openzaak-worker",
+        "openklant",
+        "openklant-worker",
+        "pabc",
+        "zac",
+        "zac-office-converter",
+    ],
+)
+def test_core_profile_pod_present(pods, core_pod_prefix):
+    """The always-on core stack should be present regardless of which
+    optional profiles are also enabled."""
+    names = {p["name"] for p in pods}
+    assert any(
+        n == core_pod_prefix or n.startswith(core_pod_prefix + "-") for n in names
+    ), f"no pod found matching '{core_pod_prefix}'"
