@@ -90,6 +90,7 @@ OIDC/PABC-mediated instead).
 | `test_django_admin_login.py` | Skips unconditionally - no classic admin credentials exist on johnb00 |
 | `test_pabc_migrations_guard.py` | Skips unconditionally - no equivalent script, and its second test mutates real state |
 | `test_productaanvraag_flow.py` | Skips unconditionally - pinned to minikube-only seeded fixture data |
+| `test_4_8_5_upgrade.py` | New file, no minikube equivalent - regression tests for what actually changed in the 4.8.4→4.8.5 chart hop specifically (ZAC image pin, Open Beheer image pin, hardened container securityContexts, the new `AUTH_ENABLE_PKCE`/`extendWithZaaktype` keys staying no-ops on johnb00) |
 
 ## Known, pre-existing johnb00 infra findings (not introduced by this suite)
 
