@@ -31,6 +31,24 @@ ONE_SHOT_JOB_PREFIXES = (
     # confirmed live: short-lived, already gone (TTL'd) by the time a
     # second `kubectl get pods` was run moments later.
     "redis-ha-label-master",
+    # The chart's own bundled setup_configuration/bootstrap Jobs (see each
+    # app's own podiumd.<app>.configuration.data comment in podiumd.yaml),
+    # plus podiumd-infra's own post-deployment-pabc-init Job - all one-shot,
+    # left as Completed pods by design.
+    "create-required-catalogi-job",
+    "create-required-objecttypen-job",
+    "ensure-keycloak-operator-sa",
+    "ensure-podiumd-admin-user",
+    "import-master-realm-job",
+    "import-podiumd-realm-job",
+    "objecttypen-config",
+    "openbeheer-config",
+    "openformulieren-config",
+    "openklant-config",
+    "opennotificaties-config",
+    "openzaak-config",
+    "post-deployment-pabc-init",
+    "referentielijsten-config",
 )
 
 
