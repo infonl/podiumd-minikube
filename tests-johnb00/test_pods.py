@@ -11,14 +11,14 @@ core_pod_prefix differences from the minikube reference:
   - "mailpit" kept: deployed this session (values/johnb00/mailpit.yaml).
   - "redis" -> "redis-ha": johnb00 uses the shared redis-ha subchart.
 
-Confirmed live and NOT suppressed here (a genuine, already-flagged,
-non-blocking issue - see this session's report, not a suite-adaptation
-bug): the `image-prepull` DaemonSet's pods are stuck
-Pending/CrashLoopBackOff on every node (the generic prepull init-container
-command assumes every image has a shell; the OPA image doesn't). This
-correctly makes `test_no_pods_in_bad_phase`/`test_long_running_pods_are_
-ready` fail - that's this test suite doing its job, not something to
-special-case away.
+The `image-prepull` DaemonSet previously crash-looped on every node: its
+generic init-container command (`sh -c "exit 0"`, just there to trigger
+imagePullPolicy: IfNotPresent) assumed every image has a shell, which several
+Go-binary/operator images (openpolicyagent/opa, pravega/zookeeper-operator,
+opstree/redis-operator) don't ship. Fixed in
+podiumd-infra/scripts/setup-image-prepull.sh (per-image command override
+table) rather than special-cased away here - this suite was correctly
+catching a real (now-fixed) infra bug, not a suite-adaptation issue.
 """
 
 import pytest
