@@ -41,6 +41,7 @@ ONE_SHOT_JOB_PREFIXES = (
     "ensure-podiumd-admin-user",
     "import-master-realm-job",
     "import-podiumd-realm-job",
+    "objecten-config",
     "objecttypen-config",
     "openbeheer-config",
     "openformulieren-config",
