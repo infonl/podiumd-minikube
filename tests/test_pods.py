@@ -34,6 +34,10 @@ ONE_SHOT_JOB_PREFIXES = (
     "openformulieren-config",
     "zac-productaanvraag-zaakafhandelparameters",
     "openformulieren-productaanvraag-form",
+    # ita's own bundled poller CronJob - only relevant if podiumd.ita.enabled
+    # is ever flipped back on (off by default, see values.yaml's own
+    # podiumd.ita comment and tests/test_pkce.py's module docstring).
+    "ita-poller",
 )
 
 

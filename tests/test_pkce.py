@@ -1,9 +1,10 @@
 """
-PKCE (RFC 9700) verification for the three Keycloak clients that have it
-actually enabled - see values.yaml's own podiumd.pabc.settings.oidc.pkceEnabled,
-podiumd.openzaak.configuration.data, and podiumd.zac.image.tag comments, and
-vendor/dimpact-zaakafhandelcomponent/NOTES.md's entries on all three, for the
-full story of what's enabled, what isn't, and why.
+PKCE (RFC 9700) verification for every Keycloak client this project wires
+up an OIDC login for - see values.yaml's own
+podiumd.pabc.settings.oidc.pkceEnabled, podiumd.openzaak.configuration.data,
+and podiumd.zac.image.tag comments, and
+vendor/dimpact-zaakafhandelcomponent/NOTES.md's entries on all three, for
+the full story of what's enabled, what isn't, and why.
 
 zac is the deliberate negative case here *by default* - its client's
 pkce.code.challenge.method is kept "" (ZAC itself doesn't support PKCE
@@ -27,6 +28,49 @@ request connecting to zac.local" incident in plan.md was fixed).
 test_zac_client_now_sends_a_pkce_code_challenge below skips entirely when
 the switch is off, since with it off ZAC deliberately never sends a
 challenge at all.
+
+The seven Django-based ZGW components (openzaak/openklant/objecten/
+objecttypen/opennotificaties/openformulieren/openarchiefbeheer) are the
+*permanent* negative case, unlike zac: all seven share the same
+`mozilla-django-oidc-db` library for admin OIDC login, and - checked live,
+not just from a changelog - none of it, at any version this project
+bundles (1.1.1 or 2.0.1 depending on the app), has ever had any PKCE
+support at all. Confirmed three ways inside each app's own running pod:
+its `OIDCProvider` Django model has no field with "pkce" in the name,
+`grep -ri pkce` across the entire installed `mozilla_django_oidc_db`
+package tree finds nothing, and the upstream project's own CHANGELOG.rst
+never mentions it either (a GitHub search across every issue/PR in
+maykinmedia/mozilla-django-oidc-db for "pkce" also returns zero results -
+not merely unimplemented, seemingly never even proposed). Re-bumping any
+of these apps' image tags doesn't change this on its own - it would only
+help if a future bump also happens to pull in a `mozilla-django-oidc-db`
+release that adds the feature, which would need re-checking the same way,
+not assumed from the app version bump alone.
+
+ita and kiss (PodiumD-only additions, not part of dimpact-zaakafhandelcomponent's
+docker-compose stack - see NOTES.md) are a third, unusual case: confirmed
+by cloning each app's own public source that both hardcode
+`options.UsePkce = true` in their own OpenIdConnect setup, the same
+pattern as pabc's own AuthenticationExtensions.cs - so PKCE itself is
+unconditionally on for both, same category of finding as pabc. But unlike
+pabc, this can't actually be confirmed *live* the same way (no equivalent
+of test_pabc_challenge_always_sends_a_pkce_code_challenge exists below
+for either): both apps also never set RequireHttpsMetadata anywhere in
+their own source, so it stays at the OpenIdConnect middleware's default of
+`true`, and both evidently resolve the OIDC handler's options eagerly on
+every single request - even a bare `/healthz` - which throws against this
+project's http:// Keycloak authority before ever reaching a redirect. Both
+crash-loop unconditionally as a result, with no values.yaml/extraEnvVars
+fix possible (confirmed: neither app ever reads this setting from
+configuration at all), so `podiumd.ita`/`podiumd.kiss` are both kept
+`enabled: false` - see values.yaml's own comments on each. Their Keycloak
+clients are still provisioned (kept `pkce.code.challenge.method: ""`,
+guarded by test_ita_and_kiss_clients_do_not_require_pkce below) so that if
+either app is ever re-enabled without someone re-reading this docstring
+first, a login attempt fails safe (Keycloak not requiring a challenge the
+app happens to send anyway) rather than fails hard (Keycloak requiring one
+a broken/rolled-back version of the app can't send, the exact zac/Django
+incident this whole module exists to prevent).
 """
 
 from urllib.parse import parse_qs, urlparse
@@ -34,38 +78,83 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import requests
 
-from conftest import NAMESPACE, kubectl
-
 PABC_HOST = "pabc.local"
 ZAC_HOST = "zac.local"
 KEYCLOAK_HOST = "keycloak.local"
 PABC_USERNAME = "pabcadmin"
 PABC_PASSWORD = "pabcadmin"
 
+# The Keycloak clientId for each of the seven Django-based ZGW components -
+# matches vendor/dimpact-zaakafhandelcomponent/keycloak/
+# zaakafhandelcomponent-realm.json exactly (see NOTES.md's own entry on
+# these seven clients for why they exist ahead of most of them actually
+# being wired up to an OIDC admin login yet).
+DJANGO_APP_CLIENT_IDS = (
+    "openzaak",
+    "openklant",
+    "objecten",
+    "objecttypen",
+    "opennotificaties",
+    "openformulieren",
+    "openarchiefbeheer",
+)
 
-def _zac_experimental_pkce_live():
+# ita/kiss - see this module's own docstring for why these two are a
+# different case from DJANGO_APP_CLIENT_IDS above (PKCE confirmed
+# unconditionally on from source, not absent - but untestable live, and
+# both podiumd.ita/podiumd.kiss stay enabled: false as a result).
+ITA_KISS_CLIENT_IDS = ("ita", "kiss")
+
+
+def _keycloak_admin_token(traefik_ip):
+    response = requests.post(
+        f"http://{traefik_ip}/realms/master/protocol/openid-connect/token",
+        headers={"Host": KEYCLOAK_HOST},
+        data={
+            "grant_type": "password",
+            "client_id": "admin-cli",
+            "username": "admin",
+            "password": "admin",
+        },
+        timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
+
+
+def _zac_experimental_pkce_live(traefik_ip):
     """
     Whether the zac 5.4.2/PKCE experiment (top-level zac.experimentalPkce
     in values.yaml, off by default - see scripts/lib/zac-experimental-pkce.sh)
-    is actually active on the currently-deployed cluster. Checked against
-    the live zac ConfigMap rather than re-reading values.yaml locally -
-    this suite otherwise only ever asserts against deployed state, and
-    zac-experimental-pkce.sh uses this exact same signal (AUTH_ENABLE_PKCE
-    presence in the zac chart's own rendered config) to decide whether the
-    currently-selected podiumd version's zac chart supports PKCE at all.
+    is actually active on the currently-deployed cluster.
+
+    Deliberately does NOT check the zac ConfigMap's own AUTH_ENABLE_PKCE key
+    (an earlier version of this helper did) - found live, that key is left
+    unconditionally "true" by values.yaml's own podiumd.zac.auth.enablePkce,
+    documented there as "a silent no-op on any zac chart without
+    AUTH_ENABLE_PKCE support" - so it's always "true" regardless of
+    zac.experimentalPkce, making that check always return True and this
+    test always run instead of skipping when the experiment is off (caught
+    live: failed outright, immediately after fixing an unrelated realm/zac
+    version mismatch, instead of skipping as intended). values.yaml's own
+    comment on that field says it plainly: "What actually gates real PKCE
+    end to end is the *realm's own* pkce.code.challenge.method requirement,
+    not this value" - so that's what this checks instead, the same live
+    signal test_ita_and_kiss_clients_do_not_require_pkce and
+    test_django_app_client_does_not_require_pkce already use.
     """
-    return (
-        kubectl(
-            "get",
-            "configmap",
-            "zac",
-            "-n",
-            NAMESPACE,
-            "-o",
-            "jsonpath={.data.AUTH_ENABLE_PKCE}",
-        ).strip()
-        == "true"
+    token = _keycloak_admin_token(traefik_ip)
+    response = requests.get(
+        f"http://{traefik_ip}/admin/realms/zaakafhandelcomponent/clients",
+        headers={"Host": KEYCLOAK_HOST, "Authorization": f"Bearer {token}"},
+        params={"clientId": "zaakafhandelcomponent"},
+        timeout=10,
     )
+    response.raise_for_status()
+    clients = response.json()
+    return bool(clients) and clients[0]["attributes"].get(
+        "pkce.code.challenge.method", ""
+    ) == "S256"
 
 
 def _via_traefik(traefik_ip, absolute_url):
@@ -231,7 +320,7 @@ def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
     / sync-zac-pkce-realm.sh both keep those two in sync either way, this
     just isn't the experiment being tested here).
     """
-    if not _zac_experimental_pkce_live():
+    if not _zac_experimental_pkce_live(traefik_ip):
         pytest.skip("zac.experimentalPkce is off on this cluster")
 
     initial = requests.get(
@@ -248,6 +337,81 @@ def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
     params = parse_qs(urlparse(auth_location).query)
     assert params.get("code_challenge_method") == ["S256"]
     assert len(params.get("code_challenge", [""])[0]) > 0
+
+
+@pytest.mark.parametrize("client_id", DJANGO_APP_CLIENT_IDS)
+def test_django_app_client_does_not_require_pkce(traefik_ip, client_id):
+    """
+    Guards the permanent negative case this module's own docstring explains:
+    none of the seven Django-based ZGW components' shared OIDC library
+    (`mozilla-django-oidc-db`) has ever had PKCE support, at any version
+    bundled here - so their Keycloak clients must stay
+    pkce.code.challenge.method: "" (not required). If this ever fails, it
+    means someone enabled it on the Keycloak side (by hand, or by copying
+    zac's own fix) without first confirming the specific app's own
+    mozilla-django-oidc-db actually grew PKCE support - doing just the
+    Keycloak side alone breaks every login for that app outright
+    ("invalid_request: Missing parameter: code_challenge_method"), the
+    exact failure mode this project has now hit twice (zac, before its own
+    chart bump; see this module's own docstring).
+
+    Checked against the *live* Keycloak realm via the Admin API, not the
+    vendored realm.json - Keycloak only imports a realm once, so the two
+    can drift after a manual live fix (confirmed happen twice already this
+    project, see this module's own docstring).
+    """
+    token = _keycloak_admin_token(traefik_ip)
+    response = requests.get(
+        f"http://{traefik_ip}/admin/realms/zaakafhandelcomponent/clients",
+        headers={"Host": KEYCLOAK_HOST, "Authorization": f"Bearer {token}"},
+        params={"clientId": client_id},
+        timeout=10,
+    )
+    response.raise_for_status()
+    clients = response.json()
+    assert clients, f"no Keycloak client found for clientId={client_id!r}"
+    assert clients[0]["attributes"].get("pkce.code.challenge.method", "") == "", (
+        f"{client_id}'s Keycloak client now requires PKCE, but its own "
+        "mozilla-django-oidc-db has no support for sending a code_challenge "
+        "(confirmed live - see this module's own docstring) - every login "
+        "for this app is now broken"
+    )
+
+
+@pytest.mark.parametrize("client_id", ITA_KISS_CLIENT_IDS)
+def test_ita_and_kiss_clients_do_not_require_pkce(traefik_ip, client_id):
+    """
+    Unlike the Django apps above, ita/kiss's own apps *do* hardcode
+    `UsePkce = true` (confirmed by reading each app's own public source -
+    see this module's own docstring) - so this isn't guarding against a
+    library that can never send a challenge. It's guarding against
+    something more specific: neither app can actually serve a single HTTP
+    request against this project's http:// Keycloak authority at all (a
+    separate, hardcoded RequireHttpsMetadata default, also confirmed from
+    source), so podiumd.ita/podiumd.kiss both stay `enabled: false` and
+    neither has ever completed a real login here. If someone re-enables
+    either without reading that far, this test is what keeps the Keycloak
+    client itself from independently starting to require a challenge the
+    app can never actually be confirmed to send in this environment -
+    that combination is exactly what broke zac and, once, the Django apps'
+    story elsewhere in this module.
+    """
+    token = _keycloak_admin_token(traefik_ip)
+    response = requests.get(
+        f"http://{traefik_ip}/admin/realms/zaakafhandelcomponent/clients",
+        headers={"Host": KEYCLOAK_HOST, "Authorization": f"Bearer {token}"},
+        params={"clientId": client_id},
+        timeout=10,
+    )
+    response.raise_for_status()
+    clients = response.json()
+    assert clients, f"no Keycloak client found for clientId={client_id!r}"
+    assert clients[0]["attributes"].get("pkce.code.challenge.method", "") == "", (
+        f"{client_id}'s Keycloak client now requires PKCE - fine only if "
+        f"podiumd.{client_id}.enabled is actually true and confirmed live "
+        "to work now (see this module's own docstring for why it doesn't "
+        "as of this writing)"
+    )
 
 
 def _extract_form_action(html):

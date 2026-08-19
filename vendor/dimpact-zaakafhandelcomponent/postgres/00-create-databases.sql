@@ -44,6 +44,16 @@ CREATE DATABASE "Pabc" OWNER pabc;
 CREATE ROLE zac WITH LOGIN PASSWORD 'password';
 CREATE DATABASE zac OWNER zac;
 
+-- Not a docker-compose service at all - KISS (klantinteractie-servicesysteem)
+-- is a PodiumD-only addition, brought in purely for the PKCE investigation in
+-- tests/test_pkce.py (see vendor/dimpact-zaakafhandelcomponent/NOTES.md).
+-- Unlike every database above, there's no compose container to copy
+-- credentials from, so this one's made up fresh. Its own `kiss-chart` has no
+-- bundled Postgres subchart (unlike ITA's - see podiumd.ita.postgresql in
+-- values.yaml), so it needs a database on this shared instance.
+CREATE ROLE kiss WITH LOGIN PASSWORD 'kiss';
+CREATE DATABASE kiss OWNER kiss;
+
 -- PostGIS: only openzaak/objects/opennotificaties/openarchiefbeheer use the
 -- postgis/postgis image in docker-compose.yaml (the others use plain
 -- postgres:17.10). Explicitly installing the extension per-database here

@@ -144,14 +144,34 @@ here is a live reference — this project never reads
   it for every component at once caused a real production incident
   (HTTP 403 on every login page, some components' bundled
   `mozilla_django_oidc` too old for PKCE) and was rolled back. `openzaak`
-  is the only one with `pkce.code.challenge.method: "S256"` set and an
-  actual `oidc_db_config_admin_auth` step wired up so far - confirmed live,
-  its bundled `mozilla_django_oidc` (5.0.2) supports it. The other five
-  real Django apps' clients are ready (secret, redirectUris) but their
-  `pkce.code.challenge.method` is left `""` and no `configuration.data`
-  step references them yet - `openarchiefbeheer`'s is reserved further
-  out still, since that app (v1.1.1, this project's current pin) has no
-  OIDC support in its chart at all yet.
+  is the only one with an actual `oidc_db_config_admin_auth` step wired up
+  so far, but **not** with PKCE - all seven clients' own
+  `pkce.code.challenge.method` was left `""` here.
+
+  **Update (PodiumD 4.9 release prep)**: corrects an earlier, now-stale
+  version of this same paragraph, which had claimed `openzaak`'s client
+  was set to `"S256"` on the strength of a `mozilla_django_oidc` "5.0.2"
+  that doesn't match anything ever actually checked live - confirmed now,
+  directly, that's wrong: checked all seven Django apps' own running pods
+  (`openzaak`/`openklant`/`objecten`/`objecttypen`/`opennotificaties`/
+  `openformulieren`/`openarchiefbeheer`, each bundling `mozilla-django-oidc-db`
+  1.1.1 or 2.0.1 depending on the app) and *none* of them have PKCE support
+  at any version bundled here - no `OIDCProvider` model field with "pkce"
+  in the name, `grep -ri pkce` across each installed package tree finds
+  nothing, and upstream's own CHANGELOG.rst plus a GitHub search across
+  every issue/PR in `maykinmedia/mozilla-django-oidc-db` for "pkce" also
+  return nothing. Unlike ZAC's own PKCE story elsewhere in this file, this
+  isn't a "revisit after the next version bump" situation - it's a genuine
+  upstream gap in the shared library itself, with no visible sign it's
+  even planned. All seven clients' `pkce.code.challenge.method` stay `""`
+  accordingly, guarded live by `tests/test_pkce.py`'s
+  `test_django_app_client_does_not_require_pkce` (parametrized over all
+  seven) - see that test module's own docstring for the fuller
+  investigation. `openarchiefbeheer`'s `oidc_db_config_admin_auth` step is
+  separately still not wired up at all, since that app (v1.1.1, this
+  project's current pin) has no OIDC support in its chart yet - unrelated
+  to the PKCE finding above, which only concerns the Keycloak client
+  attribute, not whether login through it is actually usable yet.
   Also: the pre-existing `pabc` client's `pkce.code.challenge.method` set
   to `"S256"` (previously absent - Keycloak's own default is "not
   required"). Unlike every Django app here, safe to enable unconditionally
@@ -168,6 +188,58 @@ here is a live reference — this project never reads
   (PABC's own hardcoded `CookieSecurePolicy.Always` blocks the actual
   session from ever being established over this project's HTTP-only
   ingress, PKCE or not) - a known limitation, not fixed here.
+
+  **Update (ITA/KISS added, then disabled again)**: two more Keycloak
+  clients added, `ita` and `kiss` - neither a docker-compose service at
+  all, both brought in purely to extend this same PKCE investigation to
+  two more PodiumD-only components (`podiumd.ita`/`podiumd.kiss` in
+  values.yaml, both `enabled: false`). Confirmed by cloning each app's own
+  public source that both hardcode `options.UsePkce = true` in their own
+  OpenIdConnect setup, the same pattern as pabc's own
+  `AuthenticationExtensions.cs` (almost the same file, in fact) - so PKCE
+  itself is unconditionally on for both, same category of finding as pabc.
+  Unlike pabc, though, neither app can actually serve a single HTTP request
+  in this project's HTTP-only environment at all: both also never set
+  `RequireHttpsMetadata` anywhere in their source (it stays at the
+  OpenIdConnect middleware's own default of `true`), and both apps'
+  authentication middleware evidently resolves the OIDC handler's options
+  eagerly on *every* request - even the chart's own `/healthz` probe,
+  confirmed live via a 500 citing exactly this - so every single request
+  throws `InvalidOperationException: The MetadataAddress or Authority must
+  use HTTPS unless disabled for development by setting
+  RequireHttpsMetadata=false` before ever reaching a redirect. No
+  values.yaml/`extraEnvVars`-level fix exists (this value is never read
+  from configuration in either app's source, only ever set - or not - in
+  code), so the only real fix would be actual TLS termination in front of
+  Keycloak, deliberately out of scope for this HTTP-only-by-design project.
+  Both Keycloak clients kept (`pkce.code.challenge.method: ""`, matching
+  every other not-yet-verified client's own starting point), and both
+  `podiumd.ita`/`podiumd.kiss` values.yaml blocks kept fully wired but
+  `enabled: false` - re-enabling either just recreates the same
+  permanently crash-looping Deployment, not a live-testable one, without a
+  source change on the app's own side. See `values.yaml`'s own
+  `podiumd.ita`/`podiumd.kiss` comments and
+  `tests/test_pkce.py`'s module docstring for the fuller detail.
+
+  **Found while cleaning up afterward** (unrelated to ita/kiss, but the
+  same live realm): `scripts/lib/sync-zac-pkce-realm.sh` (added by the
+  same teammate commit that made the zac 5.4.2/PKCE experiment
+  switchable) calls `kcadm.sh` directly via `kubectl exec` to reconcile
+  the live realm's `zaakafhandelcomponent` client - this OOM-kills the
+  Keycloak pod outright (exit 137, confirmed live), the same `kcadm.sh`
+  memory-limit issue already documented above as the reason this file's
+  own live fixes use a port-forward + raw Admin API `curl` instead of
+  `kcadm.sh`. Every `deploy.sh --full` run currently fails to reconcile
+  silently (and periodically restarts Keycloak) as a result - worth
+  fixing in that script the same way, not done here (out of scope for the
+  task that surfaced it). Separately, `tests/test_pkce.py`'s own
+  `_zac_experimental_pkce_live` skip-condition helper was checking the
+  zac ConfigMap's `AUTH_ENABLE_PKCE` key, which - per this file's own
+  paragraph above - is deliberately left `"true"` unconditionally as a
+  no-op, so that check always returned true regardless of
+  `zac.experimentalPkce`'s real value. Fixed in that test to check the
+  realm client's own `pkce.code.challenge.method` instead, the same live
+  signal every other guard test in that module already uses.
 
 ## Newly authored (not copied from anywhere)
 

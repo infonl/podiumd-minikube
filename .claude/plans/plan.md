@@ -3794,3 +3794,233 @@ PKCE-capable zac chart checkout exists to test against again - see
 values.yaml's own podiumd.zac.image.tag comment and NOTES.md's PKCE
 entry, both updated to say so explicitly rather than carry the earlier,
 now-stale "confirmed live" claim forward unqualified.
+
+## Does PKCE work for the Django-based ZGW components? (No, and it's not close)
+
+Asked, as a follow-up to ZAC's own PKCE story above, to check/document
+whether PKCE works for the seven Django-based components too
+(`openzaak`/`openklant`/`objecten`/`objecttypen`/`opennotificaties`/
+`openformulieren`/`openarchiefbeheer`) - they all share the same
+`mozilla-django-oidc-db` library for admin OIDC login, so the natural
+question after ZAC's own version-bump-unlocks-PKCE story is whether the
+same applies here, especially having just bumped `objecten` and
+`openformulieren` themselves.
+
+Checked live, not assumed from a changelog: `pip show
+mozilla-django-oidc-db` inside each app's own running pod
+(`openzaak`/`openklant`/`objecten`/`openformulieren`/`openarchiefbeheer`
+bundle `1.1.1`; `objecttypen`/`opennotificaties` bundle `2.0.1` - openzaak
+itself is `2.0.1` too, confirmed unchanged across this session's own
+1.29.1→1.29.3 bump: that upgrade's own upstream CHANGELOG.rst never
+mentions bumping this dependency, and re-checking live after the bump
+confirms it didn't). For every one of these seven: no `OIDCProvider`
+Django model field has "pkce" anywhere in its name, `grep -ri pkce`
+across the entire installed `mozilla_django_oidc_db` package tree finds
+nothing, and neither does the upstream project's own `CHANGELOG.rst` - a
+GitHub search across every issue/PR in `maykinmedia/mozilla-django-oidc-db`
+for "pkce" returns zero results too. Unlike ZAC (a genuinely different
+codebase, unrelated to this library, which *did* gain PKCE support via a
+real merged PR), this looks like a permanent gap in the shared library
+itself with no visible sign it's even proposed upstream, not something a
+future version bump would likely fix on its own.
+
+This also caught a real, stale inaccuracy in an earlier version of this
+same file's own PKCE entry (further up, from step 4's original Keycloak
+work): it had claimed `openzaak`'s Keycloak client was already set to
+`pkce.code.challenge.method: "S256"`, backed by a `mozilla_django_oidc`
+"5.0.2" - neither of which checks out live (the client is `""`, the
+bundled library is `2.0.1` with no PKCE support at all). Corrected
+directly in that entry rather than left to contradict this one.
+
+All seven Keycloak clients' `pkce.code.challenge.method` confirmed to
+already correctly be `""` (matching this finding) - no values.yaml/realm
+change needed, just documentation. Added
+`tests/test_pkce.py::test_django_app_client_does_not_require_pkce`
+(parametrized over all seven, checked against the *live* realm via the
+Keycloak Admin API, not just the vendored JSON - Keycloak only imports a
+realm once, so the two can drift after a manual live fix, confirmed
+happen twice already this project) as a permanent guard: if any of these
+seven ever start requiring PKCE without the specific app's own
+mozilla-django-oidc-db actually having grown support for it first, every
+login for that app breaks outright, the exact failure mode already hit
+twice for ZAC before its own chart bump.
+
+Full suite: 72 passed, 3 skipped, 0 failed.
+
+## Adding ITA/KISS to extend the PKCE investigation - both confirmed PKCE-on-by-source, both permanently unrunnable here
+
+Asked to add two more PodiumD components neither running here nor part of
+`dimpact-zaakafhandelcomponent`'s docker-compose stack at all - `ita`
+(`internetaakafhandeling`) and `kiss` (`kiss-chart`) - and test PKCE for
+them the same way pabc/zac/the Django apps already were, plus a "also test
+pabc with pkce" follow-up that turned out to already be fully covered
+(`test_pabc_challenge_always_sends_a_pkce_code_challenge` +
+`test_pabc_pkce_login_accepted_by_keycloak`, both already passing).
+
+Getting either component rendering at all surfaced several real, distinct
+bugs, each fixed in turn:
+- `kiss-chart` ships its own `values.schema.json` requiring ~15 settings
+  fields non-blank (elastic/enterpriseSearch/haalCentraal/groepen/
+  afdelingen/logboek/kvk/feedback/managementInformatie/email/
+  organisatieIds/registers) *regardless* of whether the templates
+  themselves ever use them - `helm template` failed outright on the
+  chart's own default blank strings once `kiss.enabled` flipped true
+  (never surfaced before since Helm skips validating a condition-disabled
+  subchart's values entirely). Fixed with placeholder-but-schema-valid
+  values throughout - none of it functionally exercised, this task's scope
+  was login/PKCE only.
+- `kennisbank`/`vac` sync CronJobs: setting their sub-object to a literal
+  `null` in values.yaml to exploit their own schema's `type: [object,
+  null]` doesn't work - Helm's own values-merging treats an override of
+  `null` as "delete this key", bringing back the chart's *default* object
+  (blank strings) and the exact same schema failure. Fixed by giving them
+  real placeholder `baseUrl`/`objectTypeUrl`/`token` (satisfies the
+  schema) plus an explicit `schedule: ""` (not schema-required, unlike the
+  other three fields) to keep their own CronJob template's `if and ...
+  .schedule` guard falsy.
+- `ita`'s own connection-string helper
+  (`internetaakafhandeling.databaseConnectionString`) hardcodes the DB
+  host as `<ita's own fullname>-postgresql` whenever `postgresql.enabled`
+  is true - never reads `database.host` in that branch at all. Left at
+  the bundled bitnami subchart's own default naming (which follows the
+  *release* name three levels up, `podiumd-minikube-postgresql`, not
+  `ita`'s own `fullnameOverride: "ita"`), the connection string pointed at
+  a Service that didn't exist. Fixed by setting
+  `postgresql.fullnameOverride: "ita-postgresql"` to match what the
+  helper expects.
+- The podiumd aggregator's own default `ita.database.password` is a
+  literal, never-filled `REP_ITA_DATABASE_PASSWORD_REP` placeholder token
+  (meant for their own production "Replacementscripts" tooling this
+  project doesn't have) - carried straight into the connection string
+  otherwise. Fixed by overriding `database.password` to match
+  `postgresql.auth.password`.
+- KISS's chart default nameOverride/fullnameOverride is `"contact"` (its
+  own internal product name), not `"kiss"` - every resource rendered under
+  that name until overridden explicitly.
+- A values.yaml indentation slip put `kiss.aspnetcore` as a sibling of
+  `kiss.settings` instead of nested inside it - silently produced no
+  `ASPNETCORE_ENVIRONMENT` override at all (the chart's own schema doesn't
+  define `kiss.aspnetcore` as a key, so nothing caught this at render
+  time). Found only by checking the *live* ConfigMap directly and seeing
+  it still said `"Production"` after a deploy that should have changed it.
+
+Both images (`ghcr.io/interne-taak-afhandeling/internetaakafhandeling.web:3.2.0`,
+`.poller:3.2.0`, `ghcr.io/klantinteractie-servicesysteem/kiss-frontend:2.2.4`)
+needed the same `crane pull`+`minikube image load` workaround as every
+other image this session (see mac.md) - all three public, no ACR-remap
+story like pabc's own.
+
+Once actually running, both `ita-web` and `kiss-web` crash-looped
+unconditionally - confirmed, after trying an `ASPNETCORE_ENVIRONMENT:
+Development` override that turned out to have zero effect (verified via
+`kubectl exec ... printenv` that the env var really was set, and the app
+still failed identically), that this isn't fixable via values.yaml at
+all. Cloned both apps' own public source
+(`Interne-Taak-Afhandeling/ITA`, `Klantinteractie-Servicesysteem/KISS-frontend`)
+to find out why: both hardcode `options.UsePkce = true` in their own
+`AddOpenIdConnect` setup (`InterneTaakAfhandeling.Web.Server.Authentication.AuthenticationExtensions.cs`,
+`Kiss.Bff/Config/AuthenticationSetup.cs` - nearly the same file as pabc's
+own `AuthenticationExtensions.cs`, same author/pattern) - so PKCE itself
+*is* unconditionally on for both, confirmed from source, same category of
+finding as pabc. But neither app ever sets `RequireHttpsMetadata`
+anywhere in its own source either (`grep -rn RequireHttpsMetadata` across
+full checkouts of both repos: zero matches) - it stays at the OpenIdConnect
+middleware's own default of `true`, and both apps' authentication
+middleware evidently resolves the OIDC handler's options eagerly on
+*every* request, even the chart's own `/healthz` probe (confirmed live: a
+500 citing exactly `InvalidOperationException: The MetadataAddress or
+Authority must use HTTPS unless disabled for development by setting
+RequireHttpsMetadata=false`). Every single request against this project's
+`http://` Keycloak authority throws before ever reaching a redirect - the
+pod never becomes Ready, restart-looping forever. No config-level fix
+exists (confirmed: neither app ever reads this setting from configuration
+at all, only ever hardcodes it), so the only real fix would be actual TLS
+termination in front of Keycloak - deliberately out of scope for this
+HTTP-only-by-design project (see CLAUDE.md).
+
+Mid-investigation, kubectl's current-context silently switched to a real
+Azure AKS cluster (`podiumd-johnb00-aks`) partway through a `deploy.sh`
+run - `scripts/lib/require-minikube-context.sh`'s own guard caught it and
+refused before the riskier `apply-pabc-migrations` step, so nothing ran
+against that cluster, but worth remembering this can happen mid-session on
+a machine with many other kubeconfig contexts (see CLAUDE.md's Azure CLI
+note) - always worth a `kubectl config current-context` sanity check after
+any unexplained deploy hiccup.
+
+Also asked, separately, to disable this project's own `metrics`
+profile (grafana/prometheus/tempo/otel-collector) - unrelated to ITA/KISS,
+raised because of the load all this generated on one machine. Simple
+`--set metrics.enabled=false` on top of `--full`; pruned cleanly. While
+untangling the resulting prune-safety-threshold refusal (15 resources over
+the limit of 10), also found and removed two pieces of unrelated dead
+cruft that weren't part of any current render either: a `podiumd-adapter`
+Deployment with a literal `:0.6.6` image (no repository at all - `InvalidImageName`,
+never going to run) and its own orphaned Secret.
+
+Given both apps are confirmed permanently crash-looping here with no fix
+available, and the PKCE question is already conclusively answered from
+their own source without needing a live pod for it, both
+`podiumd.ita.enabled`/`podiumd.kiss.enabled` were left `false` (config
+kept fully wired for whoever revisits this) rather than leave two
+Deployments burning CPU restart-looping forever for no further signal.
+Their Keycloak clients (`ita`, `kiss`) stay provisioned regardless
+(`pkce.code.challenge.method: ""`), guarded by the new
+`tests/test_pkce.py::test_ita_and_kiss_clients_do_not_require_pkce`
+(parametrized over both) so that re-enabling either without re-reading
+this finding first fails safe rather than hard.
+
+Disabling ita/kiss and re-running the full suite surfaced three more real
+bugs, all pre-existing and unrelated to ita/kiss themselves:
+
+- ZAC had a stuck rollout: the teammate's own zac 5.4.2/PKCE-experiment
+  revert (image tag back to the chart default, 5.0.1) meant the live
+  Keycloak realm's `zaakafhandelcomponent` client - still left requiring
+  PKCE from earlier session experimentation - now mismatched a version
+  that can't send one, the exact "invalid_request: Missing parameter:
+  code_challenge_method" incident this project has now hit three times.
+  Compounding this, ZAC's shared Postgres database still carried a
+  Flowable schema from that same earlier 5.4.2 experiment ("unknown
+  version from database: '8.0.0.0'") - the identical DB-mismatch bug fixed
+  once already this session, recurred because the experimental image had
+  been deployed against this database again in between. Fixed both: reset
+  (drop/recreate) the `zac` database/schemas the same way as before, then
+  manually patched the Keycloak client's `pkce.code.challenge.method` back
+  to `""` via the Admin REST API (port-forward + curl, not `kcadm.sh`).
+- That manual patch was necessary because the teammate's own new
+  `scripts/lib/sync-zac-pkce-realm.sh` - meant to do exactly this
+  reconciliation automatically on every `deploy.sh` run - calls
+  `kcadm.sh` directly via `kubectl exec`, which OOM-kills the Keycloak
+  pod outright (exit 137, confirmed live) under this project's 768Mi
+  limit - the exact `kcadm.sh` OOM limitation already documented earlier
+  this session as the reason the live realm fixes here use a port-forward
+  + raw Admin API curl instead. Worth flagging upstream: this script will
+  silently fail to reconcile (and periodically OOM-restart Keycloak) on
+  every single `deploy.sh --full` run until it's changed to the same
+  curl-based approach, not something this session fixed in the script
+  itself (out of scope for the ita/kiss task at hand).
+- `tests/test_pkce.py::_zac_experimental_pkce_live` (the teammate's own
+  skip-condition helper for `test_zac_client_now_sends_a_pkce_code_challenge`)
+  checked the zac ConfigMap's `AUTH_ENABLE_PKCE` key as its signal - but
+  that key is *always* `"true"` regardless of `zac.experimentalPkce`,
+  documented in values.yaml's own `podiumd.zac.auth.enablePkce` comment as
+  "a silent no-op on any zac chart without AUTH_ENABLE_PKCE support" -
+  so the test never actually skipped, it just happened not to fail before
+  because the realm and the deployed zac version happened to already
+  agree. Fixed to check what that same comment says actually gates real
+  PKCE - the *realm client's own* `pkce.code.challenge.method` - matching
+  the live-signal pattern already used by the Django-apps and ita/kiss
+  guard tests.
+- Also found and reset the same `zac-productaanvraag-zaakafhandelparameters`
+  seed Job's own data (wiped along with the rest of the `zac` database) -
+  re-ran it (delete + `deploy.sh`) to restore
+  `test_zac_zaaktype_test_1_zaakafhandelparameters_is_valide`/
+  `test_full_productaanvraag_flow_creates_a_zaak`.
+
+Also, mid-session, `kubectl`'s current-context briefly became a real Azure
+AKS cluster (`podiumd-johnb00-aks`) - `require-minikube-context.sh`'s own
+guard caught it before anything ran against it, but worth a
+`kubectl config current-context` sanity check on this machine after any
+unexplained deploy hiccup (many other kubeconfig contexts present, see
+CLAUDE.md's Azure CLI note).
+
+Full suite (including `test_browser.py`): 76 passed, 7 skipped, 0 failed.
