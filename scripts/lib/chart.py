@@ -22,7 +22,6 @@ FULL_PROFILE_SETS = [
     "--set", "podiumd.eck-operator.enabled=true",
     "--set", "ita.enabled=true", "--set", "podiumd.ita.enabled=true",
     "--set", "kiss.enabled=true", "--set", "podiumd.kiss.enabled=true", "--set", "podiumd.kiss-eck.enabled=true",
-    "--set", "omc.enabled=true", "--set", "podiumd.omc.enabled=true",
     "--set", "referentielijsten.enabled=true", "--set", "podiumd.referentielijsten.enabled=true",
     "--set", "openbeheer.enabled=true", "--set", "podiumd.openbeheer.enabled=true",
     "--set", "frankgateway.enabled=true", "--set", "podiumd.frankgateway.enabled=true",

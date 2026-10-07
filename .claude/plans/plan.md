@@ -4771,3 +4771,16 @@ Fix: `kube.first_pod(selector)` returns a Ready pod without a
 it (seeding had the same flaw). The timeout raise to 180s (a wrong guess at
 slow starts) is reverted to 90s. Verified live: a sync right after a
 Keycloak restart took 23s.
+
+## OMC out of --full
+
+OMC 1.17.19 answers every notification from Open Notificaties 1.16.2 /
+Open Zaak 1.29.3 with 206 (inner 422): their root property `source` is not
+in its model, and it rejects unknown root properties. Reproduced live: the
+same event without `source` passes deserialisation and reaches Open Zaak;
+with it, OMC reports "more root 'notification' properties than expected by
+the POCO model", cases `source`. Every reference environment runs these
+versions; no project sets an option for it, and TA's OMC test accepts 206
+as a pass. Per the user, OMC is out of `--full` (values kept, `omc.enabled`
+plus `podiumd.omc.enabled` still turn it on) and podiumd-tests disables its
+OMC tests, until a fixed OMC exists.

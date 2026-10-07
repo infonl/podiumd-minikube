@@ -60,7 +60,10 @@ ita:
 kiss:
   enabled: false # with podiumd.kiss and podiumd.kiss-eck (its Elasticsearch); needs objecten
 omc:
-  enabled: false # with podiumd.omc; needs objecten, openklant and opennotificaties
+  # Not in --full for now (user's choice): OMC 1.17.19 rejects every
+  # notification with a `source` property (plan.md). With podiumd.omc; needs
+  # objecten, openklant and opennotificaties.
+  enabled: false
 referentielijsten:
   enabled: false # with podiumd.referentielijsten
 openbeheer:
