@@ -228,22 +228,25 @@ if [ "${MONITORING_LOGGING_REQUESTED}" = true ]; then
   "${CHART_DIR}/scripts/lib/apply-monitoring-logging-crds.sh"
 fi
 
-echo
-echo "Applying the full manifest..."
-set +e
-apply_output="$(render | kubectl apply -n "${NAMESPACE}" -f - 2>&1)"
-apply_exit=$?
-set -e
-echo "${apply_output}"
-
 # Expected failures, not real ones: podiumd's own competing Azure-CSI
 # PV/PVC objects (one pair per enabled app covered by storage-hooks.yaml)
 # get rejected by Kubernetes' immutable-spec check every time, on purpose -
 # that's the whole mechanism protecting our own pre-provisioned pair from
 # being overwritten (see storage-hooks.yaml). Compute exactly how many of
-# those to expect from the same render used above, rather than a hardcoded
+# those to expect from the same render used below, rather than a hardcoded
 # number, so this stays correct regardless of which profiles are enabled.
 expected_errors=$(( $(render -s templates/storage-hooks.yaml | grep -c "^kind: PersistentVolume$") * 2 ))
+
+echo
+echo "Applying the full manifest..."
+echo "NOTE: expect ${expected_errors} long \"spec is immutable\" errors below for PersistentVolumes/"
+echo "PersistentVolumeClaims - HARMLESS. podiumd's own Azure-CSI storage objects are"
+echo "rejected on purpose so this chart's hostPath ones (applied above) stay in place."
+set +e
+apply_output="$(render | kubectl apply -n "${NAMESPACE}" -f - 2>&1)"
+apply_exit=$?
+set -e
+echo "${apply_output}"
 # Counts every *kind* of apply failure seen so far, not just the immutable-
 # spec one - confirmed live that matching a single substring ("error when
 # applying patch") is fragile: other, genuinely different failures (a
@@ -267,8 +270,9 @@ echo
 if [ "${apply_exit}" -eq 0 ]; then
   echo "Applied cleanly."
 elif [ "${actual_errors}" -eq "${expected_errors}" ]; then
-  echo "${actual_errors} \"spec is immutable\" error(s) above - expected (podiumd's own"
-  echo "competing storage objects being correctly rejected), not a real failure."
+  echo "${actual_errors} \"spec is immutable\" error(s) above - expected and HARMLESS (podiumd's"
+  echo "own competing Azure-CSI storage objects being correctly rejected, so this chart's"
+  echo "hostPath PV/PVCs stay in place), not a real failure."
 else
   echo "WARNING: ${actual_errors} apply error(s), expected exactly ${expected_errors} from" >&2
   echo "the known immutable-spec case - re-check the output above for something new." >&2
