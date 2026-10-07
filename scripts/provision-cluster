@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Creates the minikube cluster: minikube, Traefik, dependencies and every image the chart uses.
 
-Sizes from MINIKUBE_CPUS (default 6) and MINIKUBE_MEMORY in MB (default 16384).
+Sizes from MINIKUBE_CPUS (default 6) and MINIKUBE_MEMORY in MB (default: half the memory Docker sees).
 """
 
 import argparse

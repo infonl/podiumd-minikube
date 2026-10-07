@@ -18,6 +18,7 @@ from lib import dependency
 from lib import disk
 from lib import kube
 from lib import manifests
+from lib import memory
 from lib import pki
 from lib import process
 from lib.paths import PROFILE
@@ -36,31 +37,12 @@ def _env_int(name: str, default: int) -> int:
     return int(os.environ.get(name, default))
 
 
-def warn_if_undersized(memory_mb: int) -> None:
-    """Warns when the running docker-driver node has less memory than memory_mb.
-
-    MINIKUBE_MEMORY only applies to `minikube start`; an undersized node
-    thrashed until the API server stopped answering (see plan.md).
-    """
-    result = process.run(["docker", "inspect", PROFILE, "--format", "{{.HostConfig.Memory}}"], check=False)
-    current = int(result.stdout.strip() or 0) if result.returncode == 0 else 0
-    requested = memory_mb * 1024 * 1024
-    if 0 < current < requested:
-        gib = memory_mb // 1024
-        print(
-            f"\nWARNING: profile '{PROFILE}' has {current // 1024**3}GiB, below the {gib}GiB requested. "
-            f"Raise it live: docker update --memory={gib}g --memory-swap=-1 {PROFILE} "
-            "(lost on `minikube delete`).",
-            file=sys.stderr,
-        )
-
-
 def start_minikube(cpus: int, memory_mb: int) -> None:
     """Starts the profile with the docker driver, or checks the running one's memory."""
     if process.succeeds(["minikube", "status", "-p", PROFILE]):
         print(f"minikube profile '{PROFILE}' is already running - leaving it as-is.")
         print("(delete it first with scripts/teardown-cluster if you want a genuinely fresh start)")
-        warn_if_undersized(memory_mb)
+        memory.check(full=False)
         return
     print(f"Starting minikube (cpus={cpus}, memory={memory_mb}MB)...")
     # Without --driver=docker minikube silently falls back to qemu2.
@@ -140,7 +122,7 @@ def provision() -> None:
     """Runs every provisioning step; each skips what is already done."""
     disk.check(disk.PROVISION)
     cpus = _env_int("MINIKUBE_CPUS", 6)
-    memory_mb = _env_int("MINIKUBE_MEMORY", 16384)
+    memory_mb = memory.wanted()
     start_minikube(cpus, memory_mb)
     kube.require_minikube_context()
     # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
