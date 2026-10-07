@@ -4754,3 +4754,20 @@ Found live:
 Verified live: OpenBao initialised, unsealed, configured (OIDC, uploader
 policy, group alias); seed Job applied 5 routes; BRP, KvK and BAG answer
 200 through the outway; ZAC's ConfigMap points at it; suite 108 passed.
+
+## Keycloak sync timeout: the terminating pod
+
+The realm sync timed out exactly on deploys where Keycloak rolled out ("1 old
+replicas are pending termination"). `rollout status` reports success while
+the old pod is still listed (Running, Ready, with a `deletionTimestamp`);
+the sync pinned `items[0]` of `-l app=keycloak`, which is by name, so the
+ReplicaSet hash decided whether it took the old pod. kcadm against a pod
+that terminates and then is gone fails every time, and `_clients` treats a
+failure as "still starting" until the timeout. Reproduced live: right after
+`rollout status`, both pods listed, the old one deleting.
+
+Fix: `kube.first_pod(selector)` returns a Ready pod without a
+`deletionTimestamp` (`kube.serving_pod`); the Keycloak sync and seeding use
+it (seeding had the same flaw). The timeout raise to 180s (a wrong guess at
+slow starts) is reverted to 90s. Verified live: a sync right after a
+Keycloak restart took 23s.

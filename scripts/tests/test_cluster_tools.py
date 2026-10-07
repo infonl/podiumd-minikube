@@ -76,3 +76,13 @@ def test_wait_until_returns_the_first_truthy_result_or_none():
     answers = iter(["", "", "10.0.0.1"])
     assert polling.wait_until(lambda: next(answers), timeout=5, interval=0) == "10.0.0.1"
     assert polling.wait_until(lambda: None, timeout=0, interval=0) is None
+
+
+def test_serving_pod_skips_terminating_and_unready_pods():
+    def pod(name: str, *, ready: bool = True, deleting: bool = False) -> dict[str, object]:
+        metadata = {"name": name, **({"deletionTimestamp": "2026-01-01T00:00:00Z"} if deleting else {})}
+        status = {"conditions": [{"type": "Ready", "status": "True" if ready else "False"}]}
+        return {"metadata": metadata, "status": status}
+
+    assert kube.serving_pod([pod("old", deleting=True), pod("starting", ready=False), pod("new")]) == "new"
+    assert kube.serving_pod([pod("old", deleting=True)]) == ""

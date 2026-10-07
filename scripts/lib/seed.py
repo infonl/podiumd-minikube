@@ -50,7 +50,7 @@ def seed(deployment: str, fixture: str, app_label: str, model: str) -> None:
     kube.kubectl_shown(
         "wait", "--for=condition=available", f"deployment/{deployment}", "-n", NAMESPACE, "--timeout=180s"
     )
-    pod = kube.first_pod(deployment)
+    pod = kube.first_pod(f"app.kubernetes.io/name={deployment}")
     if _has_rows(pod, app_label, model):
         print(f"'{deployment}' already has {app_label}.{model} data - skipping (not re-seeding).")
         return
@@ -77,9 +77,9 @@ def seed_fixtures(*, merged: bool) -> None:
     """Seeds objecten (and classic objecttypen) and publishes their draft versions."""
     if merged:
         seed("objecten", "openobject/demodata.json", "core", "Object")
-        _publish(kube.first_pod("objecten"), "ObjectTypeVersion")
+        _publish(kube.first_pod("app.kubernetes.io/name=objecten"), "ObjectTypeVersion")
     else:
         seed("objecten", "objecten/demodata.json", "core", "Object")
         seed("objecttypen", "objecttypen/demodata.json", "core", "ObjectType")
-        _publish(kube.first_pod("objecttypen"), "ObjectVersion")
+        _publish(kube.first_pod("app.kubernetes.io/name=objecttypen"), "ObjectVersion")
     print("\nDone.")

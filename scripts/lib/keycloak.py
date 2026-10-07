@@ -25,7 +25,7 @@ PKCE_ATTRIBUTE = "pkce.code.challenge.method"
 # templates/keycloak/deployment.yaml's KC_BOOTSTRAP_ADMIN_USERNAME/PASSWORD.
 ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"  # nosec B105  # noqa: S105 - dev-only default from the template
-STARTUP_TIMEOUT = 180
+STARTUP_TIMEOUT = 90
 REALM_FILE = VENDOR_DIR / "keycloak" / "zaakafhandelcomponent-realm.json"
 # The podiumd chart's realm config declares it: ita/kiss map it into a claim,
 # and users may see but not edit it.
@@ -143,7 +143,7 @@ def sync_realm(*, zac_pkce: bool) -> None:
     print(f"Reconciling Keycloak's live '{REALM}' realm clients...")
     # A changed Keycloak spec rolls out a new pod; exec into the new one only.
     kube.kubectl_shown("rollout", "status", "deployment/keycloak", "-n", NAMESPACE, "--timeout=300s")
-    pod = kube.kubectl("get", "pod", "-n", NAMESPACE, "-l", "app=keycloak", "-o", "jsonpath={.items[0].metadata.name}")
+    pod = kube.first_pod("app=keycloak")
     clients = polling.wait_until(lambda: _clients(pod), timeout=STARTUP_TIMEOUT, interval=3)
     if not clients:
         print(

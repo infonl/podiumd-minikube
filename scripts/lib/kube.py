@@ -70,18 +70,28 @@ def traefik_ip() -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def first_pod(app_name: str) -> str:
-    """Name of the first pod labelled app.kubernetes.io/name=app_name."""
-    return kubectl(
-        "get",
-        "pod",
-        "-n",
-        NAMESPACE,
-        "-l",
-        f"app.kubernetes.io/name={app_name}",
-        "-o",
-        "jsonpath={.items[0].metadata.name}",
-    )
+def serving_pod(pods: list[dict[str, Any]]) -> str:
+    """Name of the first pod that is Ready and not terminating; "" when none is.
+
+    Right after `rollout status` succeeds, the old pod is still listed while it
+    terminates; exec into it fails once it is gone (the Keycloak sync timed out
+    on it).
+    """
+    for pod in pods:
+        conditions: list[dict[str, Any]] = pod.get("status", {}).get("conditions") or []
+        ready = any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions)
+        if ready and not pod["metadata"].get("deletionTimestamp"):
+            return str(pod["metadata"]["name"])
+    return ""
+
+
+def first_pod(selector: str) -> str:
+    """Name of a serving pod matching the label selector; UserError when there is none."""
+    name = serving_pod(get_json("pod", "-n", NAMESPACE, "-l", selector)["items"])
+    if not name:
+        msg = f"no Ready pod with labels {selector} in namespace {NAMESPACE}: check `kubectl get pod -l {selector}`"
+        raise process.UserError(msg)
+    return name
 
 
 def django_shell(pod: str, code: str) -> str:
