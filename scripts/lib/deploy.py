@@ -9,6 +9,7 @@ from dataclasses import field
 from lib import chart
 from lib import crds
 from lib import dependency
+from lib import disk
 from lib import dns
 from lib import hosts
 from lib import keycloak
@@ -109,6 +110,16 @@ def _apply_storage_hooks(selected: Options) -> manifests.Render:
     return storage
 
 
+def _apply_crds(render: manifests.Render) -> None:
+    """Applies the render's CRDs server-side and waits until they are established."""
+    if not render.crds:
+        return
+    print(f"\nApplying {len(render.crds)} CRD(s) first...")
+    kube.kubectl_shown("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=manifests.dump(render.crds))
+    names = [f"crd/{manifests.name_of(doc)}" for doc in render.crds]
+    kube.kubectl_shown("wait", "--for=condition=Established", *names, "--timeout=60s")
+
+
 def _apply_full_manifest(render: manifests.Render, expected: int) -> None:
     print("\nApplying the full manifest...")
     print(f'NOTE: expect {expected} long "spec is immutable" errors below for PersistentVolumes/')
@@ -139,6 +150,7 @@ def _apply_full_manifest(render: manifests.Render, expected: int) -> None:
 def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     """Syncs dependencies, applies the render, then the guarded and post-apply steps."""
     kube.require_minikube_context()
+    disk.check(disk.DEPLOY)
     dependency.sync()
     selected = options(full=full, extra=extra)
 
@@ -157,6 +169,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     pki.apply_trust(NAMESPACE)
     render = selected.render()
     _rerun_jobs(render)
+    _apply_crds(render)
     _apply_full_manifest(render, expected_storage_errors(storage))
     print()
     chart_hosts = hosts.chart_hosts()

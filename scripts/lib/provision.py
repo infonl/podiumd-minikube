@@ -15,6 +15,7 @@ from pathlib import Path
 
 from lib import chart
 from lib import dependency
+from lib import disk
 from lib import kube
 from lib import manifests
 from lib import pki
@@ -137,6 +138,7 @@ def load_images(images: list[str]) -> None:
 
 def provision() -> None:
     """Runs every provisioning step; each skips what is already done."""
+    disk.check(disk.PROVISION)
     cpus = _env_int("MINIKUBE_CPUS", 6)
     memory_mb = _env_int("MINIKUBE_MEMORY", 16384)
     start_minikube(cpus, memory_mb)
