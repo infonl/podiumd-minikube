@@ -617,6 +617,17 @@ podiumd:
               auth_type: zgw
               client_id: zaak
               secret: zaakSecret
+            # As ExternalsPodiumD; Open Zaak validates zaakobject URLs with
+            # it. Token: the vendored fixtures' Objecten token "openzaak".
+            # Their own service row (http://objecten-api.local:8000) only
+            # works in docker-compose.
+            - identifier: objecten-api
+              label: Objecten API
+              api_root: https://objecten.local/api/v2/
+              api_type: orc
+              auth_type: api_key
+              header_key: Authorization
+              header_value: Token cd63e158f3aca276ef284e3033d020a22899c728
 
         vng_api_common_credentials_config_enable: true
         vng_api_common_credentials:
