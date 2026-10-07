@@ -4320,3 +4320,21 @@ waited forever (242 polls while ZAC was Ready); it no longer follows
 redirects. Verified with ZAC scaled to 0: the Job waited (20 polls), ZAC
 started, the seed succeeded on its first attempt with 0 restarts.
 A rolling restart is no test of this: the old ZAC pod keeps serving.
+
+## TLS step (a): local CA and cert-manager (podiumd-tests handoff section 2)
+
+How the reference environments do TLS (checked first): both terminate it
+with one cert-manager `Certificate` holding every host
+(ExternalsPodiumD: `global-tls` on an NGINX Gateway Fabric Gateway;
+podiumd-infra: secret `podiumd-tls` on every Traefik Ingress), issued by a
+Let's Encrypt ClusterIssuer; every backend calls Keycloak and the other apps
+on their public `https://` hosts and trusts public CAs; ExternalsPodiumD
+serves HTTP and HTTPS without redirect, podiumd-infra HTTPS only.
+
+Step (a): `scripts/lib/pki.py` creates a local CA once per checkout in
+`.pki/` (gitignored; `ca.key` 0600, 10 years) and, from
+`provision-cluster`, installs cert-manager v1.12.2 (ExternalsPodiumD's
+version; podiumd-infra v1.13.2) and a CA ClusterIssuer `podiumd-local-ca`
+from that CA. Deviation: a local CA instead of Let's Encrypt, because
+minikube has no public DNS. Verified live on Kubernetes 1.37: cert-manager
+pods Running, ClusterIssuer Ready.

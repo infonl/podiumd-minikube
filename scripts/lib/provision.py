@@ -1,7 +1,8 @@
 """Creates the minikube cluster this chart deploys to.
 
-Starts minikube, installs Traefik, fetches the dependencies and loads every
-image the chart can reference: minikube's inner Docker has no internet access.
+Starts minikube, installs Traefik and cert-manager (with the local CA
+issuer), fetches the dependencies and loads every image the chart can
+reference: minikube's inner Docker has no internet access.
 """
 
 import os
@@ -16,6 +17,7 @@ from lib import chart
 from lib import dependency
 from lib import kube
 from lib import manifests
+from lib import pki
 from lib import process
 from lib.paths import PROFILE
 from lib.paths import TRAEFIK_NAMESPACE
@@ -146,6 +148,8 @@ def provision() -> None:
     # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
     kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
     install_traefik()
+    pki.install_cert_manager()
+    pki.install_issuer()
     print("Running helm dependency update...")
     dependency.sync()
     print("Deriving the image list from the currently-selected podiumd version...")

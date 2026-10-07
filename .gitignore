@@ -46,3 +46,6 @@ tests-johnb00/.env.johnb00
 
 # Written into the working directory by the claude-token-reducer Claude Code plugin.
 session_memory.json
+
+# The local CA (scripts/lib/pki.py); one per checkout, its key never leaves it.
+.pki/
