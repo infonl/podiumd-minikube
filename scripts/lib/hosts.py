@@ -1,15 +1,17 @@
-"""The *.local hostnames of this chart's Ingresses, for /etc/hosts."""
+"""The *.local hostnames this chart's Ingresses can have."""
 
-HOSTNAMES = [
-    "zac.local", "keycloak.local", "openzaak.local", "openklant.local", "pabc.local", "solr.local",
-    "objecten.local", "objecttypen.local", "opennotificaties.local", "openarchiefbeheer-web.local",
-    "openarchiefbeheer-ui.local", "openformulieren-nginx.local", "openformulieren-web.local",
-    "grafana.local", "mailpit.local", "ita.local", "kiss.local",
-]  # fmt: skip
+from lib import chart
+from lib import manifests
 
 MARKER = "# podiumd-minikube"
 
 
-def hosts_line(ip: str) -> str:
-    """The /etc/hosts line mapping every hostname to ip, with this project's marker."""
-    return f"{ip} {' '.join(HOSTNAMES)}  {MARKER}"
+def chart_hosts() -> list[str]:
+    """Ingress hosts of a render with every profile on (for /etc/hosts and the TLS certificate)."""
+    render = manifests.fix_up(manifests.helm_template(*chart.everything_args()), objecten_merged=False, zac_pkce=False)
+    return manifests.ingress_hosts(render.docs)
+
+
+def hosts_line(ip: str, hostnames: list[str]) -> str:
+    """The /etc/hosts line mapping hostnames to ip, with this project's marker."""
+    return f"{ip} {' '.join(hostnames)}  {MARKER}"

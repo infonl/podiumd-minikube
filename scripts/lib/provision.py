@@ -86,11 +86,7 @@ def install_traefik() -> None:
 
 def chart_images() -> list[str]:
     """Images of a render with every profile and monitoring-logging on, digests stripped."""
-    shape = chart.objecten_shape()
-    pkce = chart.zac_pkce()
-    text = manifests.helm_template(
-        *chart.FULL_PROFILE_SETS, *shape.sets, "--set", "monitoringLogging.enabled=true", *pkce.sets
-    )
+    text = manifests.helm_template(*chart.everything_args())
     return manifests.images(manifests.strip_image_digests(text))
 
 

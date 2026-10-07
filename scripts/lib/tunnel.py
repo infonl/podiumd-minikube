@@ -51,10 +51,10 @@ def setup_tunnel() -> None:
     print("\nRun ./scripts/update-hosts to add/refresh the /etc/hosts entry for it.")
 
 
-def replace_hosts_line(text: str, ip: str) -> str:
-    """text without earlier lines of this project (any line naming zac.local), plus a fresh one."""
-    kept = [line for line in text.splitlines() if "zac.local" not in line]
-    return "\n".join([*kept, hosts.hosts_line(ip)]) + "\n"
+def replace_hosts_line(text: str, line: str) -> str:
+    """text without earlier lines of this project (any line naming zac.local), plus line."""
+    kept = [old for old in text.splitlines() if "zac.local" not in old]
+    return "\n".join([*kept, line]) + "\n"
 
 
 def update_hosts() -> None:
@@ -67,6 +67,7 @@ def update_hosts() -> None:
     print("Caching sudo credentials up front...")
     process.run(["sudo", "-v"], capture=False)
     current = ETC_HOSTS.read_text(encoding="utf-8")
+    line = hosts.hosts_line(ip, hosts.chart_hosts())
     process.run(["sudo", "cp", str(ETC_HOSTS), f"{ETC_HOSTS}.bak"])
-    process.run(["sudo", "tee", str(ETC_HOSTS)], stdin=replace_hosts_line(current, ip))
-    print(f"Done. /etc/hosts now has:\n{hosts.hosts_line(ip)}")
+    process.run(["sudo", "tee", str(ETC_HOSTS)], stdin=replace_hosts_line(current, line))
+    print(f"Done. /etc/hosts now has:\n{line}")

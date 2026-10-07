@@ -24,8 +24,9 @@ def test_require_minikube_context_refuses_another_context(fake_run: FakeRun):
 
 def test_replace_hosts_line_drops_earlier_lines_of_this_project():
     text = "127.0.0.1 localhost\n10.0.0.1 zac.local keycloak.local\n"
-    assert tunnel.replace_hosts_line(text, "10.0.0.2") == f"127.0.0.1 localhost\n{hosts.hosts_line('10.0.0.2')}\n"
-    assert hosts.hosts_line("10.0.0.2").endswith(hosts.MARKER)
+    line = hosts.hosts_line("10.0.0.2", ["zac.local", "pabc.local"])
+    assert tunnel.replace_hosts_line(text, line) == f"127.0.0.1 localhost\n{line}\n"
+    assert line == f"10.0.0.2 zac.local pabc.local  {hosts.MARKER}"
 
 
 def test_routes_resolve_named_ports_through_the_service():

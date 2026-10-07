@@ -9,6 +9,7 @@ from dataclasses import field
 from lib import chart
 from lib import crds
 from lib import dependency
+from lib import hosts
 from lib import keycloak
 from lib import kube
 from lib import manifests
@@ -16,6 +17,7 @@ from lib import pabc
 from lib import process
 from lib import prune
 from lib import seed
+from lib import tls
 from lib import values
 from lib.paths import NAMESPACE
 from lib.paths import RELEASE_NAME
@@ -153,6 +155,8 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     render = selected.render()
     _rerun_config_jobs(render)
     _apply_full_manifest(render, expected_storage_errors(storage))
+    print()
+    tls.apply_certificate(hosts.chart_hosts())
 
     print()
     keycloak.sync_zac_pkce(enabled=selected.zac_pkce)

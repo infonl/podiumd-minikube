@@ -4338,3 +4338,21 @@ version; podiumd-infra v1.13.2) and a CA ClusterIssuer `podiumd-local-ca`
 from that CA. Deviation: a local CA instead of Let's Encrypt, because
 minikube has no public DNS. Verified live on Kubernetes 1.37: cert-manager
 pods Running, ClusterIssuer Ready.
+
+## TLS step (b): one certificate on Traefik, HTTP unchanged
+
+`scripts/deploy` applies a cert-manager `Certificate` `podiumd-tls`
+(podiumd-infra's name) in namespace `traefik` with every ingress host, from
+ClusterIssuer `podiumd-local-ca`, and a Traefik `TLSStore` `default` that
+serves it on `websecure` (which already had TLS on, with Traefik's own
+self-signed certificate). The subcharts' Ingresses need no `tls:` section.
+HTTP keeps working, as in ExternalsPodiumD (no redirect).
+
+The hosts come from one place: `hosts.chart_hosts()` renders with every
+profile and monitoring-logging on (`chart.everything_args`, also used for
+provision's image list) and collects the Ingress hosts. It replaces the
+hand-kept list in `lib/hosts.py`, which had drifted (it still listed
+ita/kiss, which are disabled), and also feeds `update-hosts`.
+
+Verified live: all 15 hosts answer over HTTPS with `--cacert .pki/ca.crt`,
+with the same status as over HTTP; live suite 79 passed.

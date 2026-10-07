@@ -87,6 +87,16 @@ class ZacPkce:
     sets: list[str] = field(default_factory=list[str])
 
 
+def everything_args(charts_dir: Path = CHARTS_DIR) -> list[str]:
+    """helm args that render every profile plus monitoring-logging: all images and hosts the chart can have."""
+    return [
+        *FULL_PROFILE_SETS,
+        *objecten_shape(charts_dir).sets,
+        "--set", "monitoringLogging.enabled=true",
+        *zac_pkce(charts_dir).sets,
+    ]  # fmt: skip
+
+
 def zac_pkce(charts_dir: Path = CHARTS_DIR) -> ZacPkce:
     """zac.experimentalPkce, refused when the selected zac chart cannot send PKCE.
 

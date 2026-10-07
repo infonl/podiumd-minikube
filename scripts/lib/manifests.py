@@ -85,6 +85,17 @@ def disable_service_links(docs: list[Doc]) -> None:
             node["enableServiceLinks"] = False
 
 
+def ingress_hosts(docs: list[Doc]) -> list[str]:
+    """Sorted unique hosts of the Ingresses in docs."""
+    found: set[str] = set()
+    for doc in docs:
+        if doc.get("kind") != "Ingress":
+            continue
+        rules: list[Doc] = section(doc, "spec").get("rules") or []
+        found.update(str(rule["host"]) for rule in rules if rule.get("host"))
+    return sorted(found)
+
+
 def _is_test_hook(doc: Doc) -> bool:
     hook = section(section(doc, "metadata"), "annotations").get("helm.sh/hook")
     return "test" in str(hook or "")
