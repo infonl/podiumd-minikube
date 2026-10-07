@@ -707,11 +707,13 @@ podiumd:
         username: openzaak
         password: openzaak
         name: openzaak
-      # Own Redis DB per app: django-solo caches singletons (NotificationsConfig)
-      # under the same key in every app, so a shared DB serves one app's config to another.
+      # Own Redis DBs per app, numbered as the podiumd chart's defaults (which
+      # ExternalsPodiumD and podiumd-infra keep): django-solo caches singletons
+      # (NotificationsConfig) under the same key in every app, so a shared DB
+      # serves one app's config to another.
       cache:
-        default: redis:6379/6
-        axes: redis:6379/6
+        default: redis:6379/4
+        axes: redis:6379/4
       celery:
         # DB 3, not the more obvious 1 - objecten's own worker (already
         # active) also brokers on db1, and Celery workers are competing
@@ -722,8 +724,8 @@ podiumd:
         # collision - "Received unregistered task of type ..." errors,
         # discarded instead of processed). No other app here brokers on
         # db3.
-        brokerUrl: redis://redis:6379/3
-        resultBackend: redis://redis:6379/3
+        brokerUrl: redis://redis:6379/5
+        resultBackend: redis://redis:6379/5
     # Compose's openzaak.local service copies a vendored test PDF into
     # /app/private-media/uploads/2023/{10,11,12}/ before starting (see
     # copy-test-pdf-and-start-openzaak.sh, referenced by the
@@ -850,12 +852,12 @@ podiumd:
         # task of type 'openforms.forms.tasks.activate_forms'" - silently
         # discarded instead of executed) the moment this worker was
         # enabled. No other app here brokers on db4.
-        brokerUrl: redis://redis:6379/4
+        brokerUrl: redis://redis:6379/8
         # Set both: this chart's own configmap.yaml has a typo reading
         # "resultBackendl" (not "resultBackend") - found live while fixing
         # the same bug on openarchiefbeheer's chart (see that comment).
-        resultBackend: redis://redis:6379/4
-        resultBackendl: redis://redis:6379/4
+        resultBackend: redis://redis:6379/8
+        resultBackendl: redis://redis:6379/8
     ingress:
       enabled: true
       className: traefik
@@ -1208,18 +1210,18 @@ podiumd:
         name: objects
       # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/8
-        axes: redis:6379/8
+        default: redis:6379/1
+        axes: redis:6379/1
         # Compose never sets an OIDC-cache env var for objecten either -
         # see opennotificaties's identical CACHE_OIDC comment above (same
         # unconditional-render leak, same fix).
-        oidc: redis:6379/8
+        oidc: redis:6379/1
       celery:
-        brokerUrl: redis://redis:6379/1
+        brokerUrl: redis://redis:6379/2
         # Set both: see openklant/openarchiefbeheer's identical comment -
         # this chart's own configmap.yaml has the same "resultBackendl" typo.
-        resultBackend: redis://redis:6379/1
-        resultBackendl: redis://redis:6379/1
+        resultBackend: redis://redis:6379/2
+        resultBackendl: redis://redis:6379/2
     ingress:
       enabled: true
       className: traefik
@@ -1351,8 +1353,8 @@ podiumd:
         name: objecttypes
       # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/9
-        axes: redis:6379/9
+        default: redis:6379/0
+        axes: redis:6379/0
     ingress:
       enabled: true
       className: traefik
@@ -1560,15 +1562,15 @@ podiumd:
         name: opennotificaties
       # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/10
-        axes: redis:6379/10
+        default: redis:6379/3
+        axes: redis:6379/3
         # Compose never sets an OIDC-cache env var for opennotificaties, but
         # this chart's configmap.yaml always renders CACHE_OIDC
         # unconditionally (no matching {{- if }} guard) - left unset, it
         # fell through to podiumd's own untouched production default
         # (redis-ha-master...). Pointed at the shared Redis instead of
         # leaving that leak in place.
-        oidc: redis:6379/10
+        oidc: redis:6379/3
       celery:
         # 1.16.0 dropped RabbitMQ (see image.tag's own comment above) -
         # CELERY_BROKER_URL/PUBLISH_BROKER_URL point at the shared Redis
@@ -1580,10 +1582,10 @@ podiumd:
         # db4, is documented on their own values.yaml blocks above) - db5
         # is the first index none of this chart's other Celery workers
         # (objecten=1, openformulieren=2, openzaak=3, openklant=4) use.
-        brokerUrl: redis://redis:6379/5
+        brokerUrl: redis://redis:6379/6
         # PUBLISH_BROKER_URL has its own dedicated field (confirmed live
         # against secret.yaml) - matches brokerUrl now that both are Redis.
-        publishBrokerUrl: redis://redis:6379/5
+        publishBrokerUrl: redis://redis:6379/6
         # CELERY_RESULT_BACKEND is defined TWICE on this chart: once here
         # (feeding configmap.yaml's tags.redis-false branch) and once via
         # settings.messageBroker.celeryResultBackend below (feeding
@@ -1594,9 +1596,9 @@ podiumd:
         # to the same value so it's correct either way. Leaving only one
         # set left the other object rendering podiumd's own untouched
         # production default (redis-ha-master...) instead of ours.
-        resultBackend: redis://redis:6379/5
+        resultBackend: redis://redis:6379/6
       messageBroker:
-        celeryResultBackend: redis://redis:6379/5
+        celeryResultBackend: redis://redis:6379/6
     # See settings.djangoSettingsModule above for why this mount exists -
     # same ConfigMap+extraVolumes+extraVolumeMounts pattern already used
     # for openzaak's/openarchiefbeheer's own docker_no2fa.py fix.
@@ -1751,18 +1753,18 @@ podiumd:
         trustedOrigins: http://openarchiefbeheer-ui.local,http://openarchiefbeheer-web.local
       # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/11
-        axes: redis:6379/11
-        choices: redis:6379/11
+        default: redis:6379/13
+        axes: redis:6379/13
+        choices: redis:6379/14
       celery:
-        brokerUrl: redis://redis:6379/0
+        brokerUrl: redis://redis:6379/14
         # Set both: this chart's own configmap.yaml has a typo reading
         # "resultBackendl" (not "resultBackend", which is what values.yaml
         # itself declares) - found live, confirmed directly against the
         # template. Setting only the correctly-spelled key would silently
         # leave CELERY_RESULT_BACKEND empty.
-        resultBackend: redis://redis:6379/0
-        resultBackendl: redis://redis:6379/0
+        resultBackend: redis://redis:6379/14
+        resultBackendl: redis://redis:6379/14
       frontend:
         apiUrl: http://openarchiefbeheer-web.local
         apiPath: /api/v1
@@ -1985,16 +1987,16 @@ podiumd:
         password: openformulieren
         name: openformulieren
       cache:
-        default: redis:6379/2
-        axes: redis:6379/2
-        portalLocker: redis:6379/2
+        default: redis:6379/9
+        axes: redis:6379/9
+        portalLocker: redis:6379/9
       celery:
-        brokerUrl: redis://redis:6379/2
+        brokerUrl: redis://redis:6379/10
         # Set both: see openklant/objecten/openarchiefbeheer's identical
         # comment - this chart's own configmap.yaml has the same
         # "resultBackendl" typo.
-        resultBackend: redis://redis:6379/2
-        resultBackendl: redis://redis:6379/2
+        resultBackend: redis://redis:6379/10
+        resultBackendl: redis://redis:6379/10
       csrf:
         trustedOrigins:
           - http://openformulieren-nginx.local

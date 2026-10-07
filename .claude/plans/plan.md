@@ -4236,3 +4236,20 @@ fixture's rows; and `scripts/deploy` deletes every `<app>-config` Job in the
 render before applying (`deploy.config_jobs`). Verified live: all six config
 Jobs succeeded, objecten's tokens are superusers again and its services carry
 the configured `*.podiumd-minikube` api_roots; live suite 79 passed, 0 failed.
+
+## Redis DBs renumbered to the podiumd chart's defaults
+
+The 5e fix gave each app its own cache DB, but numbered 6-11. The podiumd
+chart's own defaults already separate the apps, and ExternalsPodiumD and
+podiumd-infra keep those numbers (podiumd-infra restates them explicitly):
+openzaak 4/5, opennotificaties 3/6, objecten 1/2, objecttypen 0,
+openklant 7/8, openformulieren 9/10, openarchiefbeheer 13 (cache) / 14
+(choices and Celery). `values.yaml` now uses exactly those; only the host
+differs (one `redis` Deployment instead of the redis-operator HA cluster).
+`flush-redis` covers DBs 0-14.
+
+The renumbering reuses DBs that held other apps' keys, so Redis was flushed
+once (`scripts/flush-redis`, which also cleared pending Celery tasks) before
+restarting every Redis-using Deployment. Verified live: env in all seven
+apps matches, Open Klant's `get_solo()` still equals its database row, live
+suite 79 passed.
