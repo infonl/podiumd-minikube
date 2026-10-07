@@ -32,9 +32,22 @@ version lives in `.podiumd-versions.yaml` (gitignored, created by this
 script). `scripts/deploy`/`scripts/provision-cluster` both refuse with a clear
 message if you haven't run it yet.
 
-Then add the printed line to `/etc/hosts` and open `http://zac.local` in a
-browser — it redirects to Keycloak, and back to the authenticated app on
-login.
+Then run `./scripts/update-hosts` (adds the `*.local` names to `/etc/hosts`)
+and open `https://zac.local` in a browser — it redirects to Keycloak, and back
+to the authenticated app on login.
+
+### HTTPS
+
+Every host serves HTTPS (and still plain HTTP), as in the real PodiumD
+environments, with a certificate from a local CA instead of Let's Encrypt:
+
+- `provision-cluster` creates the CA once per checkout in `.pki/` (gitignored)
+  and installs cert-manager with a ClusterIssuer for it; `deploy` issues one
+  certificate for all ingress hosts and serves it from Traefik.
+- To trust it, import `.pki/ca.crt` in your browser, or pass it to clients:
+  `curl --cacert .pki/ca.crt https://openzaak.local/`.
+- Inside the cluster the `*.local` hosts resolve to Traefik and every pod
+  trusts the CA, so the apps call each other on `https://<app>.local`.
 
 Leave off `--full` on `scripts/deploy` to deploy just the core profile (ZAC,
 Open Zaak, Open Klant, PABC, Postgres/Redis/Solr/Keycloak/WireMock),
