@@ -6,8 +6,9 @@ services-gateway.yml): Gateway API CRDs v1.5.1 standard, NGF 2.6.7 in
 ingress-basic, Gateway public-gateway with http and https listeners, and per
 host an HTTPRoute to an ExternalName Service in ingress-basic that names the
 app's Service. No ClientSettingsPolicy, so nginx's 1 MB request-body limit
-applies, as in ExternalsPodiumD. The routes come from the rendered Ingresses,
-so a host is defined once.
+applies, as in ExternalsPodiumD; one deviation, larger response-header buffers
+(proxy_settings_manifest). The routes come from the rendered Ingresses, so a
+host is defined once.
 """
 
 from typing import Any
@@ -99,6 +100,26 @@ def gateway_manifest() -> dict[str, Any]:
     }
 
 
+def proxy_settings_manifest() -> dict[str, Any]:
+    """Larger response-header buffers than nginx's default 4 KB: a deviation from ExternalsPodiumD.
+
+    KISS's /signin-oidc answer carries a 3.4 KB session cookie (about 5 KB of
+    headers in all), which nginx rejects with "upstream sent too big header"
+    and a 502. ExternalsPodiumD sets no buffer and most likely has the same 502
+    (plan.md). busyBuffersSize must lie between bufferSize and the total of
+    buffers minus one buffer.
+    """
+    return {
+        "apiVersion": "gateway.nginx.org/v1alpha1",
+        "kind": "ProxySettingsPolicy",
+        "metadata": {"name": GATEWAY, "namespace": EDGE_NAMESPACE, "labels": LABELS},
+        "spec": {
+            "targetRefs": [{"group": "gateway.networking.k8s.io", "kind": "Gateway", "name": GATEWAY}],
+            "buffering": {"bufferSize": "16k", "buffers": {"number": 4, "size": "16k"}, "busyBuffersSize": "32k"},
+        },
+    }
+
+
 def _service_port(docs: list[manifests.Doc], service: str, port: Any) -> int:
     """The number of a backend port, which may be a Service port name."""
     if isinstance(port, int):
@@ -169,7 +190,12 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
     if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
         return
     print("\nApplying the NGINX Gateway Fabric Gateway and routes (see scripts/lib/gateway.py)...")
-    objects = [tls.certificate(EDGE_NAMESPACE, hosts), gateway_manifest(), *route_manifests(docs)]
+    objects = [
+        tls.certificate(EDGE_NAMESPACE, hosts),
+        gateway_manifest(),
+        proxy_settings_manifest(),
+        *route_manifests(docs),
+    ]
     kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
     wanted = {(doc["kind"], manifests.name_of(doc)) for doc in objects}
     for kind in ("HTTPRoute", "Service"):

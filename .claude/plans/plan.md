@@ -4849,3 +4849,15 @@ the suite.
 
 Verified live: Gateway Programmed, all 22 HTTPRoutes accepted; suite 107
 passed on the Gateway, 106 on Traefik (the 2 MB test skips there).
+
+NGF follow-up: podiumd-tests' pre-switch run (209 passed) found the KISS
+login failing on the Gateway: POST /signin-oidc → 502, nginx "upstream sent
+too big header". KISS's answer carries a 3.4 KB session cookie, about 5 KB
+of headers, over nginx's default 4 KB proxy_buffer_size. ExternalsPodiumD
+configures no buffers and has no test that logs in to KISS behind NGF (TA's
+active KISS login runs on QA's Traefik), so it most likely has the same 502.
+Per the user: `gateway.proxy_settings_manifest`, a ProxySettingsPolicy on
+public-gateway (proxy_buffer_size 16k, proxy_buffers 4 16k,
+proxy_busy_buffers_size 32k), recorded as a deviation; writeup for
+ExternalsPodiumD in the untracked `ngf-response-header-buffer-issue.md`.
+Verified: policy Accepted, the directives in `nginx -T`.
