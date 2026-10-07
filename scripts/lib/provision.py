@@ -42,7 +42,7 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
     if process.succeeds(["minikube", "status", "-p", PROFILE]):
         print(f"minikube profile '{PROFILE}' is already running - leaving it as-is.")
         print("(delete it first with scripts/teardown-cluster if you want a genuinely fresh start)")
-        memory.check(full=False)
+        memory.check(full=True)
         return
     print(f"Starting minikube (cpus={cpus}, memory={memory_mb}MB)...")
     # Without --driver=docker minikube silently falls back to qemu2.

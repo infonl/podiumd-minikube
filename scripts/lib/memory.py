@@ -24,16 +24,6 @@ def wanted_mb(host_total_mb: int, override: str | None) -> int:
     return int(override) if override else int(host_total_mb * HOST_FRACTION)
 
 
-def shortfalls(cap_mb: int, target_mb: int, *, full: bool) -> list[str]:
-    """Why a node capped at cap_mb is too small; [] when it fits."""
-    result: list[str] = []
-    if cap_mb < target_mb:
-        result.append(f"below the {target_mb // 1024} GiB wanted")
-    if full and cap_mb < FULL_STACK_MB:
-        result.append(f"below the ~{FULL_STACK_MB // 1024} GiB a deploy --full needs")
-    return result
-
-
 def host_mb() -> int:
     """Memory Docker sees, in MB."""
     return int(process.output(["docker", "info", "--format", "{{.MemTotal}}"]).strip()) // MIB
@@ -51,17 +41,18 @@ def wanted() -> int:
 
 
 def check(*, full: bool) -> None:
-    """Warns when the running node's cap is below what is wanted; never changes it."""
+    """Warns when the running node's cap is below what a deploy --full needs; never changes it.
+
+    Only --full has a measured need; wanted() sizes a new node, a running
+    one may have been sized on purpose.
+    """
     cap = node_mb()
-    if not cap:
+    if not full or not cap or cap >= FULL_STACK_MB:
         return
-    target = wanted()
-    reasons = shortfalls(cap, target, full=full)
-    if reasons:
-        raise_to = max(target, FULL_STACK_MB if full else 0) // 1024
-        print(
-            f"WARNING: minikube profile '{PROFILE}' has {cap // 1024} GiB, {' and '.join(reasons)}. "
-            f"Raise it live: docker update --memory={raise_to}g --memory-swap=-1 {PROFILE} "
-            "(lost on `minikube delete`).",
-            file=sys.stderr,
-        )
+    raise_to = max(wanted(), FULL_STACK_MB) // 1024
+    print(
+        f"WARNING: minikube profile '{PROFILE}' has {cap // 1024} GiB, below the ~{FULL_STACK_MB // 1024} GiB "
+        f"a deploy --full needs. Raise it live: docker update --memory={raise_to}g --memory-swap=-1 {PROFILE} "
+        "(lost on `minikube delete`).",
+        file=sys.stderr,
+    )

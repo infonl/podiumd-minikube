@@ -189,10 +189,10 @@ step instead.
 profile combinations a few times.** Usually an under-provisioned minikube
 VM thrashing under memory pressure — check with `docker stats minikube`
 or `minikube ssh -- free -h`. `provision-cluster` sizes the node at half the
-memory Docker sees (override with `MINIKUBE_MEMORY` in MB); `deploy` and
-`provision-cluster` warn when the running node is smaller, or below the
-~24 GiB a `deploy --full` needs, and print the command to raise it live
-without restarting:
+memory Docker sees (override with `MINIKUBE_MEMORY` in MB); `deploy --full` and
+`provision-cluster` warn when the running node is below the ~24 GiB a
+`deploy --full` needs, and print the command to raise it live without
+restarting:
 
 ```bash
 docker update --memory=<GiB>g --memory-swap=-1 minikube
