@@ -4068,3 +4068,59 @@ restart - same reasoning as the earlier egress fix) and
 resolves, deleting the stuck `kindnet` pod let its replacement pull and
 run, node went `Ready`, and the waiting `storage-permissions-fix` Job
 completed. Host-side DNS unaffected.
+
+## scripts/ converted from bash to Python, with lint/type/test tooling for all Python code
+
+Every `scripts/*.sh` and `scripts/lib/*.sh` is now Python, following the
+helm-charts `charts/podiumd/bin/` conventions (copied from there:
+`run_python_checks`, `pyproject.toml`, `.jscpd.json`, now at the repo root):
+
+- Extensionless, kebab-case entry scripts (`scripts/deploy`,
+  `scripts/provision-cluster`, ...) that only parse arguments; the logic is
+  the `scripts/lib/` package (`process`, `kube`, `chart`, `values`,
+  `dependency`, `manifests`, `deploy`, `provision`, `prune`, `pabc`, `seed`,
+  `keycloak`, `crds`, `tunnel`, `ports`, `services`, `teardown`, `versions`,
+  `hosts`, `polling`). The two lib scripts that were also run by hand became
+  `scripts/apply-pabc-migrations` and `scripts/seed-fixtures`.
+- The nine post-render filters that `deploy.sh` piped through separate
+  `python3` processes are one in-process pipeline, `manifests.fix_up`.
+  Verified equal to the old pipeline by rendering both and comparing the
+  parsed documents: core, `--full`, `--full` + monitoringLogging,
+  `--full` + PKCE, and the storage-hooks render were all identical. The
+  provision image list was the same set too.
+- `scripts/tests/` holds 62 offline unit tests (fake `kubectl`/`helm`
+  through a patched `lib.process.run`). One caught a real difference before
+  it shipped: an empty pod spec `{}` skipped `enableServiceLinks: false`,
+  which the old filter did set.
+- `./run_python_checks` (ruff, shellcheck, jscpd, pymarkdown, vulture,
+  bandit, basedpyright strict, pylint, pytest) passes on `scripts/` and on the
+  live suite in `tests/`, which needed only small lint fixes. `vendor/` is
+  upstream's and not checked. pylint runs the two test directories
+  separately: each imports its own `conftest`.
+- Python output is line-buffered (`process.main`): found live that, with
+  stdout redirected to a file, `print` output landed after kubectl's own.
+
+Verified live against the cluster (safe scripts only, as agreed):
+`show-podiumd-version`, `show-port-mappings`, `setup-tunnel` (tunnel
+already up), `expose-postgres` (spare port, stopped afterwards),
+`apply-pabc-migrations` (no `--force`: left the succeeded Job alone),
+`seed-fixtures`, and `deploy --full` twice (12 expected immutable PV/PVC
+errors, PKCE sync, pabc guard, no prune, seeding skipped). Not run live:
+`provision-cluster`, `teardown-cluster`, `reset-namespace`, `flush-redis`,
+`update-hosts` (destructive or sudo); unit tests only.
+
+Live suite: 78 passed, 4 skipped, 1 failed. The failure is not from the
+conversion; found while checking it:
+
+- `zac-productaanvraag-zaakafhandelparameters` had failed on the fresh
+  cluster (2026-10-06): ZAC was not up yet (the start-order problem in
+  podiumd-tests' handoff, section 4). Recovered the documented way: delete
+  the Job, `scripts/deploy --full`.
+- `test_full_productaanvraag_flow_creates_a_zaak` gets 403 from Objecten.
+  The `objecten-config` Job (`ttlSecondsAfterFinished: 600`) is deleted
+  after it succeeds, so every later deploy recreates it. The re-run fails in
+  the TokenAuth step: `duplicate key value violates unique constraint
+  "token_tokenauth_token_..." Key (token)=(fakeZacObjectsToken) already
+  exists`, and setup_configuration rolls back the whole run. Whether this
+  causes the 403 is not confirmed yet. The old bash deploy recreates the Job
+  the same way (identical render); not fixed yet.
