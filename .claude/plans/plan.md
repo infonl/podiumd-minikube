@@ -4513,3 +4513,18 @@ Verified live: Elasticsearch green, every openinwoner Deployment Ready,
 page carries `openinwoner-theme`, live Keycloak client `openinwoner`
 present; suite 80 passed. Not verified: that a deploy without `--full`
 prunes Open Inwoner (would take it away from podiumd-tests mid-run).
+
+Follow-up: `eherkenningMock: true` next to `digidMock`, as every
+ExternalsPodiumD environment (podiumd-infra sets digidMock only): the real
+DigiD and eHerkenning are never reachable from minikube. The DigiD/
+eHerkenning OIDC mock providers (Keycloak bsn/kvk scopes, OI
+OIDCProvider rows, test inwoners/bedrijf) are not deployed config in
+either reference project: ExternalsPodiumD seeds them with
+`smoke-tests/scripts/seed-identities.sh`, so they belong to podiumd-tests'
+seeding.
+
+PABC login (podiumd-tests report): not a minikube bug. PABC 1.1.1 answers a
+non-navigation request (no `Sec-Fetch-Dest: document`) with a 401 whose
+Location has no `state`, so following it ends in "message.State is null or
+empty" and a silent redirect to `/`. Logging in through `/api/challenge` as
+a document navigation works (verified in-cluster).

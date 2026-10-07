@@ -907,7 +907,9 @@ podiumd:
   # As ExternalsPodiumD and podiumd-infra: Keycloak admin login (no
   # superuser Job), Open Zaak client "openinwoner", digidMock, Elasticsearch
   # through ECK (podiumd.eck-operator, on with this profile, one node as
-  # podiumd-infra). One replica each, as podiumd-infra. Not configured:
+  # podiumd-infra). eherkenningMock as ExternalsPodiumD: the real DigiD and
+  # eHerkenning are unreachable from here. One replica each, as
+  # podiumd-infra. Not configured:
   # the e-Suite services (external) and the Open Zaak api group, which both
   # reference projects leave commented out.
   openinwoner:
@@ -1036,6 +1038,7 @@ podiumd:
       isHttps: true
       numProxies: 2
       digidMock: true
+      eherkenningMock: true
       database:
         host: postgres
         port: 5432
