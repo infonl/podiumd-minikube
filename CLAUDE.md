@@ -8,6 +8,7 @@ Rules for working in this repository:
 
 @.claude/memory/reuse-existing-logic.md
 @.claude/memory/comments-and-help-texts.md
+@.claude/memory/reference-environments.md
 
 For usage instructions (provisioning, deploying, the test suite, script
 reference) see [`README.md`](README.md). This file is oriented at AI coding
