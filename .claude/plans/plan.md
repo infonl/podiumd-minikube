@@ -4253,3 +4253,27 @@ once (`scripts/flush-redis`, which also cleared pending Celery tasks) before
 restarting every Redis-using Deployment. Verified live: env in all seven
 apps matches, Open Klant's `get_solo()` still equals its database row, live
 suite 79 passed.
+
+## Open Zaak's notifications reach Open Notificaties (podiumd-tests handoff section 5c)
+
+Open Zaak sent as client `openzaak`, but Open Notificaties checks a sender's
+authorization through Open Zaak's Autorisaties API, where only Applicaties
+`open-zaak` / `open-notificaties` (fixture SQL) existed: every Open Zaak
+notification got 403, so nothing reached ZAC.
+
+Now as ExternalsPodiumD (podiumd-infra uses the same ids): Open Zaak's
+`configuration.data` has service `notificaties-api` with client `zaak`,
+credentials `zaak` and `notificaties`, and Applicaties `zaak` /
+`notificaties` (ExternalsPodiumD's uuids, all autorisaties); Open
+Notificaties checks authorizations as `notificaties` and accepts JWTs from
+`zaak` and `notificaties`. Not changed: Objecten still notifies as
+`objectsapi` (ExternalsPodiumD: `objecten`).
+
+Found live on the way: the first re-run failed with
+`zgw_consumers_service_api_root_key` (the existing row kept the old
+identifier `notifications-api` with the same api_root; the trap
+ExternalsPodiumD's icat values document). Fresh clusters do not have that
+row; this cluster's row was renamed once in Open Zaak's shell, then the Job
+succeeded. Verified: as `zaak` and `notificaties` `GET /api/v1/kanaal` on
+Open Notificaties 200, as `openzaak` 403; Open Zaak's own configured client
+gets 200.

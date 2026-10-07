@@ -558,20 +558,45 @@ podiumd:
         # declaratively instead, straight on opennotificaties' own
         # notifications_kanalen_config below - see that block's own
         # comment.
+        # Client ids, identifiers and Applicatie uuids as ExternalsPodiumD:
+        # Open Zaak notifies as "zaak"; Open Notificaties checks it through
+        # this Autorisaties API as "notificaties".
         zgw_consumers_config_enable: true
         zgw_consumers:
           services:
-            - identifier: notifications-api
-              label: Notificaties API
+            - identifier: notificaties-api
+              label: Open Notificaties
               api_root: http://opennotificaties.podiumd-minikube/api/v1/
               api_type: nrc
               auth_type: zgw
-              client_id: openzaak
-              secret: opennotificatiesOpenzaakSecret
+              client_id: zaak
+              secret: zaakSecret
+
+        vng_api_common_credentials_config_enable: true
+        vng_api_common_credentials:
+          items:
+            - identifier: zaak
+              secret: zaakSecret
+            - identifier: notificaties
+              secret: notificatiesSecret
+
+        vng_api_common_applicaties_config_enable: true
+        vng_api_common_applicaties:
+          items:
+            - uuid: 6bf5bfb4-e76b-469f-b993-4aedb832b61f
+              client_ids:
+                - zaak
+              heeft_alle_autorisaties: true
+              label: Zaak
+            - uuid: c5989254-922d-43f9-a32a-3fa2a44f6230
+              client_ids:
+                - notificaties
+              heeft_alle_autorisaties: true
+              label: Notificaties
 
         notifications_config_enable: true
         notifications_config:
-          notifications_api_service_identifier: notifications-api
+          notifications_api_service_identifier: notificaties-api
 
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
@@ -1438,11 +1463,8 @@ podiumd:
       # local Autorisaties API service is configured, and every incoming
       # notification-publish request (even to the "objecten" kanaal) gets a
       # live 403 from that default before ever reaching our own abonnement.
-      # client_id/secret here match openzaak's own vendored
-      # vng_api_common_jwtsecret row for "open-notificaties" (see
-      # vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/openzaak/
-      # 01-setup-zac-config.sql) - already fully authorized there
-      # (heeft_alle_autorisaties: true), no openzaak-side change needed.
+      # Client "notificaties", as ExternalsPodiumD: its credential and
+      # Applicatie are registered in podiumd.openzaak.configuration.data.
       #
       # objectsapi credential: lets the Objects API (podiumd.objecten's own
       # notifications_config below) authenticate its outgoing
@@ -1458,14 +1480,12 @@ podiumd:
         zgw_consumers:
           services:
             - identifier: autorisaties-api
-              label: Autorisaties API
+              label: Open Zaak - Autorisaties API
               api_root: http://openzaak.podiumd-minikube/autorisaties/api/v1/
               api_type: ac
               auth_type: zgw
-              client_id: open-notificaties
-              secret: opennotificatiesAutorisatieApiSecret
-              user_id: open-notificaties
-              user_representation: Open Notificaties
+              client_id: notificaties
+              secret: notificatiesSecret
 
         autorisaties_api_config_enable: True
         autorisaties_api:
@@ -1477,12 +1497,11 @@ podiumd:
             # Credentials for the Objects API (podiumd.objecten) to send notifications
             - identifier: objectsapi
               secret: opennotificatiesObjectsSecret
-            # Credentials for openzaak (podiumd.openzaak) to send its own
-            # zaak/besluit/document notifications - see values.yaml's own
-            # podiumd.openzaak.configuration.data notifications_config
-            # comment for the bug this fixes.
-            - identifier: openzaak
-              secret: opennotificatiesOpenzaakSecret
+            # Open Zaak's notifications (client "zaak", as ExternalsPodiumD).
+            - identifier: zaak
+              secret: zaakSecret
+            - identifier: notificaties
+              secret: notificatiesSecret
 
         notifications_kanalen_config_enable: true
         notifications_kanalen_config:
