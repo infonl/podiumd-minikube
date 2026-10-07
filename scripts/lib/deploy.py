@@ -5,6 +5,7 @@ import re
 
 from dataclasses import dataclass
 from dataclasses import field
+from typing import Any
 
 from lib import chart
 from lib import crds
@@ -19,6 +20,7 @@ from lib import memory
 from lib import openbao
 from lib import pabc
 from lib import pki
+from lib import polling
 from lib import postgres
 from lib import process
 from lib import prune
@@ -30,6 +32,8 @@ from lib.paths import RELEASE_NAME
 
 STORAGE_HOOKS = "templates/storage-hooks.yaml"
 STORAGE_PERMISSIONS_JOB = "storage-permissions-fix"
+# Rollouts and config Jobs of a --full deploy, Elasticsearch included.
+READY_TIMEOUT = 900
 
 # Server-side rejections start "Error from server ("; the others are client-side.
 _CLIENT_SIDE_ERRORS = re.compile(
@@ -199,7 +203,47 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     if render.after_seed:
         print("\nApplying the Job(s) that must run after seeding...")
         kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(render.after_seed))
+    _wait_ready(render)
     print("\nDone. Next: ./scripts/setup-tunnel for external reachability, or run the suite in tests/ to verify.")
+
+
+def unfinished_jobs(jobs: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
+    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items."""
+    by_name = {job["metadata"]["name"]: job for job in jobs}
+    running: list[str] = []
+    failed: list[str] = []
+    for name in names:
+        conditions: list[dict[str, Any]] = by_name.get(name, {}).get("status", {}).get("conditions") or []
+        done = {c["type"] for c in conditions if c.get("status") == "True"}
+        if "Failed" in done:
+            failed.append(name)
+        elif "Complete" not in done:
+            running.append(name)
+    return running, failed
+
+
+def _wait_ready(render: manifests.Render) -> None:
+    """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs."""
+    print("\nWaiting until every rendered workload has rolled out and every Job has completed...")
+    for doc in render.docs:
+        if doc.get("kind") in ("Deployment", "StatefulSet"):
+            resource = f"{doc['kind'].lower()}/{manifests.name_of(doc)}"
+            kube.kubectl("rollout", "status", resource, "-n", NAMESPACE, f"--timeout={READY_TIMEOUT}s")
+    names = jobs(render)
+
+    def settled() -> tuple[list[str], list[str]] | None:
+        running, failed = unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
+        return None if running else (running, failed)
+
+    result = polling.wait_until(settled, timeout=READY_TIMEOUT, interval=5)
+    if result is None:
+        running, _ = unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
+        msg = f"Job(s) still running after {READY_TIMEOUT}s: {', '.join(running)}"
+        raise process.UserError(msg)
+    if result[1]:
+        msg = f"Job(s) failed: {', '.join(result[1])}: check `kubectl logs job/<name> -n {NAMESPACE}`"
+        raise process.UserError(msg)
+    print("All workloads rolled out, all Jobs completed.")
 
 
 def parser(description: str) -> argparse.ArgumentParser:

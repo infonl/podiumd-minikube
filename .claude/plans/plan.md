@@ -4784,3 +4784,16 @@ versions; no project sets an option for it, and TA's OMC test accepts 206
 as a pass. Per the user, OMC is out of `--full` (values kept, `omc.enabled`
 plus `podiumd.omc.enabled` still turn it on) and podiumd-tests disables its
 OMC tests, until a fixed OMC exists.
+
+## Deploy waits for readiness
+
+`scripts/deploy` printed "Done." without waiting for rollouts other than
+Keycloak's or for the config Jobs (only the storage Job, CRDs, Keycloak,
+seeding's objecten/objecttypen `available` and OpenBao were waited on), and a
+failed config Job went unnoticed. It now ends with `_wait_ready`: `rollout
+status` for every rendered Deployment and StatefulSet, then every rendered
+Job complete, failing with the names of failed Jobs (900s limit).
+Investigated after a transient podiumd-tests failure right after a deploy,
+which turned out to be podiumd-tests' own CA-bundle race, not a rollout gap.
+Verified live: a `--full` deploy passed the wait; suite 106 passed
+immediately after.

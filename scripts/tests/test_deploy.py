@@ -72,3 +72,12 @@ def test_jobs_are_every_job_in_the_render():
         large_configmaps=[],
     )
     assert deploy.jobs(render) == ["openzaak-config", "pabc-migrations-1"]
+
+
+def test_unfinished_jobs_splits_running_and_failed():
+    def job(name: str, condition: str | None) -> dict[str, object]:
+        conditions = [{"type": condition, "status": "True"}] if condition else []
+        return {"metadata": {"name": name}, "status": {"conditions": conditions}}
+
+    jobs = [job("done", "Complete"), job("broken", "Failed"), job("busy", None)]
+    assert deploy.unfinished_jobs(jobs, ["done", "broken", "busy", "missing"]) == (["busy", "missing"], ["broken"])
