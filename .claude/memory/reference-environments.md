@@ -21,6 +21,11 @@ makes the tests prove something the real environments do not do.
 - Before changing an app setting, a client id, a token, a Job or a wiring
   between components, look up how both projects configure it in their values
   files, and match it. Name what each does in the change and in `plan.md`.
+- ExternalsPodiumD holds the test, acceptance and production environments;
+  podiumd-infra tests earlier, so it can carry features that ExternalsPodiumD
+  does not have yet. Include such optional functionality anyway (the
+  podiumd-infra way), so broader tests can run. Where both configure the same
+  thing differently, ExternalsPodiumD's way wins.
 - Deviate only where minikube cannot do the same (single node, no Azure, no
   cloud operators, no public DNS), and record each deviation with its reason
   in `values.yaml` and `plan.md`.
