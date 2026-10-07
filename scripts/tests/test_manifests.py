@@ -143,3 +143,11 @@ def test_with_https_adds_twins_only_for_local_hosts():
     urls = ["http://zac.local/*", "http://zac.local", "http://localhost:8080/*", "https://kiss.local"]
     assert manifests.with_https(urls) == [*urls, "https://zac.local/*", "https://zac.local"]
     assert manifests.with_https(manifests.with_https(urls)) == manifests.with_https(urls)
+
+
+def test_fix_up_separates_crds_for_server_side_apply():
+    crd = {"kind": "CustomResourceDefinition", "metadata": {"name": "elasticsearches.elasticsearch.k8s.elastic.co"}}
+    other = {"kind": "Service", "metadata": {"name": "zac"}}
+    render = manifests.fix_up(yaml.safe_dump_all([crd, other]), objecten_merged=False, zac_pkce=False)
+    assert render.crds == [crd]
+    assert render.docs == [other]

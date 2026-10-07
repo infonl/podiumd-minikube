@@ -10,6 +10,7 @@ import json
 import re
 
 from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 from typing import cast
 
@@ -217,14 +218,16 @@ def dump(docs: list[Doc]) -> str:
 
 @dataclass(frozen=True)
 class Render:
-    """A fixed-up render: the manifest for `kubectl apply`, and ConfigMaps too large for it.
+    """A fixed-up render: the manifest for `kubectl apply`, plus what it cannot carry.
 
-    The large ones (monitoring-logging's Grafana dashboards) need
-    `kubectl apply --server-side`.
+    Large ConfigMaps (monitoring-logging's Grafana dashboards) and CRDs
+    (ECK's) exceed client-side apply's annotation limit and go server-side;
+    CRDs also have to be established before the resources that use them.
     """
 
     docs: list[Doc]
     large_configmaps: list[Doc]
+    crds: list[Doc] = field(default_factory=list[Doc])
 
     @property
     def manifest(self) -> str:
@@ -243,8 +246,9 @@ def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool =
         fixup_merged_objecten(docs)
     fix_realm(docs, zac_pkce=zac_pkce)
     return Render(
-        docs=[doc for doc in docs if not _is_large_configmap(doc)],
+        docs=[doc for doc in docs if not _is_large_configmap(doc) and doc.get("kind") != "CustomResourceDefinition"],
         large_configmaps=[doc for doc in docs if _is_large_configmap(doc)],
+        crds=[doc for doc in docs if doc.get("kind") == "CustomResourceDefinition"],
     )
 
 
