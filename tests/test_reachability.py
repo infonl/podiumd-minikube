@@ -5,6 +5,7 @@ curl checks used throughout manual verification of this chart.
 Expected status codes:
   - 302 for zac.local/keycloak.local (both redirect - ZAC to Keycloak's
     OIDC auth endpoint, Keycloak's own root to its admin console)
+  - 401 for ita.local (see its entry)
   - 200 for everything else (each app's own home/API root page)
 """
 
@@ -30,6 +31,8 @@ HOSTS = [
     ("openformulieren-web.local", 403, "openformulieren"),
     ("grafana.local", 200, "metrics"),
     ("openinwoner.local", 200, "openinwoner"),
+    ("ita.local", 401, "ita"),  # like PABC: 401 to a request that is not a page navigation
+    ("contact.local", 200, "kiss"),
     ("mailpit.local", 200, None),
 ]
 

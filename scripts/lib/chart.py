@@ -20,6 +20,8 @@ FULL_PROFILE_SETS = [
     "--set", "metrics.enabled=true",
     "--set", "openinwoner.enabled=true", "--set", "podiumd.openinwoner.enabled=true",
     "--set", "podiumd.eck-operator.enabled=true",
+    "--set", "ita.enabled=true", "--set", "podiumd.ita.enabled=true",
+    "--set", "kiss.enabled=true", "--set", "podiumd.kiss.enabled=true", "--set", "podiumd.kiss-eck.enabled=true",
 ]  # fmt: skip
 
 ZAC_PKCE_IMAGE_TAG = "5.4.2"

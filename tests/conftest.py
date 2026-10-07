@@ -111,6 +111,8 @@ def enabled_profiles(pods):
         "openarchiefbeheer": any_pod_named("openarchiefbeheer"),
         "openformulieren": any_pod_named("openformulieren"),
         "openinwoner": any_pod_named("openinwoner"),
+        "ita": any_pod_named("ita-web"),
+        "kiss": any_pod_named("contact-web"),
         "metrics": any_pod_named("grafana"),
         # The monitoring-logging dependency's own subcharts are all prefixed
         # with the release name ("podiumd-minikube-grafana", not plain

@@ -69,6 +69,8 @@ every app's email settings point at it).
 | `opennotificaties` | Open Notificaties + RabbitMQ |
 | `openformulieren` | Open Formulieren (transitively needs `objecten`, `objecttypen`, `opennotificaties`) |
 | `openinwoner` | Open Inwoner, with Elasticsearch through the ECK operator (as ExternalsPodiumD and podiumd-infra) |
+| `ita` | Interne Taakafhandeling on `https://ita.local` (needs `objecten` and the KISS objecttypes) |
+| `kiss` | KISS (chart name `contact`) on `https://contact.local`, its Elasticsearch, Kibana and podiumd-adapter (needs `objecten`) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
 | `wiremock` | extra WireMock mappings (SmartDocuments/KVK/BAG) |
 
@@ -97,7 +99,9 @@ No `metrics-server` is installed, so `kubectl top` isn't available — use
 `docker stats minikube --no-stream` (real usage) and `kubectl describe
 node minikube` (requested/limited).
 
-Measured on a full `scripts/deploy --full`, idle-ish, 20Gi-capped container:
+With Open Inwoner, KISS and ITA (both Elasticsearch clusters, Kibana) a settled
+`deploy --full` uses 18.4 GiB of a 32 GiB cap; a 16 GiB cap thrashes.
+Earlier, without them, idle-ish, 20Gi-capped container:
 
 | | `monitoringLogging.enabled=true` | `=false` |
 |---|---|---|
@@ -184,10 +188,14 @@ step instead.
 **Cluster becomes sluggish or unresponsive, especially after switching
 profile combinations a few times.** Usually an under-provisioned minikube
 VM thrashing under memory pressure — check with `docker stats minikube`
-or `minikube ssh -- free -h`. Raise it live without restarting:
+or `minikube ssh -- free -h`. `provision-cluster` sizes the node at half the
+memory Docker sees (override with `MINIKUBE_MEMORY` in MB); `deploy` and
+`provision-cluster` warn when the running node is smaller, or below the
+~24 GiB a `deploy --full` needs, and print the command to raise it live
+without restarting:
 
 ```bash
-docker update --memory=16g --memory-swap=-1 minikube
+docker update --memory=<GiB>g --memory-swap=-1 minikube
 ```
 
 This doesn't persist across `minikube delete`.

@@ -15,8 +15,10 @@ from lib import hosts
 from lib import keycloak
 from lib import kube
 from lib import manifests
+from lib import memory
 from lib import pabc
 from lib import pki
+from lib import postgres
 from lib import process
 from lib import prune
 from lib import seed
@@ -79,7 +81,7 @@ def expected_storage_errors(storage: manifests.Render) -> int:
 
 def jobs(render: manifests.Render) -> list[str]:
     """The Jobs in render (all idempotent; pabc-migrations is not in a render)."""
-    return [manifests.name_of(doc) for doc in render.docs if doc.get("kind") == "Job"]
+    return [manifests.name_of(doc) for doc in [*render.docs, *render.after_seed] if doc.get("kind") == "Job"]
 
 
 def _rerun_jobs(render: manifests.Render) -> None:
@@ -151,6 +153,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     """Syncs dependencies, applies the render, then the guarded and post-apply steps."""
     kube.require_minikube_context()
     disk.check(disk.DEPLOY)
+    memory.check(full=full)
     dependency.sync()
     selected = options(full=full, extra=extra)
 
@@ -167,6 +170,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
         msg = f"no local CA in {pki.PKI_DIR}: run scripts/provision-cluster (it creates the CA and its issuer)"
         raise process.UserError(msg)
     pki.apply_trust(NAMESPACE)
+    postgres.create_missing_databases()
     render = selected.render()
     _rerun_jobs(render)
     _apply_crds(render)
@@ -190,6 +194,9 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
         seed.seed_fixtures(merged=chart.objecten_shape().merged)
     else:
         print("'objecten' profile not deployed - skipping seeding.")
+    if render.after_seed:
+        print("\nApplying the Job(s) that must run after seeding...")
+        kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(render.after_seed))
     print("\nDone. Next: ./scripts/setup-tunnel for external reachability, or run the suite in tests/ to verify.")
 
 

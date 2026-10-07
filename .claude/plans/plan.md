@@ -4528,3 +4528,71 @@ non-navigation request (no `Sec-Fetch-Dest: document`) with a 401 whose
 Location has no `state`, so following it ends in "message.State is null or
 empty" and a silent redirect to `/`. Logging in through `/api/challenge` as
 a document navigation works (verified in-cluster).
+
+## KISS and ITA (podiumd-tests handoff 3)
+
+Profiles `kiss` and `ita` (both in `--full`), configured as ExternalsPodiumD
+(choices confirmed by the user):
+
+- KISS keeps the chart name `contact`, as ExternalsPodiumD: Deployment
+  `contact-web`, host `https://contact.local`, database `contact`. Its
+  register calls Open Zaak (JWT client `contact`, Applicatie `ebd9f2c0…`)
+  and Open Klant (token) directly, as ExternalsPodiumD's icat/mayk; dim1 and
+  podiumd-infra route every register through the podiumd-adapter to an
+  e-Suite, which minikube does not have. The adapter still runs, for the
+  medewerkers sync from Objecten. kiss-eck: one node with 2Gi, as
+  podiumd-infra (ExternalsPodiumD runs three), plus Kibana.
+  `templates/kiss/elastic-user-secret.yaml` creates `kiss-es-elastic-user`
+  before ECK does, as podiumd-infra's ensure-kiss-elastic-secret.sh, so
+  `settings.elastic.password` is the real password.
+- ITA: database `ita` on the shared Postgres (it had its own bundled
+  Postgres in the PKCE-only setup), `ita.ita.baseUrl`, Open Klant/Objecten
+  tokens, Open Zaak client `ita` (Applicatie `86499f7a…`).
+- Objecttypes: the podiumd chart's `create-required-objecttypen` Job, with
+  an Objecttypen token `integratieteam`. It downloads each schema from
+  GitHub only when it creates that objecttype, so later deploys need no
+  internet. Objecten registers the seven objecttypes and gives tokens
+  `contact` and `ita` the permissions of ExternalsPodiumD (icat). Known
+  gap, as ExternalsPodiumD: KISS's logboek uses the `contact` token, which
+  has no permission on Activiteitenlog.
+- Keycloak: the vendored `kiss`/`ita` clients get https redirect URIs and
+  the chart's client roles and mappers (roles claim, samaccountname).
+  `keycloak.sync_realm` now adds vendored redirect URIs, protocol mappers
+  and client roles to live clients, and declares the user attribute
+  `samaccountname` as the chart's realm config.
+
+Found live:
+
+- Helm ignores eck-stack's own `enabled: false` defaults one chart level
+  deeper (our umbrella over podiumd) and renders eck-fleet-server, which
+  fails the render ("At least one of statefulSet or deployment is
+  required"). Set explicitly in `podiumd.kiss-eck`.
+- The Job takes the next objecttype primary keys; `seed-fixtures` loads
+  the objecttypen fixture by primary key and would overwrite them on a
+  fresh cluster. `manifests.AFTER_SEED_JOBS` makes deploy apply it after
+  seeding.
+- The Job lists existing objecttypes with `dataClassification=open` only;
+  the fixture's Productaanvraag-Dimpact is `intern`, so the Job creates a
+  second one (`11a5f7fd…`, as in the reference environments). Left as is.
+- New databases never reached a running Postgres (I created Open Inwoner's
+  by hand). `postgres.create_missing_databases` now runs the init SQL's
+  statements for missing databases on every deploy.
+- kcadm `--fields protocolMappers` returns mapper objects without their
+  fields; `protocolMappers(name)` is needed (the first deploy failed with
+  "Protocol mapper exists with same name").
+- The minikube container was capped at 16 GiB while the node reports the
+  host's memory, so the scheduler overcommitted and the node swapped until
+  etcd/apiserver restarted (load 150+). The user raised it to 32 GiB live.
+  `lib.memory`: provision sizes the node at half the memory Docker sees,
+  and deploy/provision warn when the cap is smaller or below ~24 GiB for
+  `--full` (measured: 18.4 GiB settled).
+- After the thrash ZAC answered 500 (OPA "JSON Binding deserialization
+  error" on RuleResponse) until a restart of the zac pod.
+- `https://ita.local/` answers 401 to a non-navigation request, like PABC
+  (302 to Keycloak as a page navigation).
+
+Verified live: contact-web, ita-web, podiumd-minikube-adapter Ready; kiss
+Elasticsearch and Kibana green; the seven objecttypes published with the
+chart's UUIDs; `https://contact.local/healthz` and `/api/healthcheck` 200;
+`https://ita.local/api/kanalen` 401; suite 93 passed. Not covered here: a
+login with role Klantcontactmedewerker (needs a seeded user, podiumd-tests).

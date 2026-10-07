@@ -47,30 +47,10 @@ help if a future bump also happens to pull in a `mozilla-django-oidc-db`
 release that adds the feature, which would need re-checking the same way,
 not assumed from the app version bump alone.
 
-ita and kiss (PodiumD-only additions, not part of dimpact-zaakafhandelcomponent's
-docker-compose stack - see NOTES.md) are a third, unusual case: confirmed
-by cloning each app's own public source that both hardcode
-`options.UsePkce = true` in their own OpenIdConnect setup, the same
-pattern as pabc's own AuthenticationExtensions.cs - so PKCE itself is
-unconditionally on for both, same category of finding as pabc. But unlike
-pabc, this can't actually be confirmed *live* the same way (no equivalent
-of test_pabc_challenge_always_sends_a_pkce_code_challenge exists below
-for either): both apps also never set RequireHttpsMetadata anywhere in
-their own source, so it stays at the OpenIdConnect middleware's default of
-`true`, and both evidently resolve the OIDC handler's options eagerly on
-every single request - even a bare `/healthz` - which throws against this
-project's http:// Keycloak authority before ever reaching a redirect. Both
-crash-loop unconditionally as a result, with no values.yaml/extraEnvVars
-fix possible (confirmed: neither app ever reads this setting from
-configuration at all), so `podiumd.ita`/`podiumd.kiss` are both kept
-`enabled: false` - see values.yaml's own comments on each. Their Keycloak
-clients are still provisioned (kept `pkce.code.challenge.method: ""`,
-guarded by test_ita_and_kiss_clients_do_not_require_pkce below) so that if
-either app is ever re-enabled without someone re-reading this docstring
-first, a login attempt fails safe (Keycloak not requiring a challenge the
-app happens to send anyway) rather than fails hard (Keycloak requiring one
-a broken/rolled-back version of the app can't send, the exact zac/Django
-incident this whole module exists to prevent).
+ita and kiss hardcode `options.UsePkce = true` (their public sources), like
+pabc. As in the podiumd chart (kiss.settings.oidc.pkceEnabled false), their
+Keycloak clients do not require it; test_ita_and_kiss_clients_do_not_require_pkce
+guards that.
 """
 
 from urllib.parse import parse_qs
@@ -100,10 +80,6 @@ DJANGO_APP_CLIENT_IDS = (
     "openarchiefbeheer",
 )
 
-# ita/kiss - see this module's own docstring for why these two are a
-# different case from DJANGO_APP_CLIENT_IDS above (PKCE confirmed
-# unconditionally on from source, not absent - but untestable live, and
-# both podiumd.ita/podiumd.kiss stay enabled: false as a result).
 ITA_KISS_CLIENT_IDS = ("ita", "kiss")
 
 
@@ -377,22 +353,7 @@ def test_django_app_client_does_not_require_pkce(traefik_ip, client_id):
 
 @pytest.mark.parametrize("client_id", ITA_KISS_CLIENT_IDS)
 def test_ita_and_kiss_clients_do_not_require_pkce(traefik_ip, client_id):
-    """
-    Unlike the Django apps above, ita/kiss's own apps *do* hardcode
-    `UsePkce = true` (confirmed by reading each app's own public source -
-    see this module's own docstring) - so this isn't guarding against a
-    library that can never send a challenge. It's guarding against
-    something more specific: neither app can actually serve a single HTTP
-    request against this project's http:// Keycloak authority at all (a
-    separate, hardcoded RequireHttpsMetadata default, also confirmed from
-    source), so podiumd.ita/podiumd.kiss both stay `enabled: false` and
-    neither has ever completed a real login here. If someone re-enables
-    either without reading that far, this test is what keeps the Keycloak
-    client itself from independently starting to require a challenge the
-    app can never actually be confirmed to send in this environment -
-    that combination is exactly what broke zac and, once, the Django apps'
-    story elsewhere in this module.
-    """
+    """The ita/kiss clients do not require PKCE, as the podiumd chart's realm config."""
     token = _keycloak_admin_token(traefik_ip)
     response = requests.get(
         f"http://{traefik_ip}/admin/realms/zaakafhandelcomponent/clients",
@@ -404,10 +365,7 @@ def test_ita_and_kiss_clients_do_not_require_pkce(traefik_ip, client_id):
     clients = response.json()
     assert clients, f"no Keycloak client found for clientId={client_id!r}"
     assert clients[0]["attributes"].get("pkce.code.challenge.method", "") == "", (
-        f"{client_id}'s Keycloak client now requires PKCE - fine only if "
-        f"podiumd.{client_id}.enabled is actually true and confirmed live "
-        "to work now (see this module's own docstring for why it doesn't "
-        "as of this writing)"
+        f"{client_id}'s Keycloak client requires PKCE; the podiumd chart's realm config does not"
     )
 
 

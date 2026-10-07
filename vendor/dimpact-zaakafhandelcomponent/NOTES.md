@@ -189,37 +189,11 @@ here is a live reference — this project never reads
   session from ever being established over this project's HTTP-only
   ingress, PKCE or not) - a known limitation, not fixed here.
 
-  **Update (ITA/KISS added, then disabled again)**: two more Keycloak
-  clients added, `ita` and `kiss` - neither a docker-compose service at
-  all, both brought in purely to extend this same PKCE investigation to
-  two more PodiumD-only components (`podiumd.ita`/`podiumd.kiss` in
-  values.yaml, both `enabled: false`). Confirmed by cloning each app's own
-  public source that both hardcode `options.UsePkce = true` in their own
-  OpenIdConnect setup, the same pattern as pabc's own
-  `AuthenticationExtensions.cs` (almost the same file, in fact) - so PKCE
-  itself is unconditionally on for both, same category of finding as pabc.
-  Unlike pabc, though, neither app can actually serve a single HTTP request
-  in this project's HTTP-only environment at all: both also never set
-  `RequireHttpsMetadata` anywhere in their source (it stays at the
-  OpenIdConnect middleware's own default of `true`), and both apps'
-  authentication middleware evidently resolves the OIDC handler's options
-  eagerly on *every* request - even the chart's own `/healthz` probe,
-  confirmed live via a 500 citing exactly this - so every single request
-  throws `InvalidOperationException: The MetadataAddress or Authority must
-  use HTTPS unless disabled for development by setting
-  RequireHttpsMetadata=false` before ever reaching a redirect. No
-  values.yaml/`extraEnvVars`-level fix exists (this value is never read
-  from configuration in either app's source, only ever set - or not - in
-  code), so the only real fix would be actual TLS termination in front of
-  Keycloak, deliberately out of scope for this HTTP-only-by-design project.
-  Both Keycloak clients kept (`pkce.code.challenge.method: ""`, matching
-  every other not-yet-verified client's own starting point), and both
-  `podiumd.ita`/`podiumd.kiss` values.yaml blocks kept fully wired but
-  `enabled: false` - re-enabling either just recreates the same
-  permanently crash-looping Deployment, not a live-testable one, without a
-  source change on the app's own side. See `values.yaml`'s own
-  `podiumd.ita`/`podiumd.kiss` comments and
-  `tests/test_pkce.py`'s module docstring for the fuller detail.
+  **Clients `ita` and `kiss`** (not docker-compose services): https
+  redirect URIs, client roles and protocol mappers as the podiumd chart's
+  realm config (`templates/keycloak-podiumd-realm-config.yaml`); KISS runs
+  on `contact.local` (chart name `contact`). Both apps hardcode
+  `UsePkce = true`; their clients do not require it, as the chart.
 
   **Found while cleaning up afterward** (unrelated to ita/kiss, but the
   same live realm): `scripts/lib/sync-zac-pkce-realm.sh` (added by the

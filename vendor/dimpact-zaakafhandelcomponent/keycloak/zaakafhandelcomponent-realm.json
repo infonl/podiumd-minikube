@@ -491,6 +491,46 @@
           "attributes": {}
         }
       ],
+      "kiss": [
+        {
+          "name": "Redacteur",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "Beheerder",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "Klantcontactmedewerker",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "Kennisbank",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "ita": [
+        {
+          "name": "ITA_Gebruiker",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "ITA_Functioneel_Beheerder",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
       "pabc": [
         {
           "id": "d75a1f4e-76a3-48d4-994d-ae9b8de2a64b",
@@ -1537,15 +1577,15 @@
     {
       "clientId": "ita",
       "name": "ITA",
-      "description": "OIDC login for Interne Taakafhandeling's web app - see values.yaml's podiumd.ita.web.oidc for the app-side wiring. Not a docker-compose service - added purely for the PKCE investigation in tests/test_pkce.py, see NOTES.md.",
+      "description": "Interne Taakafhandeling; mappers and roles as the podiumd chart's realm config.",
       "rootUrl": "",
       "surrogateAuthRequired": false,
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "secret": "itaClientSecret",
-      "redirectUris": ["http://ita.local/*"],
-      "webOrigins": ["http://ita.local"],
+      "redirectUris": ["https://ita.local/*"],
+      "webOrigins": ["https://ita.local"],
       "notBefore": 0,
       "bearerOnly": false,
       "consentRequired": false,
@@ -1564,21 +1604,56 @@
       "authenticationFlowBindingOverrides": {},
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
+      "protocolMappers": [
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "introspection.token.claim": "true",
+            "multivalued": "true",
+            "userinfo.token.claim": "false",
+            "id.token.claim": "true",
+            "lightweight.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "usermodel.clientRoleMapping.clientId": "ita"
+          }
+        },
+        {
+          "name": "samaccountname",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "introspection.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "user.attribute": "samaccountname",
+            "id.token.claim": "true",
+            "lightweight.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "samaccountname",
+            "jsonType.label": "String"
+          }
+        }
+      ],
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
       "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
     },
     {
       "clientId": "kiss",
       "name": "KISS",
-      "description": "OIDC login for KISS (klantinteractie-servicesysteem)'s web app - see values.yaml's podiumd.kiss.settings.oidc for the app-side wiring. Not a docker-compose service - added purely for the PKCE investigation in tests/test_pkce.py, see NOTES.md.",
+      "description": "KISS (chart name contact); mappers and roles as the podiumd chart's realm config.",
       "rootUrl": "",
       "surrogateAuthRequired": false,
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "secret": "kissClientSecret",
-      "redirectUris": ["http://kiss.local/*"],
-      "webOrigins": ["http://kiss.local"],
+      "redirectUris": ["https://contact.local/*"],
+      "webOrigins": ["https://contact.local"],
       "notBefore": 0,
       "bearerOnly": false,
       "consentRequired": false,
@@ -1597,6 +1672,40 @@
       "authenticationFlowBindingOverrides": {},
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
+      "protocolMappers": [
+        {
+          "name": "kiss-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "kiss",
+            "multivalued": "true",
+            "claim.name": "roles",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "lightweight.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "samaccountname",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "introspection.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "user.attribute": "samaccountname",
+            "id.token.claim": "true",
+            "lightweight.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "samaccountname",
+            "jsonType.label": "String"
+          }
+        }
+      ],
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
       "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
     },

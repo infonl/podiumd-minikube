@@ -55,6 +55,10 @@ openformulieren:
   enabled: false # also pulls in objecten + objecttypen + opennotificaties
 openinwoner:
   enabled: false # with podiumd.openinwoner and podiumd.eck-operator (its Elasticsearch)
+ita:
+  enabled: false # with podiumd.ita; needs objecten (its objecttypes) and openklant
+kiss:
+  enabled: false # with podiumd.kiss and podiumd.kiss-eck (its Elasticsearch); needs objecten
 metrics:
   enabled: false
 monitoringLogging:
@@ -118,13 +122,45 @@ podiumd:
     enabled: false # already false by default upstream, set explicitly for clarity
   zgw-office-addin:
     enabled: false
-  # ita and kiss each get their own full block further down (see the
-  # "PodiumD-only additions" section right before the monitoring-logging
-  # dependency) instead of a placeholder here, matching how the
-  # profile-gated apps below (objecten, openformulieren, etc.) each have
-  # exactly one definition rather than a disabled stub plus a duplicate.
+  # ita and kiss: own blocks before the monitoring-logging dependency.
+  # One node, as podiumd-infra (ExternalsPodiumD runs three).
   kiss-eck:
     enabled: false
+    # eck-stack's own defaults; one chart level deeper Helm ignores them and
+    # renders these parts (eck-fleet-server then fails the render).
+    eck-agent:
+      enabled: false
+    eck-fleet-server:
+      enabled: false
+    eck-beats:
+      enabled: false
+    eck-logstash:
+      enabled: false
+    eck-apm-server:
+      enabled: false
+    eck-autoops-agent-policy:
+      enabled: false
+    eck-package-registry:
+      enabled: false
+    eck-elasticsearch:
+      nodeSets:
+        - name: default
+          count: 1
+          config:
+            node.roles:
+              - data
+              - ingest
+              - master
+            node.store.allow_mmap: false
+          volumeClaimTemplates:
+            - metadata:
+                name: elasticsearch-data
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 2Gi
   eck-operator:
     enabled: false
     # podiumd's operator watches namespace "podiumd" only; ours is
@@ -591,6 +627,10 @@ podiumd:
               secret: notificatiesSecret
             - identifier: openinwoner
               secret: openinwonerSecret
+            - identifier: ita
+              secret: itaSecret
+            - identifier: contact
+              secret: contactSecret
 
         vng_api_common_applicaties_config_enable: true
         vng_api_common_applicaties:
@@ -610,6 +650,16 @@ podiumd:
                 - openinwoner
               heeft_alle_autorisaties: true
               label: Openinwoner
+            - uuid: 86499f7a-0b68-4424-ad04-4cf88de06b59
+              client_ids:
+                - ita
+              heeft_alle_autorisaties: true
+              label: Internetaakafhandeling
+            - uuid: ebd9f2c0-8f50-4b1a-bb77-672c3ec5c43b
+              client_ids:
+                - contact
+              heeft_alle_autorisaties: true
+              label: Contact
 
         notifications_config_enable: true
         notifications_config:
@@ -813,6 +863,17 @@ podiumd:
           notification_delivery_max_retries: 5
           notification_delivery_retry_backoff: 3
           notification_delivery_retry_backoff_max: 48
+        tokenauth_config_enable: true
+        tokenauth:
+          items:
+            - identifier: contact
+              token: openklantContactToken
+              contact_person: Contact
+              email: contact@example.com
+            - identifier: ita
+              token: openklantItaToken
+              contact_person: ITA
+              email: ita@example.com
       # No compose equivalent to match (compose never sets openklant
       # SUPERUSER credentials either) and, unlike openzaak/opennotificaties/
       # objecttypen/openformulieren, this chart's values.yaml has no
@@ -1384,6 +1445,29 @@ podiumd:
             - service_identifier: objecttypes-api
               uuid: 021f685e-9482-4620-b157-34cd4003da6b
               name: Productaanvraag-Dimpact
+            # KISS/ITA, as ExternalsPodiumD; UUIDs fixed by
+            # podiumd.objecttypen.create_required_objecttypen_job.
+            - service_identifier: objecttypes-api
+              uuid: 90984726-2692-49d8-8f9d-742075cb761d
+              name: Medewerker
+            - service_identifier: objecttypes-api
+              uuid: c8d301f9-80b8-4575-8b29-3e9431f92994
+              name: Afdeling
+            - service_identifier: objecttypes-api
+              uuid: cbec27ac-157b-490b-b586-9e8a8f5bbb85
+              name: Groep
+            - service_identifier: objecttypes-api
+              uuid: 72240cd6-29bb-4a66-b1c3-ab6589a39a22
+              name: InterneTaak
+            - service_identifier: objecttypes-api
+              uuid: e4d2e353-80ea-4962-8276-920d59a3e8de
+              name: Kennisartikel
+            - service_identifier: objecttypes-api
+              uuid: 6a0d8f9d-f7e2-4e57-a91b-01656968a62d
+              name: VAC
+            - service_identifier: objecttypes-api
+              uuid: 2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
+              name: Activiteitenlog
 
         tokenauth_config_enable: true
         tokenauth:
@@ -1400,6 +1484,39 @@ podiumd:
               email: openformulieren@example.com
               application: Open Formulieren
               is_superuser: true
+            # As ExternalsPodiumD (icat).
+            - identifier: contact
+              token: objectenContactToken
+              contact_person: Contact
+              email: contact@example.com
+              application: Contact
+              permissions:
+                - object_type: 90984726-2692-49d8-8f9d-742075cb761d
+                  mode: read_and_write
+                - object_type: c8d301f9-80b8-4575-8b29-3e9431f92994
+                  mode: read_and_write
+                - object_type: cbec27ac-157b-490b-b586-9e8a8f5bbb85
+                  mode: read_and_write
+                - object_type: 72240cd6-29bb-4a66-b1c3-ab6589a39a22
+                  mode: read_and_write
+                - object_type: e4d2e353-80ea-4962-8276-920d59a3e8de
+                  mode: read_and_write
+                - object_type: 6a0d8f9d-f7e2-4e57-a91b-01656968a62d
+                  mode: read_and_write
+            - identifier: ita
+              token: objectenItaToken
+              contact_person: ITA
+              email: ita@example.com
+              application: ITA
+              permissions:
+                - object_type: c8d301f9-80b8-4575-8b29-3e9431f92994
+                  mode: read_and_write
+                - object_type: cbec27ac-157b-490b-b586-9e8a8f5bbb85
+                  mode: read_and_write
+                - object_type: 2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
+                  mode: read_and_write
+                - object_type: 90984726-2692-49d8-8f9d-742075cb761d
+                  mode: read_and_write
     # See templates/objecten/configmap-no-solo-cache-settings.yaml's own
     # header for why this shim exists (django-solo's own cache for
     # NotificationsConfig intermittently going stale, confirmed live while
@@ -1536,13 +1653,18 @@ podiumd:
               contact_person: Open Formulieren
               email: openformulieren@example.com
               application: Open Formulieren
-    # podiumd's own umbrella override enables create_required_objecttypen_job
-    # by default with placeholder credentials - same class of problem as
-    # openzaak's create_required_catalogi_job (see that override's comment
-    # above): would fail repeatedly against our vendored fixture data
-    # instead of its own.
+            - identifier: integratieteam
+              token: objecttypenIntegratieteamToken
+              contact_person: Integratieteam
+              email: integratieteam@example.com
+      # For create_required_objecttypen_job.
+      oidcUrl: https://objecttypen.local
+      token: objecttypenIntegratieteamToken
+    # The KISS/ITA objecttypes, as podiumd; downloads each schema from
+    # GitHub only when it creates that objecttype. scripts/lib/deploy.py
+    # runs it after the fixtures, whose primary keys it would otherwise take.
     create_required_objecttypen_job:
-      enabled: false
+      enabled: true
     # See settings.djangoSettingsModule below for why this mount exists -
     # same ConfigMap+extraVolumes+extraVolumeMounts pattern already used
     # for openzaak's/opennotificaties'/openarchiefbeheer's own
@@ -2263,118 +2385,49 @@ podiumd:
       storageClassName: ""
       size: 10Gi
 
-  # -----------------------------------------------------------------------
-  # PodiumD-only additions - NOT part of dimpact-zaakafhandelcomponent's
-  # docker-compose stack at all (unlike everything above), so neither gets a
-  # compose-profile-equivalent top-level flag. Added purely to extend the
-  # PKCE investigation in tests/test_pkce.py to two more components this
-  # project didn't previously run - see vendor/dimpact-zaakafhandelcomponent/
-  # NOTES.md for the full story. Deliberately minimal: only wired up enough
-  # to reach each app's own OIDC login and observe its PKCE behavior, not for
-  # functional completeness (real ZGW integrations, KISS's search features).
-  #
-  # Both left `enabled: false` (config kept below, fully wired, for whoever
-  # wants to poke at this again): confirmed by cloning each app's own public
-  # source (github.com/Interne-Taak-Afhandeling/ITA,
-  # github.com/Klantinteractie-Servicesysteem/KISS-frontend) that both
-  # hardcode `options.UsePkce = true` in their own OpenIdConnect setup
-  # (InterneTaakAfhandeling.Web.Server/Authentication/AuthenticationExtensions.cs,
-  # Kiss.Bff/Config/AuthenticationSetup.cs - same pattern, almost the same
-  # file, as pabc's own AuthenticationExtensions.cs) - so PKCE *is*
-  # unconditionally on for both, same category of finding as pabc. But
-  # unlike pabc, confirmed live neither app can actually serve a single HTTP
-  # request in this project's HTTP-only environment at all: both also
-  # hardcode `NonceCookie`/`CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always`
-  # *and*, unlike pabc, never set `RequireHttpsMetadata` anywhere in their
-  # own source (grepped the full checkout of both repos - zero matches), so
-  # it stays at the OpenIdConnect middleware's own default of `true`. Since
-  # both apps' authentication middleware evidently resolves the OIDC
-  # handler's options eagerly on every request (even the chart's own
-  # `/healthz` liveness/readiness endpoint, confirmed live with 500s citing
-  # exactly this), that throws `InvalidOperationException: The
-  # MetadataAddress or Authority must use HTTPS unless disabled for
-  # development by setting RequireHttpsMetadata=false` on literally every
-  # request against this project's http:// Keycloak authority, before ever
-  # reaching a redirect - the pod never becomes Ready and restart-loops
-  # continuously. No values.yaml/extraEnvVars-level fix exists (confirmed:
-  # this value is never read from configuration in either app's source, only
-  # ever set - or not - directly in code), so the only real fix would be
-  # actual TLS termination in front of Keycloak, deliberately out of scope
-  # for this HTTP-only-by-design project (see CLAUDE.md). Left `enabled:
-  # false` rather than leave two permanently crash-looping Deployments
-  # burning CPU for no further signal - the PKCE question itself is already
-  # answered, from source, without needing a live pod for it.
-  # -----------------------------------------------------------------------
-
-  # --- ita (internetaakafhandeling) ---
+  # --- ita (profile: ita) ---
+  # As ExternalsPodiumD: database on the shared Postgres, Open Klant/Objecten
+  # tokens and Open Zaak client "ita", the KISS objecttypes (created by
+  # podiumd.objecttypen.create_required_objecttypen_job, fixed UUIDs).
   ita:
     enabled: false
-    fullnameOverride: "ita"
-    # Self-contained: this chart bundles its own bitnami Postgres subchart,
-    # unlike kiss below (whose chart has none) - simplest option here, no
-    # need to touch this project's own shared instance.
-    #
-    # fullnameOverride is required, not cosmetic: found live, this chart's
-    # own connection-string helper (_helpers.tpl's
-    # "internetaakafhandeling.databaseConnectionString") hardcodes the DB
-    # host as "<ita's own fullname>-postgresql" whenever postgresql.enabled
-    # is true - it never reads .Values.database.host at all in that branch.
-    # Left at the bitnami subchart's own default naming (which follows the
-    # *release* name three levels up, "podiumd-minikube-postgresql" here,
-    # not ita's own fullnameOverride "ita"), the connection string pointed at
-    # a Service that doesn't exist ("ita-postgresql"). Matching this
-    # subchart's own name to what the helper expects is the actual fix.
-    postgresql:
-      enabled: true
-      fullnameOverride: "ita-postgresql"
-      auth:
-        username: ita
-        password: ita
-        database: ita
-        postgresPassword: ita
-    # The podiumd aggregator's own default values.yaml already sets
-    # database.name/username to "ita" (matching postgresql.auth above), but
-    # leaves database.password as a literal, un-filled
-    # "REP_ITA_DATABASE_PASSWORD_REP" placeholder token - meant for their own
-    # production "Replacementscripts" tooling to substitute, which this
-    # project doesn't have/use. Found live: without overriding it here too,
-    # ITA's own connection string carries that literal placeholder string as
-    # the password, not a real one, and the app can't connect at all.
+    ita:
+      baseUrl: https://ita.local
     database:
+      host: postgres
       password: ita
-    # Plausible internal baseUrls, not actually exercised - this task's scope
-    # is ITA's own OIDC login/PKCE behavior, not its ZGW integrations, so
-    # these credentials are placeholders.
     apiConnections:
       openKlant:
         baseUrl: https://openklant.local/klantinteracties/api/v1/
-        apiKey: placeholder-ita-openklant-key
+        apiKey: openklantItaToken
       object:
         baseUrl: https://objecten.local/api/v2/
-        apiKey: placeholder-ita-object-key
+        apiKey: objectenItaToken
       zaakSysteem:
         baseUrl: https://openzaak.local
-        clientId: ita
-        key: placeholder-ita-zaaksysteem-key
-    # Only medewerker.type is a hard render-time requirement (the parent
-    # podiumd chart's own templates/validations.yaml fails the whole render
-    # if it's left blank) - logboek/afdeling/groep stay unset since nothing
-    # here exercises them. This URL doesn't need to resolve to a real
-    # registered objecttype for this task.
+        key: itaSecret
+    afdeling:
+      type: https://objecttypen.local/api/v2/objecttypes/c8d301f9-80b8-4575-8b29-3e9431f92994
+      typeVersion: 1
+    groep:
+      type: https://objecttypen.local/api/v2/objecttypes/cbec27ac-157b-490b-b586-9e8a8f5bbb85
+      typeVersion: 1
     medewerker:
-      type: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000000
+      type: https://objecttypen.local/api/v2/objecttypes/90984726-2692-49d8-8f9d-742075cb761d
+      typeVersion: 1
+    logboek:
+      type: https://objecttypen.local/api/v2/objecttypes/2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
       typeVersion: 1
     web:
       oidc:
-        authority: https://keycloak.local/realms/zaakafhandelcomponent/
-        clientId: ita
+        authority: https://keycloak.local/realms/zaakafhandelcomponent
+        frontendUrl: https://ita.local/
         clientSecret: itaClientSecret
-        itaSystemAccessRole: ITA_Gebruiker
-        functioneelBeheerderRole: ITA_Functioneel_Beheerder
-        nameClaimType: name
-        roleClaimType: roles
-        objectregisterMedewerkerIdClaimType: samaccountname
-        emailClaimType: email
+    smtp:
+      fromEmail: noreply@example.com
+      host: mailpit
+      port: "1025"
+      enableSsl: "false"
     ingress:
       enabled: true
       className: traefik
@@ -2384,140 +2437,118 @@ podiumd:
             - path: /
               pathType: ImplementationSpecific
 
-  # --- kiss (klantinteractie-servicesysteem) ---
+  # --- kiss (profile: kiss) ---
+  # As ExternalsPodiumD (chart name "contact"), with the register of its
+  # icat/mayk environments that calls Open Zaak and Open Klant directly:
+  # minikube has no e-Suite behind the podiumd-adapter registers of dim1.
+  # The adapter still serves the medewerkers sync from Objecten. Elasticsearch
+  # one node as podiumd-infra; templates/kiss/elastic-user-secret.yaml fixes
+  # its password before ECK generates one.
   kiss:
     enabled: false
-    # Chart default is nameOverride/fullnameOverride: "contact" (its own
-    # internal product name) - overridden here so every resource this
-    # project renders for it is actually named "kiss-*", matching every
-    # other component's own convention instead of standing out as the one
-    # exception.
-    fullnameOverride: "kiss"
-    # Unlike ita above, this chart has no bundled Postgres subchart - points
-    # at a database on this project's own shared instance instead (see
-    # vendor/dimpact-zaakafhandelcomponent/postgres/00-create-databases.sql's
-    # own "kiss" role/database).
+    configuration:
+      oidcUrl: https://contact.local
+      oidcSecret: kissClientSecret
     settings:
       database:
         host: postgres
-        port: 5432
-        name: kiss
-        username: kiss
-        password: kiss
-      # This chart ships its own values.schema.json requiring most of the
-      # settings below to be non-blank (minLength: 1) regardless of whether
-      # anything in the templates actually uses them at render time - found
-      # live, the hard way: leaving them at the chart's own default blank
-      # strings (as first attempted here) fails `helm template` outright with
-      # a schema validation error, even though the *templates* themselves
-      # gate real behavior on these same fields being truthy. Since none of
-      # this is exercised by this task (scope is login/PKCE only, not KISS's
-      # actual search/content/KvK/Haal Centraal features), every field below
-      # is a placeholder purely to satisfy the schema - not a functional
-      # integration. Real per-app credentials, not shared with anything else.
+        name: contact
+        username: contact
+        password: contact
       elastic:
-        baseUrl: http://elastic.unused.podiumd-minikube:9200/
-        password: placeholder-kiss-elastic-password
-      enterpriseSearch:
-        baseUrl: http://enterprise-search.unused.podiumd-minikube/
-        publicApiKey: placeholder-kiss-enterprise-search-public-key
-        privateApiKey: placeholder-kiss-enterprise-search-private-key
+        baseUrl: https://kiss-es-http:9200
+        password: kissElasticPassword
+      # ExternalsPodiumD's api-proxy paths, served here by WireMock.
       haalCentraal:
-        baseUrl: http://haalcentraal.unused.podiumd-minikube/
-        apiKey: placeholder-kiss-haalcentraal-key
-      groepen:
-        baseUrl: https://objecttypen.local/api/v2/
-        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000001
-        token: placeholder-kiss-groepen-token
-      afdelingen:
-        baseUrl: https://objecttypen.local/api/v2/
-        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000002
-        token: placeholder-kiss-afdelingen-token
-      logboek:
-        baseUrl: https://objecttypen.local/api/v2/
-        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000003
-        token: placeholder-kiss-logboek-token
+        baseUrl: http://wiremock:8080/haalcentraal/api/
+        apiKey: unused-wiremock-key
       kvk:
-        baseUrl: http://kvk.unused.podiumd-minikube/
-        apiKey: placeholder-kiss-kvk-key
-      feedback:
-        emailFrom: kiss@podiumd-minikube.invalid
-        emailTo: kiss@podiumd-minikube.invalid
-      managementInformatie:
-        apiKey: placeholder-kiss-managementinformatie-key
+        baseUrl: http://wiremock:8080/api
+        apiKey: unused-wiremock-key
       email:
-        # mailpit, matching every other app's own SMTP relay in this
-        # project - see values.yaml's other "host: mailpit" comments.
         host: mailpit
-      organisatieIds:
-        - "0000"
-      # At least one register is required (minItems: 1) - points at this
-      # project's real internal openzaak/openklant services for
-      # plausibility, "Nieuw" (klantinteracties) shape since that's what
-      # this project's own openklant version implements. Not actually
-      # exercised by this task.
+        port: 1025
+        enableSsl: false
+      feedback:
+        emailFrom: noreply@example.com
+        emailTo: noreply@example.com
+      afdelingen:
+        baseUrl: https://objecten.local
+        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/c8d301f9-80b8-4575-8b29-3e9431f92994
+        token: objectenContactToken
+      groepen:
+        baseUrl: https://objecten.local
+        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/cbec27ac-157b-490b-b586-9e8a8f5bbb85
+        token: objectenContactToken
+      logboek:
+        baseUrl: https://objecten.local
+        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
+        token: objectenContactToken
+      managementInformatie:
+        apiKey: kissManagementInformatieKey
       registers:
         - isDefault: true
           zaaksysteem:
             catalogiBaseUrl: https://openzaak.local/catalogi/api/v1
-            clientId: kiss
-            clientSecret: placeholder-kiss-zaaksysteem-secret
+            clientId: contact
+            clientSecret: contactSecret
             documentenBaseUrl: https://openzaak.local/documenten/api/v1
             zakenBaseUrl: https://openzaak.local/zaken/api/v1
+            useExperimentalQueries: true
           klantinteractie:
-            baseUrl: https://openklant.local/klantinteracties/api/v1
-            token: placeholder-kiss-klantinteractie-token
-      # Every sync CronJob (SharePoint/VAC/website/kennisbank/smoelenboek)
-      # stays off. medewerkers' schema accepts `useEmail: true` as a
-      # complete, self-sufficient alternative to baseUrl/objectTypeUrl/token,
-      # so its own CronJob template's `{{- with ... }}{{- if and .baseUrl
-      # .objectTypeUrl .schedule }}` guard stays falsy with nothing else set.
-      # kennisbank/vac don't have an equally cheap schema escape - their
-      # schema declares `type: [object, null]`, but a literal `null` here
-      # gets treated by Helm's own values-merging as "delete this override",
-      # which brings back the chart's *default* object (blank strings) and
-      # therefore the exact same schema failure - confirmed live. So both
-      # get real (if unused) placeholder baseUrl/objectTypeUrl/token to
-      # satisfy the schema, with `schedule` explicitly blanked (not required
-      # by the schema, unlike the other three fields) to keep their own
-      # CronJob's `if and ... .schedule` guard falsy instead.
-      # sharepoint/website are plain arrays with no minItems constraint, so
-      # the empty default is already schema-valid.
+            baseUrl: https://openklant.local/klantinteracties
+            token: openklantContactToken
       syncJobs:
         kennisbank:
-          baseUrl: http://kennisbank.unused.podiumd-minikube/
-          objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000004
-          token: placeholder-kiss-kennisbank-token
-          schedule: ""
-        vac:
-          baseUrl: https://objecten.local/api/v2/
-          objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000005
-          token: placeholder-kiss-vac-token
-          schedule: ""
+          baseUrl: https://objecten.local
+          objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/e4d2e353-80ea-4962-8276-920d59a3e8de
+          schedule: "15 6-14 * * 1-5"
+          token: objectenContactToken
         medewerkers:
-          useEmail: true
+          baseUrl: http://podiumd-minikube-adapter
+          objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/90984726-2692-49d8-8f9d-742075cb761d
+          schedule: "15 6-14 * * 1-5"
+          clientId: contact_intern
+          clientSecret: contactAdapterSecret
+        vac:
+          manageFromKiss: true
+          baseUrl: https://objecten.local
+          objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/6a0d8f9d-f7e2-4e57-a91b-01656968a62d
+          schedule: "15 6-14 * * 1-5"
+          token: objectenContactToken
       oidc:
         authority: https://keycloak.local/realms/zaakafhandelcomponent/
-        clientId: kiss
         clientSecret: kissClientSecret
-      # No settings.oidc.requireHttps-style field exists in this chart
-      # (unlike pabc's own settings.oidc.requireHttps) - found live, its
-      # OpenIdConnect middleware's RequireHttpsMetadata rejects this
-      # project's plain-HTTP Keycloak authority outright ("must use HTTPS
-      # unless disabled for development"). Empirically confirmed this app
-      # relaxes that check based on ASPNETCORE_ENVIRONMENT instead (the
-      # common `!env.IsDevelopment()` pattern) - chart default is
-      # "Production". Must be nested under settings, not a kiss-level
-      # sibling - found live: misplaced one level up first, which silently
-      # produced no ASPNETCORE_ENVIRONMENT override at all (schema doesn't
-      # catch this since kiss.aspnetcore just isn't a key it defines).
-      aspnetcore:
-        environment: Development
+      organisatieIds:
+        - "000000000"
+    adapter:
+      baseUrl: http://podiumd-minikube-adapter
+      clientId: contact_intern
+      secret: contactAdapterSecret
+      objecten:
+        baseUrl: https://objecten.local
+        token: objectenContactToken
+      objecttypen:
+        baseUrlIntern: https://objecttypen.local
+        baseUrlExtern: https://objecttypen.local
+        medewerkerUUID: 90984726-2692-49d8-8f9d-742075cb761d
+        afdelingUUID: c8d301f9-80b8-4575-8b29-3e9431f92994
+        groepUUID: cbec27ac-157b-490b-b586-9e8a8f5bbb85
+        interneTaakUUID: 72240cd6-29bb-4a66-b1c3-ab6589a39a22
+        kennisartikelUUID: e4d2e353-80ea-4962-8276-920d59a3e8de
+        vacUUID: 6a0d8f9d-f7e2-4e57-a91b-01656968a62d
+      # No e-Suite here: unreachable, so contactverzoeken through the adapter fail.
+      esuite:
+        baseUrl: http://esuite.invalid
+        clientId: contact-kiss
+        secret: unused-esuite-secret
+        contactverzoektypen:
+          - Terugbelverzoek
     ingress:
       enabled: true
       className: traefik
       hosts:
-        - host: kiss.local
+        - host: contact.local
           paths:
             - path: /
               pathType: ImplementationSpecific

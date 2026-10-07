@@ -44,18 +44,15 @@ CREATE DATABASE "Pabc" OWNER pabc;
 CREATE ROLE zac WITH LOGIN PASSWORD 'password';
 CREATE DATABASE zac OWNER zac;
 
--- Not a docker-compose service at all - KISS (klantinteractie-servicesysteem)
--- is a PodiumD-only addition, brought in purely for the PKCE investigation in
--- tests/test_pkce.py (see vendor/dimpact-zaakafhandelcomponent/NOTES.md).
--- Unlike every database above, there's no compose container to copy
--- credentials from, so this one's made up fresh. Its own `kiss-chart` has no
--- bundled Postgres subchart (unlike ITA's - see podiumd.ita.postgresql in
--- values.yaml), so it needs a database on this shared instance.
-CREATE ROLE kiss WITH LOGIN PASSWORD 'kiss';
-CREATE DATABASE kiss OWNER kiss;
+-- KISS (kiss profile, chart name "contact") and ITA (ita profile): PodiumD
+-- components, not in docker-compose; names as ExternalsPodiumD.
+CREATE ROLE contact WITH LOGIN PASSWORD 'contact';
+CREATE DATABASE contact OWNER contact;
+CREATE ROLE ita WITH LOGIN PASSWORD 'ita';
+CREATE DATABASE ita OWNER ita;
 
 -- Open Inwoner (openinwoner profile): a PodiumD component, not in
--- docker-compose; credentials made up like kiss's.
+-- docker-compose; credentials made up like contact's.
 CREATE ROLE openinwoner WITH LOGIN PASSWORD 'openinwoner';
 CREATE DATABASE openinwoner OWNER openinwoner;
 

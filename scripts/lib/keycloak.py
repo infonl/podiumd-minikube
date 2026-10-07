@@ -2,8 +2,9 @@
 
 --import-realm skips a realm that already exists, and Keycloak persists to
 Postgres, so a changed vendored realm never reaches a provisioned cluster.
-The same fixes as lib.manifests.fix_realm are applied to the live clients,
-and clients added to the vendored realm are created.
+The same fixes as lib.manifests.fix_realm are applied to the live clients;
+clients, redirect URIs, protocol mappers and client roles added to the
+vendored realm are added, never removed.
 """
 
 import json
@@ -26,6 +27,14 @@ ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"  # nosec B105  # noqa: S105 - dev-only default from the template
 STARTUP_TIMEOUT = 90
 REALM_FILE = VENDOR_DIR / "keycloak" / "zaakafhandelcomponent-realm.json"
+# The podiumd chart's realm config declares it: ita/kiss map it into a claim,
+# and users may see but not edit it.
+SAMACCOUNTNAME = {
+    "name": "samaccountname",
+    "displayName": "${samaccountname}",
+    "permissions": {"view": ["admin", "user"], "edit": ["admin"]},
+    "multivalued": False,
+}
 
 
 def _kcadm(pod: str) -> list[str]:
@@ -41,19 +50,19 @@ def _clients(pod: str) -> list[Any] | None:
     ]  # fmt: skip
     if not process.succeeds(login):
         return None
-    fields = "id,clientId,redirectUris,webOrigins,attributes"
+    fields = "id,clientId,redirectUris,webOrigins,attributes,protocolMappers(name)"
     result = process.run([*_kcadm(pod), "get", "clients", "-r", REALM, "--fields", fields], check=False)
     if result.returncode != 0:
         return None
     return json.loads(result.stdout) or None
 
 
-def client_changes(client: dict[str, Any], *, zac_pkce: bool) -> list[str]:
-    """kcadm `-s` settings that bring client in line with lib.manifests.fix_realm; [] when it is."""
+def client_changes(client: dict[str, Any], vendored: dict[str, Any], *, zac_pkce: bool) -> list[str]:
+    """kcadm `-s` settings that bring client in line with vendored and lib.manifests.fix_realm; [] when it is."""
     changes: list[str] = []
     for field in ("redirectUris", "webOrigins"):
         current: list[str] = client.get(field) or []
-        wanted = manifests.with_https(current)
+        wanted = manifests.with_https(current + [uri for uri in vendored.get(field, []) if uri not in current])
         if wanted != current:
             changes += ["-s", f"{field}={json.dumps(wanted)}"]
     if client.get("clientId") == ZAC_CLIENT_ID:
@@ -78,6 +87,40 @@ def missing_clients(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) 
     ]
 
 
+def missing_by_name(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The vendored protocol mappers or roles whose name is not live, without their ids."""
+    present = {item.get("name") for item in live}
+    return [
+        {key: value for key, value in item.items() if key not in ("id", "containerId")}
+        for item in vendored
+        if item.get("name") not in present
+    ]
+
+
+def profile_with_samaccountname(profile: dict[str, Any]) -> dict[str, Any] | None:
+    """profile with SAMACCOUNTNAME appended; None when it already has it."""
+    attributes: list[dict[str, Any]] = profile.get("attributes", [])
+    if any(attribute.get("name") == SAMACCOUNTNAME["name"] for attribute in attributes):
+        return None
+    return {**profile, "attributes": [*attributes, SAMACCOUNTNAME]}
+
+
+def _sync_client_parts(pod: str, client: dict[str, Any], vendored: dict[str, Any], roles: list[dict[str, Any]]) -> None:
+    """Adds the vendored protocol mappers and client roles that client lacks."""
+    path = f"clients/{client['id']}"
+    for mapper in missing_by_name(client.get("protocolMappers") or [], vendored.get("protocolMappers", [])):
+        process.output(
+            [*_kcadm(pod), "create", f"{path}/protocol-mappers/models", "-r", REALM, "-f", "-"],
+            stdin=json.dumps(mapper),
+        )
+        print(f"  added mapper {mapper['name']} to client {client['clientId']}")
+    if roles:
+        live = json.loads(process.output([*_kcadm(pod), "get", f"{path}/roles", "-r", REALM, "--fields", "name"]))
+        for role in missing_by_name(live, roles):
+            process.output([*_kcadm(pod), "create", f"{path}/roles", "-r", REALM, "-f", "-"], stdin=json.dumps(role))
+            print(f"  added role {role['name']} to client {client['clientId']}")
+
+
 def sync_realm(*, zac_pkce: bool) -> None:
     """Applies the realm fixes to the live clients."""
     if not kube.exists("deployment/keycloak"):
@@ -95,13 +138,26 @@ def sync_realm(*, zac_pkce: bool) -> None:
             file=sys.stderr,
         )
         return
-    vendored: list[dict[str, Any]] = json.loads(REALM_FILE.read_text(encoding="utf-8"))["clients"]
-    for client in missing_clients(clients, vendored):
+    realm = json.loads(REALM_FILE.read_text(encoding="utf-8"))
+    vendored = {client["clientId"]: client for client in realm["clients"]}
+    created = missing_clients(clients, list(vendored.values()))
+    for client in created:
         process.output([*_kcadm(pod), "create", "clients", "-r", REALM, "-f", "-"], stdin=json.dumps(client))
         print(f"  created client {client['clientId']}")
+    if created:
+        clients = _clients(pod) or clients
+    client_roles: dict[str, list[dict[str, Any]]] = realm["roles"]["client"]
     for client in clients:
-        changes = client_changes(client, zac_pkce=zac_pkce)
+        wanted = vendored.get(client["clientId"], {})
+        changes = client_changes(client, wanted, zac_pkce=zac_pkce)
         if changes:
             process.output([*_kcadm(pod), "update", f"clients/{client['id']}", "-r", REALM, *changes])
             print(f"  updated client {client['clientId']}")
+        _sync_client_parts(pod, client, wanted, client_roles.get(client["clientId"], []))
+    profile = profile_with_samaccountname(
+        json.loads(process.output([*_kcadm(pod), "get", "users/profile", "-r", REALM]))
+    )
+    if profile:
+        process.output([*_kcadm(pod), "update", "users/profile", "-r", REALM, "-f", "-"], stdin=json.dumps(profile))
+        print("  declared user attribute samaccountname")
     print(f"Keycloak's live '{REALM}' realm clients are in sync.")
