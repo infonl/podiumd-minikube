@@ -4024,3 +4024,47 @@ unexplained deploy hiccup (many other kubeconfig contexts present, see
 CLAUDE.md's Azure CLI note).
 
 Full suite (including `test_browser.py`): 76 passed, 7 skipped, 0 failed.
+
+## Fresh cluster never went Ready: node DNS via the bridge gateway had no listener
+
+`./scripts/deploy.sh --full` timed out at "Waiting for the
+storage-permissions-fix Job to complete". The Job itself was fine - its pod
+sat `Pending` on `node.kubernetes.io/not-ready:NoSchedule`, because the
+minikube node (recreated 2026-10-05) had been `NotReady` since creation:
+`cni plugin not initialized`, since `kindnet` was in permanent
+`ImagePullBackOff` on `lookup registry-1.docker.io: Temporary failure in
+name resolution`. CoreDNS and storage-provisioner were `Pending` with it.
+
+Not the egress gap fixed earlier ("Fixing the outbound DNS/egress gap for
+real, on the host") - egress from the node was fine (`nslookup ... 8.8.8.8`
+and `curl https://1.1.1.1` both worked, so did Docker's embedded resolver
+at `127.0.0.11` from inside the node). Only the node's configured resolver
+was dead: kicbase writes `nameserver 192.168.49.1` (the minikube bridge's
+gateway) into the node's `/etc/resolv.conf`, and normally pairs it with a
+DNAT inside the node from `192.168.49.1:53` to Docker's embedded DNS. That
+DNAT was absent. Most likely cause: with `firewall-backend: nftables` in
+`/etc/docker/daemon.json`, Docker's embedded-DNS rules in the node netns
+are nft rules, not the iptables `DOCKER_OUTPUT` chain kicbase's entrypoint
+looks for, so it finds nothing to copy (inferred, not verified against
+kicbase source). Meanwhile host dnsmasq only listened on `lo`
+(`interface=lo` + `bind-interfaces`), so nothing answered on
+`192.168.49.1:53`.
+
+Fixed on the host (root-owned system files, outside this repo; originals
+kept as `*.bak`):
+
+- `/etc/dnsmasq.conf`: added `interface=br-*` and `no-dhcp-interface=br-*`,
+  and switched `bind-interfaces` to `bind-dynamic` so dnsmasq picks up
+  Docker bridges created after it starts (a recreated minikube network
+  gets a new `br-<id>`). DNS only, never DHCP, on those bridges.
+- `/etc/nftables.conf`: `input` chain (IPv4 `filter`) gets
+  `iifname "br-*" meta l4proto { udp, tcp } th dport 53 accept`, since
+  its default is `counter log drop`.
+
+Applied with `nft -f /etc/nftables.conf` (in-place reload, no Docker
+restart - same reasoning as the earlier egress fix) and
+`systemctl restart dnsmasq`. Verified live: dnsmasq now listening on
+`192.168.49.1:53`, `minikube ssh -- nslookup registry-1.docker.io`
+resolves, deleting the stuck `kindnet` pod let its replacement pull and
+run, node went `Ready`, and the waiting `storage-permissions-fix` Job
+completed. Host-side DNS unaffected.
