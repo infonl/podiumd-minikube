@@ -24,7 +24,6 @@ import pytest
 import requests
 
 from conftest import NAMESPACE
-from conftest import host_headers
 from conftest import host_url
 from conftest import kubectl
 
@@ -43,7 +42,7 @@ KEYCLOAK_HOST = "keycloak.local"
 # reach Objects API itself. Real form submissions hit this the same way -
 # Open Formulieren's own "objecttypes-api" service in values.yaml uses the
 # identical dotted host for exactly this reason.
-PRODUCTAANVRAAG_OBJECTTYPE_INTERNAL_HOST = "objecttypen.podiumd-minikube"
+PRODUCTAANVRAAG_OBJECTTYPE_INTERNAL_HOST = "objecttypen.local"
 
 CATALOGUS_DOMEIN = "ALG"
 CATALOGUS_RSIN = "002564440"
@@ -118,9 +117,8 @@ def _zgw_jwt(client_id, secret):
 
 def _openzaak_get(traefik_ip, path, **params):
     response = requests.get(
-        host_url(traefik_ip, path),
+        host_url(OPENZAAK_HOST, path),
         headers={
-            **host_headers(OPENZAAK_HOST),
             "Authorization": f"Bearer {_zgw_jwt(ZGW_JWT_CLIENT_ID, ZGW_JWT_SECRET)}",
             "Accept-Crs": "EPSG:4326",
         },
@@ -153,8 +151,7 @@ def _zaaktype_url(traefik_ip):
 
 def _beheerder_token(traefik_ip):
     response = requests.post(
-        host_url(traefik_ip, "/realms/zaakafhandelcomponent/protocol/openid-connect/token"),
-        headers=host_headers(KEYCLOAK_HOST),
+        host_url(KEYCLOAK_HOST, "/realms/zaakafhandelcomponent/protocol/openid-connect/token"),
         data={
             "grant_type": "password",
             "client_id": "zaakafhandelcomponent",
@@ -224,7 +221,7 @@ def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement():
     assert "objecten" in kanalen.splitlines()
 
     callback_urls = _opennotificaties_psql("SELECT callback_url FROM datamodel_abonnement;")
-    assert "http://zac.podiumd-minikube/rest/notificaties" in callback_urls.splitlines()
+    assert "https://zac.local/rest/notificaties" in callback_urls.splitlines()
 
 
 def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enabled_profiles):
@@ -252,9 +249,8 @@ def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enab
     # unified Objects/Objecttypes token table only ever gets OBJECTEN_TOKEN.
     token = "openFormulierenToObjecttypenToken" if enabled_profiles.get("objecttypen") else OBJECTEN_TOKEN
     response = requests.get(
-        host_url(traefik_ip, f"/api/v2/objecttypes/{PRODUCTAANVRAAG_OBJECTTYPE_UUID}"),
+        host_url(host, f"/api/v2/objecttypes/{PRODUCTAANVRAAG_OBJECTTYPE_UUID}"),
         headers={
-            **host_headers(host),
             "Authorization": f"Token {token}",
         },
         timeout=15,
@@ -263,9 +259,8 @@ def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enab
     assert response.json()["name"] == "Productaanvraag-Dimpact"
 
     versions = requests.get(
-        host_url(traefik_ip, f"/api/v2/objecttypes/{PRODUCTAANVRAAG_OBJECTTYPE_UUID}/versions"),
+        host_url(host, f"/api/v2/objecttypes/{PRODUCTAANVRAAG_OBJECTTYPE_UUID}/versions"),
         headers={
-            **host_headers(host),
             "Authorization": f"Token {token}",
         },
         timeout=15,
@@ -290,9 +285,8 @@ def test_zac_zaaktype_test_1_zaakafhandelparameters_is_valide(traefik_ip):
     """
     zaaktype_uuid = _zaaktype_url(traefik_ip).rstrip("/").rsplit("/", 1)[-1]
     response = requests.get(
-        host_url(traefik_ip, f"/rest/zaakafhandelparameters/{zaaktype_uuid}"),
+        host_url(ZAC_HOST, f"/rest/zaakafhandelparameters/{zaaktype_uuid}"),
         headers={
-            **host_headers(ZAC_HOST),
             "Authorization": f"Bearer {_beheerder_token(traefik_ip)}",
         },
         timeout=15,
@@ -362,15 +356,14 @@ def test_full_productaanvraag_flow_creates_a_zaak(traefik_ip):
     zaaktype_url = _zaaktype_url(traefik_ip)
 
     create_response = requests.post(
-        host_url(traefik_ip, "/api/v2/objects"),
+        host_url(OBJECTEN_HOST, "/api/v2/objects"),
         headers={
-            **host_headers(OBJECTEN_HOST),
             "Authorization": f"Token {OBJECTEN_TOKEN}",
             "Content-Crs": "EPSG:4326",
         },
         json={
             "type": (
-                f"http://{PRODUCTAANVRAAG_OBJECTTYPE_INTERNAL_HOST}"
+                f"https://{PRODUCTAANVRAAG_OBJECTTYPE_INTERNAL_HOST}"
                 f"/api/v2/objecttypes/{PRODUCTAANVRAAG_OBJECTTYPE_UUID}"
             ),
             "record": {

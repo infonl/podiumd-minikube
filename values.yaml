@@ -274,7 +274,7 @@ podiumd:
     # ALLOWED_HOSTS already includes this dotted form alongside the bare one
     # (a podiumd/zac chart default) - this is what it's there for.
     zgwApis:
-      url: http://openzaak.podiumd-minikube/
+      url: https://openzaak.local/
       clientId: zac_client
       secret: openzaakZaakafhandelcomponentClientSecret
     notificationsSecretKey: openNotificatiesApiSecretKey
@@ -298,10 +298,10 @@ podiumd:
       nietOntvankelijkResultaatNaam: Geweigerd
       productaanvraagtype: productaanvraag-test-zaaktype-1
     klantinteractiesApi:
-      url: http://openklant
+      url: https://openklant.local
       token: fakeToken
     objectenApi:
-      url: http://objecten
+      url: https://objecten.local
       token: fakeZacObjectsToken
     brpApi:
       url: http://wiremock:8080/haalcentraal/api/brp
@@ -526,6 +526,12 @@ podiumd:
       # seven) for the live guard, and that test module's own docstring for
       # the full investigation.
       data: |-
+        sites_config_enable: true
+        sites_config:
+          items:
+            - domain: openzaak.local
+              name: Open Zaak
+
         # openzaak's own outbound notifications (published whenever it
         # creates/updates a zaak/besluit/document, not the productaanvraag
         # flow's own objecten->opennotificaties->zac path above, which is
@@ -566,7 +572,7 @@ podiumd:
           services:
             - identifier: notificaties-api
               label: Open Notificaties
-              api_root: http://opennotificaties.podiumd-minikube/api/v1/
+              api_root: https://opennotificaties.local/api/v1/
               api_type: nrc
               auth_type: zgw
               client_id: zaak
@@ -650,7 +656,7 @@ podiumd:
       # realm.json import (keycloak-operator.enabled is false here - see
       # that key's own comment) - inert otherwise.
       pkceEnabled: false
-      oidcUrl: http://openzaak.local
+      oidcUrl: https://openzaak.local
       # Matches docker-compose.yaml's DJANGO_SUPERUSER_PASSWORD/
       # OPENZAAK_SUPERUSER_USERNAME/OPENZAAK_SUPERUSER_EMAIL exactly. Found
       # live: left unset, the container never creates the 'admin' user our
@@ -677,18 +683,10 @@ podiumd:
       # DisallowedHost 400 error page, since "openzaak.local" was never in
       # that list.
       allowedHosts: openzaak.local
-      # Host for URLs built outside a request (notifications, autorisaties
-      # sync); unset, Django's default Site "example.com" fails ALLOWED_HOSTS.
-      # The in-cluster name, because the consumers (ZAC, Open Notificaties)
-      # are in-cluster.
-      siteDomain: openzaak.podiumd-minikube
-      # Chart default (true) makes session/CSRF cookies Secure-only -
-      # confirmed live, the browser silently drops both over our plain
-      # http://openzaak.local ingress, failing django-admin login with a
-      # CSRF error before a single credential is even checked. No compose
-      # equivalent to match (compose never exposes openzaak's admin login
-      # through a browser at all) - purely for local admin access.
-      isHttps: false
+      # As ExternalsPodiumD: Secure cookies and https URLs (Traefik
+      # terminates TLS). Its domain for URLs built outside a request comes
+      # from sites_config in configuration.data.
+      isHttps: true
       # Confirmed live: DISABLE_2FA is only read by openzaak.conf.dev/.ci,
       # neither part of the conf.docker->production->includes.base chain
       # this container actually uses, so settings.disable2fa is a dead
@@ -793,7 +791,7 @@ podiumd:
           services:
             - identifier: notificaties-api
               label: Open Notificaties
-              api_root: http://opennotificaties.podiumd-minikube/api/v1/
+              api_root: https://opennotificaties.local/api/v1/
               api_type: nrc
               auth_type: zgw
               client_id: zaak
@@ -834,13 +832,10 @@ podiumd:
     settings:
       # See openzaak's own allowedHosts comment above - same gap, same fix.
       allowedHosts: openklant.local
-      # See openzaak's siteDomain comment.
-      siteDomain: openklant.podiumd-minikube
-      # Chart default (true) makes session/CSRF cookies Secure-only -
-      # confirmed live, the browser silently drops both over our plain
-      # http://openklant.local ingress, failing django-admin login with a
-      # CSRF error before a single credential is even checked.
-      isHttps: false
+      # As ExternalsPodiumD, which sets Open Klant's domain here, not in
+      # sites_config.
+      siteDomain: openklant.local
+      isHttps: true
       # Unlike openzaak/opennotificaties/objecttypen/openformulieren, this
       # actually works natively - confirmed live by reading
       # open_api_framework.conf.base (the shared maykinmedia library
@@ -1126,12 +1121,18 @@ podiumd:
       # every other fake-credential-with-full-access pattern already used
       # throughout this file (e.g. openzaak's own Applicatie rows).
       data: |-
+        sites_config_enable: true
+        sites_config:
+          items:
+            - domain: objecten.local
+              name: Objecten
+
         zgw_consumers_config_enable: True
         zgw_consumers:
           services:
             - identifier: objecttypes-api
               label: Objecttypen API
-              api_root: http://objecttypen.podiumd-minikube/api/v2/
+              api_root: https://objecttypen.local/api/v2/
               api_type: orc
               auth_type: api_key
               header_key: Authorization
@@ -1139,7 +1140,7 @@ podiumd:
 
             - identifier: open-notificaties
               label: Open Notificaties
-              api_root: http://opennotificaties.podiumd-minikube/api/v1/
+              api_root: https://opennotificaties.local/api/v1/
               api_type: nrc
               auth_type: zgw
               client_id: objectsapi
@@ -1204,13 +1205,8 @@ podiumd:
     settings:
       secretKey: objectenApiSecretKey
       allowedHosts: objecten.local
-      # See openzaak's siteDomain comment.
-      siteDomain: objecten.podiumd-minikube
-      # Chart default (true) makes session/CSRF cookies Secure-only -
-      # confirmed live, the browser silently drops both over our plain
-      # http://objecten.local ingress, failing django-admin login with a
-      # CSRF error before a single credential is even checked.
-      isHttps: false
+      # See openzaak's isHttps comment.
+      isHttps: true
       djangoSettingsModule: objects.conf.docker_no_solo_cache
       # Unlike most other apps fixed here, this works natively - confirmed
       # live by reading open_api_framework.conf.base (the shared maykinmedia
@@ -1307,6 +1303,12 @@ podiumd:
       # Values match what those two blocks' own zgw_consumers services
       # authenticate with.
       data: |-
+        sites_config_enable: true
+        sites_config:
+          items:
+            - domain: objecttypen.local
+              name: Objecttypen
+
         tokenauth_config_enable: true
         tokenauth:
           items:
@@ -1327,15 +1329,6 @@ podiumd:
     # instead of its own.
     create_required_objecttypen_job:
       enabled: false
-    # No dedicated values.yaml field for IS_HTTPS on this chart (unlike
-    # openarchiefbeheer's settings.cookie.*), so set via extraEnvVars -
-    # confirmed live: without this, SESSION_COOKIE_SECURE/CSRF_COOKIE_SECURE
-    # default true, and the browser silently drops both cookies over our
-    # plain http://objecttypen.local ingress, failing django-admin login
-    # with "CSRF verification failed" before a single credential is checked.
-    extraEnvVars:
-      - name: IS_HTTPS
-        value: "False"
     # See settings.djangoSettingsModule below for why this mount exists -
     # same ConfigMap+extraVolumes+extraVolumeMounts pattern already used
     # for openzaak's/opennotificaties'/openarchiefbeheer's own
@@ -1479,6 +1472,12 @@ podiumd:
       # own self-contained JWT secret store, confirmed live sufficient for
       # this direction).
       data: |-
+        sites_config_enable: true
+        sites_config:
+          items:
+            - domain: opennotificaties.local
+              name: Open Notificaties
+
         oidc_db_config_enable: False
 
         zgw_consumers_config_enable: True
@@ -1486,7 +1485,7 @@ podiumd:
           services:
             - identifier: autorisaties-api
               label: Open Zaak - Autorisaties API
-              api_root: http://openzaak.podiumd-minikube/autorisaties/api/v1/
+              api_root: https://openzaak.local/autorisaties/api/v1/
               api_type: ac
               auth_type: zgw
               client_id: notificaties
@@ -1569,19 +1568,15 @@ podiumd:
             # its own --help text) always updates the same abonnement
             # rather than accumulating duplicates.
             - uuid: fb4e3474-18c8-474b-94ae-980850ea4a7f
-              callback_url: http://zac.podiumd-minikube/rest/notificaties
+              callback_url: https://zac.local/rest/notificaties
               auth: openNotificatiesApiSecretKey
               kanalen:
                 - naam: objecten
     settings:
       secretKey: opennotificatiesApiSecretKey
       allowedHosts: opennotificaties.local
-      # See openzaak's siteDomain comment.
-      siteDomain: opennotificaties.podiumd-minikube
-      # See openzaak's own isHttps comment above - same chart-default
-      # (Secure-only cookies dropped by the browser over plain http://,
-      # confirmed live), same fix.
-      isHttps: false
+      # See openzaak's isHttps comment.
+      isHttps: true
       # See openzaak's own djangoSettingsModule comment above - same
       # DISABLE_2FA-only-lives-in-conf.dev gap, confirmed live against the
       # same "Tweestapsauthenticatie instellen" wall (opennotificaties'
@@ -1698,28 +1693,28 @@ podiumd:
           services:
           - identifier: zaken-test
             label: Open Zaak - Zaken API
-            api_root: http://openzaak/zaken/api/v1/
+            api_root: https://openzaak.local/zaken/api/v1/
             api_type: zrc
             auth_type: zgw
             client_id: zac_client
             secret: openzaakZaakafhandelcomponentClientSecret
           - identifier: documenten-test
             label: Open Zaak - Documenten API
-            api_root: http://openzaak/documenten/api/v1/
+            api_root: https://openzaak.local/documenten/api/v1/
             api_type: drc
             auth_type: zgw
             client_id: zac_client
             secret: openzaakZaakafhandelcomponentClientSecret
           - identifier: catalogi-test
             label: Open Zaak - Catalogi API
-            api_root: http://openzaak/catalogi/api/v1/
+            api_root: https://openzaak.local/catalogi/api/v1/
             api_type: ztc
             auth_type: zgw
             client_id: zac_client
             secret: openzaakZaakafhandelcomponentClientSecret
           - identifier: besluiten-test
             label: Open Zaak - Besluiten API
-            api_root: http://openzaak/besluiten/api/v1/
+            api_root: https://openzaak.local/besluiten/api/v1/
             api_type: brc
             auth_type: zgw
             client_id: zac_client
@@ -1769,6 +1764,8 @@ podiumd:
       # nginx, just two Host-header entry points. Also feeds nginx's own
       # server_name directive (same mechanism as our raw templates).
       allowedHosts: openarchiefbeheer-web.local,openarchiefbeheer-ui.local
+      # See openzaak's isHttps comment.
+      isHttps: true
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
       email:
@@ -1784,16 +1781,10 @@ podiumd:
         username: openarchiefbeheer
         password: openarchiefbeheer
         name: openarchiefbeheer
-      # Plain HTTP ingress (no TLS) - the chart's own secure-cookie
-      # defaults (true) would make the browser silently refuse to send
-      # session/CSRF cookies back at all over our http:// hostnames.
-      cookie:
-        sessionCookieSecure: false
-        csrfCookieSecure: false
       cors:
-        allowedOrigins: http://openarchiefbeheer-ui.local,http://openarchiefbeheer-web.local
+        allowedOrigins: https://openarchiefbeheer-ui.local,https://openarchiefbeheer-web.local
       csrf:
-        trustedOrigins: http://openarchiefbeheer-ui.local,http://openarchiefbeheer-web.local
+        trustedOrigins: https://openarchiefbeheer-ui.local,https://openarchiefbeheer-web.local
       # Own Redis DB, see openzaak's cache comment.
       cache:
         default: redis:6379/13
@@ -1809,10 +1800,10 @@ podiumd:
         resultBackend: redis://redis:6379/14
         resultBackendl: redis://redis:6379/14
       frontend:
-        apiUrl: http://openarchiefbeheer-web.local
+        apiUrl: https://openarchiefbeheer-web.local
         apiPath: /api/v1
         zaakUrlTemplate: "https://zac.local/zaken/{identificatie}"
-      frontendUrl: http://openarchiefbeheer-ui.local
+      frontendUrl: https://openarchiefbeheer-ui.local
       requestsReadTimeout: "5000"
     extraVolumes:
       - name: no2fa-settings
@@ -1932,7 +1923,7 @@ podiumd:
           services:
             - identifier: openzaak-zaken
               label: Open Zaak - Zaken API
-              api_root: http://openzaak.podiumd-minikube/zaken/api/v1/
+              api_root: https://openzaak.local/zaken/api/v1/
               api_type: zrc
               auth_type: zgw
               client_id: open-formulieren
@@ -1940,7 +1931,7 @@ podiumd:
 
             - identifier: openzaak-documenten
               label: Open Zaak - Documenten API
-              api_root: http://openzaak.podiumd-minikube/documenten/api/v1/
+              api_root: https://openzaak.local/documenten/api/v1/
               api_type: drc
               auth_type: zgw
               client_id: open-formulieren
@@ -1948,7 +1939,7 @@ podiumd:
 
             - identifier: openzaak-catalogi
               label: Open Zaak - Catalogi API
-              api_root: http://openzaak.podiumd-minikube/catalogi/api/v1/
+              api_root: https://openzaak.local/catalogi/api/v1/
               api_type: ztc
               auth_type: zgw
               client_id: open-formulieren
@@ -1956,7 +1947,7 @@ podiumd:
 
             - identifier: objects-api
               label: Objects API
-              api_root: http://objecten.podiumd-minikube/api/v2/
+              api_root: https://objecten.local/api/v2/
               api_type: orc
               auth_type: api_key
               header_key: Authorization
@@ -1964,7 +1955,7 @@ podiumd:
 
             - identifier: objecttypes-api
               label: Objecttypen API
-              api_root: http://objecttypen.podiumd-minikube/api/v2/
+              api_root: https://objecttypen.local/api/v2/
               api_type: orc
               auth_type: api_key
               header_key: Authorization
@@ -1998,13 +1989,8 @@ podiumd:
     settings:
       secretKey: openFormulierenSecretKey
       allowedHosts: openformulieren-nginx.local,openformulieren-web.local
-      # Chart default (true) makes session/CSRF cookies Secure-only -
-      # confirmed live, the browser silently drops both over our plain
-      # http://openformulieren-nginx.local ingress, failing django-admin
-      # login with a CSRF error before a single credential is even
-      # checked. Unlike openzaak/opennotificaties/objecttypen, this chart
-      # does expose a dedicated field for it (no extraEnvVars needed).
-      isHttps: false
+      # See openzaak's isHttps comment.
+      isHttps: true
       # Confirmed live: DISABLE_2FA is only read by openforms.conf.dev,
       # not the conf.docker->production->base chain this container
       # actually uses, so there's no settings.disable2fa-equivalent field
@@ -2042,8 +2028,8 @@ podiumd:
         resultBackendl: redis://redis:6379/10
       csrf:
         trustedOrigins:
-          - http://openformulieren-nginx.local
-          - http://openformulieren-web.local
+          - https://openformulieren-nginx.local
+          - https://openformulieren-web.local
       cors:
         allowAllOrigins: true
     ingress:
@@ -2147,13 +2133,13 @@ podiumd:
     # these credentials are placeholders.
     apiConnections:
       openKlant:
-        baseUrl: http://openklant.podiumd-minikube/klantinteracties/api/v1/
+        baseUrl: https://openklant.local/klantinteracties/api/v1/
         apiKey: placeholder-ita-openklant-key
       object:
-        baseUrl: http://objecten.podiumd-minikube/api/v2/
+        baseUrl: https://objecten.local/api/v2/
         apiKey: placeholder-ita-object-key
       zaakSysteem:
-        baseUrl: http://openzaak.podiumd-minikube
+        baseUrl: https://openzaak.local
         clientId: ita
         key: placeholder-ita-zaaksysteem-key
     # Only medewerker.type is a hard render-time requirement (the parent
@@ -2162,7 +2148,7 @@ podiumd:
     # here exercises them. This URL doesn't need to resolve to a real
     # registered objecttype for this task.
     medewerker:
-      type: http://objecttypen.podiumd-minikube/api/v2/objecttypes/00000000-0000-0000-0000-000000000000
+      type: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000000
       typeVersion: 1
     web:
       oidc:
@@ -2226,16 +2212,16 @@ podiumd:
         baseUrl: http://haalcentraal.unused.podiumd-minikube/
         apiKey: placeholder-kiss-haalcentraal-key
       groepen:
-        baseUrl: http://objecttypen.podiumd-minikube/api/v2/
-        objectTypeUrl: http://objecttypen.podiumd-minikube/api/v2/objecttypes/00000000-0000-0000-0000-000000000001
+        baseUrl: https://objecttypen.local/api/v2/
+        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000001
         token: placeholder-kiss-groepen-token
       afdelingen:
-        baseUrl: http://objecttypen.podiumd-minikube/api/v2/
-        objectTypeUrl: http://objecttypen.podiumd-minikube/api/v2/objecttypes/00000000-0000-0000-0000-000000000002
+        baseUrl: https://objecttypen.local/api/v2/
+        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000002
         token: placeholder-kiss-afdelingen-token
       logboek:
-        baseUrl: http://objecttypen.podiumd-minikube/api/v2/
-        objectTypeUrl: http://objecttypen.podiumd-minikube/api/v2/objecttypes/00000000-0000-0000-0000-000000000003
+        baseUrl: https://objecttypen.local/api/v2/
+        objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000003
         token: placeholder-kiss-logboek-token
       kvk:
         baseUrl: http://kvk.unused.podiumd-minikube/
@@ -2259,13 +2245,13 @@ podiumd:
       registers:
         - isDefault: true
           zaaksysteem:
-            catalogiBaseUrl: http://openzaak.podiumd-minikube/catalogi/api/v1
+            catalogiBaseUrl: https://openzaak.local/catalogi/api/v1
             clientId: kiss
             clientSecret: placeholder-kiss-zaaksysteem-secret
-            documentenBaseUrl: http://openzaak.podiumd-minikube/documenten/api/v1
-            zakenBaseUrl: http://openzaak.podiumd-minikube/zaken/api/v1
+            documentenBaseUrl: https://openzaak.local/documenten/api/v1
+            zakenBaseUrl: https://openzaak.local/zaken/api/v1
           klantinteractie:
-            baseUrl: http://openklant.podiumd-minikube/klantinteracties/api/v1
+            baseUrl: https://openklant.local/klantinteracties/api/v1
             token: placeholder-kiss-klantinteractie-token
       # Every sync CronJob (SharePoint/VAC/website/kennisbank/smoelenboek)
       # stays off. medewerkers' schema accepts `useEmail: true` as a
@@ -2286,12 +2272,12 @@ podiumd:
       syncJobs:
         kennisbank:
           baseUrl: http://kennisbank.unused.podiumd-minikube/
-          objectTypeUrl: http://objecttypen.podiumd-minikube/api/v2/objecttypes/00000000-0000-0000-0000-000000000004
+          objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000004
           token: placeholder-kiss-kennisbank-token
           schedule: ""
         vac:
-          baseUrl: http://objecten.podiumd-minikube/api/v2/
-          objectTypeUrl: http://objecttypen.podiumd-minikube/api/v2/objecttypes/00000000-0000-0000-0000-000000000005
+          baseUrl: https://objecten.local/api/v2/
+          objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/00000000-0000-0000-0000-000000000005
           token: placeholder-kiss-vac-token
           schedule: ""
         medewerkers:
@@ -2420,7 +2406,7 @@ monitoring-logging:
       server:
         domain: grafana.local
         enforce_domain: false # avoids a redirect loop if reached by IP or a different hostname
-        root_url: http://grafana.local/
+        root_url: https://grafana.local/
       security:
         cookie_secure: false # plain http://*.local, not https - same fix as openarchiefbeheer's identical cookie issue elsewhere in this file
       smtp:

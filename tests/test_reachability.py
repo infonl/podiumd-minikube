@@ -11,7 +11,6 @@ Expected status codes:
 import pytest
 import requests
 
-from conftest import host_headers
 from conftest import host_url
 
 # (hostname, expected_status, profile_key or None if always-on)
@@ -39,8 +38,7 @@ def test_ingress_host_reachable(traefik_ip, enabled_profiles, hostname, expected
     if profile is not None and not enabled_profiles.get(profile):
         pytest.skip(f"'{profile}' profile is not deployed")
     response = requests.get(
-        host_url(traefik_ip),
-        headers=host_headers(hostname),
+        host_url(hostname),
         timeout=10,
         allow_redirects=False,
     )
@@ -59,8 +57,7 @@ def test_openformulieren_admin_login_reachable(traefik_ip, enabled_profiles):
         pytest.skip("'openformulieren' profile is not deployed")
     session = requests.Session()
     response = session.get(
-        host_url(traefik_ip, "/admin/login/"),
-        headers=host_headers("openformulieren-nginx.local"),
+        host_url("openformulieren-nginx.local", "/admin/login/"),
         timeout=10,
     )
     assert response.status_code == 200

@@ -15,6 +15,7 @@ local `/etc/hosts` edits (useful for CI or a fresh checkout).
 """
 
 import json
+import os
 import socket
 import subprocess
 
@@ -26,8 +27,10 @@ NAMESPACE = "podiumd-minikube"
 TRAEFIK_NAMESPACE = "traefik"
 TRAEFIK_SERVICE = "traefik"
 REQUEST_TIMEOUT = 10
-# The local CA that signs every ingress host's certificate (scripts/lib/pki.py).
+# The local CA that signs every ingress host's certificate (scripts/lib/pki.py);
+# requests verifies against it everywhere in this suite.
 CA_FILE = str(Path(__file__).resolve().parents[1] / ".pki" / "ca.crt")
+os.environ["REQUESTS_CA_BUNDLE"] = CA_FILE
 
 
 def kubectl(*args):
@@ -121,12 +124,9 @@ def enabled_profiles(pods):
     }
 
 
-def host_url(traefik_ip, path="/"):
-    return f"http://{traefik_ip}{path}"
-
-
-def host_headers(hostname):
-    return {"Host": hostname}
+def host_url(hostname, path="/"):
+    """https URL of an ingress host; the traefik_ip fixture resolves *.local to Traefik."""
+    return f"https://{hostname}{path}"
 
 
 @pytest.fixture(scope="session")
@@ -135,7 +135,7 @@ def browser_type_launch_args(browser_type_launch_args, traefik_ip):
     Extends pytest-playwright's own fixture: makes the browser resolve
     every *.local hostname straight to Traefik's IP (Chromium's own
     --host-resolver-rules), so browser-based tests can navigate to real
-    URLs like http://zac.local/ with no `/etc/hosts` edit needed - same
+    URLs like https://zac.local/ with no `/etc/hosts` edit needed - same
     "no local hosts-file changes required" property as the rest of this
     suite, just done at the browser level instead of a manual Host header.
     """

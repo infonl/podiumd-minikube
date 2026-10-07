@@ -13,7 +13,6 @@ raw-templates implementation has no equivalent of at all.
 import pytest
 import requests
 
-from conftest import host_headers
 from conftest import host_url
 
 
@@ -28,8 +27,7 @@ def _skip_if_monitoring_logging_disabled(enabled_profiles):
 
 def _grafana_get(traefik_ip, path, **kwargs):
     return requests.get(
-        host_url(traefik_ip, path),
-        headers=host_headers("grafana.local"),
+        host_url("grafana.local", path),
         timeout=10,
         **kwargs,
     )

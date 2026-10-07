@@ -6,8 +6,8 @@ settings chain defaults SESSION_COOKIE_SECURE/CSRF_COOKIE_SECURE to True
 (driven by an IS_HTTPS-style env var, either a dedicated
 settings.isHttps values.yaml field or, where the chart doesn't expose one,
 set directly via extraEnvVars) - the browser silently drops both cookies
-over our plain http://*.local ingress, and login fails as a CSRF error
-before a single credential is even checked. See each app's own
+over plain http://, so these logins go over https://*.local (Traefik
+terminates TLS, as in ExternalsPodiumD). See each app's own
 values.yaml comment (isHttps / extraEnvVars) for the exact mechanism used.
 
 The login form itself is always shaped like a django-two-factor-auth
@@ -34,19 +34,18 @@ import re
 import pytest
 import requests
 
-from conftest import host_headers
 from conftest import host_url
 
 
 def _login(traefik_ip, hostname, username, password):
     session = requests.Session()
-    headers = {**host_headers(hostname), "Referer": f"http://{hostname}/admin/login/"}
+    headers = {"Referer": f"https://{hostname}/admin/login/"}
 
     # GET /admin/login/ and follow wherever it redirects (openformulieren
     # splits into a separate /admin/classic-login/?next=/admin/ view) - the
     # POST below must target that final URL, not the original one, or it
     # 404s/re-redirects instead of submitting the form.
-    login_page = session.get(host_url(traefik_ip, "/admin/login/"), headers=headers, timeout=10)
+    login_page = session.get(host_url(hostname, "/admin/login/"), headers=headers, timeout=10)
     assert login_page.status_code == 200
     login_url = login_page.url
 
@@ -66,7 +65,7 @@ def _login(traefik_ip, hostname, username, password):
         login_url,
         headers={
             **headers,
-            "Origin": f"http://{hostname}",
+            "Origin": f"https://{hostname}",
             "Content-Type": "application/x-www-form-urlencoded",
         },
         data={

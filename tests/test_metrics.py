@@ -8,7 +8,6 @@ bind-address fixes actually working end to end.
 import pytest
 import requests
 
-from conftest import host_headers
 from conftest import host_url
 
 
@@ -20,8 +19,7 @@ def _skip_if_metrics_disabled(enabled_profiles):
 
 def test_grafana_datasources_provisioned(traefik_ip):
     response = requests.get(
-        host_url(traefik_ip, "/api/datasources"),
-        headers=host_headers("grafana.local"),
+        host_url("grafana.local", "/api/datasources"),
         timeout=10,
     )
     assert response.status_code == 200
@@ -31,8 +29,7 @@ def test_grafana_datasources_provisioned(traefik_ip):
 
 def test_prometheus_scrape_targets_healthy(traefik_ip):
     response = requests.get(
-        host_url(traefik_ip, "/api/datasources/proxy/uid/prometheus/api/v1/targets"),
-        headers=host_headers("grafana.local"),
+        host_url("grafana.local", "/api/datasources/proxy/uid/prometheus/api/v1/targets"),
         timeout=10,
     )
     assert response.status_code == 200

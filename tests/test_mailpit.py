@@ -17,7 +17,6 @@ import uuid
 import requests
 
 from conftest import NAMESPACE
-from conftest import host_headers
 from conftest import host_url
 from conftest import kubectl
 from playwright.sync_api import expect
@@ -46,8 +45,7 @@ def test_mail_sent_by_a_component_arrives_in_mailpit(traefik_ip):
     _send_test_mail(marker)
 
     response = requests.get(
-        host_url(traefik_ip, "/api/v1/messages"),
-        headers=host_headers(MAILPIT_HOST),
+        host_url(MAILPIT_HOST, "/api/v1/messages"),
         timeout=10,
     )
     assert response.status_code == 200
@@ -59,7 +57,7 @@ def test_sent_mail_visible_in_mailpit_webui(page):
     marker = f"podiumd-minikube test {uuid.uuid4()}"
     _send_test_mail(marker)
 
-    page.goto("http://mailpit.local/")
+    page.goto("https://mailpit.local/")
     # expect(...).to_be_visible(), not a bare .is_visible() assert: same
     # race as test_browser.py's own dashboard check found live - mailpit's
     # SPA fetches its message list asynchronously after the initial page

@@ -4442,3 +4442,40 @@ Found live, all fixed:
 Verified live: realm clients in sync; seed Job succeeds against
 `https://keycloak.local`; live suite 79 passed, including the HTTPS login
 flow and the browser test.
+
+## TLS step (d2): app-to-app over HTTPS
+
+As ExternalsPodiumD, every app calls the others on their public https host:
+all `http://<app>.podiumd-minikube` and bare `http://openzaak`,
+`http://openklant`, `http://objecten` URLs in `values.yaml` (zgw_consumers
+api_roots, ZAC's API URLs, objecttype URLs, notification callbacks) and the
+`http://*.local` URLs (oidcUrl, CORS/trusted origins, Grafana root_url) are
+now `https://<app>.local`; the ZAC seed Job calls Open Zaak on
+`https://openzaak.local`. In-cluster http stays where ExternalsPodiumD keeps
+it: PABC, the WireMock mocks (its api-proxy), Solr, metrics.
+
+- `isHttps: true` for openzaak, openklant, objecten, opennotificaties,
+  openformulieren and openarchiefbeheer; objecttypen's `IS_HTTPS=False`
+  extraEnvVar and openarchiefbeheer's insecure-cookie override are gone
+  (both chart defaults, as ExternalsPodiumD).
+- Domains: `sites_config` with the public host in openzaak, objecten,
+  objecttypen and opennotificaties `configuration.data`; Open Klant
+  `siteDomain: openklant.local` (ExternalsPodiumD sets it there). This
+  replaces the in-cluster `SITE_DOMAIN` from handoff 5: Open Zaak now builds
+  `https://openzaak.local/...`.
+- Tests: `host_url(hostname, path)` gives the real `https://` URL,
+  `host_headers` is gone, and `REQUESTS_CA_BUNDLE` points at `.pki/ca.crt`;
+  `test_zgw_service_reachability` treats `*.local` api_roots as in-cluster
+  (pods resolve them to Traefik).
+
+Verified live: every Deployment Ready, every Job Complete; Open Zaak's
+`build_absolute_url` gives `https://openzaak.local/x`; Open Zaak and
+Objecten services and the abonnement callback are https; live suite 79
+passed (Django admin logins, productaanvraag flow and service reachability
+all over https).
+
+Known gaps: Open Zaak's fixture SQL keeps a compose-era service
+`objects-api` at `http://objecten-api.local:8000` (unused); the merged
+objecten shape has no `objecttypen.local` Ingress, so
+`https://objecttypen.local` only works on the classic shape (the one
+deployed here).

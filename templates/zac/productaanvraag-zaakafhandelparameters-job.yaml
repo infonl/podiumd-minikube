@@ -86,7 +86,7 @@ spec:
             - name: ZAC_BASE_URL
               value: http://zac/rest
             - name: OPENZAAK_BASE_URL
-              value: http://openzaak.podiumd-minikube
+              value: https://openzaak.local
             - name: ZGW_JWT_CLIENT_ID
               value: {{ .Values.podiumd.zac.zgwApis.clientId | quote }}
             - name: ZGW_JWT_SECRET
