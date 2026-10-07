@@ -10,9 +10,10 @@ from lib import prune
 from lib.process import UserError
 
 
-def _items(*names: str, owned: bool = False) -> str:
-    metadata = [{"name": name, **({"ownerReferences": [{"kind": "Prometheus"}]} if owned else {})} for name in names]
-    return json.dumps({"items": [{"metadata": m} for m in metadata]})
+def _items(*names: str, owned: bool = False, labels: dict[str, str] | None = None) -> str:
+    labels = {"app.kubernetes.io/managed-by": "Helm"} if labels is None else labels
+    owner = {"ownerReferences": [{"kind": "Prometheus"}]} if owned else {}
+    return json.dumps({"items": [{"metadata": {"name": name, "labels": labels, **owner}} for name in names]})
 
 
 def test_orphans_skip_desired_owned_and_unknown_kinds(fake_run: FakeRun):
@@ -40,3 +41,16 @@ def test_prune_refuses_a_large_prune_without_force(fake_run: FakeRun):
     assert fake_run.ran("kubectl", "delete") == []
     prune.prune([], force=True)
     assert len(fake_run.ran("kubectl", "delete")) == len(names)
+
+
+def test_orphans_never_include_objects_without_this_charts_labels(fake_run: FakeRun):
+    fake_run.on("kubectl", "get", stdout=_items())
+    fake_run.on(
+        "kubectl", "get", "Secret",
+        stdout=json.dumps({"items": [
+            json.loads(_items("podiumd-tests-credentials", labels={"app.kubernetes.io/managed-by": "podiumd-tests"}))["items"][0],
+            json.loads(_items("ptest-unlabelled", labels={}))["items"][0],
+            json.loads(_items("old-chart-secret", labels={"app.kubernetes.io/instance": "podiumd-minikube"}))["items"][0],
+        ]}),
+    )  # fmt: skip
+    assert prune.orphans([]) == [("Secret", "old-chart-secret")]

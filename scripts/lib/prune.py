@@ -6,8 +6,9 @@ running (two Grafanas answering grafana.local).
 
 Not pruned: Jobs and CronJobs (pabc-migrations is excluded from the render on
 purpose; CronJob runs are never rendered), ConfigMaps (large ones are applied
-outside the render), and anything with an ownerReference (operator-created,
-like Prometheus' StatefulSet and prometheus-operated Service).
+outside the render), anything with an ownerReference (operator-created,
+like Prometheus' StatefulSet and prometheus-operated Service), and anything
+without this chart's labels (podiumd-tests' Secret was deleted twice).
 """
 
 import json
@@ -16,7 +17,9 @@ import sys
 from lib import kube
 from lib import process
 from lib.manifests import Doc
+from lib.manifests import section
 from lib.paths import NAMESPACE
+from lib.paths import RELEASE_NAME
 
 PRUNABLE_KINDS = (
     "Deployment", "StatefulSet", "DaemonSet",
@@ -39,14 +42,22 @@ def live_objects(kind: str) -> list[Doc] | None:
     return json.loads(result.stdout)["items"]
 
 
+def is_ours(item: Doc) -> bool:
+    """Whether a live object carries this chart's labels (helm template sets one or both)."""
+    labels = section(section(item, "metadata"), "labels")
+    return (
+        labels.get("app.kubernetes.io/instance") == RELEASE_NAME or labels.get("app.kubernetes.io/managed-by") == "Helm"
+    )
+
+
 def orphans(desired_docs: list[Doc]) -> list[tuple[str, str]]:
-    """(kind, name) of live, unowned objects of PRUNABLE_KINDS that desired_docs lack."""
+    """(kind, name) of this chart's live, unowned objects of PRUNABLE_KINDS that desired_docs lack."""
     desired = {(doc["kind"], doc["metadata"]["name"]) for doc in desired_docs if doc.get("kind") in PRUNABLE_KINDS}
     found: list[tuple[str, str]] = []
     for kind in PRUNABLE_KINDS:
         for item in live_objects(kind) or []:
             metadata = item["metadata"]
-            if (kind, metadata["name"]) not in desired and not metadata.get("ownerReferences"):
+            if (kind, metadata["name"]) not in desired and not metadata.get("ownerReferences") and is_ours(item):
                 found.append((kind, metadata["name"]))
     return found
 
