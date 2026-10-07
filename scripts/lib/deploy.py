@@ -12,6 +12,7 @@ from lib import crds
 from lib import dependency
 from lib import disk
 from lib import dns
+from lib import gateway
 from lib import hosts
 from lib import keycloak
 from lib import kube
@@ -184,6 +185,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     chart_hosts = hosts.chart_hosts()
     tls.apply_certificate(chart_hosts)
     dns.apply_hosts(chart_hosts)
+    gateway.apply(render.docs, chart_hosts)
 
     print()
     keycloak.sync_realm(zac_pkce=selected.zac_pkce)
@@ -207,9 +209,9 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     print("\nDone. Next: ./scripts/setup-tunnel for external reachability, or run the suite in tests/ to verify.")
 
 
-def unfinished_jobs(jobs: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
-    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items."""
-    by_name = {job["metadata"]["name"]: job for job in jobs}
+def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
+    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live."""
+    by_name = {job["metadata"]["name"]: job for job in live}
     running: list[str] = []
     failed: list[str] = []
     for name in names:
