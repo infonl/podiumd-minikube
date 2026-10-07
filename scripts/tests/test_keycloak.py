@@ -23,3 +23,15 @@ def test_client_changes_add_https_and_set_pkce_once():
     }
     assert keycloak.client_changes(done, zac_pkce=False) == []
     assert keycloak.client_changes(done, zac_pkce=True) == ["-s", 'attributes."pkce.code.challenge.method"=S256']
+
+
+def test_missing_clients_are_the_vendored_ones_not_live_with_https_twins():
+    live = [{"clientId": "zac"}]
+    vendored = [{"clientId": "zac"}, {"clientId": "openinwoner", "redirectUris": ["http://openinwoner.local/*"]}]
+    assert keycloak.missing_clients(live, vendored) == [
+        {
+            "clientId": "openinwoner",
+            "redirectUris": ["http://openinwoner.local/*", "https://openinwoner.local/*"],
+            "webOrigins": [],
+        }
+    ]

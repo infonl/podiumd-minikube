@@ -2,7 +2,8 @@
 
 --import-realm skips a realm that already exists, and Keycloak persists to
 Postgres, so a changed vendored realm never reaches a provisioned cluster.
-The same fixes as lib.manifests.fix_realm are applied to the live clients.
+The same fixes as lib.manifests.fix_realm are applied to the live clients,
+and clients added to the vendored realm are created.
 """
 
 import json
@@ -15,6 +16,7 @@ from lib import manifests
 from lib import polling
 from lib import process
 from lib.paths import NAMESPACE
+from lib.paths import VENDOR_DIR
 
 REALM = "zaakafhandelcomponent"
 ZAC_CLIENT_ID = "zaakafhandelcomponent"
@@ -23,11 +25,12 @@ PKCE_ATTRIBUTE = "pkce.code.challenge.method"
 ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"  # nosec B105  # noqa: S105 - dev-only default from the template
 STARTUP_TIMEOUT = 90
+REALM_FILE = VENDOR_DIR / "keycloak" / "zaakafhandelcomponent-realm.json"
 
 
 def _kcadm(pod: str) -> list[str]:
     """kcadm.sh in pod; one pod for login and updates, kcadm keeps its session in a file there."""
-    return ["kubectl", "exec", "-n", NAMESPACE, pod, "--", "/opt/keycloak/bin/kcadm.sh"]
+    return ["kubectl", "exec", "-i", "-n", NAMESPACE, pod, "--", "/opt/keycloak/bin/kcadm.sh"]
 
 
 def _clients(pod: str) -> list[Any] | None:
@@ -61,6 +64,20 @@ def client_changes(client: dict[str, Any], *, zac_pkce: bool) -> list[str]:
     return changes
 
 
+def missing_clients(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Vendored clients the live realm lacks, with the https URI twins of lib.manifests.fix_realm."""
+    present = {client.get("clientId") for client in live}
+    return [
+        {
+            **client,
+            "redirectUris": manifests.with_https(client.get("redirectUris", [])),
+            "webOrigins": manifests.with_https(client.get("webOrigins", [])),
+        }
+        for client in vendored
+        if client.get("clientId") not in present
+    ]
+
+
 def sync_realm(*, zac_pkce: bool) -> None:
     """Applies the realm fixes to the live clients."""
     if not kube.exists("deployment/keycloak"):
@@ -78,6 +95,10 @@ def sync_realm(*, zac_pkce: bool) -> None:
             file=sys.stderr,
         )
         return
+    vendored: list[dict[str, Any]] = json.loads(REALM_FILE.read_text(encoding="utf-8"))["clients"]
+    for client in missing_clients(clients, vendored):
+        process.output([*_kcadm(pod), "create", "clients", "-r", REALM, "-f", "-"], stdin=json.dumps(client))
+        print(f"  created client {client['clientId']}")
     for client in clients:
         changes = client_changes(client, zac_pkce=zac_pkce)
         if changes:
