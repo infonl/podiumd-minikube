@@ -4356,3 +4356,31 @@ ita/kiss, which are disabled), and also feeds `update-hosts`.
 
 Verified live: all 15 hosts answer over HTTPS with `--cacert .pki/ca.crt`,
 with the same status as over HTTP; live suite 79 passed.
+
+## TLS step (c): in-cluster DNS for the ingress hosts, CA trust in every pod
+
+The reference environments call each other on public `https://` hosts,
+through public DNS and with publicly trusted certificates. Minikube has
+neither, so `scripts/deploy` now:
+
+- adds a CoreDNS server block (`lib/dns.py`) answering every ingress host
+  with Traefik's ClusterIP;
+- applies ConfigMap `podiumd-ca` (`lib/pki.py`: the CA, certifi's public CAs
+  plus ours, and a Java PKCS12 truststore made with `openssl pkcs12
+  -jdktrust`) server-side, and mounts it via `manifests.trust_ca` in every
+  workload and config Job with `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`,
+  `NODE_EXTRA_CA_CERTS` and `JAVA_TOOL_OPTIONS` (not overriding a value a
+  container sets itself). Other bare Jobs are skipped (immutable spec).
+
+Incident, found live: the first version used the CoreDNS zone `local`. A
+query goes to the most specific matching zone, so `*.cluster.local`
+landed in that block and got SERVFAIL: for about 15 minutes
+(11:57-12:12 UTC) new in-cluster lookups failed, objecttypen could not reach
+Postgres and ZAC was restarted by its probes. Fixed by using the exact host
+names as the block's zones; podiumd-tests was told.
+
+Verified live: cluster names and `zac.local` resolve from a fresh pod;
+Open Zaak's Python reaches `https://keycloak.local` with verification (200);
+ZAC starts with the truststore (`Picked up JAVA_TOOL_OPTIONS`) and becomes
+Ready; every pod Ready; live suite 79 passed. Java's HTTPS trust itself is
+exercised in step (d), when ZAC's URLs switch to https.
