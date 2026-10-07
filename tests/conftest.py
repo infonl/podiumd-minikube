@@ -24,8 +24,13 @@ from pathlib import Path
 import pytest
 
 NAMESPACE = "podiumd-minikube"
-TRAEFIK_NAMESPACE = "traefik"
-TRAEFIK_SERVICE = "traefik"
+# The edge the suite talks to: Traefik, or with PODIUMD_EDGE=gateway the NGINX
+# Gateway Fabric Service (scripts/lib/gateway.py) while it runs next to Traefik.
+EDGE = os.environ.get("PODIUMD_EDGE", "traefik")
+EDGE_NAMESPACE, EDGE_SERVICE = {
+    "traefik": ("traefik", "traefik"),
+    "gateway": ("ingress-basic", "public-gateway-nginx"),
+}[EDGE]
 REQUEST_TIMEOUT = 10
 # The local CA that signs every ingress host's certificate (scripts/lib/pki.py);
 # requests verifies against it everywhere in this suite.
@@ -44,21 +49,21 @@ def kubectl(*args):
 
 @pytest.fixture(scope="session")
 def traefik_ip():
-    """The Traefik LoadBalancer's external IP, or skip the whole suite."""
+    """The edge LoadBalancer's external IP (EDGE), or skip the whole suite."""
     try:
         ip = kubectl(
             "get",
             "svc",
-            TRAEFIK_SERVICE,
+            EDGE_SERVICE,
             "-n",
-            TRAEFIK_NAMESPACE,
+            EDGE_NAMESPACE,
             "-o",
             "jsonpath={.status.loadBalancer.ingress[0].ip}",
         ).strip()
     except (RuntimeError, FileNotFoundError) as exc:
         pytest.skip(f"could not reach the cluster via kubectl: {exc}")
     if not ip:
-        pytest.skip("Traefik has no external IP yet - is `minikube tunnel` running? See scripts/setup-tunnel.")
+        pytest.skip(f"{EDGE_NAMESPACE}/{EDGE_SERVICE} has no external IP yet - is `minikube tunnel` running?")
     _resolve_local_hosts_to(ip)
     return ip
 

@@ -16,6 +16,7 @@ from pathlib import Path
 from lib import chart
 from lib import dependency
 from lib import disk
+from lib import gateway
 from lib import kube
 from lib import manifests
 from lib import memory
@@ -128,6 +129,7 @@ def provision() -> None:
     # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
     kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
     install_traefik()
+    gateway.install()
     pki.install_cert_manager()
     pki.install_issuer()
     print("Running helm dependency update...")

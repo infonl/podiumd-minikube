@@ -59,6 +59,8 @@ from urllib.parse import urlparse
 import pytest
 import requests
 
+from conftest import host_url
+
 PABC_HOST = "pabc.local"
 ZAC_HOST = "zac.local"
 KEYCLOAK_HOST = "keycloak.local"
@@ -85,8 +87,7 @@ ITA_KISS_CLIENT_IDS = ("ita", "kiss")
 
 def _keycloak_admin_token(traefik_ip):
     response = requests.post(
-        f"http://{traefik_ip}/realms/master/protocol/openid-connect/token",
-        headers={"Host": KEYCLOAK_HOST},
+        host_url(KEYCLOAK_HOST, "/realms/master/protocol/openid-connect/token"),
         data={
             "grant_type": "password",
             "client_id": "admin-cli",
@@ -122,29 +123,14 @@ def _zac_experimental_pkce_live(traefik_ip):
     """
     token = _keycloak_admin_token(traefik_ip)
     response = requests.get(
-        f"http://{traefik_ip}/admin/realms/zaakafhandelcomponent/clients",
-        headers={"Host": KEYCLOAK_HOST, "Authorization": f"Bearer {token}"},
+        host_url(KEYCLOAK_HOST, "/admin/realms/zaakafhandelcomponent/clients"),
+        headers={"Authorization": f"Bearer {token}"},
         params={"clientId": "zaakafhandelcomponent"},
         timeout=10,
     )
     response.raise_for_status()
     clients = response.json()
     return bool(clients) and clients[0]["attributes"].get("pkce.code.challenge.method", "") == "S256"
-
-
-def _via_traefik(traefik_ip, absolute_url):
-    """
-    Turn an absolute "http://<some>.local/path?query" redirect target into
-    a (url, headers) pair that reaches it through Traefik by IP + Host
-    header, instead of relying on DNS/`/etc/hosts` resolving *.local. Same
-    helper as test_login_flow.py's own (kept local rather than shared -
-    every test module here is self-contained by convention).
-    """
-    parsed = urlparse(absolute_url)
-    url = f"http://{traefik_ip}{parsed.path}"
-    if parsed.query:
-        url += f"?{parsed.query}"
-    return url, {"Host": parsed.netloc}
 
 
 def test_pabc_challenge_always_sends_a_pkce_code_challenge(traefik_ip):
@@ -158,8 +144,7 @@ def test_pabc_challenge_always_sends_a_pkce_code_challenge(traefik_ip):
     app was already doing this before that flag existed.
     """
     challenge = requests.get(
-        f"http://{traefik_ip}/api/challenge",
-        headers={"Host": PABC_HOST},
+        host_url(PABC_HOST, "/api/challenge"),
         params={"returnUrl": "/"},
         timeout=10,
         allow_redirects=False,
@@ -189,21 +174,13 @@ def test_pabc_pkce_login_accepted_by_keycloak(traefik_ip):
     the challenge/verifier pair correctly, not just that the parameter is
     present.
 
-    Deliberately does NOT assert a fully authenticated session afterward
-    (no check against /api/me) - confirmed live, a separate and unrelated
-    bug (PABC's own CookieSecurePolicy.Always, hardcoded with no config
-    override - see values.yaml's own pkceEnabled comment) drops the OIDC
-    nonce/correlation cookies over this project's plain-HTTP ingress, so
-    the session never actually gets established regardless of PKCE. That's
-    a known, documented limitation, not something this test should treat
-    as a PKCE regression if it starts "passing" a stricter check later
-    without TLS being added.
+    Does not assert a session afterward (/api/me): that is PABC's login, not
+    PKCE, and a navigation-only flow (see plan.md, PABC login).
     """
     session = requests.Session()
 
     challenge = session.get(
-        f"http://{traefik_ip}/api/challenge",
-        headers={"Host": PABC_HOST},
+        host_url(PABC_HOST, "/api/challenge"),
         params={"returnUrl": "/"},
         timeout=10,
         allow_redirects=False,
@@ -214,18 +191,17 @@ def test_pabc_pkce_login_accepted_by_keycloak(traefik_ip):
     # Keycloak's auth endpoint renders the real login form - not an error
     # page like "Missing parameter: code_challenge_method", which is what
     # a broken PKCE setup (challenge sent, but not accepted) looks like.
-    auth_url, auth_headers = _via_traefik(traefik_ip, auth_location)
-    login_page = session.get(auth_url, headers=auth_headers, timeout=10)
+    auth_url = auth_location
+    login_page = session.get(auth_url, timeout=10)
     assert login_page.status_code == 200
     assert 'id="kc-form-login"' in login_page.text
 
     form_action = _extract_form_action(login_page.text)
     assert form_action, "could not find the login form's action URL"
 
-    submit_url, submit_headers = _via_traefik(traefik_ip, form_action)
+    submit_url = form_action
     submitted = session.post(
         submit_url,
-        headers=submit_headers,
         data={
             "username": PABC_USERNAME,
             "password": PABC_PASSWORD,
@@ -253,10 +229,9 @@ def test_pabc_pkce_login_accepted_by_keycloak(traefik_ip):
     # Actually POST it through, like the browser's own onload handler
     # would - confirms pabc.local's /signin-oidc callback accepts the code
     # (i.e. the full round trip works, not just that Keycloak issued one).
-    callback_url, callback_headers = _via_traefik(traefik_ip, callback_action)
+    callback_url = callback_action
     callback = session.post(
         callback_url,
-        headers=callback_headers,
         data={
             "code": code,
             "iss": _extract_hidden_input(submitted.text, "iss"),
@@ -297,8 +272,7 @@ def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
         pytest.skip("zac.experimentalPkce is off on this cluster")
 
     initial = requests.get(
-        f"http://{traefik_ip}/",
-        headers={"Host": ZAC_HOST},
+        host_url(ZAC_HOST, "/"),
         timeout=10,
         allow_redirects=False,
     )
@@ -335,8 +309,8 @@ def test_django_app_client_does_not_require_pkce(traefik_ip, client_id):
     """
     token = _keycloak_admin_token(traefik_ip)
     response = requests.get(
-        f"http://{traefik_ip}/admin/realms/zaakafhandelcomponent/clients",
-        headers={"Host": KEYCLOAK_HOST, "Authorization": f"Bearer {token}"},
+        host_url(KEYCLOAK_HOST, "/admin/realms/zaakafhandelcomponent/clients"),
+        headers={"Authorization": f"Bearer {token}"},
         params={"clientId": client_id},
         timeout=10,
     )
@@ -356,8 +330,8 @@ def test_ita_and_kiss_clients_do_not_require_pkce(traefik_ip, client_id):
     """The ita/kiss clients do not require PKCE, as the podiumd chart's realm config."""
     token = _keycloak_admin_token(traefik_ip)
     response = requests.get(
-        f"http://{traefik_ip}/admin/realms/zaakafhandelcomponent/clients",
-        headers={"Host": KEYCLOAK_HOST, "Authorization": f"Bearer {token}"},
+        host_url(KEYCLOAK_HOST, "/admin/realms/zaakafhandelcomponent/clients"),
+        headers={"Authorization": f"Bearer {token}"},
         params={"clientId": client_id},
         timeout=10,
     )

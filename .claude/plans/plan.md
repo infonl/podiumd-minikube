@@ -4814,3 +4814,38 @@ deploy's readiness wait passed. `test_no_pods_in_bad_phase` now accepts a
 failed pod of a Job that completed. The failed-Job stop of the readiness
 wait was tested with a throwaway Job that exits 1: it stopped after 5s,
 naming the Job.
+
+## NGINX Gateway Fabric, build phase (next to Traefik)
+
+ExternalsPodiumD's edge is NGINX Gateway Fabric 2.6.7 (behind Azure's
+Application Gateway), not Traefik; podiumd-infra runs Traefik. Per the user,
+minikube switches to NGF, built next to Traefik first so podiumd-tests is
+not disturbed, and switched at a moment agreed with podiumd-tests.
+
+- `lib.gateway.install` (also in provision-cluster): Gateway API CRDs
+  v1.5.1 standard and NGF 2.6.7 in `ingress-basic`, with ExternalsPodiumD's
+  ngf.yml minus AKS parts (one replica each, dnsResolver = kube-dns for
+  ExternalName backends, LoadBalancer Service).
+- `lib.gateway.apply` (deploy, when NGF is installed): Certificate
+  `podiumd-tls` in `ingress-basic` (`tls.certificate`, shared with Traefik's),
+  Gateway `public-gateway` with A's listeners, and per rendered Ingress host
+  an HTTPRoute in A's shape (URLRewrite hostname, X-Forwarded-Host/Proto
+  https/Port 443) to an ExternalName Service named after the app's Service,
+  as A's services-gateway.yml; named ports resolved from the render; routes
+  no longer rendered are deleted.
+- No ClientSettingsPolicy, as ExternalsPodiumD (user's choice): nginx's 1 MB
+  request-body limit applies. No test in podiumd-tests, TA or
+  ExternalsPodiumD uploads more than a few bytes, so nobody knows whether
+  uploads above 1 MB work in ExternalsPodiumD. `tests/test_edge.py` posts
+  2 MB to Open Zaak and expects 413 on the Gateway (skipped on Traefik).
+- Tests: `PODIUMD_EDGE=gateway` points the suite at
+  `ingress-basic/public-gateway-nginx`.
+
+Found live: test_pkce used plain `http://<edge ip>` with a Host header.
+Through the Gateway, which sets X-Forwarded-Proto https on every listener
+as ExternalsPodiumD does, Keycloak sets Secure cookies and the plain-http
+form post got 400. The test now uses the https host URLs like the rest of
+the suite.
+
+Verified live: Gateway Programmed, all 22 HTTPRoutes accepted; suite 107
+passed on the Gateway, 106 on Traefik (the 2 MB test skips there).
