@@ -667,6 +667,11 @@ podiumd:
       # DisallowedHost 400 error page, since "openzaak.local" was never in
       # that list.
       allowedHosts: openzaak.local
+      # Host for URLs built outside a request (notifications, autorisaties
+      # sync); unset, Django's default Site "example.com" fails ALLOWED_HOSTS.
+      # The in-cluster name, because the consumers (ZAC, Open Notificaties)
+      # are in-cluster.
+      siteDomain: openzaak.podiumd-minikube
       # Chart default (true) makes session/CSRF cookies Secure-only -
       # confirmed live, the browser silently drops both over our plain
       # http://openzaak.local ingress, failing django-admin login with a
@@ -795,6 +800,8 @@ podiumd:
     settings:
       # See openzaak's own allowedHosts comment above - same gap, same fix.
       allowedHosts: openklant.local
+      # See openzaak's siteDomain comment.
+      siteDomain: openklant.podiumd-minikube
       # Chart default (true) makes session/CSRF cookies Secure-only -
       # confirmed live, the browser silently drops both over our plain
       # http://openklant.local ingress, failing django-admin login with a
@@ -1158,6 +1165,8 @@ podiumd:
     settings:
       secretKey: objectenApiSecretKey
       allowedHosts: objecten.local
+      # See openzaak's siteDomain comment.
+      siteDomain: objecten.podiumd-minikube
       # Chart default (true) makes session/CSRF cookies Secure-only -
       # confirmed live, the browser silently drops both over our plain
       # http://objecten.local ingress, failing django-admin login with a
@@ -1513,6 +1522,8 @@ podiumd:
     settings:
       secretKey: opennotificatiesApiSecretKey
       allowedHosts: opennotificaties.local
+      # See openzaak's siteDomain comment.
+      siteDomain: opennotificaties.podiumd-minikube
       # See openzaak's own isHttps comment above - same chart-default
       # (Secure-only cookies dropped by the browser over plain http://,
       # confirmed live), same fix.

@@ -4124,3 +4124,28 @@ conversion; found while checking it:
   exists`, and setup_configuration rolls back the whole run. Whether this
   causes the 403 is not confirmed yet. The old bash deploy recreates the Job
   the same way (identical render); not fixed yet.
+
+## SITE_DOMAIN for the Maykin apps (podiumd-tests handoff section 5)
+
+None of the Maykin apps set `SITE_DOMAIN`, so Open Zaak built every URL
+outside a request from Django's default Site, `example.com`. Found by
+podiumd-tests: notifications carried `http://example.com/...` URLs, and
+creating a zaaktype (API or ORM) in a catalogus with a
+`CatalogusAutorisatie` returned 500 - the autorisaties sync
+(`send_applicatie_changed_notification` -> `build_absolute_url`) builds a
+dummy request on that host, which `ALLOWED_HOSTS` rejects (`DisallowedHost`).
+
+Set `settings.siteDomain` to `<app>.podiumd-minikube` for openzaak,
+openklant, objecten and opennotificaties (objecttypen, openforms and
+openarchiefbeheer's charts have no such setting). The in-cluster name, not
+`<app>.local`: the consumers of these URLs (ZAC, Open Notificaties) are
+in-cluster, and the name is already in each chart's default `ALLOWED_HOSTS`.
+Verified live: `SITE_DOMAIN` set in all four pods, and
+`build_absolute_url("/x")` in Open Zaak returns
+`http://openzaak.podiumd-minikube/x`.
+
+Found while applying it: `scripts/deploy` updates the ConfigMaps, but these
+Deployments do not restart on a ConfigMap change (no checksum annotation),
+so the pods kept the old env until `kubectl rollout restart` of the apps
+and their worker/beat Deployments. Any future `settings.*` change needs the
+same restart; not automated yet.
