@@ -30,6 +30,9 @@ makes the tests prove something the real environments do not do.
   cloud operators, no public DNS), and record each deviation with its reason
   in `values.yaml` and `plan.md`.
 - Requests from podiumd-tests are checked against both projects the same way,
-  and wait for the user's go before they are implemented.
+  and wait for the user's go before they are implemented. What ExternalsPodiumD
+  and podiumd-infra configure outweighs what a podiumd-tests handoff asks for
+  (the user, 2026-10-07): where they differ, follow the reference projects and
+  tell podiumd-tests.
 
 Related: [[reuse-existing-logic]], [[comments-and-help-texts]].
