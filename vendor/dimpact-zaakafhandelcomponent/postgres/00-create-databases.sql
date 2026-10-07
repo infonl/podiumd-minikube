@@ -54,6 +54,11 @@ CREATE DATABASE zac OWNER zac;
 CREATE ROLE kiss WITH LOGIN PASSWORD 'kiss';
 CREATE DATABASE kiss OWNER kiss;
 
+-- Open Inwoner (openinwoner profile): a PodiumD component, not in
+-- docker-compose; credentials made up like kiss's.
+CREATE ROLE openinwoner WITH LOGIN PASSWORD 'openinwoner';
+CREATE DATABASE openinwoner OWNER openinwoner;
+
 -- PostGIS: only openzaak/objects/opennotificaties/openarchiefbeheer use the
 -- postgis/postgis image in docker-compose.yaml (the others use plain
 -- postgres:17.10). Explicitly installing the extension per-database here
@@ -74,6 +79,9 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 \c openarchiefbeheer
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+\c openinwoner
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- zac database schema/grants, copied from zac-database/init-zac-database.sql

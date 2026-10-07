@@ -68,6 +68,7 @@ every app's email settings point at it).
 | `openarchiefbeheer` | Open Archiefbeheer (web + nginx + worker + beat) |
 | `opennotificaties` | Open Notificaties + RabbitMQ |
 | `openformulieren` | Open Formulieren (transitively needs `objecten`, `objecttypen`, `opennotificaties`) |
+| `openinwoner` | Open Inwoner, with Elasticsearch through the ECK operator (as ExternalsPodiumD and podiumd-infra) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
 | `wiremock` | extra WireMock mappings (SmartDocuments/KVK/BAG) |
 

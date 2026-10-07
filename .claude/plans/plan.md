@@ -4479,3 +4479,37 @@ Known gaps: Open Zaak's fixture SQL keeps a compose-era service
 objecten shape has no `objecttypen.local` Ingress, so
 `https://objecttypen.local` only works on the classic shape (the one
 deployed here).
+
+## Open Inwoner (podiumd-tests handoff 1)
+
+New `openinwoner` profile (in `--full`): `podiumd.openinwoner` with
+`podiumd.eck-operator` for its Elasticsearch, configured as
+ExternalsPodiumD and podiumd-infra: Keycloak OIDC (realm client
+`openinwoner`, vendored as a textual insert), Open Zaak services with
+client `openinwoner` (new Open Zaak credential and Applicatie), selectielijst,
+BRP/KvK/BAG on WireMock (ExternalsPodiumD's api-proxy paths), Open
+Notificaties, `sites_config` `openinwoner.local`, digidMock, one replica.
+Own Postgres DB `openinwoner` with postgis, Redis DBs 11/12 (chart
+defaults), Ingress `https://openinwoner.local`.
+
+- `keycloak.sync_realm` now also creates vendored clients missing from the
+  live realm (`missing_clients`): the realm import only runs on an empty
+  realm, so a new client would otherwise never reach a running cluster.
+- Found live: podiumd's root `eck-operator` has
+  `managedNamespaces: [podiumd]`, which renders its Role/RoleBinding in
+  namespace `podiumd` (apply error "namespace from the provided object
+  "podiumd" does not match"). Overridden to `podiumd-minikube`.
+- Found live: without a nodeSet override the subchart's Elasticsearch
+  requires credentials, and Open Inwoner sends none (search-index init
+  container: `AuthenticationException(401 ... missing authentication
+  credentials)`). Took ExternalsPodiumD's nodeSet: one node, anonymous
+  superuser, 1g heap, 8Gi volume (without Azure nodeSelector/storage
+  class). The volume size change needed a one-off delete of the
+  Elasticsearch CR and its (empty) PVC: minikube's hostpath storage cannot
+  expand.
+
+Verified live: Elasticsearch green, every openinwoner Deployment Ready,
+`openinwoner-config` Job Complete, `https://openinwoner.local/` 200, login
+page carries `openinwoner-theme`, live Keycloak client `openinwoner`
+present; suite 80 passed. Not verified: that a deploy without `--full`
+prunes Open Inwoner (would take it away from podiumd-tests mid-run).

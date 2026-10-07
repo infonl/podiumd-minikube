@@ -18,6 +18,8 @@ FULL_PROFILE_SETS = [
     "--set", "openarchiefbeheer.enabled=true", "--set", "podiumd.openarchiefbeheer.enabled=true",
     "--set", "openformulieren.enabled=true", "--set", "podiumd.openformulieren.enabled=true",
     "--set", "metrics.enabled=true",
+    "--set", "openinwoner.enabled=true", "--set", "podiumd.openinwoner.enabled=true",
+    "--set", "podiumd.eck-operator.enabled=true",
 ]  # fmt: skip
 
 ZAC_PKCE_IMAGE_TAG = "5.4.2"

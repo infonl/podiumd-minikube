@@ -53,6 +53,8 @@ openarchiefbeheer:
   enabled: false
 openformulieren:
   enabled: false # also pulls in objecten + objecttypen + opennotificaties
+openinwoner:
+  enabled: false # with podiumd.openinwoner and podiumd.eck-operator (its Elasticsearch)
 metrics:
   enabled: false
 monitoringLogging:
@@ -125,11 +127,13 @@ podiumd:
     enabled: false
   eck-operator:
     enabled: false
+    # podiumd's operator watches namespace "podiumd" only; ours is
+    # podiumd-minikube (its Role/RoleBinding land there).
+    managedNamespaces:
+      - podiumd-minikube
   omc:
     enabled: false
   clamav:
-    enabled: false
-  openinwoner:
     enabled: false
   referentielijsten:
     enabled: false
@@ -585,6 +589,8 @@ podiumd:
               secret: zaakSecret
             - identifier: notificaties
               secret: notificatiesSecret
+            - identifier: openinwoner
+              secret: openinwonerSecret
 
         vng_api_common_applicaties_config_enable: true
         vng_api_common_applicaties:
@@ -599,6 +605,11 @@ podiumd:
                 - notificaties
               heeft_alle_autorisaties: true
               label: Notificaties
+            - uuid: 74f76546-7c1a-40f0-8a05-81af12a7eaef
+              client_ids:
+                - openinwoner
+              heeft_alle_autorisaties: true
+              label: Openinwoner
 
         notifications_config_enable: true
         notifications_config:
@@ -891,6 +902,206 @@ podiumd:
           paths:
             - path: /
               pathType: ImplementationSpecific
+
+  # --- openinwoner (profile: openinwoner) ---
+  # As ExternalsPodiumD and podiumd-infra: Keycloak admin login (no
+  # superuser Job), Open Zaak client "openinwoner", digidMock, Elasticsearch
+  # through ECK (podiumd.eck-operator, on with this profile, one node as
+  # podiumd-infra). One replica each, as podiumd-infra. Not configured:
+  # the e-Suite services (external) and the Open Zaak api group, which both
+  # reference projects leave commented out.
+  openinwoner:
+    enabled: false
+    replicaCount: 1
+    worker:
+      replicaCount: 1
+    lowLatencyWorker:
+      replicaCount: 1
+    beat:
+      replicaCount: 1
+    nginx:
+      replicaCount: 1
+    tags:
+      redis: false
+    configuration:
+      enabled: true
+      job:
+        enabled: true
+      oidcUrl: https://openinwoner.local
+      data: |-
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+            - identifier: admin-oidc-provider
+              oidc_token_use_basic_auth: true
+              oidc_use_nonce: true
+              oidc_nonce_size: 32
+              oidc_state_size: 32
+              endpoint_config:
+                oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+            - identifier: admin-oidc
+              oidc_provider_identifier: admin-oidc-provider
+              enabled: true
+              claim_mapping:
+                first_name:
+                  - given_name
+                last_name:
+                  - family_name
+              username_claim:
+                - preferred_username
+              groups_claim:
+                - groups
+              superuser_group_names:
+                - administrators
+              oidc_rp_scopes_list:
+                - openid
+                - email
+                - profile
+              userinfo_claims_source: id_token
+              oidc_rp_client_id: openinwoner
+              oidc_rp_client_secret: keycloakOpeninwonerClientSecret
+              oidc_rp_sign_algo: RS256
+              make_users_staff: true
+              sync_groups: true
+
+        zgw_consumers_config_enable: true
+        zgw_consumers:
+          services:
+            - identifier: openzaak-zaken-api
+              label: Open Zaak - Zaken API
+              api_root: https://openzaak.local/zaken/api/v1/
+              api_type: zrc
+              auth_type: zgw
+              client_id: openinwoner
+              secret: openinwonerSecret
+            - identifier: openzaak-documenten-api
+              label: Open Zaak - Documenten API
+              api_root: https://openzaak.local/documenten/api/v1/
+              api_type: drc
+              auth_type: zgw
+              client_id: openinwoner
+              secret: openinwonerSecret
+            - identifier: openzaak-catalogi-api
+              label: Open Zaak - Catalogi API
+              api_root: https://openzaak.local/catalogi/api/v1/
+              api_type: ztc
+              auth_type: zgw
+              client_id: openinwoner
+              secret: openinwonerSecret
+            - identifier: openzaak-besluiten-api
+              label: Open Zaak - Besluiten API
+              api_root: https://openzaak.local/besluiten/api/v1/
+              api_type: brc
+              auth_type: zgw
+              client_id: openinwoner
+              secret: openinwonerSecret
+            - identifier: vng-selectielijst
+              label: VNG Selectielijst
+              api_root: https://selectielijst.openzaak.nl/api/v1/
+              api_type: orc
+              auth_type: no_auth
+            # ExternalsPodiumD's api-proxy paths, served here by WireMock.
+            - identifier: brp-api
+              label: BRP API
+              api_root: http://wiremock:8080/haalcentraal/api/brp/
+              api_type: orc
+              auth_type: no_auth
+            - identifier: kvk-api
+              label: KvK API
+              api_root: http://wiremock:8080/api/
+              api_type: orc
+              auth_type: no_auth
+            - identifier: bag-api
+              label: BAG API
+              api_root: http://wiremock:8080/lvbag/individuelebevragingen/v2/
+              api_type: orc
+              auth_type: no_auth
+            - identifier: notificaties-api
+              label: Open Notificaties
+              api_root: https://opennotificaties.local/api/v1/
+              api_type: nrc
+              auth_type: zgw
+              client_id: notificaties
+              secret: notificatiesSecret
+
+        sites_config_enable: true
+        sites_config:
+          items:
+            - domain: openinwoner.local
+              name: Open Inwoner
+    settings:
+      secretKey: openInwonerSecretKey
+      allowedHosts: openinwoner.local,openinwoner-nginx.podiumd-minikube.svc.cluster.local
+      isHttps: true
+      numProxies: 2
+      digidMock: true
+      database:
+        host: postgres
+        port: 5432
+        name: openinwoner
+        username: openinwoner
+        password: openinwoner
+      email:
+        host: mailpit
+        port: 1025
+        useTLS: false
+        defaultFrom: noreply@example.com
+      # The chart's default DBs, on this chart's single Redis.
+      cache:
+        default: redis:6379/11
+        axes: redis:6379/11
+      celery:
+        brokerUrl: redis://redis:6379/12
+        resultBackend: redis://redis:6379/12
+    # ExternalsPodiumD's nodeSet: one node, anonymous superuser (Open
+    # Inwoner sends no credentials), minus its Azure nodeSelector and
+    # storage class.
+    eck-elasticsearch:
+      annotations:
+        co.elastic.co/config-checksum: "xpack-anonymous-auth"
+      nodeSets:
+        - name: default
+          count: 1
+          config:
+            cluster.initial_master_nodes:
+              - openinwoner-elasticsearch-es-default-0
+            node.roles:
+              - master
+              - data
+              - ingest
+            node.store.allow_mmap: false
+            xpack.security.authc:
+              anonymous:
+                username: anonymous
+                roles: superuser
+                authz_exception: false
+          podTemplate:
+            spec:
+              terminationGracePeriodSeconds: 60
+              containers:
+                - name: elasticsearch
+                  resources:
+                    requests:
+                      cpu: 200m
+                      memory: 1536Mi
+                    limits:
+                      cpu: 1000m
+                      memory: 1536Mi
+                  env:
+                    - name: ES_JAVA_OPTS
+                      value: "-Xms1g -Xmx1g"
+                    - name: PRE_STOP_ADDITIONAL_WAIT_SECONDS
+                      value: "15"
+          volumeClaimTemplates:
+            - metadata:
+                name: elasticsearch-data
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 8Gi
 
   # --- pabc (always on - core) ---
   pabc:

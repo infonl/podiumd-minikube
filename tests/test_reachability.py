@@ -29,6 +29,7 @@ HOSTS = [
     ("openformulieren-nginx.local", 403, "openformulieren"),
     ("openformulieren-web.local", 403, "openformulieren"),
     ("grafana.local", 200, "metrics"),
+    ("openinwoner.local", 200, "openinwoner"),
     ("mailpit.local", 200, None),
 ]
 
