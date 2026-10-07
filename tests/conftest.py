@@ -77,7 +77,7 @@ def _resolve_local_hosts_to(ip):
 
 @pytest.fixture(scope="session")
 def pods(traefik_ip):
-    """All pods in the chart's namespace: name, phase, container_statuses, from_job."""
+    """All pods in the chart's namespace: name, phase, container_statuses, from_job, job (its Job's name or None)."""
     raw = kubectl("get", "pods", "-n", NAMESPACE, "-o", "json")
     data = json.loads(raw)
     return [
@@ -87,6 +87,9 @@ def pods(traefik_ip):
             "container_statuses": item["status"].get("containerStatuses", []),
             # Job pods (CronJob runs included) end not-ready by design.
             "from_job": any(ref.get("kind") == "Job" for ref in item["metadata"].get("ownerReferences", [])),
+            "job": next(
+                (ref["name"] for ref in item["metadata"].get("ownerReferences", []) if ref.get("kind") == "Job"), None
+            ),
         }
         for item in data["items"]
     ]

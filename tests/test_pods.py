@@ -4,11 +4,27 @@ project: every pod should be Running (and all its containers Ready), or for
 one-shot Jobs, Succeeded.
 """
 
+import json
+
 import pytest
+
+from conftest import NAMESPACE
+from conftest import kubectl
 
 
 def test_no_pods_in_bad_phase(pods):
-    bad = [p for p in pods if p["phase"] not in ("Running", "Succeeded")]
+    """A failed attempt of a Job that completed on a retry is fine (e.g. Postgres restarting during a deploy)."""
+    jobs = json.loads(kubectl("get", "jobs", "-n", NAMESPACE, "-o", "json"))["items"]
+    completed = {
+        job["metadata"]["name"]
+        for job in jobs
+        if any(c["type"] == "Complete" and c["status"] == "True" for c in job.get("status", {}).get("conditions", []))
+    }
+    bad = [
+        p
+        for p in pods
+        if p["phase"] not in ("Running", "Succeeded") and not (p["phase"] == "Failed" and p["job"] in completed)
+    ]
     assert not bad, f"pods not Running/Succeeded: {[p['name'] for p in bad]}"
 
 

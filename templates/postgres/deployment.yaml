@@ -25,6 +25,9 @@ spec:
       containers:
         - name: postgres
           image: postgis/postgis:17-3.4
+          # As podiumd-infra's Azure Postgres; the default 100 ran out with
+          # every profile on (each app's workers keep their connections).
+          args: ["postgres", "-c", "max_connections=500"]
           env:
             - name: POSTGRES_USER
               value: postgres

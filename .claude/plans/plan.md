@@ -4797,3 +4797,20 @@ Investigated after a transient podiumd-tests failure right after a deploy,
 which turned out to be podiumd-tests' own CA-bundle race, not a rollout gap.
 Verified live: a `--full` deploy passed the wait; suite 106 passed
 immediately after.
+
+## Postgres max_connections 500
+
+podiumd-tests ran out of Postgres connections in a full run ("remaining
+connection slots are reserved for roles with the SUPERUSER attribute"). At
+rest 78 of the default 100 were held, all idle Django persistent
+connections (opennotificaties 24, openformulieren 12, openzaak 12, ...).
+`max_connections=500` as podiumd-infra sets on its Azure Postgres
+(`scripts/create-postgresql-databases.sh`; its PgBouncer is off by
+default). Verified live: `show max_connections` 500; suite 106 passed.
+
+Found while verifying: the Postgres restart failed the first attempt of
+two config Jobs (connection refused); their retries completed, and the
+deploy's readiness wait passed. `test_no_pods_in_bad_phase` now accepts a
+failed pod of a Job that completed. The failed-Job stop of the readiness
+wait was tested with a throwaway Job that exits 1: it stopped after 5s,
+naming the Job.
