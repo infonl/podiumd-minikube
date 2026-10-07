@@ -4277,3 +4277,29 @@ row; this cluster's row was renamed once in Open Zaak's shell, then the Job
 succeeded. Verified: as `zaak` and `notificaties` `GET /api/v1/kanaal` on
 Open Notificaties 200, as `openzaak` 403; Open Zaak's own configured client
 gets 200.
+
+## Open Klant notifies Open Notificaties (podiumd-tests handoff section 5d); prune keeps foreign objects
+
+Open Klant had no notifications service: its config Job was disabled. Now
+enabled with podiumd-infra kees00's configuration: service
+`notificaties-api`, client `zaak` (Open Zaak's), and its retry settings.
+ExternalsPodiumD has none yet; included as optional functionality per the
+reference-environments rule. podiumd-tests' bootstrap wired its own
+service (`ptest-bootstrap-nrc`, same api_root) and removed it first, so the
+`zgw_consumers_service_api_root_key` constraint did not hit. Redis DB 7
+flushed afterwards. Verified live: `get_solo()` equals the database row,
+`GET kanaal` via Open Klant's client 200, two `POST partijen` 201,
+openklant-worker without 401/403.
+
+Before that, the prune was fixed: it deleted every unowned object missing
+from the render, which twice removed podiumd-tests' Secret
+`podiumd-tests-credentials`. It now only deletes objects carrying this
+chart's labels (`app.kubernetes.io/instance=podiumd-minikube` or
+`app.kubernetes.io/managed-by=Helm`); a live dry run selected nothing.
+
+`tests/test_pods.py` recognised one-shot Job pods by a hard-coded name
+list, which missed the new `openklant-config`; it now uses the pod's
+ownerReference (kind Job).
+
+Coordination with podiumd-tests on this shared cluster: lock file
+`infonl/.minikube-lock` plus messages before and after disruptive actions.

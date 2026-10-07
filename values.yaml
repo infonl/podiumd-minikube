@@ -798,7 +798,27 @@ podiumd:
       enabled: false
     configuration:
       job:
-        enabled: false # same "No steps enabled, aborting" issue as openzaak - see its own comment above
+        enabled: true
+      # Open Klant's notifications to Open Notificaties, as podiumd-infra
+      # (kees00): service notificaties-api, Open Zaak's client "zaak".
+      # ExternalsPodiumD has none yet; included so the tests cover it.
+      data: |-
+        zgw_consumers_config_enable: true
+        zgw_consumers:
+          services:
+            - identifier: notificaties-api
+              label: Open Notificaties
+              api_root: http://opennotificaties.podiumd-minikube/api/v1/
+              api_type: nrc
+              auth_type: zgw
+              client_id: zaak
+              secret: zaakSecret
+        notifications_config_enable: true
+        notifications_config:
+          notifications_api_service_identifier: notificaties-api
+          notification_delivery_max_retries: 5
+          notification_delivery_retry_backoff: 3
+          notification_delivery_retry_backoff_max: 48
       # No compose equivalent to match (compose never sets openklant
       # SUPERUSER credentials either) and, unlike openzaak/opennotificaties/
       # objecttypen/openformulieren, this chart's values.yaml has no
