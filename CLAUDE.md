@@ -4,6 +4,11 @@ A standalone Helm chart that reproduces the `dimpact-zaakafhandelcomponent`
 docker-compose dev stack (ZAC + its ZGW dependencies) for local development on
 minikube.
 
+Rules for working in this repository:
+
+@.claude/memory/reuse-existing-logic.md
+@.claude/memory/comments-and-help-texts.md
+
 For usage instructions (provisioning, deploying, the test suite, script
 reference) see [`README.md`](README.md). This file is oriented at AI coding
 tools instead: cross-repo relationships and local paths a README shouldn't
