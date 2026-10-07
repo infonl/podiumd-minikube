@@ -20,6 +20,8 @@ OBJECTTYPES = {
 }
 # values.yaml's podiumd.objecttypen.configuration.token.
 OBJECTTYPEN_TOKEN = "objecttypenIntegratieteamToken"  # nosec B105
+# values.yaml's podiumd.ita.apiConnections.object.apiKey.
+ITA_OBJECTEN_TOKEN = "objectenItaToken"  # nosec B105
 
 
 @pytest.mark.parametrize("path", ["/healthz", "/api/healthcheck"])
@@ -56,3 +58,27 @@ def test_kiss_objecttype_published(traefik_ip, enabled_profiles, name, uuid):
     body = response.json()
     assert body["name"] == name
     assert body["versions"], f"{name} has no published version"
+
+
+def test_chunked_post_reaches_objecten(traefik_ip, enabled_profiles):
+    """ITA posts its logboek chunked; the edge must forward the body (403 means Objecten got none)."""
+    if not enabled_profiles.get("ita"):
+        pytest.skip("'ita' profile is not deployed")
+    body = json.dumps(
+        {
+            "type": f"https://objecttypen.local/api/v2/objecttypes/{OBJECTTYPES['Activiteitenlog']}",
+            "record": {"typeVersion": 1, "data": {}, "startAt": "2026-01-01"},
+        }
+    ).encode()
+    response = requests.post(
+        host_url("objecten.local", "/api/v2/objects"),
+        data=iter([body]),  # a generator body makes requests send it chunked
+        headers={
+            "Authorization": f"Token {ITA_OBJECTEN_TOKEN}",
+            "Content-Type": "application/json",
+            "Content-Crs": "EPSG:4326",
+        },
+        timeout=10,
+    )
+    # 400: past the permission check, rejected by the Activiteitenlog schema; nothing is created.
+    assert response.status_code == 400, response.text

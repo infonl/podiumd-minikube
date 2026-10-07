@@ -29,6 +29,13 @@ PABC_MIGRATION_JOB = "pabc-migrations-1"
 # fixtures (lib.seed, by primary key) would overwrite on a fresh cluster.
 AFTER_SEED_JOBS = frozenset({"create-required-objecttypen-job"})
 ZAC_UNUSED_OTEL_COLLECTOR = "zac-unused-otel-collector"
+# templates/traefik/buffering.yaml, as Traefik's Kubernetes CRD provider names it.
+BUFFERING_MIDDLEWARE = f"{NAMESPACE}-buffering@kubernetescrd"
+# Django apps that Ingresses reach on uWSGI directly, without their own nginx.
+# Not every Ingress: Traefik's buffer also buffers responses and turns an empty
+# chunked one (Solr's 302) into a 500.
+UWSGI_SERVICES = frozenset({"objecten", "objecttypen", "opennotificaties"})
+MIDDLEWARES_ANNOTATION = "traefik.ingress.kubernetes.io/router.middlewares"
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000
 
@@ -88,6 +95,27 @@ def disable_service_links(docs: list[Doc]) -> None:
             node = cast("Doc", value) if isinstance(value, dict) else None
         if node is not None:
             node["enableServiceLinks"] = False
+
+
+def _backends(ingress: Doc) -> set[str]:
+    rules: list[Doc] = section(ingress, "spec").get("rules") or []
+    paths: list[Doc] = []
+    for rule in rules:
+        paths += cast("list[Doc]", section(rule, "http").get("paths") or [])
+    return {str(section(section(path, "backend"), "service").get("name")) for path in paths}
+
+
+def buffer_requests(docs: list[Doc]) -> None:
+    """Adds BUFFERING_MIDDLEWARE to the Traefik middlewares of the Ingresses to UWSGI_SERVICES."""
+    for doc in docs:
+        if doc.get("kind") != "Ingress" or not _backends(doc) & UWSGI_SERVICES:
+            continue
+        metadata = doc.setdefault("metadata", {})
+        annotations: Doc = metadata.get("annotations") or {}
+        current = [name for name in str(annotations.get(MIDDLEWARES_ANNOTATION, "")).split(",") if name]
+        if BUFFERING_MIDDLEWARE not in current:
+            annotations[MIDDLEWARES_ANNOTATION] = ",".join([BUFFERING_MIDDLEWARE, *current])
+        metadata["annotations"] = annotations
 
 
 def ingress_hosts(docs: list[Doc]) -> list[str]:
@@ -244,6 +272,7 @@ def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool =
     loaded: list[Doc | None] = list(yaml.safe_load_all(strip_image_digests(text)))
     docs = [doc for doc in loaded if doc and not _excluded(doc)]
     disable_service_links(docs)
+    buffer_requests(docs)
     if ca_trust:
         trust_ca(docs)
     if objecten_merged:

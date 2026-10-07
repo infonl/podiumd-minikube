@@ -4612,3 +4612,29 @@ object URL to `objecten-api` and GETs it with 200; suite 93 passed.
 Also: the memory check warned against the user's deliberate 32 GiB cap
 (below half the host). A running node is now only checked against the
 measured `--full` need; half the host only sizes a new node.
+
+## Edge request buffering (ITA logboek 403)
+
+podiumd-tests: ITA's claim and add-klantcontact failed. ITA's logboek POST
+to Objecten got 403. Cause: .NET `PostAsJsonAsync` sends the body chunked;
+Traefik passes it through, and Objecten's uWSGI gives Django an empty body,
+so ObjectTypeBasedPermission finds no `type` and denies. Reproduced: the same
+POST with Content-Length got 400 (schema), chunked got 403.
+
+ExternalsPodiumD's edge is Azure Application Gateway plus NGINX Gateway
+Fabric (`pipelines/values/ngf.yml`); its `objecten-nginx` is only an
+ExternalName to `objecten`. nginx buffers request bodies and forwards them
+with a Content-Length, so ITA works there (TA's ITA tests pass on QA, says
+the user). I first claimed ExternalsPodiumD runs Traefik; it does not
+(`traefikMonitor.enabled: false`).
+
+Fix: Traefik Middleware `buffering` (`templates/traefik/buffering.yaml`),
+attached by `manifests.buffer_requests` to the Ingresses of the Django apps
+Traefik reaches on uWSGI directly (objecten, objecttypen,
+opennotificaties); the others have their own nginx or a Java/.NET server.
+Found live: on every Ingress it broke Solr: Traefik's buffer also buffers
+responses and answers an empty chunked response (Solr's 302) with 500
+("vulcand/oxy/buffer: failed to read response, err: no data ready").
+
+Verified live: `test_chunked_post_reaches_objecten` (chunked POST with
+ITA's token gets 400, not 403); suite 94 passed.
