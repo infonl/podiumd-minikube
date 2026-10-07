@@ -43,3 +43,6 @@ __pycache__/
 # via the Admin API for tests-johnb00/ (see tests-johnb00/README.md), never
 # committed.
 tests-johnb00/.env.johnb00
+
+# Written into the working directory by the claude-token-reducer Claude Code plugin.
+session_memory.json
