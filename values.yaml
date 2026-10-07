@@ -65,6 +65,8 @@ referentielijsten:
   enabled: false # with podiumd.referentielijsten
 openbeheer:
   enabled: false # with podiumd.openbeheer; needs objecten (objecttypen)
+frankgateway:
+  enabled: false # with podiumd.frankgateway and podiumd.openbao; apps then call BRP/KvK/BAG through its outway
 metrics:
   enabled: false
 monitoringLogging:
@@ -2673,8 +2675,9 @@ podiumd:
         axes: redis:6379/17
 
   # --- omc (profile: omc), as ExternalsPodiumD (icat) ---
-  # podiumd-tests points notify.api.baseUrl at its Notify mock and subscribes
-  # OMC to Open Notificaties (neither reference environment does). Besluiten
+  # Notify goes to podiumd-tests' Notify mock (its webhook receiver, created
+  # by its bootstrap); podiumd-tests also subscribes OMC to Open
+  # Notificaties (neither reference environment does). Besluiten
   # on Open Zaak: ExternalsPodiumD's separate besluiten host does not exist
   # here.
   omc:
@@ -2684,7 +2687,7 @@ podiumd:
         environment: Development
       notify:
         api:
-          baseUrl: https://notify.invalid
+          baseUrl: http://ptest-bootstrap-webhook-receiver.podiumd-minikube/notify
           # ExternalsPodiumD's NotifyNL test key (name-serviceId-secret).
           key: omcconfigtest-0c9cdaaf-7b0a-4d88-a8d8-dacbccf52734-173e579d-0f99-4d29-a6f8-7b522418f57b
         templateId:
@@ -2737,6 +2740,119 @@ podiumd:
       enabled: true
       hostname: omc.local
       ingressClass: traefik
+
+  # --- frankgateway + openbao (profile: frankgateway) ---
+  # As ExternalsPodiumD's dim1 Frank!Gateway branch: outway only, OpenBao
+  # with a static seal and Keycloak login, one replica each (single node).
+  # Beyond it (user's choice, the chart runbook's step 6): the outway carries
+  # the api-proxy's paths to the same mocks, as the chart's reference routes
+  # without their API-key functions, and lib.manifests.route_outbound points
+  # the apps' http://api-proxy/ URLs at it. BRP on the outway, not on the
+  # internal instance where the docs put it, so one gateway serves the paths.
+  # Fixed admin keys: helm template has no cluster for the chart's lookup and
+  # would regenerate them on every render. The seal key comes from
+  # .openbao/seal-key (lib.openbao), never from this file.
+  frankgateway:
+    enabled: false
+    replicas: 1
+    podDisruptionBudget:
+      enabled: false
+    admin:
+      adminKey: frankgatewayAdminKeyPodiumdMinikube0001
+      viewerKey: frankgatewayViewerKeyPodiumdMinikube001
+    dashboard:
+      enabled: false
+    networkPolicies:
+      enabled: false
+    etcd:
+      replicas: 1
+      podDisruptionBudget:
+        enabled: false
+    instances:
+      inway:
+        enabled: false
+      internal:
+        enabled: false
+      outway:
+        enabled: true
+        routes:
+          apiproxy-brp:
+            uri: "/haalcentraal/api/brp/*"
+            name: apiproxy-brp
+            labels:
+              managed-by: iac
+            upstream:
+              type: roundrobin
+              scheme: http
+              pass_host: rewrite
+              upstream_host: brp-personen-mock
+              nodes:
+                "brp-personen-mock:5010": 1
+          apiproxy-bag:
+            uri: "/lvbag/individuelebevragingen/v2/*"
+            name: apiproxy-bag
+            labels:
+              managed-by: iac
+            upstream:
+              type: roundrobin
+              scheme: http
+              pass_host: rewrite
+              upstream_host: wiremock
+              nodes:
+                "wiremock:8080": 1
+          apiproxy-kvk-search:
+            uri: "/api/v2/zoeken*"
+            name: apiproxy-kvk-search
+            labels:
+              managed-by: iac
+            upstream:
+              type: roundrobin
+              scheme: http
+              pass_host: rewrite
+              upstream_host: wiremock
+              nodes:
+                "wiremock:8080": 1
+          apiproxy-kvk-basic:
+            uri: "/api/v1/basisprofielen*"
+            name: apiproxy-kvk-basic
+            labels:
+              managed-by: iac
+            upstream:
+              type: roundrobin
+              scheme: http
+              pass_host: rewrite
+              upstream_host: wiremock
+              nodes:
+                "wiremock:8080": 1
+          apiproxy-kvk-branch:
+            uri: "/api/v1/vestigingsprofielen*"
+            name: apiproxy-kvk-branch
+            labels:
+              managed-by: iac
+            upstream:
+              type: roundrobin
+              scheme: http
+              pass_host: rewrite
+              upstream_host: wiremock
+              nodes:
+                "wiremock:8080": 1
+  openbao:
+    enabled: false
+    configuration:
+      oidcUrl: https://openbao.local
+      secrets:
+        keycloak_client_secret: keycloakOpenbaoClientSecret
+      keycloak:
+        url: https://keycloak.local
+        realm: zaakafhandelcomponent
+    database:
+      host: postgres
+      username: openbao
+      password: openbao
+      sslmode: disable # minikube's Postgres has no TLS
+    server:
+      ha:
+        replicas: 1
 
   # --- ita (profile: ita) ---
   # As ExternalsPodiumD: database on the shared Postgres, Open Klant/Objecten

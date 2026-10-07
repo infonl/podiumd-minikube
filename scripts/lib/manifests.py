@@ -31,6 +31,11 @@ AFTER_SEED_JOBS = frozenset({"create-required-objecttypen-job"})
 ZAC_UNUSED_OTEL_COLLECTOR = "zac-unused-otel-collector"
 # templates/traefik/buffering.yaml, as Traefik's Kubernetes CRD provider names it.
 BUFFERING_MIDDLEWARE = f"{NAMESPACE}-buffering@kubernetescrd"
+# The apps' BRP/KvK/BAG base URL (values.yaml), and Frank!Gateway's outway, which
+# serves the same paths (podiumd.frankgateway.instances.outway.routes).
+API_PROXY_URL = "http://api-proxy/"
+OUTWAY_SERVICE = "frankgateway-outway"
+OUTWAY_URL = f"http://{OUTWAY_SERVICE}:9080/"
 # Django apps that Ingresses reach on uWSGI directly, without their own nginx.
 # Not every Ingress: Traefik's buffer also buffers responses and turns an empty
 # chunked one (Solr's 302) into a 500.
@@ -116,6 +121,19 @@ def buffer_requests(docs: list[Doc]) -> None:
         if BUFFERING_MIDDLEWARE not in current:
             annotations[MIDDLEWARES_ANNOTATION] = ",".join([BUFFERING_MIDDLEWARE, *current])
         metadata["annotations"] = annotations
+
+
+def route_outbound(docs: list[Doc]) -> None:
+    """Points ConfigMap values at OUTWAY_URL instead of API_PROXY_URL when the outway is rendered."""
+    if not any(doc.get("kind") == "Service" and name_of(doc) == OUTWAY_SERVICE for doc in docs):
+        return
+    for doc in docs:
+        if doc.get("kind") != "ConfigMap":
+            continue
+        data: Doc = doc.get("data") or {}
+        for key, value in data.items():
+            if isinstance(value, str) and API_PROXY_URL in value:
+                data[key] = value.replace(API_PROXY_URL, OUTWAY_URL)
 
 
 def ingress_hosts(docs: list[Doc]) -> list[str]:
@@ -273,6 +291,7 @@ def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool =
     docs = [doc for doc in loaded if doc and not _excluded(doc)]
     disable_service_links(docs)
     buffer_requests(docs)
+    route_outbound(docs)
     if ca_trust:
         trust_ca(docs)
     if objecten_merged:

@@ -25,6 +25,8 @@ FULL_PROFILE_SETS = [
     "--set", "omc.enabled=true", "--set", "podiumd.omc.enabled=true",
     "--set", "referentielijsten.enabled=true", "--set", "podiumd.referentielijsten.enabled=true",
     "--set", "openbeheer.enabled=true", "--set", "podiumd.openbeheer.enabled=true",
+    "--set", "frankgateway.enabled=true", "--set", "podiumd.frankgateway.enabled=true",
+    "--set", "podiumd.openbao.enabled=true",
 ]  # fmt: skip
 
 ZAC_PKCE_IMAGE_TAG = "5.4.2"

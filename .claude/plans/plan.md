@@ -4710,3 +4710,47 @@ signs one); `tests/test_omc.py` signs an HS256 JWT with OMC's secret.
 Verified live: the four Deployments Ready, both config Jobs Complete (all
 steps executed), live Keycloak clients created; suite 103 passed. Memory:
 22 GiB of the 32 GiB cap.
+
+## Frank!Gateway with OpenBao (profile frankgateway)
+
+As ExternalsPodiumD's branch `feature/ontw-dim1-podiumd-4.9.3-frankgateway`
+(podiumd-infra's johnb00 committed no values): OpenBao with a static seal on
+Postgres and Keycloak login (openbao-config Job), Frank!Gateway outway only.
+One replica each. Beyond the reference (user's choice, the chart runbook's
+step 6): the outway carries the api-proxy's paths to the same mocks (the
+chart's reference routes without their OpenBao API-key functions), and
+`manifests.route_outbound` points the apps' `http://api-proxy/` ConfigMap
+values at `http://frankgateway-outway:9080/` when the outway is rendered.
+api-proxy stays for `https://api-proxy.local`.
+
+- Seal key: generated once into `.openbao/seal-key` (gitignored, like
+  `.pki/`; user's choice) and passed with `--set-file` on every render.
+- `lib.openbao.bootstrap` after the Keycloak sync: initialises OpenBao once
+  (`operator init`, recovery key and root token into `.openbao/`), waits
+  until it holds the active lock, mints the config token into Secret
+  `openbao-bootstrap-token` once (port of the chart's
+  `scripts/openbao-mint-config-token.sh`, which the tarball does not ship),
+  and re-runs the `openbao-config` Job.
+- Keycloak: client `openbao` (role `uploaders`), group `vault-uploaders`;
+  `keycloak.sync_realm` now also creates missing top-level groups with
+  their client roles. `templates/openbao/keycloak-secret.yaml` renders the
+  Secret the config Job reads, which the chart only renders with its
+  Keycloak operator.
+- Fixed gateway admin keys: the chart's `lookup` never finds the Secret
+  under `helm template` and would regenerate them on every render.
+
+Found live:
+- The `-active` Service has no endpoints until OpenBao is unsealed, so the
+  bootstrap talks to pod 0's own listener (127.0.0.1:8200).
+- Right after init, writes failed with "local node not active but active
+  cluster node not found": with HA storage a node takes writes only once it
+  holds the lock; the bootstrap waits for `is_self`.
+- A failing `kubectl exec ... env BAO_TOKEN=...` printed the root token in
+  the error (the command line). The token now travels on stdin.
+- The Keycloak sync timed out (180s) once more while Keycloak restarted
+  with a changed realm ConfigMap during a `--full` deploy; the next deploy
+  synced. Not understood yet.
+
+Verified live: OpenBao initialised, unsealed, configured (OIDC, uploader
+policy, group alias); seed Job applied 5 routes; BRP, KvK and BAG answer
+200 through the outway; ZAC's ConfigMap points at it; suite 108 passed.

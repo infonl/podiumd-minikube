@@ -1,0 +1,6 @@
+{{/*
+openbao.local -> the active OpenBao pod: its UI and the Keycloak login callback.
+*/}}
+{{- if .Values.podiumd.openbao.enabled }}
+{{ include "podiumd-minikube.ingress" (dict "root" . "name" "openbao" "host" "openbao.local" "service" (printf "%s-openbao-active" .Release.Name) "port" 8200) }}
+{{- end }}

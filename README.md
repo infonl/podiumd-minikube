@@ -82,6 +82,7 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | `omc` | OMC on `https://omc.local`; `podiumd.omc.settings.notify.api.baseUrl` takes a Notify mock (needs `objecten`, `opennotificaties`) |
 | `referentielijsten` | Referentielijsten on `https://referentielijsten.local` |
 | `openbeheer` | Open Beheer on `https://openbeheer.local` (needs `objecten`) |
+| `frankgateway` | Frank!Gateway's outway (with etcd) and OpenBao on `https://openbao.local`; apps then call BRP/KvK/BAG at `http://frankgateway-outway:9080/...` instead of the api-proxy. OpenBao's seal key, root token and recovery key live in `.openbao/` (gitignored) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
 | `wiremock` | SmartDocuments WireMock mappings |
 

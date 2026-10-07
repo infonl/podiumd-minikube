@@ -55,6 +55,9 @@ CREATE ROLE referentielijsten WITH LOGIN PASSWORD 'referentielijsten';
 CREATE DATABASE referentielijsten OWNER referentielijsten;
 CREATE ROLE openbeheer WITH LOGIN PASSWORD 'openbeheer';
 CREATE DATABASE openbeheer OWNER openbeheer;
+-- OpenBao (frankgateway profile); its schema Job creates the tables.
+CREATE ROLE openbao WITH LOGIN PASSWORD 'openbao';
+CREATE DATABASE openbao OWNER openbao;
 
 -- Open Inwoner (openinwoner profile): a PodiumD component, not in
 -- docker-compose; credentials made up like contact's.

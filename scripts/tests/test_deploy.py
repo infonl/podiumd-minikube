@@ -5,6 +5,7 @@ import pytest
 from lib import chart
 from lib import deploy
 from lib import manifests
+from lib import openbao
 from lib import values
 
 
@@ -26,9 +27,13 @@ def test_expected_storage_errors_is_one_pv_and_one_pvc_per_app():
     assert deploy.expected_storage_errors(storage) == 4
 
 
+SEAL = ["--set-file", "seal=key"]
+
+
 @pytest.fixture
 def no_pkce(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(chart, "zac_pkce", lambda: chart.ZacPkce(enabled=False))
+    monkeypatch.setattr(openbao, "seal_key_args", lambda: SEAL)
 
 
 def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.MonkeyPatch, no_pkce: None):
@@ -36,7 +41,7 @@ def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.Mon
     monkeypatch.setattr(values, "monitoring_logging_enabled", lambda: False)
     selected = deploy.options(full=True, extra=["--set", "x=y"])
     assert selected.objecten_merged
-    assert selected.helm_args == [*chart.FULL_PROFILE_SETS, "--set", "shape=1", "--set", "x=y"]
+    assert selected.helm_args == [*chart.FULL_PROFILE_SETS, "--set", "shape=1", *SEAL, "--set", "x=y"]
 
 
 def test_options_points_zac_at_monitoring_logging_collector(monkeypatch: pytest.MonkeyPatch, no_pkce: None):
@@ -46,6 +51,7 @@ def test_options_points_zac_at_monitoring_logging_collector(monkeypatch: pytest.
     assert selected.helm_args == [
         "--set",
         "podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint=http://podiumd-minikube-opentelemetry-collector:4317",
+        *SEAL,
     ]
 
 

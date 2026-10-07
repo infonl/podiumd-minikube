@@ -172,3 +172,12 @@ def test_buffer_requests_adds_the_middleware_once_to_uwsgi_ingresses():
     assert manifests.section(objecten, "metadata")["annotations"][key] == f"{manifests.BUFFERING_MIDDLEWARE},x@file"
     assert manifests.section(bare, "metadata")["annotations"][key] == manifests.BUFFERING_MIDDLEWARE
     assert "annotations" not in manifests.section(solr, "metadata")
+
+
+def test_route_outbound_only_with_the_outway():
+    config: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": "zac"}, "data": {"BRP": "http://api-proxy/x"}}
+    manifests.route_outbound([config])
+    assert config["data"]["BRP"] == "http://api-proxy/x"
+    outway: manifests.Doc = {"kind": "Service", "metadata": {"name": manifests.OUTWAY_SERVICE}}
+    manifests.route_outbound([config, outway])
+    assert config["data"]["BRP"] == "http://frankgateway-outway:9080/x"

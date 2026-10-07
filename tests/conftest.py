@@ -116,6 +116,7 @@ def enabled_profiles(pods):
         "omc": any_pod_named("omc"),
         "referentielijsten": any_pod_named("referentielijsten"),
         "openbeheer": any_pod_named("openbeheer"),
+        "frankgateway": any_pod_named("frankgateway-outway"),
         "metrics": any_pod_named("grafana"),
         # The monitoring-logging dependency's own subcharts are all prefixed
         # with the release name ("podiumd-minikube-grafana", not plain

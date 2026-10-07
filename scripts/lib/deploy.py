@@ -16,6 +16,7 @@ from lib import keycloak
 from lib import kube
 from lib import manifests
 from lib import memory
+from lib import openbao
 from lib import pabc
 from lib import pki
 from lib import postgres
@@ -62,7 +63,7 @@ def options(*, full: bool, extra: list[str]) -> Options:
         # monitoring-logging's collector Service, named by that chart's fullname template.
         endpoint = f"http://{RELEASE_NAME}-opentelemetry-collector:4317"
         selected.helm_args += ["--set", f"podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint={endpoint}"]
-    selected.helm_args += extra
+    selected.helm_args += [*openbao.seal_key_args(), *extra]
     return selected
 
 
@@ -182,6 +183,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
 
     print()
     keycloak.sync_realm(zac_pkce=selected.zac_pkce)
+    openbao.bootstrap(render)
     print("\nApplying pabc-migrations (guarded - see scripts/lib/pabc.py)...")
     pabc.apply_migrations(force=False)
     print("\nPruning Deployments/StatefulSets/DaemonSets/Services/Secrets/Ingresses not part of this render...")

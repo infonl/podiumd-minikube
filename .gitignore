@@ -49,3 +49,5 @@ session_memory.json
 
 # The local CA (scripts/lib/pki.py); one per checkout, its key never leaves it.
 .pki/
+# OpenBao's seal key, root token and recovery key (scripts/lib/openbao.py).
+.openbao/
