@@ -4596,3 +4596,19 @@ Elasticsearch and Kibana green; the seven objecttypes published with the
 chart's UUIDs; `https://contact.local/healthz` and `/api/healthcheck` 200;
 `https://ita.local/api/kanalen` 401; suite 93 passed. Not covered here: a
 login with role Klantcontactmedewerker (needs a seeded user, podiumd-tests).
+
+## Open Zaak's Objecten service
+
+Open Zaak had only the vendored fixtures' service `objects-api` at
+`http://objecten-api.local:8000` (a docker-compose host), so it validated
+zaakobject URLs on `https://objecten.local` without credentials and got 401
+(ZAC: "Failed to create a zaak ... HTTP 401"). Added ExternalsPodiumD's
+zgw_consumers service `objecten-api` (`https://objecten.local/api/v2/`) to
+Open Zaak's setup_configuration, with the fixtures' Objecten token
+`openzaak` (read_and_write on Productaanvraag-Dimpact). The vendored rows
+stay as ZAC ships them. Verified live: `Service.get_service` resolves an
+object URL to `objecten-api` and GETs it with 200; suite 93 passed.
+
+Also: the memory check warned against the user's deliberate 32 GiB cap
+(below half the host). A running node is now only checked against the
+measured `--full` need; half the host only sizes a new node.
