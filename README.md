@@ -56,8 +56,16 @@ matching `values.yaml`'s own default.
 ## What's running
 
 **Core (always on):** zac, openzaak, openklant, pabc, brp-personen-mock,
-postgres, redis, solr, keycloak, wiremock, mailpit (SMTP test server —
-every app's email settings point at it).
+postgres, redis, solr, keycloak, mailpit (SMTP test server — every app's
+email settings point at it), and the api-proxy with WireMock: apps call
+BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
+`https://api-proxy.local` serves the same paths to tests:
+
+| Path | Answered by |
+|---|---|
+| `/haalcentraal/api/brp/` | brp-personen-mock |
+| `/api/v2/zoeken`, `/api/v1/basisprofielen`, `/api/v1/vestigingsprofielen` | WireMock (KvK mappings) |
+| `/lvbag/individuelebevragingen/v2/` | WireMock (BAG mappings) |
 
 **Optional profiles** (each its own `values.yaml` flag, off by default —
 `scripts/deploy --full` turns all of them on):
@@ -72,7 +80,7 @@ every app's email settings point at it).
 | `ita` | Interne Taakafhandeling on `https://ita.local` (needs `objecten` and the KISS objecttypes) |
 | `kiss` | KISS (chart name `contact`) on `https://contact.local`, its Elasticsearch, Kibana and podiumd-adapter (needs `objecten`) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
-| `wiremock` | extra WireMock mappings (SmartDocuments/KVK/BAG) |
+| `wiremock` | SmartDocuments WireMock mappings |
 
 `metrics` has two implementations, picked by `values.yaml`'s
 `monitoringLogging.enabled` (not a `scripts/deploy` flag):

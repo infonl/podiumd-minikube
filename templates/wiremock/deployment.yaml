@@ -1,3 +1,9 @@
+{{- $content := "" }}
+{{- range $set := splitList " " (include "podiumd-minikube.wiremockSets" .) }}
+{{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/**" $set) }}
+{{- $content = print $content $path ($.Files.Get $path | sha256sum) }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,7 +20,7 @@ spec:
       labels:
         app: wiremock
       annotations:
-        checksum/mappings: {{ (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/wiremocks/brp-personen-wiremock/mappings/*.json").AsConfig | sha256sum }}
+        checksum/mappings: {{ $content | sha256sum }}
     spec:
       # See templates/solr/deployment.yaml's comment.
       enableServiceLinks: false
@@ -42,13 +48,7 @@ spec:
             # directly in mappings/, it doesn't recurse into subdirectories -
             # so each file is mounted individually via subPath rather than
             # the whole ConfigMap as one subdirectory.
-            {{- range $path, $_ := .Files.Glob "vendor/dimpact-zaakafhandelcomponent/wiremocks/brp-personen-wiremock/mappings/*.json" }}
-            - name: brp-personen-mappings
-              mountPath: /home/wiremock/mappings/{{ base $path }}
-              subPath: {{ base $path }}
-            {{- end }}
-            {{- if .Values.wiremock.enabled }}
-            {{- range $set := list "smartdocuments-wiremock" "kvk-wiremock" "bag-wiremock" }}
+            {{- range $set := splitList " " (include "podiumd-minikube.wiremockSets" .) }}
             {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/mappings/*.json" $set) }}
             - name: {{ $set }}-mappings
               mountPath: /home/wiremock/mappings/{{ base $path }}
@@ -60,18 +60,12 @@ spec:
               subPath: {{ base $path }}
             {{- end }}
             {{- end }}
-            {{- end }}
       volumes:
-        - name: brp-personen-mappings
-          configMap:
-            name: wiremock-brp-personen-mappings
-        {{- if .Values.wiremock.enabled }}
-        {{- range $set := list "smartdocuments-wiremock" "kvk-wiremock" "bag-wiremock" }}
+        {{- range $set := splitList " " (include "podiumd-minikube.wiremockSets" .) }}
         - name: {{ $set }}-mappings
           configMap:
             name: wiremock-{{ $set }}-mappings
         - name: {{ $set }}-files
           configMap:
             name: wiremock-{{ $set }}-files
-        {{- end }}
         {{- end }}

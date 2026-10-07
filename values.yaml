@@ -27,7 +27,7 @@ zac:
   # detects that isn't the case.
   experimentalPkce: false
 wiremock:
-  enabled: false # extra wiremock mappings (smartdocuments/kvk/bag) - was "itest", renamed since that's all this flag does now
+  enabled: false # SmartDocuments WireMock mappings; KvK/BAG load always (the api-proxy's targets)
   # mailpit (SMTP test server) moved out of this profile - it's now
   # unconditional (templates/mailpit/), since every app's own email
   # settings point at it regardless of which optional profiles are on.
@@ -343,8 +343,9 @@ podiumd:
     objectenApi:
       url: https://objecten.local
       token: fakeZacObjectsToken
+    # BRP/KvK/BAG through the api-proxy, as ExternalsPodiumD.
     brpApi:
-      url: http://wiremock:8080/haalcentraal/api/brp
+      url: http://api-proxy/haalcentraal/api/brp/
       logLevel: INFO
       apiKey:
         # Compose defaults both BRP_API_KEY and BRP_API_KEY_HEADER to empty
@@ -373,10 +374,10 @@ podiumd:
           header: x-gebruiker
         systemUser: ZacSystemUser
     kvkApi:
-      url: fakeKvkApiUrl
+      url: http://api-proxy/
       apiKey: fakeKvkApiKey
     bagApi:
-      url: https://api.bag.kadaster.nl/lvbag/individuelebevragingen/v2/
+      url: http://api-proxy/lvbag/individuelebevragingen/v2/
       apiKey: fakeBagApiKey
     openForms:
       url: http://localhost:9999 # not used at the moment, matches compose's own placeholder
@@ -1075,20 +1076,19 @@ podiumd:
               api_root: https://selectielijst.openzaak.nl/api/v1/
               api_type: orc
               auth_type: no_auth
-            # ExternalsPodiumD's api-proxy paths, served here by WireMock.
             - identifier: brp-api
               label: BRP API
-              api_root: http://wiremock:8080/haalcentraal/api/brp/
+              api_root: http://api-proxy/haalcentraal/api/brp/
               api_type: orc
               auth_type: no_auth
             - identifier: kvk-api
               label: KvK API
-              api_root: http://wiremock:8080/api/
+              api_root: http://api-proxy/api/
               api_type: orc
               auth_type: no_auth
             - identifier: bag-api
               label: BAG API
-              api_root: http://wiremock:8080/lvbag/individuelebevragingen/v2/
+              api_root: http://api-proxy/lvbag/individuelebevragingen/v2/
               api_type: orc
               auth_type: no_auth
             - identifier: notificaties-api
@@ -1297,12 +1297,37 @@ podiumd:
   # --- brp-personen-mock (always on - core) ---
   brppersonenmock:
     enabled: true
-    # No fullnameOverride/ingress overrides needed - this chart already
-    # ships nameOverride: "brp-personen-mock" by default (verified via
-    # `helm show values dimpact/brp-personen-mock`), matching the vendored
-    # brp-personen-wiremock mapping's hardcoded proxyBaseUrl unchanged. Not
-    # exposed via Ingress - compose reaches it only in-cluster, through the
-    # wiremock proxy.
+    # Its default nameOverride "brp-personen-mock" is the api-proxy's target.
+
+  # --- api-proxy (always on - core), as ExternalsPodiumD ---
+  # Apps call BRP, KvK and BAG at http://api-proxy/<path>, as ExternalsPodiumD.
+  # BRP goes to brp-personen-mock as there; KvK and BAG go to WireMock instead
+  # of the real APIs (their mappings come with the wiremock profile).
+  # templates/api-proxy/ingress.yaml serves the same paths on api-proxy.local.
+  # podiumd's frankgateway replaces it in time; no reference environment
+  # routes through it yet.
+  apiproxy:
+    enabled: true
+    resolverIp: 10.96.0.10 # minikube's kube-dns; the chart's 10.0.0.10 is AKS's
+    locations:
+      bag:
+        hostHeader: wiremock
+        targetUrl: http://wiremock:8080/lvbag/individuelebevragingen/v2/
+      brp:
+        hostHeader: brp-personen-mock
+        targetUrl: http://brp-personen-mock:5010/haalcentraal/api/brp/
+      kvkSearch:
+        hostHeader: wiremock
+        path: /api/v2/zoeken
+        targetUrl: http://wiremock:8080/api/v2/zoeken
+      kvkBasic:
+        hostHeader: wiremock
+        path: /api/v1/basisprofielen
+        targetUrl: http://wiremock:8080/api/v1/basisprofielen
+      kvkBranch:
+        hostHeader: wiremock
+        path: /api/v1/vestigingsprofielen
+        targetUrl: http://wiremock:8080/api/v1/vestigingsprofielen
 
   # --- Profile-gated apps (build order step 5). Each one's `enabled` flag
   # here is the one that actually controls whether podiumd renders it (its
@@ -2268,6 +2293,22 @@ podiumd:
         zgw_consumers_config_enable: True
         zgw_consumers:
           services:
+            # As ExternalsPodiumD.
+            - identifier: brp-api
+              label: BRP API
+              api_root: http://api-proxy/haalcentraal/api/brp/
+              api_type: orc
+              auth_type: no_auth
+            - identifier: kvk-api
+              label: KvK API
+              api_root: http://api-proxy/api/
+              api_type: orc
+              auth_type: no_auth
+            - identifier: bag-api
+              label: BAG API
+              api_root: http://api-proxy/lvbag/individuelebevragingen/v2/
+              api_type: orc
+              auth_type: no_auth
             - identifier: openzaak-zaken
               label: Open Zaak - Zaken API
               api_root: https://openzaak.local/zaken/api/v1/
@@ -2469,12 +2510,11 @@ podiumd:
       elastic:
         baseUrl: https://kiss-es-http:9200
         password: kissElasticPassword
-      # ExternalsPodiumD's api-proxy paths, served here by WireMock.
       haalCentraal:
-        baseUrl: http://wiremock:8080/haalcentraal/api/
+        baseUrl: http://api-proxy/haalcentraal/api/
         apiKey: unused-wiremock-key
       kvk:
-        baseUrl: http://wiremock:8080/api
+        baseUrl: http://api-proxy/api
         apiKey: unused-wiremock-key
       email:
         host: mailpit

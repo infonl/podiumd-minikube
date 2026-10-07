@@ -4638,3 +4638,36 @@ responses and answers an empty chunked response (Solr's 302) with 500
 
 Verified live: `test_chunked_post_reaches_objecten` (chunked POST with
 ITA's token gets 400, not 403); suite 94 passed.
+
+## api-proxy for BRP, KvK and BAG (podiumd-tests handoff 6)
+
+The handoff asked for hosts brp.local/kvk.local/bag.local. ExternalsPodiumD
+instead runs podiumd's `apiproxy` (nginx, Service `api-proxy`), which every
+app calls at `http://api-proxy/...`, with no public host. Per the user,
+minikube follows ExternalsPodiumD:
+
+- `podiumd.apiproxy` on (core), with ExternalsPodiumD's locations: BRP to
+  brp-personen-mock (as there), KvK and BAG to WireMock instead of the real
+  APIs. `resolverIp: 10.96.0.10` (minikube's kube-dns; the chart default is
+  AKS's).
+- ZAC, Open Inwoner, KISS and Open Formulieren (new brp-api/kvk-api/bag-api
+  services, as ExternalsPodiumD) call A's exact `http://api-proxy/...` URLs.
+- `https://api-proxy.local` serves the same paths to the tests;
+  `templates/_helpers.tpl`'s `podiumd-minikube.ingress` now renders it and
+  Open Inwoner's Ingress.
+- WireMock: the KvK and BAG mappings load always (the api-proxy's targets;
+  its nginx also needs the `wiremock` Service to exist at start); the
+  `wiremock` profile is SmartDocuments only. WireMock's compose-era BRP proxy
+  mapping (`brp-personen-wiremock`) had no caller left and is removed. The
+  pod's checksum now hashes every mapping file: `AsConfig` returns nothing
+  for SmartDocuments' binary `__files`.
+
+Frank!Gateway: chart 4.9.3 and 4.10.0 still ship `apiproxy`; `frankgateway`
+is opt-in ("none of the gemeenten today"). podiumd-infra ran it once on
+johnb00 (outway only, no routes; `4.9.0-to-4.9.1-johnb00-validation.md`).
+It requires OpenBao and etcd and has no `api-proxy` alias: apps are
+repointed to `http://frankgateway-outway:9080/...` with the same paths.
+Parked as its own optional step.
+
+Verified live: `tests/test_api_proxy.py` (BRP person 999993653, KvK search
+and basisprofiel with ZAC's Accept header, BAG address); suite 99 passed.

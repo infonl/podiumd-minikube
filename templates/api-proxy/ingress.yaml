@@ -1,0 +1,7 @@
+{{/*
+api-proxy.local -> api-proxy: the BRP/KvK/BAG paths the apps call, for the
+tests. No reference environment exposes the api-proxy publicly.
+*/}}
+{{- if .Values.podiumd.apiproxy.enabled }}
+{{ include "podiumd-minikube.ingress" (dict "root" . "name" "api-proxy" "host" "api-proxy.local" "service" "api-proxy") }}
+{{- end }}

@@ -4,23 +4,5 @@ route their Open Inwoner host. The subchart's own Ingress points at the
 Django Service instead, and its extraIngress renders an empty tls entry.
 */}}
 {{- if .Values.podiumd.openinwoner.enabled }}
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: openinwoner
-  labels:
-    {{- include "podiumd-minikube.labels" . | nindent 4 }}
-spec:
-  ingressClassName: traefik
-  rules:
-    - host: openinwoner.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: openinwoner-nginx
-                port:
-                  number: 80
+{{ include "podiumd-minikube.ingress" (dict "root" . "name" "openinwoner" "host" "openinwoner.local" "service" "openinwoner-nginx") }}
 {{- end }}
