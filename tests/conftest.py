@@ -56,7 +56,7 @@ def traefik_ip():
 
 @pytest.fixture(scope="session")
 def pods(traefik_ip):
-    """All pods in the chart's namespace, as a list of (name, phase) dicts."""
+    """All pods in the chart's namespace: name, phase, container_statuses, from_job."""
     raw = kubectl("get", "pods", "-n", NAMESPACE, "-o", "json")
     data = json.loads(raw)
     return [
@@ -64,6 +64,8 @@ def pods(traefik_ip):
             "name": item["metadata"]["name"],
             "phase": item["status"]["phase"],
             "container_statuses": item["status"].get("containerStatuses", []),
+            # Job pods (CronJob runs included) end not-ready by design.
+            "from_job": any(ref.get("kind") == "Job" for ref in item["metadata"].get("ownerReferences", [])),
         }
         for item in data["items"]
     ]

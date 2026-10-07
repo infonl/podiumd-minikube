@@ -6,44 +6,6 @@ one-shot Jobs, Succeeded.
 
 import pytest
 
-ONE_SHOT_JOB_PREFIXES = (
-    "pabc-migrations",
-    "storage-permissions-fix",
-    "openarchiefbeheer-config",
-    "openzaak-config",
-    # ZAC's own bundled CronJobs (periodic signaleren/sig-del housekeeping) -
-    # found live: their completed pods report ready=false once terminated,
-    # same as any other one-shot Job, but weren't in this allowlist yet.
-    "zac-sig-del",
-    "zac-signaleren",
-    # templates/<app>/create-superuser-job.yaml - see each one's own header
-    # for why it exists.
-    "openformulieren-create-superuser",
-    "openklant-create-superuser",
-    "openarchiefbeheer-create-superuser",
-    # The four subchart-bundled setup_configuration Jobs the productaanvraag
-    # flow's own declarative wiring turns on (see each app's own
-    # podiumd.<app>.configuration.data comment in values.yaml), plus the
-    # two custom ones this project adds for the pieces that mechanism
-    # doesn't cover (see templates/{zac,openformulieren}/productaanvraag-*.yaml -
-    # the third gap, the productaanvraag objecttype's own schema, is seeded
-    # by scripts/seed-fixtures instead, not a Job at all).
-    "objecten-config",
-    "objecttypen-config",
-    "opennotificaties-config",
-    "openformulieren-config",
-    "zac-productaanvraag-zaakafhandelparameters",
-    "openformulieren-productaanvraag-form",
-    # ita's own bundled poller CronJob - only relevant if podiumd.ita.enabled
-    # is ever flipped back on (off by default, see values.yaml's own
-    # podiumd.ita comment and tests/test_pkce.py's module docstring).
-    "ita-poller",
-)
-
-
-def is_one_shot(name):
-    return any(name == prefix or name.startswith(prefix + "-") for prefix in ONE_SHOT_JOB_PREFIXES)
-
 
 def test_no_pods_in_bad_phase(pods):
     bad = [p for p in pods if p["phase"] not in ("Running", "Succeeded")]
@@ -58,7 +20,7 @@ def test_long_running_pods_are_ready(pods):
     """
     not_ready = []
     for pod in pods:
-        if is_one_shot(pod["name"]):
+        if pod["from_job"]:
             continue
         not_ready.extend(
             f"{pod['name']}/{status['name']}" for status in pod["container_statuses"] if not status.get("ready", False)
