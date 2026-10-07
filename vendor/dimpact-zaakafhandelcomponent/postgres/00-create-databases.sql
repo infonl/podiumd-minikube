@@ -50,6 +50,11 @@ CREATE ROLE contact WITH LOGIN PASSWORD 'contact';
 CREATE DATABASE contact OWNER contact;
 CREATE ROLE ita WITH LOGIN PASSWORD 'ita';
 CREATE DATABASE ita OWNER ita;
+-- Referentielijsten and Open Beheer (their profiles), names as ExternalsPodiumD.
+CREATE ROLE referentielijsten WITH LOGIN PASSWORD 'referentielijsten';
+CREATE DATABASE referentielijsten OWNER referentielijsten;
+CREATE ROLE openbeheer WITH LOGIN PASSWORD 'openbeheer';
+CREATE DATABASE openbeheer OWNER openbeheer;
 
 -- Open Inwoner (openinwoner profile): a PodiumD component, not in
 -- docker-compose; credentials made up like contact's.

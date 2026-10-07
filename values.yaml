@@ -59,6 +59,12 @@ ita:
   enabled: false # with podiumd.ita; needs objecten (its objecttypes) and openklant
 kiss:
   enabled: false # with podiumd.kiss and podiumd.kiss-eck (its Elasticsearch); needs objecten
+omc:
+  enabled: false # with podiumd.omc; needs objecten, openklant and opennotificaties
+referentielijsten:
+  enabled: false # with podiumd.referentielijsten
+openbeheer:
+  enabled: false # with podiumd.openbeheer; needs objecten (objecttypen)
 metrics:
   enabled: false
 monitoringLogging:
@@ -167,13 +173,7 @@ podiumd:
     # podiumd-minikube (its Role/RoleBinding land there).
     managedNamespaces:
       - podiumd-minikube
-  omc:
-    enabled: false
   clamav:
-    enabled: false
-  referentielijsten:
-    enabled: false
-  openbeheer:
     enabled: false
   zaakbrug:
     enabled: false
@@ -643,6 +643,10 @@ podiumd:
               secret: itaSecret
             - identifier: contact
               secret: contactSecret
+            - identifier: omc
+              secret: omcSecret
+            - identifier: openbeheer
+              secret: openbeheerSecret
 
         vng_api_common_applicaties_config_enable: true
         vng_api_common_applicaties:
@@ -672,6 +676,16 @@ podiumd:
                 - contact
               heeft_alle_autorisaties: true
               label: Contact
+            - uuid: 746c65d7-b88e-4043-a1c0-15451004fbfa
+              client_ids:
+                - omc
+              heeft_alle_autorisaties: true
+              label: OMC
+            - uuid: 3690fccd-b625-4896-8829-992b14bca77a
+              client_ids:
+                - openbeheer
+              heeft_alle_autorisaties: true
+              label: Open Beheer
 
         notifications_config_enable: true
         notifications_config:
@@ -886,6 +900,10 @@ podiumd:
               token: openklantItaToken
               contact_person: ITA
               email: ita@example.com
+            - identifier: omc
+              token: openklantOmcToken
+              contact_person: OMC
+              email: omc@example.com
       # No compose equivalent to match (compose never sets openklant
       # SUPERUSER credentials either) and, unlike openzaak/opennotificaties/
       # objecttypen/openformulieren, this chart's values.yaml has no
@@ -1553,6 +1571,23 @@ podiumd:
                   mode: read_and_write
                 - object_type: 90984726-2692-49d8-8f9d-742075cb761d
                   mode: read_and_write
+            - identifier: omc
+              token: objectenOmcToken
+              contact_person: OMC
+              email: omc@example.com
+              application: OMC
+              permissions:
+                - object_type: c8d301f9-80b8-4575-8b29-3e9431f92994
+                  mode: read_and_write
+                - object_type: cbec27ac-157b-490b-b586-9e8a8f5bbb85
+                  mode: read_and_write
+                - object_type: 2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
+                  mode: read_and_write
+            - identifier: openbeheer-token
+              token: objectenOpenbeheerToken
+              contact_person: Open Beheer
+              email: openbeheer@example.com
+              is_superuser: true
     # See templates/objecten/configmap-no-solo-cache-settings.yaml's own
     # header for why this shim exists (django-solo's own cache for
     # NotificationsConfig intermittently going stale, confirmed live while
@@ -1693,6 +1728,17 @@ podiumd:
               token: objecttypenIntegratieteamToken
               contact_person: Integratieteam
               email: integratieteam@example.com
+            - identifier: omc
+              token: objecttypenOmcToken
+              contact_person: OMC
+              email: omc@example.com
+            - identifier: openbeheer-token
+              token: objecttypenOpenbeheerToken
+              contact_person: Open Beheer
+              email: openbeheer@example.com
+              organization: Open Beheer
+              application: Open Beheer
+              administration: Open Beheer
       # For create_required_objecttypen_job.
       oidcUrl: https://objecttypen.local
       token: objecttypenIntegratieteamToken
@@ -2436,6 +2482,261 @@ podiumd:
       existingClaim: openformulieren
       storageClassName: ""
       size: 10Gi
+
+  # --- referentielijsten (profile: referentielijsten), as ExternalsPodiumD ---
+  # Keycloak admin login only; nothing in the reference environments calls
+  # its API. Redis DB 15, the chart default.
+  referentielijsten:
+    enabled: false
+    configuration:
+      oidcUrl: https://referentielijsten.local
+      secrets:
+        keycloak_client_secret: keycloakReferentielijstenClientSecret
+      data: |-
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+            - identifier: keycloak-provider
+              oidc_use_nonce: true
+              oidc_nonce_size: 32
+              oidc_state_size: 32
+              endpoint_config:
+                oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+            - identifier: admin-oidc
+              oidc_provider_identifier: keycloak-provider
+              enabled: true
+              oidc_rp_client_id: referentielijsten
+              oidc_rp_client_secret: {value_from: {env: keycloak_client_secret}}
+              oidc_rp_scopes_list:
+                - openid
+                - email
+                - profile
+                - roles
+              oidc_rp_sign_algo: RS256
+              userinfo_claims_source: id_token
+              options:
+                user_settings:
+                  claim_mappings:
+                    username:
+                      - preferred_username
+                    first_name:
+                      - given_name
+                    last_name:
+                      - family_name
+                    email:
+                      - email
+                groups_settings:
+                  claim_mapping:
+                    - groups
+                  sync: true
+                  sync_pattern: "*"
+                  default_groups: []
+                  make_users_staff: true
+                  superuser_group_names:
+                    - administrators
+    settings:
+      allowedHosts: referentielijsten.local
+      secretKey: referentielijstenSecretKey
+      disable2fa: true
+      environment: podiumd-minikube
+      database:
+        host: postgres
+        port: 5432
+        name: referentielijsten
+        username: referentielijsten
+        password: referentielijsten
+      email:
+        host: mailpit
+        port: 1025
+        useTLS: false
+        defaultFrom: noreply@example.com
+      cache:
+        default: redis:6379/15
+        axes: redis:6379/15
+    ingress:
+      enabled: true
+      className: traefik
+      hosts:
+        - host: referentielijsten.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+
+  # --- openbeheer (profile: openbeheer), as ExternalsPodiumD ---
+  # Catalogi on Open Zaak (client openbeheer), Objecttypen and Objecten
+  # tokens "openbeheer-token". apiDomain as ExternalsPodiumD's icat and
+  # podiumd-infra: unset, the SPA's API URL renders as "https://". The SPA
+  # is served by openbeheer-nginx, the Ingress target in ExternalsPodiumD
+  # (templates/openbeheer/ingress.yaml). Redis DB 17, the chart default.
+  openbeheer:
+    enabled: false
+    replicaCount: 1
+    configuration:
+      oidcUrl: https://openbeheer.local
+      secrets:
+        keycloak_client_secret: keycloakOpenbeheerClientSecret
+      data: |-
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+            - identifier: keycloak-provider
+              oidc_use_nonce: true
+              oidc_nonce_size: 32
+              oidc_state_size: 32
+              endpoint_config:
+                oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+            - identifier: admin-oidc
+              oidc_provider_identifier: keycloak-provider
+              enabled: true
+              oidc_rp_client_id: openbeheer
+              oidc_rp_client_secret: {value_from: {env: keycloak_client_secret}}
+              oidc_rp_scopes_list:
+                - openid
+                - email
+                - profile
+                - roles
+              oidc_rp_sign_algo: RS256
+              userinfo_claims_source: id_token
+              options:
+                user_settings:
+                  claim_mappings:
+                    username:
+                      - preferred_username
+                    first_name:
+                      - given_name
+                    last_name:
+                      - family_name
+                    email:
+                      - email
+                groups_settings:
+                  claim_mapping:
+                    - groups
+                  sync: true
+                  sync_pattern: "*"
+                  default_groups: []
+                  make_users_staff: true
+                  superuser_group_names:
+                    - administrators
+        zgw_consumers_config_enable: true
+        zgw_consumers:
+          services:
+            - identifier: objecttypen-service
+              label: Objecttypen API
+              api_root: https://objecttypen.local/api/v2/
+              api_type: orc
+              auth_type: api_key
+              header_key: Authorization
+              header_value: Token objecttypenOpenbeheerToken
+            - identifier: objecten-service
+              label: Objecten API
+              api_root: https://objecten.local/api/v2/
+              api_type: orc
+              auth_type: api_key
+              header_key: Authorization
+              header_value: Token objectenOpenbeheerToken
+            - identifier: catalogi-service
+              label: Open Zaak - Catalogi API
+              api_root: https://openzaak.local/catalogi/api/v1/
+              api_type: ztc
+              auth_type: zgw
+              client_id: openbeheer
+              secret: openbeheerSecret
+            - identifier: selectielijst-service
+              label: Open Zaak (public) - Selectielijst API
+              api_root: https://selectielijst.openzaak.nl/api/v1/
+              api_type: orc
+              auth_type: no_auth
+        api_configuration_enabled: true
+        api_configuration:
+          selectielijst_service_identifier: selectielijst-service
+          objecttypen_service_identifier: objecttypen-service
+    settings:
+      allowedHosts: openbeheer.local,openbeheer-nginx.podiumd-minikube.svc.cluster.local
+      apiDomain: openbeheer.local
+      secretKey: openbeheerSecretKey
+      environment: podiumd-minikube
+      database:
+        host: postgres
+        port: 5432
+        name: openbeheer
+        username: openbeheer
+        password: openbeheer
+      email:
+        host: mailpit
+        port: 1025
+        useTLS: false
+        defaultFrom: noreply@example.com
+      cache:
+        default: redis:6379/17
+        axes: redis:6379/17
+
+  # --- omc (profile: omc), as ExternalsPodiumD (icat) ---
+  # podiumd-tests points notify.api.baseUrl at its Notify mock and subscribes
+  # OMC to Open Notificaties (neither reference environment does). Besluiten
+  # on Open Zaak: ExternalsPodiumD's separate besluiten host does not exist
+  # here.
+  omc:
+    enabled: false
+    settings:
+      aspnetcore:
+        environment: Development
+      notify:
+        api:
+          baseUrl: https://notify.invalid
+          # ExternalsPodiumD's NotifyNL test key (name-serviceId-secret).
+          key: omcconfigtest-0c9cdaaf-7b0a-4d88-a8d8-dacbccf52734-173e579d-0f99-4d29-a6f8-7b522418f57b
+        templateId:
+          decisionMade: "00000000-0000-1000-8000-000000000000"
+          email:
+            zaakCreate: 716369c8-edba-44ff-a213-a045b4a8d246
+            zaakUpdate: ed368ce1-89b5-4826-b34c-3f563fb418a9
+            zaakClose: 123e14bd-181e-4a93-a15b-071bee52e383
+          sms:
+            zaakCreate: b2a51bd0-df3c-492a-9097-9384fa34060a
+            zaakUpdate: 76e9ebe7-edae-4fac-ad3c-834586851ef2
+            zaakClose: a8d0026a-afab-48e4-b034-c4d85bb3ca60
+      omc:
+        actor:
+          id: 3a91832c-f2bd-4f22-8d5b-557b44c0ed38
+        auth:
+          jwt:
+            secret: omcAuthJwtSecretForPodiumdMinikubeAtLeastSixtyFourCharactersLong0123
+      zgw:
+        auth:
+          jwt:
+            secret: omcSecret
+            issuer: omc
+          key:
+            openklant: openklantOmcToken
+            objecten: objectenOmcToken
+            objectTypen: objecttypenOmcToken
+        endpoint:
+          openNotificaties: https://opennotificaties.local/api/v1
+          openZaak: https://openzaak.local/zaken/api/v1
+          openKlant: https://openklant.local/klantinteracties/api/v1
+          contactMomenten: https://openklant.local/klantinteracties/api/v1
+          besluiten: https://openzaak.local/besluiten/api/v1
+          objecten: https://objecten.local/api/v2
+          objectTypen: https://objecttypen.local/api/v2
+        whitelist:
+          zaakCreate:
+            ids: "*"
+          zaakUpdate:
+            ids: "*"
+          zaakClose:
+            ids: "*"
+          taskAssigned:
+            ids: niet-bestaande-id
+          decisionMade:
+            ids: niet-bestaande-id
+          message:
+            allowed: false
+    ingress:
+      enabled: true
+      hostname: omc.local
+      ingressClass: traefik
 
   # --- ita (profile: ita) ---
   # As ExternalsPodiumD: database on the shared Postgres, Open Klant/Objecten

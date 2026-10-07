@@ -491,6 +491,30 @@
           "attributes": {}
         }
       ],
+      "openinwoner": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "referentielijsten": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "openbeheer": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
       "kiss": [
         {
           "name": "Redacteur",
@@ -1732,6 +1756,56 @@
          "config": {"introspection.token.claim": "true", "userinfo.token.claim": "true", "user.attribute": "username", "id.token.claim": "true", "lightweight.claim": "false", "access.token.claim": "true", "claim.name": "preferred_username", "jsonType.label": "String"}},
         {"name": "client roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-client-role-mapper", "consentRequired": false,
          "config": {"introspection.token.claim": "true", "multivalued": "true", "userinfo.token.claim": "false", "user.attribute": "foo", "id.token.claim": "true", "lightweight.claim": "false", "access.token.claim": "true", "claim.name": "groups", "jsonType.label": "String", "usermodel.clientRoleMapping.clientId": "openinwoner"}}
+      ]
+    },
+    {
+      "clientId": "referentielijsten",
+      "name": "Referentielijsten",
+      "description": "Referentielijsten's admin login, as the podiumd chart's realm config (keycloak-podiumd-realm-config.yaml).",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "keycloakReferentielijstenClientSecret",
+      "redirectUris": ["https://referentielijsten.local/*"],
+      "webOrigins": ["https://referentielijsten.local/*"],
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "attributes": {"pkce.code.challenge.method": ""},
+      "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
+      "protocolMappers": [
+        {"name": "username", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper",
+         "config": {"introspection.token.claim": "true", "userinfo.token.claim": "true", "user.attribute": "username", "id.token.claim": "true", "lightweight.claim": "false", "access.token.claim": "true", "claim.name": "preferred_username", "jsonType.label": "String"}},
+        {"name": "client roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-client-role-mapper", "consentRequired": false,
+         "config": {"introspection.token.claim": "true", "multivalued": "true", "userinfo.token.claim": "false", "user.attribute": "foo", "id.token.claim": "true", "lightweight.claim": "false", "access.token.claim": "true", "claim.name": "groups", "jsonType.label": "String", "usermodel.clientRoleMapping.clientId": "referentielijsten"}}
+      ]
+    },
+    {
+      "clientId": "openbeheer",
+      "name": "Openbeheer",
+      "description": "Open Beheer's admin login, as the podiumd chart's realm config (keycloak-podiumd-realm-config.yaml).",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "keycloakOpenbeheerClientSecret",
+      "redirectUris": ["https://openbeheer.local/*"],
+      "webOrigins": ["https://openbeheer.local/*"],
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "attributes": {"pkce.code.challenge.method": ""},
+      "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
+      "protocolMappers": [
+        {"name": "username", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper",
+         "config": {"introspection.token.claim": "true", "userinfo.token.claim": "true", "user.attribute": "username", "id.token.claim": "true", "lightweight.claim": "false", "access.token.claim": "true", "claim.name": "preferred_username", "jsonType.label": "String"}},
+        {"name": "client roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-client-role-mapper", "consentRequired": false,
+         "config": {"introspection.token.claim": "true", "multivalued": "true", "userinfo.token.claim": "false", "user.attribute": "foo", "id.token.claim": "true", "lightweight.claim": "false", "access.token.claim": "true", "claim.name": "groups", "jsonType.label": "String", "usermodel.clientRoleMapping.clientId": "openbeheer"}}
       ]
     }
   ],

@@ -4671,3 +4671,42 @@ Parked as its own optional step.
 
 Verified live: `tests/test_api_proxy.py` (BRP person 999993653, KvK search
 and basisprofiel with ZAC's Accept header, BAG address); suite 99 passed.
+
+## OMC, Referentielijsten, Open Beheer (podiumd-tests handoff 7)
+
+Optional profiles `omc`, `referentielijsten`, `openbeheer` (in `--full`),
+configured as ExternalsPodiumD (dim1; OMC as icat, where it is enabled):
+
+- Referentielijsten: Keycloak admin login (client `referentielijsten`),
+  database on the shared Postgres, Redis DB 15. Image 0.7.4 as
+  ExternalsPodiumD; podiumd-infra pins 0.7.3 because 0.7.4's probes failed
+  there, which is the `REFERENTIELIJSTEN_PORT` service-link variable;
+  minikube strips service links, and 0.7.4 runs. Bare uWSGI behind
+  Traefik, so in `manifests.UWSGI_SERVICES`.
+- Open Beheer: client `openbeheer`; Catalogi on Open Zaak (JWT client
+  `openbeheer`, Applicatie `3690fccd…`), Objecttypen and Objecten token
+  `openbeheer-token`, selectielijst. `apiDomain` set as ExternalsPodiumD's
+  icat and podiumd-infra (dim1 leaves it empty, which renders the SPA's API
+  URL as `https://`). Ingress to `openbeheer-nginx` (the SPA), as
+  ExternalsPodiumD; the subchart's Ingress targets the Django Service.
+  Redis DB 17.
+- OMC: Notify URL `podiumd.omc.settings.notify.api.baseUrl`
+  (`https://notify.invalid` until podiumd-tests' mock), ExternalsPodiumD's
+  NotifyNL test key and template ids, Open Zaak client `omc` (Applicatie
+  `746c65d7…`), tokens `omc` in Open Klant, Objecten (Afdeling, Groep,
+  Activiteitenlog) and Objecttypen. No abonnement, as both reference
+  environments (user's choice): podiumd-tests subscribes OMC.
+- Keycloak: vendored clients `referentielijsten` and `openbeheer`, and the
+  chart's client role `administrators` for them and for `openinwoner`
+  (missed when Open Inwoner was added).
+- Redis gets `--databases 32`, so the chart's default DBs (15, 17) exist.
+- Storage hooks cover both Django apps (their podiumd PVs are Azure CSI).
+
+Found live: the Keycloak sync gave up after 90s while Keycloak restarted
+during a `--full` deploy that also started three new apps; raised to 180s.
+OMC's `/Events/Version` needs a token too (ExternalsPodiumD's smoke test
+signs one); `tests/test_omc.py` signs an HS256 JWT with OMC's secret.
+
+Verified live: the four Deployments Ready, both config Jobs Complete (all
+steps executed), live Keycloak clients created; suite 103 passed. Memory:
+22 GiB of the 32 GiB cap.

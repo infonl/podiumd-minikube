@@ -79,6 +79,9 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | `openinwoner` | Open Inwoner, with Elasticsearch through the ECK operator (as ExternalsPodiumD and podiumd-infra) |
 | `ita` | Interne Taakafhandeling on `https://ita.local` (needs `objecten` and the KISS objecttypes) |
 | `kiss` | KISS (chart name `contact`) on `https://contact.local`, its Elasticsearch, Kibana and podiumd-adapter (needs `objecten`) |
+| `omc` | OMC on `https://omc.local`; `podiumd.omc.settings.notify.api.baseUrl` takes a Notify mock (needs `objecten`, `opennotificaties`) |
+| `referentielijsten` | Referentielijsten on `https://referentielijsten.local` |
+| `openbeheer` | Open Beheer on `https://openbeheer.local` (needs `objecten`) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
 | `wiremock` | SmartDocuments WireMock mappings |
 

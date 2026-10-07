@@ -25,7 +25,7 @@ PKCE_ATTRIBUTE = "pkce.code.challenge.method"
 # templates/keycloak/deployment.yaml's KC_BOOTSTRAP_ADMIN_USERNAME/PASSWORD.
 ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"  # nosec B105  # noqa: S105 - dev-only default from the template
-STARTUP_TIMEOUT = 90
+STARTUP_TIMEOUT = 180
 REALM_FILE = VENDOR_DIR / "keycloak" / "zaakafhandelcomponent-realm.json"
 # The podiumd chart's realm config declares it: ita/kiss map it into a claim,
 # and users may see but not edit it.

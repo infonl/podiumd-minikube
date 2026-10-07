@@ -33,6 +33,8 @@ HOSTS = [
     ("openinwoner.local", 200, "openinwoner"),
     ("ita.local", 401, "ita"),  # like PABC: 401 to a request that is not a page navigation
     ("contact.local", 200, "kiss"),
+    ("referentielijsten.local", 200, "referentielijsten"),
+    ("openbeheer.local", 200, "openbeheer"),
     ("mailpit.local", 200, None),
 ]
 

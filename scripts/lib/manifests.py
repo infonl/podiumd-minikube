@@ -34,7 +34,7 @@ BUFFERING_MIDDLEWARE = f"{NAMESPACE}-buffering@kubernetescrd"
 # Django apps that Ingresses reach on uWSGI directly, without their own nginx.
 # Not every Ingress: Traefik's buffer also buffers responses and turns an empty
 # chunked one (Solr's 302) into a 500.
-UWSGI_SERVICES = frozenset({"objecten", "objecttypen", "opennotificaties"})
+UWSGI_SERVICES = frozenset({"objecten", "objecttypen", "opennotificaties", "referentielijsten"})
 MIDDLEWARES_ANNOTATION = "traefik.ingress.kubernetes.io/router.middlewares"
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000

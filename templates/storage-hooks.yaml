@@ -22,11 +22,11 @@ check reject podiumd's competing objects on every subsequent `kubectl
 apply` (verified live in step 4) - matching access modes would remove that
 protection, not strengthen it.
 
-Ranges over all seven possible apps but only renders for whichever are
+Ranges over all nine possible apps but only renders for whichever are
 actually enabled, so turning on a profile flag in values.yaml (step 5) is
 enough - no template changes needed later.
 */}}
-{{- $apps := list "openzaak" "openklant" "opennotificaties" "openarchiefbeheer" "openformulieren" "objecten" "openinwoner" }}
+{{- $apps := list "openzaak" "openklant" "opennotificaties" "openarchiefbeheer" "openformulieren" "objecten" "openinwoner" "referentielijsten" "openbeheer" }}
 {{- range $app := $apps }}
 {{- if (index $.Values.podiumd $app).enabled }}
 apiVersion: v1

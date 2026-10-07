@@ -1,0 +1,8 @@
+{{/*
+openbeheer.local -> openbeheer-nginx, which serves the SPA, as
+ExternalsPodiumD routes it. The subchart's own Ingress points at the Django
+Service.
+*/}}
+{{- if .Values.podiumd.openbeheer.enabled }}
+{{ include "podiumd-minikube.ingress" (dict "root" . "name" "openbeheer" "host" "openbeheer.local" "service" "openbeheer-nginx") }}
+{{- end }}
