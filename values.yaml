@@ -1524,39 +1524,58 @@ podiumd:
               secret: notificatiesSecret
 
         notifications_kanalen_config_enable: true
+        # Kanalen and filters as ExternalsPodiumD; internetaken,
+        # klantcontacten and partijen as podiumd-infra (kees00). Defined
+        # here because this Job re-runs every deploy: a kanaal listed
+        # without filters would lose filters set elsewhere.
         notifications_kanalen_config:
           items:
-            - naam: objecten
-              documentatie_link: http://objecten.podiumd-minikube/ref/kanalen/#/objecten
-              filters:
-                - object_type
-            # openzaak's own outbound notifications (see values.yaml's own
-            # podiumd.openzaak.configuration.data notifications_config
-            # comment for the bug this fixes) publish to these six kanalen
-            # (notifications_api_common.kanalen.KANAAL_REGISTRY, confirmed
-            # live against the actual running pod) whenever it
-            # creates/updates the matching resource - registering them
-            # here (this is where a Kanaal actually lives in the ZGW
-            # notifications model, on the *receiving* Notifications API
-            # side, not the publisher) rather than via openzaak's own
-            # `manage.py register_kanalen` (an authenticated HTTP call
-            # against opennotificaties itself - 403'd live, its plain
-            # vng_api_common_credentials entry above has no matching
-            # Autorisatie granting kanaal-management scope, unlike this
-            # declarative route which never crosses that boundary).
-            # Registering all six, not just "zaken" - notifications_config
-            # only really needed the one for today's bug, but every other
-            # resource type's own create/update hook hits the identical
-            # "kanaal missing" failure the moment notifications_config
-            # exists at all, previously never exercised because nothing
-            # ever created any of these via openzaak's REST API (only via
-            # the vendored SQL fixture, which bypasses this hook entirely).
-            - naam: zaken
-            - naam: besluittypen
-            - naam: zaaktypen
-            - naam: informatieobjecttypen
-            - naam: documenten
             - naam: autorisaties
+              filters:
+                - autorisaties
+            - naam: besluittypen
+              filters:
+                - catalogus
+            - naam: informatieobjecttypen
+              filters:
+                - catalogus
+            - naam: zaaktypen
+              filters:
+                - catalogus
+            - naam: zaken
+              filters:
+                - bronorganisatie
+                - zaaktype
+                - vertrouwelijkheidaanduiding
+            - naam: documenten
+              filters:
+                - bronorganisatie
+                - informatieobjecttype
+                - vertrouwelijkheidaanduiding
+            - naam: besluiten
+              filters:
+                - verantwoordelijke_organisatie
+                - besluittype
+            - naam: objecten
+              filters:
+                - object
+                - object_type
+            - naam: internetaken
+              filters:
+                - nummer
+                - gevraagde_handeling
+                - toelichting
+                - status
+            - naam: klantcontacten
+              filters:
+                - hoofd_onderwerp_type
+                - indicatie_contact_gelukt
+                - verdere_actie_ondernomen
+            - naam: partijen
+              filters:
+                - nummer
+                - interne_notitie
+                - soort_partij
 
         notifications_abonnementen_config_enable: true
         notifications_abonnementen_config:

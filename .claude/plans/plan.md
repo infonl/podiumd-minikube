@@ -4384,3 +4384,17 @@ Open Zaak's Python reaches `https://keycloak.local` with verification (200);
 ZAC starts with the truststore (`Picked up JAVA_TOOL_OPTIONS`) and becomes
 Ready; every pod Ready; live suite 79 passed. Java's HTTPS trust itself is
 exercised in step (d), when ZAC's URLs switch to https.
+
+## Open Notificaties kanalen with the reference filters
+
+Since every deploy re-runs `opennotificaties-config`, its kanalen step
+(`update_or_create`, never deletes) reset kanalen to what `values.yaml`
+listed: `zaken` and `documenten` without filters, which stripped the filters
+podiumd-tests' bootstrap had set (its filtered abonnementen broke after each
+deploy). Both reference environments configure the kanalen themselves, with
+filters. `values.yaml` now lists exactly ExternalsPodiumD's eight
+(autorisaties, besluittypen, informatieobjecttypen, zaaktypen, zaken,
+documenten, besluiten, objecten) plus podiumd-infra's internetaken,
+klantcontacten and partijen, with their filters. `statussen` is in neither
+and stays podiumd-tests'. Verified live: all eleven kanalen carry the
+reference filters after the deploy; live suite 79 passed.
