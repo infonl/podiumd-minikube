@@ -30,12 +30,42 @@ metadata:
     {{- include "podiumd-minikube.labels" . | nindent 4 }}
 spec:
   backoffLimit: 6
+  # The wait-for-zac init container below can take as long as ZAC's first boot.
+  activeDeadlineSeconds: 1800
   template:
     metadata:
       labels:
         {{- include "podiumd-minikube.labels" . | nindent 8 }}
     spec:
       restartPolicy: OnFailure
+      # ZAC refuses connections until WildFly has deployed it; on a fresh
+      # start this Job used to fail for good before that (podiumd-tests
+      # handoff section 4). Any HTTP answer below 500 means ZAC is up;
+      # redirects are not followed (ZAC answers 302 to keycloak.local, which
+      # does not resolve in the cluster).
+      initContainers:
+        - name: wait-for-zac
+          image: python:3.13-alpine
+          command:
+            - python
+            - -c
+            - |
+              import time, urllib.error, urllib.request
+              class NoRedirect(urllib.request.HTTPRedirectHandler):
+                  def redirect_request(self, *args, **kwargs):
+                      return None
+              opener = urllib.request.build_opener(NoRedirect)
+              while True:
+                  try:
+                      opener.open("http://zac/rest/", timeout=10)
+                      break
+                  except urllib.error.HTTPError as error:
+                      if error.code < 500:
+                          break
+                  except OSError:
+                      pass
+                  print("waiting for zac", flush=True)
+                  time.sleep(5)
       containers:
         - name: seed-zaakafhandelparameters
           image: python:3.13-alpine

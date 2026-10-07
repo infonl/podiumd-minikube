@@ -4303,3 +4303,20 @@ ownerReference (kind Job).
 
 Coordination with podiumd-tests on this shared cluster: lock file
 `infonl/.minikube-lock` plus messages before and after disruptive actions.
+
+## The ZAC seed Job waits for ZAC (podiumd-tests handoff section 4)
+
+On a fresh start `zac-productaanvraag-zaakafhandelparameters` failed for
+good because ZAC was not up yet. ExternalsPodiumD and podiumd-infra make
+ZAC wait for nothing (its liveness probe restarts it), and neither has this
+Job (podiumd-infra seeds zaakafhandelparameters from outside the cluster),
+so ZAC is unchanged and only our Job waits: a `wait-for-zac` init container
+(same `python:3.13-alpine` image) polls `http://zac/rest/` until any answer
+below 500, and the Job gets `activeDeadlineSeconds: 1800`.
+
+Found live: the first version followed ZAC's 302 to
+`http://keycloak.local/...`, which does not resolve in the cluster, so it
+waited forever (242 polls while ZAC was Ready); it no longer follows
+redirects. Verified with ZAC scaled to 0: the Job waited (20 polls), ZAC
+started, the seed succeeded on its first attempt with 0 restarts.
+A rolling restart is no test of this: the old ZAC pod keeps serving.
