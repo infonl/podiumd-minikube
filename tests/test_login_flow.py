@@ -1,5 +1,5 @@
 """
-End-to-end OIDC login flow through http://zac.local, replaying the same
+End-to-end OIDC login flow through https://zac.local, replaying the same
 redirect chain a browser would make (cookies included via requests.Session)
 - this is the strongest verification this project has that ZAC, Keycloak,
 and PABC are wired together correctly: it exercises the PKCE realm-client
@@ -20,50 +20,33 @@ Keycloak via the Admin API is only a temporary fix, silently undone by the
 next fresh import.
 """
 
-from urllib.parse import urlparse
-
 import requests
 
+from conftest import CA_FILE
+
+ZAC_URL = "https://zac.local/"
 ZAC_HOST = "zac.local"
 KEYCLOAK_HOST = "keycloak.local"
 TEST_USERNAME = "beheerder1newiam"
 TEST_PASSWORD = "beheerder1newiam"
 
 
-def _via_traefik(traefik_ip, absolute_url):
-    """
-    Turn an absolute "http://<some>.local/path?query" redirect target into
-    a (url, headers) pair that reaches it through Traefik by IP + Host
-    header, instead of relying on DNS/`/etc/hosts` resolving *.local.
-    """
-    parsed = urlparse(absolute_url)
-    url = f"http://{traefik_ip}{parsed.path}"
-    if parsed.query:
-        url += f"?{parsed.query}"
-    return url, {"Host": parsed.netloc}
-
-
 def test_full_login_flow_reaches_authenticated_app(traefik_ip):
     session = requests.Session()
+    session.verify = CA_FILE
 
     # 1. Unauthenticated request to ZAC redirects to Keycloak's real OIDC
-    #    authorization endpoint.
-    initial = session.get(
-        f"http://{traefik_ip}/",
-        headers={"Host": ZAC_HOST},
-        timeout=10,
-        allow_redirects=False,
-    )
+    #    authorization endpoint, on https.
+    initial = session.get(ZAC_URL, timeout=10, allow_redirects=False)
     assert initial.status_code == 302, "zac.local should redirect to Keycloak"
     auth_location = initial.headers["Location"]
-    assert KEYCLOAK_HOST in auth_location
+    assert auth_location.startswith(f"https://{KEYCLOAK_HOST}/")
     assert "response_type=code" in auth_location
     assert "client_id=zaakafhandelcomponent" in auth_location
 
     # 2. Keycloak's auth endpoint renders the real login form (not an error
     #    page - this is exactly what the PKCE realm-client fix made work).
-    auth_url, auth_headers = _via_traefik(traefik_ip, auth_location)
-    login_page = session.get(auth_url, headers=auth_headers, timeout=10)
+    login_page = session.get(auth_location, timeout=10)
     assert login_page.status_code == 200
     assert 'id="kc-form-login"' in login_page.text
 
@@ -72,10 +55,8 @@ def test_full_login_flow_reaches_authenticated_app(traefik_ip):
 
     # 3. Submit credentials - Keycloak should issue an authorization code
     #    and redirect back to zac.local.
-    submit_url, submit_headers = _via_traefik(traefik_ip, form_action)
     submitted = session.post(
-        submit_url,
-        headers=submit_headers,
+        form_action,
         data={
             "username": TEST_USERNAME,
             "password": TEST_PASSWORD,
@@ -90,18 +71,17 @@ def test_full_login_flow_reaches_authenticated_app(traefik_ip):
         "wrong (see this module's docstring for how to reset them)"
     )
     callback_location = submitted.headers["Location"]
-    assert ZAC_HOST in callback_location
+    assert callback_location.startswith(f"https://{ZAC_HOST}/")
     assert "code=" in callback_location
 
     # 4. Follow the callback - ZAC exchanges the code and redirects to /.
-    callback_url, callback_headers = _via_traefik(traefik_ip, callback_location)
-    callback = session.get(callback_url, headers=callback_headers, timeout=15, allow_redirects=False)
+    callback = session.get(callback_location, timeout=15, allow_redirects=False)
     assert callback.status_code == 302
 
     # 5. Final request should land on the real, authenticated app shell -
     #    not bounced back to login, and not ZAC's own "Geen toestemming"
     #    (403) authorization-denied page.
-    final = session.get(f"http://{traefik_ip}/", headers={"Host": ZAC_HOST}, timeout=15)
+    final = session.get(ZAC_URL, timeout=15)
     assert final.status_code == 200
     assert "<zac-root>" in final.text
     assert "Geen toestemming" not in final.text

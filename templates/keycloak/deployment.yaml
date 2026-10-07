@@ -34,17 +34,14 @@ spec:
               value: admin
             - name: KC_HEALTH_ENABLED
               value: "true"
-            # The Traefik Ingress hostname, not the in-cluster Service name -
-            # this is what ends up in the OIDC discovery document and is
-            # what the browser is redirected to. Backend callers (ZAC's own
-            # auth.server) reach Keycloak via the in-cluster Service DNS
-            # instead - see plan.md's "Keycloak/ZAC issuer-URL consistency".
+            # The public https host, for browsers and backends alike, as in
+            # ExternalsPodiumD; Traefik terminates TLS.
             - name: KC_HOSTNAME
-              value: http://keycloak.local
+              value: https://keycloak.local
             - name: KC_HTTP_ENABLED
               value: "true"
-            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
-              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
             - name: KC_DB
               value: postgres
             - name: KC_DB_URL_HOST

@@ -213,14 +213,14 @@ podiumd:
     # take "on" being wired up here as proof it currently works - only
     # that it's ready to, once it can be tested.
     javaOptions: "-Xms512m -Xmx1024m -XX:ActiveProcessorCount=2"
-    contextUrl: http://zac.local
+    contextUrl: https://zac.local
     db:
       host: postgres
       name: zac
       user: zac
       password: password
     auth:
-      server: http://keycloak:8080
+      server: https://keycloak.local
       realm: zaakafhandelcomponent
       clientId: zaakafhandelcomponent
       secret: keycloakZaakafhandelcomponentClientSecret
@@ -605,24 +605,9 @@ podiumd:
             oidc_use_nonce: true
             oidc_nonce_size: 32
             oidc_state_size: 32
-            # Explicit endpoints, not endpoint_config.oidc_op_discovery_endpoint:
-            # this step's own pydantic model accepts either shape (both
-            # validated fine here - "Valid configuration settings found for
-            # all steps"), but the *execution* step re-validates the same
-            # URLs through a plain Django URLField, which is stricter than
-            # pydantic's AnyUrl and (confirmed live, isolated in a shell)
-            # rejects a bare single-label Service hostname like
-            # "http://keycloak:8080/..." outright ("Voer een geldige URL
-            # in.") - it has no dot and isn't in Django's own "localhost"
-            # exception. The fully-qualified in-cluster DNS name satisfies
-            # it; explicit endpoints chosen over discovery only because
-            # they don't depend on Keycloak's own discovery document being
-            # fetchable/well-formed at setup-configuration-job time.
+            # Discovery on the public https host, as ExternalsPodiumD.
             endpoint_config:
-              oidc_op_authorization_endpoint: http://keycloak.podiumd-minikube.svc.cluster.local:8080/realms/zaakafhandelcomponent/protocol/openid-connect/auth
-              oidc_op_token_endpoint: http://keycloak.podiumd-minikube.svc.cluster.local:8080/realms/zaakafhandelcomponent/protocol/openid-connect/token
-              oidc_op_user_endpoint: http://keycloak.podiumd-minikube.svc.cluster.local:8080/realms/zaakafhandelcomponent/protocol/openid-connect/userinfo
-              oidc_op_jwks_endpoint: http://keycloak.podiumd-minikube.svc.cluster.local:8080/realms/zaakafhandelcomponent/protocol/openid-connect/certs
+              oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
           items:
           - identifier: admin-oidc
             enabled: true
@@ -968,7 +953,7 @@ podiumd:
       apiKeys:
         - zac-test-api-key
       oidc:
-        authority: http://keycloak:8080/realms/zaakafhandelcomponent/
+        authority: https://keycloak.local/realms/zaakafhandelcomponent/
         clientId: pabc
         clientSecret: pabcClientSecret
         functioneelBeheerderRole: administrator
@@ -2181,7 +2166,7 @@ podiumd:
       typeVersion: 1
     web:
       oidc:
-        authority: http://keycloak:8080/realms/zaakafhandelcomponent/
+        authority: https://keycloak.local/realms/zaakafhandelcomponent/
         clientId: ita
         clientSecret: itaClientSecret
         itaSystemAccessRole: ITA_Gebruiker
@@ -2312,7 +2297,7 @@ podiumd:
         medewerkers:
           useEmail: true
       oidc:
-        authority: http://keycloak:8080/realms/zaakafhandelcomponent/
+        authority: https://keycloak.local/realms/zaakafhandelcomponent/
         clientId: kiss
         clientSecret: kissClientSecret
       # No settings.oidc.requireHttps-style field exists in this chart

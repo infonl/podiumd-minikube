@@ -15,7 +15,10 @@ local `/etc/hosts` edits (useful for CI or a fresh checkout).
 """
 
 import json
+import socket
 import subprocess
+
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +26,8 @@ NAMESPACE = "podiumd-minikube"
 TRAEFIK_NAMESPACE = "traefik"
 TRAEFIK_SERVICE = "traefik"
 REQUEST_TIMEOUT = 10
+# The local CA that signs every ingress host's certificate (scripts/lib/pki.py).
+CA_FILE = str(Path(__file__).resolve().parents[1] / ".pki" / "ca.crt")
 
 
 def kubectl(*args):
@@ -51,7 +56,20 @@ def traefik_ip():
         pytest.skip(f"could not reach the cluster via kubectl: {exc}")
     if not ip:
         pytest.skip("Traefik has no external IP yet - is `minikube tunnel` running? See scripts/setup-tunnel.")
+    _resolve_local_hosts_to(ip)
     return ip
+
+
+def _resolve_local_hosts_to(ip):
+    """Resolves every *.local host to Traefik in this process, so https URLs get the right SNI."""
+    original = socket.getaddrinfo
+
+    def getaddrinfo(host, *args, **kwargs):
+        if isinstance(host, str) and host.endswith(".local"):
+            host = ip
+        return original(host, *args, **kwargs)
+
+    socket.getaddrinfo = getaddrinfo
 
 
 @pytest.fixture(scope="session")
@@ -127,3 +145,9 @@ def browser_type_launch_args(browser_type_launch_args, traefik_ip):
             f"--host-resolver-rules=MAP zac.local {traefik_ip},MAP keycloak.local {traefik_ip},MAP mailpit.local {traefik_ip}",
         ],
     }
+
+
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    """Accepts the local CA's certificates: Chromium would need it in an NSS database."""
+    return {**browser_context_args, "ignore_https_errors": True}

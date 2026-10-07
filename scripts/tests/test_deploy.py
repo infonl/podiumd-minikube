@@ -56,7 +56,7 @@ def test_parser_passes_unknown_arguments_to_helm():
     assert extra == ["--set", "a=b"]
 
 
-def test_config_jobs_are_the_setup_configuration_jobs():
+def test_jobs_are_every_job_in_the_render():
     render = manifests.Render(
         docs=[
             {"kind": "Job", "metadata": {"name": "openzaak-config"}},
@@ -65,4 +65,4 @@ def test_config_jobs_are_the_setup_configuration_jobs():
         ],
         large_configmaps=[],
     )
-    assert deploy.config_jobs(render) == ["openzaak-config"]
+    assert deploy.jobs(render) == ["openzaak-config", "pabc-migrations-1"]

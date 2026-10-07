@@ -4398,3 +4398,47 @@ documenten, besluiten, objecten) plus podiumd-infra's internetaken,
 klantcontacten and partijen, with their filters. `statussen` is in neither
 and stays podiumd-tests'. Verified live: all eleven kanalen carry the
 reference filters after the deploy; live suite 79 passed.
+
+## TLS step (d1): login over HTTPS
+
+As ExternalsPodiumD (backends call Keycloak on its public https host):
+
+- Keycloak `KC_HOSTNAME=https://keycloak.local` with `KC_PROXY_HEADERS=xforwarded`
+  (Traefik terminates TLS); `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` removed.
+- ZAC `contextUrl: https://zac.local`, `auth.server: https://keycloak.local`;
+  PABC, ITA and KISS `authority` and Open Zaak's admin OIDC on
+  `https://keycloak.local` (Open Zaak now via `oidc_op_discovery_endpoint`,
+  as ExternalsPodiumD).
+- The realm: `manifests.with_https` adds an `https://` twin of every
+  `http://*.local` redirect URI and web origin (HTTP keeps working), applied
+  to the rendered realm (`fix_realm`, which also does the PKCE switch) and
+  to the live clients (`keycloak.sync_realm`, replacing the PKCE-only sync).
+- Every deploy re-runs all Jobs in the render (all idempotent), and all of
+  them get the CA: the ZAC seed Job's token URL is now https, and a changed
+  Job spec cannot be applied over the existing Job.
+- Tests: `tests/conftest.py`'s `traefik_ip` fixture resolves `*.local` to
+  Traefik inside the test process, so `test_login_flow.py` uses the real
+  `https://` URLs verified against `.pki/ca.crt` (its IP-plus-Host-header
+  helper is gone); Playwright ignores certificate errors (Chromium would need
+  the CA in an NSS database).
+
+Found live, all fixed:
+
+1. The realm sync's `kcadm` login and updates ran via `deploy/keycloak` while
+   Keycloak was rolling out a new pod (KC_HOSTNAME changed): the update hit
+   the other pod, which had no `kcadm` session, and failed. `sync_realm` now
+   waits for the rollout and runs every `kcadm` call in one pod.
+2. While reproducing that by hand I overwrote the ZAC client's redirect URIs
+   with two entries; restored from the vendored realm plus https twins.
+3. musl (the Alpine `python:3.13-alpine` seed Job) could not resolve
+   `keycloak.local`: with `ndots:5` it first tries the host's search domain
+   (`keycloak.local.info.local`), the host's DNS answers "no data", and musl
+   gives up there (glibc continues). The CoreDNS block now also answers
+   `<host>.<search domain>` for every non-cluster search domain with
+   NXDOMAIN (`template` plugin; the `hosts` plugin answered SERVFAIL, which
+   musl also gives up on), read from a pod's `resolv.conf`.
+4. The seed Job had exhausted its retries during 3 and was recreated.
+
+Verified live: realm clients in sync; seed Job succeeds against
+`https://keycloak.local`; live suite 79 passed, including the HTTPS login
+flow and the browser test.

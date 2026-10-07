@@ -110,15 +110,14 @@ def _pod_spec(doc: Doc) -> Doc | None:
 
 
 def trust_ca(docs: list[Doc]) -> None:
-    """Mounts the local CA (pki.TRUST_CONFIGMAP) in every workload and config Job, with its env.
+    """Mounts the local CA (pki.TRUST_CONFIGMAP) in every workload and Job, with its env.
 
     The reference environments call each other on public https hosts with
     publicly trusted certificates; here every client must trust the local
-    CA. Other bare Jobs are skipped: their pod template is immutable.
+    CA. Jobs are recreated by every deploy (lib.deploy), so their immutable
+    spec can change.
     """
     for doc in docs:
-        if doc.get("kind") == "Job" and not name_of(doc).endswith("-config"):
-            continue
         spec = _pod_spec(doc)
         if spec is None:
             continue
@@ -180,8 +179,17 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
             doc["data"]["configuration.yaml"] = yaml.safe_dump(openformulieren, sort_keys=False)
 
 
-def set_zac_pkce(docs: list[Doc], *, enabled: bool) -> None:
-    """Sets the vendored realm's zaakafhandelcomponent client PKCE method to S256 or "" (not required)."""
+_LOCAL_HTTP = re.compile(r"http://[^/:]+\.local(/|$)")
+
+
+def with_https(urls: list[str]) -> list[str]:
+    """urls plus an https:// twin of every http://<host>.local one (HTTPS next to HTTP, as ExternalsPodiumD)."""
+    twins = [f"https://{url.removeprefix('http://')}" for url in urls if _LOCAL_HTTP.match(url)]
+    return [*urls, *(twin for twin in twins if twin not in urls)]
+
+
+def fix_realm(docs: list[Doc], *, zac_pkce: bool) -> None:
+    """Fixes the vendored realm: https redirect URIs and web origins, zaakafhandelcomponent's PKCE (S256 or "")."""
     for doc in docs:
         if not _is_configmap(doc, "keycloak-realm"):
             continue
@@ -191,8 +199,10 @@ def set_zac_pkce(docs: list[Doc], *, enabled: bool) -> None:
                 continue
             realm = json.loads(raw)
             for client in realm.get("clients", []):
+                client["redirectUris"] = with_https(client.get("redirectUris", []))
+                client["webOrigins"] = with_https(client.get("webOrigins", []))
                 if client.get("clientId") == "zaakafhandelcomponent":
-                    client["attributes"]["pkce.code.challenge.method"] = "S256" if enabled else ""
+                    client["attributes"]["pkce.code.challenge.method"] = "S256" if zac_pkce else ""
             data[key] = json.dumps(realm, indent=2)
 
 
@@ -231,7 +241,7 @@ def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool =
         trust_ca(docs)
     if objecten_merged:
         fixup_merged_objecten(docs)
-    set_zac_pkce(docs, enabled=zac_pkce)
+    fix_realm(docs, zac_pkce=zac_pkce)
     return Render(
         docs=[doc for doc in docs if not _is_large_configmap(doc)],
         large_configmaps=[doc for doc in docs if _is_large_configmap(doc)],

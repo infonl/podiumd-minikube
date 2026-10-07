@@ -89,7 +89,7 @@ def test_fix_up_leaves_objecten_alone_on_the_classic_shape():
     assert render.docs == [doc]
 
 
-def test_set_zac_pkce_switches_only_the_zac_client():
+def test_fix_realm_switches_pkce_only_for_the_zac_client():
     realm = {
         "clients": [{"clientId": "zaakafhandelcomponent", "attributes": {}}, {"clientId": "other", "attributes": {}}]
     }
@@ -98,11 +98,11 @@ def test_set_zac_pkce_switches_only_the_zac_client():
         "metadata": {"name": "keycloak-realm"},
         "data": {"zaakafhandelcomponent-realm.json": json.dumps(realm)},
     }
-    manifests.set_zac_pkce([doc], enabled=True)
+    manifests.fix_realm([doc], zac_pkce=True)
     clients = json.loads(doc["data"]["zaakafhandelcomponent-realm.json"])["clients"]
     assert clients[0]["attributes"]["pkce.code.challenge.method"] == "S256"
     assert clients[1]["attributes"] == {}
-    manifests.set_zac_pkce([doc], enabled=False)
+    manifests.fix_realm([doc], zac_pkce=False)
     clients = json.loads(doc["data"]["zaakafhandelcomponent-realm.json"])["clients"]
     assert clients[0]["attributes"]["pkce.code.challenge.method"] == ""
 
@@ -120,7 +120,7 @@ def test_fix_up_splits_off_large_configmaps():
     assert _docs(render.manifest) == [small]
 
 
-def test_trust_ca_mounts_the_ca_in_workloads_and_config_jobs_only():
+def test_trust_ca_mounts_the_ca_in_workloads_and_jobs():
     docs: list[manifests.Doc] = [
         {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "SSL_CERT_FILE", "value": "/own"}]}]}}}},
         {"kind": "Job", "metadata": {"name": "openzaak-config"}, "spec": {"template": {"spec": {"containers": [{"name": "job"}]}}}},
@@ -135,5 +135,11 @@ def test_trust_ca_mounts_the_ca_in_workloads_and_config_jobs_only():
     assert env["REQUESTS_CA_BUNDLE"] == "/etc/podiumd-ca/ca-bundle.pem"
     assert "truststore.p12" in env["JAVA_TOOL_OPTIONS"]
     assert docs[1]["spec"]["template"]["spec"]["volumes"]
-    assert "volumes" not in docs[2]["spec"]["template"]["spec"]
+    assert docs[2]["spec"]["template"]["spec"]["volumes"]
     assert docs[3]["spec"]["template"]["spec"]["containers"][0]["env"]
+
+
+def test_with_https_adds_twins_only_for_local_hosts():
+    urls = ["http://zac.local/*", "http://zac.local", "http://localhost:8080/*", "https://kiss.local"]
+    assert manifests.with_https(urls) == [*urls, "https://zac.local/*", "https://zac.local"]
+    assert manifests.with_https(manifests.with_https(urls)) == manifests.with_https(urls)

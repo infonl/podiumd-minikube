@@ -2,68 +2,85 @@
 
 --import-realm skips a realm that already exists, and Keycloak persists to
 Postgres, so a changed vendored realm never reaches a provisioned cluster.
+The same fixes as lib.manifests.fix_realm are applied to the live clients.
 """
 
+import json
 import sys
 
+from typing import Any
+
 from lib import kube
+from lib import manifests
 from lib import polling
 from lib import process
 from lib.paths import NAMESPACE
 
 REALM = "zaakafhandelcomponent"
-CLIENT_ID = "zaakafhandelcomponent"
+ZAC_CLIENT_ID = "zaakafhandelcomponent"
+PKCE_ATTRIBUTE = "pkce.code.challenge.method"
 # templates/keycloak/deployment.yaml's KC_BOOTSTRAP_ADMIN_USERNAME/PASSWORD.
 ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"  # nosec B105  # noqa: S105 - dev-only default from the template
-KCADM = ["kubectl", "exec", "-n", NAMESPACE, "deploy/keycloak", "--", "/opt/keycloak/bin/kcadm.sh"]
 STARTUP_TIMEOUT = 90
 
 
-def _client_uuid() -> str | None:
-    """The client's id after a fresh kcadm login; None while Keycloak is still starting."""
+def _kcadm(pod: str) -> list[str]:
+    """kcadm.sh in pod; one pod for login and updates, kcadm keeps its session in a file there."""
+    return ["kubectl", "exec", "-n", NAMESPACE, pod, "--", "/opt/keycloak/bin/kcadm.sh"]
+
+
+def _clients(pod: str) -> list[Any] | None:
+    """The realm's clients after a fresh kcadm login in pod; None while Keycloak is still starting."""
     login = [
-        *KCADM, "config", "credentials", "--server", "http://localhost:8080",
+        *_kcadm(pod), "config", "credentials", "--server", "http://localhost:8080",
         "--realm", "master", "--user", ADMIN_USER, "--password", ADMIN_PASSWORD,
     ]  # fmt: skip
     if not process.succeeds(login):
         return None
-    lookup = [
-        *KCADM,
-        "get",
-        "clients",
-        "-r",
-        REALM,
-        "-q",
-        f"clientId={CLIENT_ID}",
-        "--fields",
-        "id",
-        "--format",
-        "csv",
-        "--noquotes",
-    ]
-    result = process.run(lookup, check=False)
+    fields = "id,clientId,redirectUris,webOrigins,attributes"
+    result = process.run([*_kcadm(pod), "get", "clients", "-r", REALM, "--fields", fields], check=False)
     if result.returncode != 0:
         return None
-    return "".join(result.stdout.split()) or None
+    return json.loads(result.stdout) or None
 
 
-def sync_zac_pkce(*, enabled: bool) -> None:
-    """Sets the live zaakafhandelcomponent client's PKCE method to S256 or "" (not required)."""
+def client_changes(client: dict[str, Any], *, zac_pkce: bool) -> list[str]:
+    """kcadm `-s` settings that bring client in line with lib.manifests.fix_realm; [] when it is."""
+    changes: list[str] = []
+    for field in ("redirectUris", "webOrigins"):
+        current: list[str] = client.get(field) or []
+        wanted = manifests.with_https(current)
+        if wanted != current:
+            changes += ["-s", f"{field}={json.dumps(wanted)}"]
+    if client.get("clientId") == ZAC_CLIENT_ID:
+        target = "S256" if zac_pkce else ""
+        attributes: dict[str, str] = client.get("attributes") or {}
+        if attributes.get(PKCE_ATTRIBUTE, "") != target:
+            changes += ["-s", f'attributes."{PKCE_ATTRIBUTE}"={target}']
+    return changes
+
+
+def sync_realm(*, zac_pkce: bool) -> None:
+    """Applies the realm fixes to the live clients."""
     if not kube.exists("deployment/keycloak"):
-        print("'keycloak' not found - skipping the PKCE sync.")
+        print("'keycloak' not found - skipping the realm sync.")
         return
-    target = "S256" if enabled else ""
-    print(f"Reconciling Keycloak's live '{REALM}' realm PKCE requirement (target: '{target}')...")
-    uuid = polling.wait_until(_client_uuid, timeout=STARTUP_TIMEOUT, interval=3)
-    if not uuid:
+    print(f"Reconciling Keycloak's live '{REALM}' realm clients...")
+    # A changed Keycloak spec rolls out a new pod; exec into the new one only.
+    kube.kubectl_shown("rollout", "status", "deployment/keycloak", "-n", NAMESPACE, "--timeout=300s")
+    pod = kube.kubectl("get", "pod", "-n", NAMESPACE, "-l", "app=keycloak", "-o", "jsonpath={.items[0].metadata.name}")
+    clients = polling.wait_until(lambda: _clients(pod), timeout=STARTUP_TIMEOUT, interval=3)
+    if not clients:
         print(
-            f"WARNING: Keycloak or client '{CLIENT_ID}' in realm '{REALM}' not reachable after "
-            f"{STARTUP_TIMEOUT}s; PKCE not synced - re-run deploy once Keycloak is up.",
+            f"WARNING: Keycloak realm '{REALM}' not reachable after {STARTUP_TIMEOUT}s; "
+            "realm not synced - re-run deploy once Keycloak is up.",
             file=sys.stderr,
         )
         return
-    process.output(
-        [*KCADM, "update", f"clients/{uuid}", "-r", REALM, "-s", f'attributes."pkce.code.challenge.method"={target}']
-    )
-    print(f"Keycloak's live '{CLIENT_ID}' client PKCE requirement set to '{target}'.")
+    for client in clients:
+        changes = client_changes(client, zac_pkce=zac_pkce)
+        if changes:
+            process.output([*_kcadm(pod), "update", f"clients/{client['id']}", "-r", REALM, *changes])
+            print(f"  updated client {client['clientId']}")
+    print(f"Keycloak's live '{REALM}' realm clients are in sync.")
