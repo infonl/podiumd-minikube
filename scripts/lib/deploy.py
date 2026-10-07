@@ -72,6 +72,27 @@ def expected_storage_errors(storage: manifests.Render) -> int:
     return 2 * sum(1 for doc in storage.docs if doc.get("kind") == "PersistentVolume")
 
 
+def config_jobs(render: manifests.Render) -> list[str]:
+    """The setup_configuration Jobs (`<app>-config`) in render."""
+    return [
+        manifests.name_of(doc)
+        for doc in render.docs
+        if doc.get("kind") == "Job" and manifests.name_of(doc).endswith("-config")
+    ]
+
+
+def _rerun_config_jobs(render: manifests.Render) -> None:
+    """Deletes the config Jobs so the apply recreates and re-runs them.
+
+    As ExternalsPodiumD's pipeline does before every deploy: a Job is
+    immutable, and otherwise only re-runs once its TTL has removed it.
+    """
+    jobs = config_jobs(render)
+    if jobs:
+        print(f"Deleting {len(jobs)} config Job(s) so this deploy re-runs them...")
+        kube.kubectl_shown("delete", "job", *jobs, "-n", NAMESPACE, "--ignore-not-found")
+
+
 def _apply_storage_hooks(selected: Options) -> manifests.Render:
     """Applies storage-hooks.yaml's hostPath PV/PVC pairs before the rest, so podiumd's cannot replace them."""
     # Its volume list follows the enabled profiles, and Jobs are immutable.
@@ -130,6 +151,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
         crds.apply_monitoring_logging_crds()
 
     render = selected.render()
+    _rerun_config_jobs(render)
     _apply_full_manifest(render, expected_storage_errors(storage))
 
     print()

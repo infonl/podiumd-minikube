@@ -4200,3 +4200,39 @@ that change. The `openzaak-config` Job, recreated by the same deploy (its
 TTL had removed it), hit "Connection refused" once and succeeded on retry;
 its failed pod made `test_pods.py::test_no_pods_in_bad_phase` fail until
 deleted. Data and sequences were intact after the restart.
+
+## The productaanvraag 403: objecten config vs. demo fixture; config Jobs re-run every deploy
+
+`test_full_productaanvraag_flow_creates_a_zaak` got 403 from Objecten (and
+so would Open Formulieren's real productaanvraag registration). Chain, found
+live:
+
+1. `objecten-config` (setup_configuration) created service `objecttypen-api`
+   at `http://objecttypen.podiumd-minikube/api/v2/` and superuser tokens
+   `zac` / `open-formulieren`.
+2. `scripts/seed-fixtures` then loaded `objecten/demodata.json`, whose rows
+   (same pks) overwrote them: service `objecttypes-api` at
+   `http://objecttypen:80/api/v2/`, tokens `zaakafhandelcomponent` /
+   `openformulieren` with `is_superuser: false`.
+3. Every later re-run of `objecten-config` (TTL 600s, recreated by the next
+   deploy) looked up token `zac`, did not find it, tried to create it and hit
+   `duplicate key ... (fakeZacObjectsToken)`; setup_configuration rolled back
+   the whole run.
+4. The objecttype was only known under `objecttypen:80`, and the token had no
+   superuser: a request naming `objecttypen.podiumd-minikube` matched no
+   permission. Proved with one token and body: 403 with the configured host,
+   201 with the fixture's.
+
+Compared with the reference environments: ExternalsPodiumD's pipeline
+deletes every `*-config` Job (and a few other one-shot Jobs) before each
+deploy, so they re-run every time; podiumd-infra re-runs them when the TTL
+has expired. ExternalsPodiumD avoids duplicate keys by choosing identifiers
+that match the existing rows.
+
+Fix, in that style: the objecten `configuration.data` identifiers now equal
+the fixture's (`objecttypes-api`, `open-notificaties`,
+`zaakafhandelcomponent`, `openformulieren`), so a re-run updates the
+fixture's rows; and `scripts/deploy` deletes every `<app>-config` Job in the
+render before applying (`deploy.config_jobs`). Verified live: all six config
+Jobs succeeded, objecten's tokens are superusers again and its services carry
+the configured `*.podiumd-minikube` api_roots; live suite 79 passed, 0 failed.

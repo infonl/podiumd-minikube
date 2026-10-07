@@ -1061,12 +1061,16 @@ podiumd:
         username: admin
         password: admin
         email: admin@example.com
-      # objecttypen-api: dotted Service DNS form, not bare "objecttypen" -
+      # Identifiers equal those of the rows scripts/seed-fixtures loads from
+      # objecten/demodata.json, so this Job's re-run on every deploy updates
+      # those rows instead of colliding with them (duplicate token).
+      #
+      # objecttypes-api: dotted Service DNS form, not bare "objecttypen" -
       # same URLValidator gotcha as ZAC's own zgwApis.url above (Django
       # rejects single-label hostnames on any field that round-trips a URL
       # this API hands back) - confirmed live the same way.
       #
-      # opennotificaties-nrc + notifications_config: lets this Objects API
+      # open-notificaties + notifications_config: lets this Objects API
       # instance publish an "object created" notification whenever a
       # productaanvraag object is written - the trigger the whole flow
       # starts from. Credentials (client_id=objectsapi) match the
@@ -1093,7 +1097,7 @@ podiumd:
         zgw_consumers_config_enable: True
         zgw_consumers:
           services:
-            - identifier: objecttypen-api
+            - identifier: objecttypes-api
               label: Objecttypen API
               api_root: http://objecttypen.podiumd-minikube/api/v2/
               api_type: orc
@@ -1101,7 +1105,7 @@ podiumd:
               header_key: Authorization
               header_value: Token objectenToObjecttypenToken
 
-            - identifier: opennotificaties-nrc
+            - identifier: open-notificaties
               label: Open Notificaties
               api_root: http://opennotificaties.podiumd-minikube/api/v1/
               api_type: nrc
@@ -1111,7 +1115,7 @@ podiumd:
 
         notifications_config_enable: true
         notifications_config:
-          notifications_api_service_identifier: opennotificaties-nrc
+          notifications_api_service_identifier: open-notificaties
 
         objecttypes_config_enable: true
         # service_identifier here is classic-shape syntax (objects-api
@@ -1130,20 +1134,20 @@ podiumd:
         # OBJECTEN_MERGED=true (see scripts/deploy's render() pipeline).
         objecttypes:
           items:
-            - service_identifier: objecttypen-api
+            - service_identifier: objecttypes-api
               uuid: 021f685e-9482-4620-b157-34cd4003da6b
               name: Productaanvraag-Dimpact
 
         tokenauth_config_enable: true
         tokenauth:
           items:
-            - identifier: zac
+            - identifier: zaakafhandelcomponent
               token: fakeZacObjectsToken
               contact_person: ZAC
               email: zac@example.com
               application: ZAC
               is_superuser: true
-            - identifier: open-formulieren
+            - identifier: openformulieren
               token: fakeOpenFormulierenObjectsToken
               contact_person: Open Formulieren
               email: openformulieren@example.com
