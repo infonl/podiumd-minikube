@@ -267,6 +267,11 @@ here is a live reference — this project never reads
   it directly as a subprocess (matching how the original `init.sh` files were
   executable) rather than sourcing it into the parent shell.
 
+  Added (not in the source scripts): `reset_sequences` after each app's
+  fixture SQL. The fixtures insert explicit ids without advancing the
+  sequences, so the app's next insert collided (`duplicate key ... Key
+  (id)=(1)`, found by podiumd-tests in Open Archiefbeheer and Open Zaak).
+
   Dropped intentionally: the original scripts each ran `useradd <appname>`
   before their `psql` calls. Postgres's official Docker image runs every
   `docker-entrypoint-initdb.d` script under a temporarily-trusted local

@@ -14,6 +14,35 @@
 
 FIXTURES_DIR="$(dirname "$0")/fixtures"
 
+# The fixture SQL inserts explicit ids without advancing the sequences, so the
+# app's next insert collides ("duplicate key ... Key (id)=(1)"). Sets every
+# column-owned sequence (serial and identity) in database $2 to at least the
+# column's max, as table owner $1. Idempotent.
+reset_sequences() {
+  psql -U "$1" -d "$2" -v ON_ERROR_STOP=1 -q <<'SQL'
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT sn.nspname AS seq_schema, s.relname AS seq, tn.nspname AS tbl_schema, t.relname AS tbl, a.attname AS col
+    FROM pg_class s
+    JOIN pg_namespace sn ON sn.oid = s.relnamespace
+    JOIN pg_depend d ON d.objid = s.oid AND d.classid = 'pg_class'::regclass
+      AND d.refclassid = 'pg_class'::regclass AND d.deptype IN ('a', 'i')
+    JOIN pg_class t ON t.oid = d.refobjid
+    JOIN pg_namespace tn ON tn.oid = t.relnamespace
+    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
+    WHERE s.relkind = 'S'
+  LOOP
+    EXECUTE format(
+      'SELECT setval(%L, GREATEST((SELECT COALESCE(max(%I), 0) FROM %I.%I), (SELECT last_value FROM %I.%I)))',
+      r.seq_schema || '.' || r.seq, r.col, r.tbl_schema, r.tbl, r.seq_schema, r.seq);
+  END LOOP;
+END $$;
+SQL
+  echo "[$2] Sequences reset to their tables' max id."
+}
+
 seed_openzaak() {
   echo ">>>> [openzaak] Waiting until Open Zaak has initialized the database <<<<"
   while true; do
@@ -27,6 +56,7 @@ seed_openzaak() {
           -v BAG_API_KEY="${BAG_API_KEY}" \
           -f "$file"
       done
+      reset_sequences openzaak openzaak
       break
     else
       echo "[openzaak] Open Zaak is not running yet"
@@ -58,6 +88,7 @@ seed_openklant() {
     echo "[openklant] Running $file ..."
     psql -U openklant openklant -f "$file"
   done
+  reset_sequences openklant openklant
   echo ">>>> [openklant] Database was initialized successfully <<<<"
 }
 
@@ -81,6 +112,7 @@ seed_openarchiefbeheer() {
     echo "[openarchiefbeheer] Running $file ..."
     psql -U openarchiefbeheer openarchiefbeheer -f "$file"
   done
+  reset_sequences openarchiefbeheer openarchiefbeheer
   echo ">>>> [openarchiefbeheer] Database was initialized successfully <<<<"
 }
 

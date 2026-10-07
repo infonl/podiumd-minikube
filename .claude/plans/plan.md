@@ -4149,3 +4149,24 @@ Deployments do not restart on a ConfigMap change (no checksum annotation),
 so the pods kept the old env until `kubectl rollout restart` of the apps
 and their worker/beat Deployments. Any future `settings.*` change needs the
 same restart; not automated yet.
+
+## Sequences behind after the fixture SQL (podiumd-tests handoff section 5b)
+
+The fixture SQL in `vendor/.../postgres/fixtures/` inserts rows with
+explicit ids and never advances the sequences, so the app's next insert
+collides. Found by podiumd-tests: Open Archiefbeheer's first `create_user`
+(`Key (id)=(1) already exists`) and Open Zaak's informatieobjecttype create.
+Live before the fix: five Open Zaak sequences behind (e.g.
+`catalogi_informatieobjecttype` 17 vs max 28,
+`documenten_enkelvoudiginformatieobject` 1 vs 1001); Open Klant and Open
+Archiefbeheer already caught up by earlier failed inserts.
+
+`01-seed-fixtures.sh` now runs `reset_sequences <user> <db>` after each
+app's fixture SQL: one `DO` block that sets every column-owned sequence
+(serial `deptype 'a'` and identity `deptype 'i'`) to
+`GREATEST(max(col), last_value)`. It only runs on a fresh Postgres init, so
+the live cluster was repaired once by piping that same function from the
+script into `kubectl exec deploy/postgres -- bash`; afterwards 0 sequences
+behind in all three databases. Tested in a throwaway `postgis/postgis:17-3.4`
+container: serial and identity columns continue after their max, an empty
+table's next id becomes 2 (harmless), and a second run changes nothing.
