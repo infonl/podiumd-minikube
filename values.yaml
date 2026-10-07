@@ -707,9 +707,11 @@ podiumd:
         username: openzaak
         password: openzaak
         name: openzaak
+      # Own Redis DB per app: django-solo caches singletons (NotificationsConfig)
+      # under the same key in every app, so a shared DB serves one app's config to another.
       cache:
-        default: redis:6379/0
-        axes: redis:6379/0
+        default: redis:6379/6
+        axes: redis:6379/6
       celery:
         # DB 3, not the more obvious 1 - objecten's own worker (already
         # active) also brokers on db1, and Celery workers are competing
@@ -835,9 +837,10 @@ podiumd:
       # it really does reuse openzaak's own secret key literally - a
       # copy-paste artifact in compose itself, not something we introduced).
       secretKey: openZaakSecretKey
+      # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/0
-        axes: redis:6379/0
+        default: redis:6379/7
+        axes: redis:6379/7
       celery:
         # DB 4, not the more obvious 2 - openformulieren's own worker
         # (already active) also brokers on db2, and Celery workers are
@@ -1199,13 +1202,14 @@ podiumd:
         username: objects
         password: objects
         name: objects
+      # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/0
-        axes: redis:6379/0
+        default: redis:6379/8
+        axes: redis:6379/8
         # Compose never sets an OIDC-cache env var for objecten either -
         # see opennotificaties's identical CACHE_OIDC comment above (same
         # unconditional-render leak, same fix).
-        oidc: redis:6379/0
+        oidc: redis:6379/8
       celery:
         brokerUrl: redis://redis:6379/1
         # Set both: see openklant/openarchiefbeheer's identical comment -
@@ -1341,9 +1345,10 @@ podiumd:
         username: objecttypes
         password: objecttypes
         name: objecttypes
+      # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/0
-        axes: redis:6379/0
+        default: redis:6379/9
+        axes: redis:6379/9
     ingress:
       enabled: true
       className: traefik
@@ -1549,16 +1554,17 @@ podiumd:
         username: opennotificaties
         password: opennotificaties
         name: opennotificaties
+      # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/0
-        axes: redis:6379/0
+        default: redis:6379/10
+        axes: redis:6379/10
         # Compose never sets an OIDC-cache env var for opennotificaties, but
         # this chart's configmap.yaml always renders CACHE_OIDC
         # unconditionally (no matching {{- if }} guard) - left unset, it
         # fell through to podiumd's own untouched production default
         # (redis-ha-master...). Pointed at the shared Redis instead of
         # leaving that leak in place.
-        oidc: redis:6379/0
+        oidc: redis:6379/10
       celery:
         # 1.16.0 dropped RabbitMQ (see image.tag's own comment above) -
         # CELERY_BROKER_URL/PUBLISH_BROKER_URL point at the shared Redis
@@ -1739,10 +1745,11 @@ podiumd:
         allowedOrigins: http://openarchiefbeheer-ui.local,http://openarchiefbeheer-web.local
       csrf:
         trustedOrigins: http://openarchiefbeheer-ui.local,http://openarchiefbeheer-web.local
+      # Own Redis DB, see openzaak's cache comment.
       cache:
-        default: redis:6379/0
-        axes: redis:6379/0
-        choices: redis:6379/0
+        default: redis:6379/11
+        axes: redis:6379/11
+        choices: redis:6379/11
       celery:
         brokerUrl: redis://redis:6379/0
         # Set both: this chart's own configmap.yaml has a typo reading

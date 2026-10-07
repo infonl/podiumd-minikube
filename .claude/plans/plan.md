@@ -4170,3 +4170,33 @@ script into `kubectl exec deploy/postgres -- bash`; afterwards 0 sequences
 behind in all three databases. Tested in a throwaway `postgis/postgis:17-3.4`
 container: serial and identity columns continue after their max, an empty
 table's next id becomes 2 (harmless), and a second run changes nothing.
+
+## One Redis DB per app cache (podiumd-tests handoff section 5e)
+
+Six apps (openzaak, openklant, objecten, objecttypen, opennotificaties,
+openarchiefbeheer) had `settings.cache.default`/`axes` (and `oidc`/`choices`)
+on `redis:6379/0`. django-solo caches singletons under the same key in every
+app, so they overwrote each other's `NotificationsConfig`. Found by
+podiumd-tests: Open Notificaties cached `None` (it has no notifications
+service), Open Klant then read that and answered every API write with 500
+("Notifications API configuration is broken or absent") after saving the
+object. Axes lockouts were shared too.
+
+Each app's cache now has its own DB: openzaak 6, openklant 7, objecten 8,
+objecttypen 9, opennotificaties 10, openarchiefbeheer 11 (Celery URLs
+unchanged; DB 0 is now only openarchiefbeheer's Celery broker).
+`scripts/flush-redis` covers DBs 0-11. No flush was needed: every cache
+starts on an empty DB, and DB 0's leftover cache keys are no longer read.
+
+Verified live, after the restart these settings need (see the SITE_DOMAIN
+entry): with Open Notificaties caching `None` and Open Zaak its own service,
+Open Klant's `NotificationsConfig.get_solo()` equals `objects.first()`, and
+three `POST /klantinteracties/api/v1/partijen` answered 201 (the test
+partijen were deleted again).
+
+Side effect, found live: the 5b change to `01-seed-fixtures.sh` changed the
+`postgres-init-scripts` ConfigMap, and the postgres Deployment restarts on
+that change. The `openzaak-config` Job, recreated by the same deploy (its
+TTL had removed it), hit "Connection refused" once and succeeded on retry;
+its failed pod made `test_pods.py::test_no_pods_in_bad_phase` fail until
+deleted. Data and sequences were intact after the restart.

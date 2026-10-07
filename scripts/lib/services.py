@@ -11,7 +11,7 @@ from lib.process import UserError
 POSTGRES_PORT = 5432
 FORWARD_LOG = Path("/tmp/podiumd-minikube-postgres-port-forward.log")  # noqa: S108 - user-visible log
 # Redis DBs the apps use (see values.yaml's settings.cache/settings.celery per app).
-REDIS_DBS = range(5)
+REDIS_DBS = range(12)
 
 
 def expose_postgres(local_port: int) -> None:
