@@ -9,11 +9,13 @@ from dataclasses import field
 from lib import chart
 from lib import crds
 from lib import dependency
+from lib import dns
 from lib import hosts
 from lib import keycloak
 from lib import kube
 from lib import manifests
 from lib import pabc
+from lib import pki
 from lib import process
 from lib import prune
 from lib import seed
@@ -42,7 +44,7 @@ class Options:
     def render(self, *args: str) -> manifests.Render:
         """`helm template` with these options and args, fixed up."""
         text = manifests.helm_template(*self.helm_args, *args)
-        return manifests.fix_up(text, objecten_merged=self.objecten_merged, zac_pkce=self.zac_pkce)
+        return manifests.fix_up(text, objecten_merged=self.objecten_merged, zac_pkce=self.zac_pkce, ca_trust=True)
 
 
 def options(*, full: bool, extra: list[str]) -> Options:
@@ -152,11 +154,17 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
         print("\nApplying monitoring-logging's own CRDs first...")
         crds.apply_monitoring_logging_crds()
 
+    if not pki.CA_CERT.is_file():
+        msg = f"no local CA in {pki.PKI_DIR}: run scripts/provision-cluster (it creates the CA and its issuer)"
+        raise process.UserError(msg)
+    pki.apply_trust(NAMESPACE)
     render = selected.render()
     _rerun_config_jobs(render)
     _apply_full_manifest(render, expected_storage_errors(storage))
     print()
-    tls.apply_certificate(hosts.chart_hosts())
+    chart_hosts = hosts.chart_hosts()
+    tls.apply_certificate(chart_hosts)
+    dns.apply_hosts(chart_hosts)
 
     print()
     keycloak.sync_zac_pkce(enabled=selected.zac_pkce)

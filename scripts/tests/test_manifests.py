@@ -118,3 +118,22 @@ def test_fix_up_splits_off_large_configmaps():
     assert render.docs == [small]
     assert render.large_configmaps == [large]
     assert _docs(render.manifest) == [small]
+
+
+def test_trust_ca_mounts_the_ca_in_workloads_and_config_jobs_only():
+    docs: list[manifests.Doc] = [
+        {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "SSL_CERT_FILE", "value": "/own"}]}]}}}},
+        {"kind": "Job", "metadata": {"name": "openzaak-config"}, "spec": {"template": {"spec": {"containers": [{"name": "job"}]}}}},
+        {"kind": "Job", "metadata": {"name": "storage-permissions-fix"}, "spec": {"template": {"spec": {"containers": [{"name": "job"}]}}}},
+        {"kind": "StatefulSet", "spec": {"template": {"spec": {"volumes": None, "containers": [{"name": "db", "env": None, "volumeMounts": None}]}}}},
+    ]  # fmt: skip
+    manifests.trust_ca(docs)
+    app = docs[0]["spec"]["template"]["spec"]
+    assert app["volumes"] == [{"name": "podiumd-ca", "configMap": {"name": "podiumd-ca"}}]
+    env = {item["name"]: item["value"] for item in app["containers"][0]["env"]}
+    assert env["SSL_CERT_FILE"] == "/own"
+    assert env["REQUESTS_CA_BUNDLE"] == "/etc/podiumd-ca/ca-bundle.pem"
+    assert "truststore.p12" in env["JAVA_TOOL_OPTIONS"]
+    assert docs[1]["spec"]["template"]["spec"]["volumes"]
+    assert "volumes" not in docs[2]["spec"]["template"]["spec"]
+    assert docs[3]["spec"]["template"]["spec"]["containers"][0]["env"]

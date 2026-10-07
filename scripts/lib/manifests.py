@@ -15,6 +15,7 @@ from typing import cast
 
 import yaml
 
+from lib import pki
 from lib import process
 from lib.paths import CHART_DIR
 from lib.paths import NAMESPACE
@@ -94,6 +95,46 @@ def ingress_hosts(docs: list[Doc]) -> list[str]:
         rules: list[Doc] = section(doc, "spec").get("rules") or []
         found.update(str(rule["host"]) for rule in rules if rule.get("host"))
     return sorted(found)
+
+
+def _pod_spec(doc: Doc) -> Doc | None:
+    """doc's pod spec for workloads (and Jobs), or None."""
+    path = _POD_SPEC_PATHS.get(doc.get("kind", "")) or (
+        ("spec", "template", "spec") if doc.get("kind") == "Job" else None
+    )
+    node: Doc | None = doc
+    for key in path or ():
+        value = node.get(key) if node is not None else None
+        node = cast("Doc", value) if isinstance(value, dict) else None
+    return node if path else None
+
+
+def trust_ca(docs: list[Doc]) -> None:
+    """Mounts the local CA (pki.TRUST_CONFIGMAP) in every workload and config Job, with its env.
+
+    The reference environments call each other on public https hosts with
+    publicly trusted certificates; here every client must trust the local
+    CA. Other bare Jobs are skipped: their pod template is immutable.
+    """
+    for doc in docs:
+        if doc.get("kind") == "Job" and not name_of(doc).endswith("-config"):
+            continue
+        spec = _pod_spec(doc)
+        if spec is None:
+            continue
+        volumes: list[Doc] = spec.get("volumes") or []
+        spec["volumes"] = volumes
+        if not any(volume.get("name") == pki.TRUST_CONFIGMAP for volume in volumes):
+            volumes.append({"name": pki.TRUST_CONFIGMAP, "configMap": {"name": pki.TRUST_CONFIGMAP}})
+        containers: list[Doc] = [*(spec.get("initContainers") or []), *(spec.get("containers") or [])]
+        for container in containers:
+            mounts: list[Doc] = container.get("volumeMounts") or []
+            container["volumeMounts"] = mounts
+            mounts.append({"name": pki.TRUST_CONFIGMAP, "mountPath": pki.TRUST_DIR, "readOnly": True})
+            env: list[Doc] = container.get("env") or []
+            container["env"] = env
+            present = {item.get("name") for item in env}
+            env.extend({"name": name, "value": value} for name, value in pki.TRUST_ENV.items() if name not in present)
 
 
 def _is_test_hook(doc: Doc) -> bool:
@@ -181,11 +222,13 @@ class Render:
         return dump(self.docs)
 
 
-def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool) -> Render:
+def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
     loaded: list[Doc | None] = list(yaml.safe_load_all(strip_image_digests(text)))
     docs = [doc for doc in loaded if doc and not _excluded(doc)]
     disable_service_links(docs)
+    if ca_trust:
+        trust_ca(docs)
     if objecten_merged:
         fixup_merged_objecten(docs)
     set_zac_pkce(docs, enabled=zac_pkce)

@@ -5,11 +5,18 @@ a CA created once per checkout in .pki/ (gitignored) takes its place. Clients
 outside the cluster (browsers, podiumd-tests) trust .pki/ca.crt.
 """
 
+import base64
+import tempfile
+
+from pathlib import Path
+
+import certifi
 import yaml
 
 from lib import kube
 from lib import process
 from lib.paths import CHART_DIR
+from lib.paths import RELEASE_NAME
 
 PKI_DIR = CHART_DIR / ".pki"
 CA_CERT = PKI_DIR / "ca.crt"
@@ -80,3 +87,52 @@ def install_issuer() -> None:
         print(f"Created the local CA in {PKI_DIR} (trust {CA_CERT} in browsers and test clients).")
     kube.kubectl_shown("apply", "-f", "-", stdin=issuer_manifests())
     kube.kubectl_shown("wait", "--for=condition=Ready", f"clusterissuer/{ISSUER}", "--timeout=120s")
+
+
+# The CA as pods use it: ConfigMap TRUST_CONFIGMAP mounted at TRUST_DIR in every container.
+TRUST_CONFIGMAP = "podiumd-ca"
+TRUST_DIR = "/etc/podiumd-ca"
+TRUSTSTORE_PASSWORD = "changeit"  # nosec B105  # noqa: S105 - Java's default truststore password
+TRUST_ENV = {
+    # OpenSSL (Python ssl, httpx, .NET on Linux) and requests: public CAs plus ours.
+    "SSL_CERT_FILE": f"{TRUST_DIR}/ca-bundle.pem",
+    "REQUESTS_CA_BUNDLE": f"{TRUST_DIR}/ca-bundle.pem",
+    "NODE_EXTRA_CA_CERTS": f"{TRUST_DIR}/ca.crt",
+    "JAVA_TOOL_OPTIONS": (
+        f"-Djavax.net.ssl.trustStore={TRUST_DIR}/truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12 "
+        f"-Djavax.net.ssl.trustStorePassword={TRUSTSTORE_PASSWORD}"
+    ),
+}
+
+
+def trust_configmap(namespace: str) -> str:
+    """ConfigMap TRUST_CONFIGMAP: ca.crt, ca-bundle.pem (certifi's public CAs plus ours) and a Java truststore."""
+    bundle = Path(certifi.where()).read_text(encoding="utf-8") + CA_CERT.read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as directory:
+        bundle_file, truststore = Path(directory) / "bundle.pem", Path(directory) / "truststore.p12"
+        bundle_file.write_text(bundle, encoding="utf-8")
+        # -jdktrust marks the certificates as trusted for Java (OpenSSL >= 3.2).
+        process.run(
+            ["openssl", "pkcs12", "-export", "-nokeys", "-jdktrust", "anyExtendedKeyUsage",
+             "-in", str(bundle_file), "-out", str(truststore), "-passout", f"pass:{TRUSTSTORE_PASSWORD}"],
+        )  # fmt: skip
+        p12 = base64.b64encode(truststore.read_bytes()).decode()
+    configmap = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": TRUST_CONFIGMAP,
+            "namespace": namespace,
+            "labels": {"app.kubernetes.io/instance": RELEASE_NAME},
+        },
+        "data": {"ca.crt": CA_CERT.read_text(encoding="utf-8"), "ca-bundle.pem": bundle},
+        "binaryData": {"truststore.p12": p12},
+    }
+    return yaml.safe_dump(configmap, sort_keys=False)
+
+
+def apply_trust(namespace: str) -> None:
+    """Applies TRUST_CONFIGMAP (server-side: it exceeds client-side apply's annotation limit)."""
+    kube.kubectl_shown(
+        "apply", "--server-side", "--force-conflicts", "-n", namespace, "-f", "-", stdin=trust_configmap(namespace)
+    )
