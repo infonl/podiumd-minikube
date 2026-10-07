@@ -17,12 +17,12 @@ PROXY = "api-proxy.local"
         ("/lvbag/individuelebevragingen/v2/adressen/0363200003761447", "*/*"),
     ],
 )
-def test_kvk_and_bag_mocks(traefik_ip, path, accept):
+def test_kvk_and_bag_mocks(edge_ip, path, accept):
     response = requests.get(host_url(PROXY, path), headers={"Accept": accept}, timeout=10)
     assert response.status_code == 200, response.text[:300]
 
 
-def test_brp_mock(traefik_ip):
+def test_brp_mock(edge_ip):
     response = requests.post(
         host_url(PROXY, "/haalcentraal/api/brp/personen"),
         json={"type": "RaadpleegMetBurgerservicenummer", "burgerservicenummer": ["999993653"], "fields": ["naam"]},

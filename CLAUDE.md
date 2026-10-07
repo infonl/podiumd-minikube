@@ -34,8 +34,9 @@ hardcode, plus a pointer to the full design/build history.
   suited to a single-node minikube box.
 - **`podiumd-infra`** (`~/development/werk/infonl-dimpact/icatt-menselijk-digitaal/podiumd-infra`)
   — operational scripts/docs for real PodiumD environments (Traefik + Ingress
-  patterns, cert-manager setup). Referenced for the Traefik ingress pattern
-  used here, minus the production TLS/cert-manager/Let's Encrypt parts.
+  patterns, cert-manager setup), minus the production TLS/Let's Encrypt
+  parts. Its edge is Traefik; this project follows ExternalsPodiumD's NGINX
+  Gateway Fabric instead (see README "Edge").
 
 ## Structure
 

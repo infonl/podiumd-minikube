@@ -35,7 +35,7 @@ spec:
             - name: KC_HEALTH_ENABLED
               value: "true"
             # The public https host, for browsers and backends alike, as in
-            # ExternalsPodiumD; Traefik terminates TLS.
+            # ExternalsPodiumD; the edge terminates TLS.
             - name: KC_HOSTNAME
               value: https://keycloak.local
             - name: KC_HTTP_ENABLED

@@ -13,5 +13,6 @@ VENDOR_DIR = CHART_DIR / "vendor" / "dimpact-zaakafhandelcomponent"
 RELEASE_NAME = "podiumd-minikube"
 NAMESPACE = "podiumd-minikube"
 PROFILE = "minikube"
-TRAEFIK_NAMESPACE = "traefik"
-TRAEFIK_SERVICE = "traefik"
+# NGINX Gateway Fabric's data-plane Service for Gateway public-gateway (lib.gateway).
+EDGE_NAMESPACE = "ingress-basic"
+EDGE_SERVICE = "public-gateway-nginx"

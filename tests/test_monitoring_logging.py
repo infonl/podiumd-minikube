@@ -25,7 +25,7 @@ def _skip_if_monitoring_logging_disabled(enabled_profiles):
         )
 
 
-def _grafana_get(traefik_ip, path, **kwargs):
+def _grafana_get(edge_ip, path, **kwargs):
     return requests.get(
         host_url("grafana.local", path),
         timeout=10,
@@ -33,15 +33,15 @@ def _grafana_get(traefik_ip, path, **kwargs):
     )
 
 
-def test_grafana_datasources_provisioned(traefik_ip):
-    response = _grafana_get(traefik_ip, "/api/datasources")
+def test_grafana_datasources_provisioned(edge_ip):
+    response = _grafana_get(edge_ip, "/api/datasources")
     assert response.status_code == 200
     names = {ds["name"] for ds in response.json()}
     assert names == {"Prometheus", "loki", "Tempo"}
 
 
-def test_prometheus_scrape_targets_healthy(traefik_ip):
-    response = _grafana_get(traefik_ip, "/api/datasources/proxy/uid/prometheus/api/v1/targets")
+def test_prometheus_scrape_targets_healthy(edge_ip):
+    response = _grafana_get(edge_ip, "/api/datasources/proxy/uid/prometheus/api/v1/targets")
     assert response.status_code == 200
     targets = response.json()["data"]["activeTargets"]
     assert targets, "no active Prometheus scrape targets found"
@@ -55,7 +55,7 @@ def test_prometheus_scrape_targets_healthy(traefik_ip):
     assert {"zac-admin", "tempo"} <= jobs
 
 
-def test_loki_has_pod_logs(traefik_ip):
+def test_loki_has_pod_logs(edge_ip):
     """
     Confirms Alloy is actually discovering and forwarding this namespace's
     pod logs into Loki - not just that Loki itself answers queries, which a
@@ -65,7 +65,7 @@ def test_loki_has_pod_logs(traefik_ip):
     would have missed).
     """
     response = _grafana_get(
-        traefik_ip,
+        edge_ip,
         "/api/datasources/proxy/uid/loki/loki/api/v1/query_range",
         params={"query": '{namespace="podiumd-minikube"}', "limit": 5},
     )

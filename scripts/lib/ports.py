@@ -1,4 +1,4 @@
-"""How host traffic reaches each app: one Traefik IP, routed by Host header."""
+"""How host traffic reaches each app: one edge IP, routed by Host header."""
 
 import sys
 
@@ -60,14 +60,17 @@ def port_number(route: Route, services: dict[str, Any]) -> str:
 
 
 def show_port_mappings() -> None:
-    """Prints the Traefik entry point and every live Ingress host's backend."""
+    """Prints the edge's entry point and every live Ingress host's backend (the routes follow the Ingresses)."""
     kube.require_minikube_context()
-    ip = kube.traefik_ip()
+    ip = kube.edge_ip()
     print("== Host entry point ==")
     if ip:
-        print(f"Traefik LoadBalancer IP: {ip} (reachable while 'minikube tunnel' runs, see scripts/setup-tunnel)")
+        print(
+            f"Edge (NGINX Gateway Fabric) LoadBalancer IP: {ip} "
+            "(reachable while 'minikube tunnel' runs, see scripts/setup-tunnel)"
+        )
     else:
-        print("Traefik has no external IP yet - 'minikube tunnel' isn't running (see scripts/setup-tunnel).")
+        print("The edge has no external IP yet - 'minikube tunnel' isn't running (see scripts/setup-tunnel).")
     print("  port 80  (web)        - HTTP; every hostname below is routed by Host header")
     print("  port 443 (websecure)  - listener without TLS: no Ingress sets spec.tls\n")
     services = {item["metadata"]["name"]: item for item in kube.get_json("svc", "-n", NAMESPACE)["items"]}
@@ -76,8 +79,10 @@ def show_port_mappings() -> None:
     for route in found:
         backend = f"{route.service}:{route.port} -> {port_number(route, services)}"
         print(f"{route.host:<30} {backend:<32} {TRAFFIC_TYPE.get(route.host, '(no description on file)')}")
-    # Two Ingresses for one host (left over after toggling monitoringLogging): Traefik picks either.
+    # Two Ingresses for one host (left over after toggling monitoringLogging): two routes claim it.
     duplicates = sorted(host for host, count in Counter(route.host for route in found).items() if count > 1)
     if duplicates:
-        print("\nWARNING: hostname(s) claimed by more than one Ingress (Traefik may route to either):", file=sys.stderr)
+        print(
+            "\nWARNING: hostname(s) claimed by more than one Ingress (the edge may route to either):", file=sys.stderr
+        )
         print("\n".join(f"  {host}" for host in duplicates), file=sys.stderr)

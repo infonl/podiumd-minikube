@@ -153,27 +153,6 @@ def test_fix_up_separates_crds_for_server_side_apply():
     assert render.docs == [other]
 
 
-def _ingress(service: str, annotations: dict[str, str] | None = None) -> manifests.Doc:
-    backend = {"service": {"name": service}}
-    return {
-        "kind": "Ingress",
-        "metadata": {"annotations": annotations} if annotations else {},
-        "spec": {"rules": [{"http": {"paths": [{"backend": backend}]}}]},
-    }
-
-
-def test_buffer_requests_adds_the_middleware_once_to_uwsgi_ingresses():
-    key = manifests.MIDDLEWARES_ANNOTATION
-    objecten = _ingress("objecten", {key: "x@file"})
-    bare = _ingress("opennotificaties")
-    solr = _ingress("solr")
-    for _ in range(2):
-        manifests.buffer_requests([objecten, bare, solr])
-    assert manifests.section(objecten, "metadata")["annotations"][key] == f"{manifests.BUFFERING_MIDDLEWARE},x@file"
-    assert manifests.section(bare, "metadata")["annotations"][key] == manifests.BUFFERING_MIDDLEWARE
-    assert "annotations" not in manifests.section(solr, "metadata")
-
-
 def test_route_outbound_only_with_the_outway():
     config: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": "zac"}, "data": {"BRP": "http://api-proxy/x"}}
     manifests.route_outbound([config])

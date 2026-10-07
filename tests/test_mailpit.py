@@ -40,7 +40,7 @@ def _send_test_mail(marker):
     )
 
 
-def test_mail_sent_by_a_component_arrives_in_mailpit(traefik_ip):
+def test_mail_sent_by_a_component_arrives_in_mailpit(edge_ip):
     marker = f"podiumd-minikube test {uuid.uuid4()}"
     _send_test_mail(marker)
 

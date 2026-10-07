@@ -1,4 +1,4 @@
-"""NGINX Gateway Fabric, ExternalsPodiumD's edge, built next to Traefik until the switch.
+"""NGINX Gateway Fabric, the edge, as ExternalsPodiumD runs it.
 
 As ExternalsPodiumD (pipelines/includes/haven/gateway-api-*.yml, pipelines/
 values/ngf.yml, gateway-api/gateway.yml, dim1 ssl-gateway.yml and
@@ -19,17 +19,16 @@ from lib import kube
 from lib import manifests
 from lib import process
 from lib import tls
+from lib.paths import EDGE_NAMESPACE
+from lib.paths import EDGE_SERVICE
 from lib.paths import NAMESPACE
 
 GATEWAY_API_VERSION = "v1.5.1"
 NGF_CHART = "oci://ghcr.io/nginx/charts/nginx-gateway-fabric"
 NGF_VERSION = "2.6.7"
 NGF_RELEASE = "nginx-gateway-fabric"
-EDGE_NAMESPACE = "ingress-basic"
 GATEWAY = "public-gateway"
 GATEWAY_CLASS = "nginx"
-# NGF names a Gateway's data-plane Service <gateway>-<gatewayclass>.
-SERVICE = f"{GATEWAY}-{GATEWAY_CLASS}"
 LABELS = {"app.kubernetes.io/part-of": "podiumd-minikube", "app.kubernetes.io/component": "gateway"}
 _SELECTOR = ",".join(f"{key}={value}" for key, value in LABELS.items())
 
@@ -186,9 +185,10 @@ def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
 
 
 def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
-    """Applies the certificate, Gateway and routes when NGF is installed; deletes routes no longer rendered."""
+    """Applies the certificate, Gateway and routes; deletes routes no longer rendered."""
     if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
-        return
+        msg = f"NGINX Gateway Fabric is not installed in namespace '{EDGE_NAMESPACE}': run scripts/provision-cluster"
+        raise process.UserError(msg)
     print("\nApplying the NGINX Gateway Fabric Gateway and routes (see scripts/lib/gateway.py)...")
     objects = [
         tls.certificate(EDGE_NAMESPACE, hosts),
@@ -208,6 +208,8 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         "wait", "--for=condition=Ready", f"certificate/{tls.CERTIFICATE}", "-n", EDGE_NAMESPACE, "--timeout=120s"
     )
     ip = kube.kubectl(
-        "get", "svc", SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}"
+        "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}"
     )  # fmt: skip
-    print(f"Gateway Service {EDGE_NAMESPACE}/{SERVICE}: external IP {ip or '<none - is minikube tunnel running?>'}")
+    print(
+        f"Gateway Service {EDGE_NAMESPACE}/{EDGE_SERVICE}: external IP {ip or '<none - is minikube tunnel running?>'}"
+    )

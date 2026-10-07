@@ -25,7 +25,7 @@ ITA_OBJECTEN_TOKEN = "objectenItaToken"  # nosec B105
 
 
 @pytest.mark.parametrize("path", ["/healthz", "/api/healthcheck"])
-def test_kiss_health(traefik_ip, enabled_profiles, path):
+def test_kiss_health(edge_ip, enabled_profiles, path):
     if not enabled_profiles.get("kiss"):
         pytest.skip("'kiss' profile is not deployed")
     assert requests.get(host_url("contact.local", path), timeout=10).status_code == 200
@@ -38,7 +38,7 @@ def test_kiss_elasticsearch_green(enabled_profiles):
     assert health.get("health") == "green"
 
 
-def test_ita_api_requires_login(traefik_ip, enabled_profiles):
+def test_ita_api_requires_login(edge_ip, enabled_profiles):
     if not enabled_profiles.get("ita"):
         pytest.skip("'ita' profile is not deployed")
     response = requests.get(host_url("ita.local", "/api/kanalen"), timeout=10, allow_redirects=False)
@@ -46,7 +46,7 @@ def test_ita_api_requires_login(traefik_ip, enabled_profiles):
 
 
 @pytest.mark.parametrize(("name", "uuid"), OBJECTTYPES.items())
-def test_kiss_objecttype_published(traefik_ip, enabled_profiles, name, uuid):
+def test_kiss_objecttype_published(edge_ip, enabled_profiles, name, uuid):
     if not (enabled_profiles.get("kiss") or enabled_profiles.get("ita")):
         pytest.skip("neither 'kiss' nor 'ita' profile is deployed")
     response = requests.get(
@@ -60,7 +60,7 @@ def test_kiss_objecttype_published(traefik_ip, enabled_profiles, name, uuid):
     assert body["versions"], f"{name} has no published version"
 
 
-def test_chunked_post_reaches_objecten(traefik_ip, enabled_profiles):
+def test_chunked_post_reaches_objecten(edge_ip, enabled_profiles):
     """ITA posts its logboek chunked; the edge must forward the body (403 means Objecten got none)."""
     if not enabled_profiles.get("ita"):
         pytest.skip("'ita' profile is not deployed")

@@ -6,7 +6,7 @@ cluster - not unit tests. They assume:
 
   - `kubectl` is configured against the cluster (current context)
   - the chart is deployed to the `podiumd-minikube` namespace
-  - Traefik has a real LoadBalancer external IP (via `minikube tunnel` -
+  - the edge (NGINX Gateway Fabric) has a real LoadBalancer external IP (via `minikube tunnel` -
     see ../scripts/setup-tunnel)
 
 Requests are made by IP with an explicit Host header rather than through
@@ -24,13 +24,9 @@ from pathlib import Path
 import pytest
 
 NAMESPACE = "podiumd-minikube"
-# The edge the suite talks to: Traefik, or with PODIUMD_EDGE=gateway the NGINX
-# Gateway Fabric Service (scripts/lib/gateway.py) while it runs next to Traefik.
-EDGE = os.environ.get("PODIUMD_EDGE", "traefik")
-EDGE_NAMESPACE, EDGE_SERVICE = {
-    "traefik": ("traefik", "traefik"),
-    "gateway": ("ingress-basic", "public-gateway-nginx"),
-}[EDGE]
+# The edge: NGINX Gateway Fabric's Service for Gateway public-gateway (scripts/lib/paths.py).
+EDGE_NAMESPACE = "ingress-basic"
+EDGE_SERVICE = "public-gateway-nginx"
 REQUEST_TIMEOUT = 10
 # The local CA that signs every ingress host's certificate (scripts/lib/pki.py);
 # requests verifies against it everywhere in this suite.
@@ -48,7 +44,7 @@ def kubectl(*args):
 
 
 @pytest.fixture(scope="session")
-def traefik_ip():
+def edge_ip():
     """The edge LoadBalancer's external IP (EDGE), or skip the whole suite."""
     try:
         ip = kubectl(
@@ -69,7 +65,7 @@ def traefik_ip():
 
 
 def _resolve_local_hosts_to(ip):
-    """Resolves every *.local host to Traefik in this process, so https URLs get the right SNI."""
+    """Resolves every *.local host to the edge in this process, so https URLs get the right SNI."""
     original = socket.getaddrinfo
 
     def getaddrinfo(host, *args, **kwargs):
@@ -81,7 +77,7 @@ def _resolve_local_hosts_to(ip):
 
 
 @pytest.fixture(scope="session")
-def pods(traefik_ip):
+def pods(edge_ip):
     """All pods in the chart's namespace: name, phase, container_statuses, from_job, job (its Job's name or None)."""
     raw = kubectl("get", "pods", "-n", NAMESPACE, "-o", "json")
     data = json.loads(raw)
@@ -140,15 +136,15 @@ def enabled_profiles(pods):
 
 
 def host_url(hostname, path="/"):
-    """https URL of an ingress host; the traefik_ip fixture resolves *.local to Traefik."""
+    """https URL of an ingress host; the edge_ip fixture resolves *.local to the edge."""
     return f"https://{hostname}{path}"
 
 
 @pytest.fixture(scope="session")
-def browser_type_launch_args(browser_type_launch_args, traefik_ip):
+def browser_type_launch_args(browser_type_launch_args, edge_ip):
     """
     Extends pytest-playwright's own fixture: makes the browser resolve
-    every *.local hostname straight to Traefik's IP (Chromium's own
+    every *.local hostname straight to the edge's IP (Chromium's own
     --host-resolver-rules), so browser-based tests can navigate to real
     URLs like https://zac.local/ with no `/etc/hosts` edit needed - same
     "no local hosts-file changes required" property as the rest of this
@@ -157,7 +153,7 @@ def browser_type_launch_args(browser_type_launch_args, traefik_ip):
     return {
         **browser_type_launch_args,
         "args": [
-            f"--host-resolver-rules=MAP zac.local {traefik_ip},MAP keycloak.local {traefik_ip},MAP mailpit.local {traefik_ip}",
+            f"--host-resolver-rules=MAP zac.local {edge_ip},MAP keycloak.local {edge_ip},MAP mailpit.local {edge_ip}",
         ],
     }
 

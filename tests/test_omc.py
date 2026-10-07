@@ -30,7 +30,7 @@ def omc_token() -> str:
 
 
 @pytest.fixture
-def omc(traefik_ip, enabled_profiles):
+def omc(edge_ip, enabled_profiles):
     if not enabled_profiles.get("omc"):
         pytest.skip("'omc' profile is not deployed")
 

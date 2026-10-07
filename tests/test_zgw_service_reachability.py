@@ -75,7 +75,7 @@ def _is_in_cluster_hostname(api_root):
     """
     host = urlparse(api_root).hostname or ""
     labels = host.split(".")
-    # *.local: the ingress hosts, which pods resolve to Traefik (scripts/lib/dns.py).
+    # *.local: the ingress hosts, which pods resolve to the edge (scripts/lib/dns.py).
     return len(labels) == 1 or (len(labels) == 2 and labels[1] in ("podiumd-minikube", "local"))
 
 

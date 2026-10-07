@@ -36,7 +36,7 @@ live: the tunnel script's own host list went stale, which is why
    | starting any external process (kubectl, helm, minikube, docker) | `lib.process` (`run`, `output`, `succeeds`, `spawn`; errors are `ProcessError`/`UserError`) |
    | a script's entry point | `process.main(...)` in an extensionless `scripts/<name>`; logic in `scripts/lib/` |
    | refuse to run against a non-minikube kubectl context | `kube.require_minikube_context` |
-   | kubectl calls, Traefik IP, a pod, a Django shell | `lib.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `traefik_ip`, `first_pod`, `django_shell`) |
+   | kubectl calls, the edge IP, a pod, a Django shell | `lib.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `edge_ip`, `first_pod`, `django_shell`) |
    | waiting for a condition | `polling.wait_until` (never a bare sleep) |
    | the rendered manifest, with all local fixups | `deploy.Options.render`; a new fixup is one more step in `manifests.fix_up` |
    | YAML sections that may be null, a resource's name | `manifests.section`, `manifests.name_of` |
@@ -55,8 +55,9 @@ live: the tunnel script's own host list went stale, which is why
    | common labels | `podiumd-minikube.labels` in `templates/_helpers.tpl` |
    | an optional profile switch | `<name>.enabled` + `podiumd.<name>.enabled` in `values.yaml`, set by `--full` in `lib.deploy.options` |
    | kubectl from tests | `kubectl` in `tests/conftest.py` |
-   | Traefik address, pod list, enabled profiles | fixtures `traefik_ip`, `pods`, `enabled_profiles` |
-   | HTTP to an ingress host from tests | `host_url` + `host_headers` |
+   | edge address, pod list, enabled profiles | fixtures `edge_ip`, `pods`, `enabled_profiles` |
+   | HTTP to an ingress host from tests | `host_url` |
+   | the edge's routes, Gateway and certificate | `lib.gateway` (routes come from the rendered Ingresses) |
 
 ## While changing code
 

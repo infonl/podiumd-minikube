@@ -7,8 +7,8 @@ app.kubernetes.io/part-of: podiumd-minikube
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 {{/*
-A Traefik Ingress from host to a service; dict with root, name, host,
-service and optional port (80).
+An Ingress from host to a service, the source of lib.gateway's HTTPRoute;
+dict with root, name, host, service and optional port (80).
 */}}
 {{- define "podiumd-minikube.ingress" -}}
 apiVersion: networking.k8s.io/v1
@@ -18,7 +18,6 @@ metadata:
   labels:
     {{- include "podiumd-minikube.labels" .root | nindent 4 }}
 spec:
-  ingressClassName: traefik
   rules:
     - host: {{ .host }}
       http:

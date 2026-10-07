@@ -5,10 +5,10 @@ import json
 from typing import Any
 
 from lib import process
+from lib.paths import EDGE_NAMESPACE
+from lib.paths import EDGE_SERVICE
 from lib.paths import NAMESPACE
 from lib.paths import PROFILE
-from lib.paths import TRAEFIK_NAMESPACE
-from lib.paths import TRAEFIK_SERVICE
 
 
 def require_minikube_context() -> None:
@@ -52,16 +52,16 @@ def exists(resource: str, namespace: str = NAMESPACE) -> bool:
     return kubectl_ok("get", resource, "-n", namespace)
 
 
-def traefik_ip() -> str:
-    """Traefik's LoadBalancer IP, or "" when minikube tunnel has not assigned one."""
+def edge_ip() -> str:
+    """The edge's LoadBalancer IP, or "" when minikube tunnel has not assigned one."""
     result = process.run(
         [
             "kubectl",
             "get",
             "svc",
-            TRAEFIK_SERVICE,
+            EDGE_SERVICE,
             "-n",
-            TRAEFIK_NAMESPACE,
+            EDGE_NAMESPACE,
             "-o",
             "jsonpath={.status.loadBalancer.ingress[0].ip}",
         ],

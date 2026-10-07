@@ -1,7 +1,7 @@
 """Creates the minikube cluster this chart deploys to.
 
-Starts minikube, installs Traefik and cert-manager (with the local CA
-issuer), fetches the dependencies and loads every image the chart can
+Starts minikube, installs NGINX Gateway Fabric (the edge) and cert-manager
+(with the local CA issuer), fetches the dependencies and loads every image the chart can
 reference: minikube's inner Docker has no internet access.
 """
 
@@ -23,10 +23,7 @@ from lib import memory
 from lib import pki
 from lib import process
 from lib.paths import PROFILE
-from lib.paths import TRAEFIK_NAMESPACE
 
-# Newer chart versions use template features older helm binaries cannot parse.
-TRAEFIK_CHART_VERSION = "34.4.0"
 # Fully parallel loads once filled /tmp on the host.
 BATCH_SIZE = 6
 # Images are amd64-only; on Apple Silicon only the workload images are forced to it,
@@ -51,21 +48,6 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
         ["minikube", "start", "-p", PROFILE, "--driver=docker", f"--cpus={cpus}", f"--memory={memory_mb}"],
         capture=False,
     )
-
-
-def install_traefik() -> None:
-    """Installs the pinned Traefik chart unless it is there."""
-    if kube.exists("deployment/traefik", TRAEFIK_NAMESPACE):
-        print(f"Traefik already installed in namespace '{TRAEFIK_NAMESPACE}' - skipping.")
-        return
-    print(f"Installing Traefik {TRAEFIK_CHART_VERSION}...")
-    process.run(["helm", "repo", "add", "traefik", "https://traefik.github.io/charts"], check=False)
-    process.output(["helm", "repo", "update", "traefik"])
-    process.run(
-        ["helm", "upgrade", "--install", "traefik", "traefik/traefik", "--version", TRAEFIK_CHART_VERSION,
-         "-n", TRAEFIK_NAMESPACE, "--create-namespace"],
-        capture=False,
-    )  # fmt: skip
 
 
 def chart_images() -> list[str]:
@@ -128,7 +110,6 @@ def provision() -> None:
     kube.require_minikube_context()
     # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
     kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
-    install_traefik()
     gateway.install()
     pki.install_cert_manager()
     pki.install_issuer()

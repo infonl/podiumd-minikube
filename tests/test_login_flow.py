@@ -31,7 +31,7 @@ TEST_USERNAME = "beheerder1newiam"
 TEST_PASSWORD = "beheerder1newiam"
 
 
-def test_full_login_flow_reaches_authenticated_app(traefik_ip):
+def test_full_login_flow_reaches_authenticated_app(edge_ip):
     session = requests.Session()
     session.verify = CA_FILE
 

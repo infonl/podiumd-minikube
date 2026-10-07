@@ -1,8 +1,8 @@
-"""In-cluster resolution of the *.local ingress hosts to Traefik.
+"""In-cluster resolution of the *.local ingress hosts to the edge (NGINX Gateway Fabric).
 
 The reference environments reach their public hosts through public DNS;
 minikube has none, so CoreDNS gets a server block for exactly the chart hosts,
-answering them with Traefik's ClusterIP. Its zones are the host names
+answering them with the edge Service's ClusterIP. Its zones are the host names
 themselves: a zone `local` would also capture cluster.local and break all
 in-cluster DNS. A separate server block leaves minikube's own configuration
 untouched; CoreDNS' reload plugin picks the change up.
@@ -16,9 +16,9 @@ NXDOMAIN, and musl moves on to keycloak.local itself.
 import json
 
 from lib import kube
+from lib.paths import EDGE_NAMESPACE
+from lib.paths import EDGE_SERVICE
 from lib.paths import NAMESPACE
-from lib.paths import TRAEFIK_NAMESPACE
-from lib.paths import TRAEFIK_SERVICE
 
 BEGIN = "# BEGIN podiumd-minikube ingress hosts"
 END = "# END podiumd-minikube ingress hosts"
@@ -55,15 +55,15 @@ def corefile_with_hosts(corefile: str, ip: str, hosts: list[str], search_domains
 
 
 def apply_hosts(hosts: list[str]) -> None:
-    """Points hosts at Traefik's ClusterIP inside the cluster."""
-    ip = kube.kubectl("get", "svc", TRAEFIK_SERVICE, "-n", TRAEFIK_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}")
+    """Points hosts at the edge's ClusterIP inside the cluster."""
+    ip = kube.kubectl("get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}")
     corefile = kube.kubectl("get", "configmap", "coredns", "-n", "kube-system", "-o", "jsonpath={.data.Corefile}")
     # Any running pod has the search domains the node hands out.
     resolv_conf = kube.kubectl("exec", "-n", NAMESPACE, "deploy/postgres", "--", "cat", "/etc/resolv.conf")
     updated = corefile_with_hosts(corefile, ip, hosts, outside_search_domains(resolv_conf))
     if updated == corefile:
-        print(f"CoreDNS already resolves {len(hosts)} ingress host(s) to Traefik ({ip}).")
+        print(f"CoreDNS already resolves {len(hosts)} ingress host(s) to the edge ({ip}).")
         return
-    print(f"Pointing {len(hosts)} ingress host(s) at Traefik ({ip}) in CoreDNS...")
+    print(f"Pointing {len(hosts)} ingress host(s) at the edge ({ip}) in CoreDNS...")
     patch = json.dumps({"data": {"Corefile": updated}})
     kube.kubectl_shown("patch", "configmap", "coredns", "-n", "kube-system", "--type", "merge", "-p", patch)

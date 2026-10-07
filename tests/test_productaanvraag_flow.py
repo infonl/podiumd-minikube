@@ -33,7 +33,7 @@ OBJECTTYPEN_HOST = "objecttypen.local"
 ZAC_HOST = "zac.local"
 KEYCLOAK_HOST = "keycloak.local"
 
-# Not this suite's usual Traefik ingress host (OBJECTTYPEN_HOST above) -
+# Not this suite's usual ingress host (OBJECTTYPEN_HOST above) -
 # confirmed live, Objects API validates a submitted object's "type" URL
 # against its own internally-registered zgw_consumers Service's api_root
 # (podiumd.objecten.configuration.data's own "objecttypen-api" service in
@@ -115,7 +115,7 @@ def _zgw_jwt(client_id, secret):
     return (signing_input + b"." + b64url(signature)).decode()
 
 
-def _openzaak_get(traefik_ip, path, **params):
+def _openzaak_get(edge_ip, path, **params):
     response = requests.get(
         host_url(OPENZAAK_HOST, path),
         headers={
@@ -129,9 +129,9 @@ def _openzaak_get(traefik_ip, path, **params):
     return response.json()
 
 
-def _zaaktype_url(traefik_ip):
+def _zaaktype_url(edge_ip):
     catalogi = _openzaak_get(
-        traefik_ip,
+        edge_ip,
         "/catalogi/api/v1/catalogussen",
         domein=CATALOGUS_DOMEIN,
         rsin=CATALOGUS_RSIN,
@@ -140,7 +140,7 @@ def _zaaktype_url(traefik_ip):
     catalogus_url = catalogi["results"][0]["url"]
 
     zaaktypen = _openzaak_get(
-        traefik_ip,
+        edge_ip,
         "/catalogi/api/v1/zaaktypen",
         catalogus=catalogus_url,
         identificatie=ZAAKTYPE_IDENTIFICATIE,
@@ -149,7 +149,7 @@ def _zaaktype_url(traefik_ip):
     return zaaktypen["results"][0]["url"]
 
 
-def _beheerder_token(traefik_ip):
+def _beheerder_token(edge_ip):
     response = requests.post(
         host_url(KEYCLOAK_HOST, "/realms/zaakafhandelcomponent/protocol/openid-connect/token"),
         data={
@@ -224,7 +224,7 @@ def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement():
     assert "https://zac.local/rest/notificaties" in callback_urls.splitlines()
 
 
-def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enabled_profiles):
+def test_productaanvraag_objecttype_is_registered_and_published(edge_ip, enabled_profiles):
     """
     scripts/seed-fixtures's own objecttypen loaddata (+ its
     draft-to-published fixup), verified against the real Objecttypen API
@@ -273,7 +273,7 @@ def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enab
     )
 
 
-def test_zac_zaaktype_test_1_zaakafhandelparameters_is_valide(traefik_ip):
+def test_zac_zaaktype_test_1_zaakafhandelparameters_is_valide(edge_ip):
     """
     templates/zac/productaanvraag-zaakafhandelparameters-job.yaml's own
     seeding, verified against ZAC's real REST API rather than just trusting
@@ -283,11 +283,11 @@ def test_zac_zaaktype_test_1_zaakafhandelparameters_is_valide(traefik_ip):
     productaanvraagtype matches what the productaanvraag object's own "type"
     field carries in test_full_productaanvraag_flow_creates_a_zaak below.
     """
-    zaaktype_uuid = _zaaktype_url(traefik_ip).rstrip("/").rsplit("/", 1)[-1]
+    zaaktype_uuid = _zaaktype_url(edge_ip).rstrip("/").rsplit("/", 1)[-1]
     response = requests.get(
         host_url(ZAC_HOST, f"/rest/zaakafhandelparameters/{zaaktype_uuid}"),
         headers={
-            "Authorization": f"Bearer {_beheerder_token(traefik_ip)}",
+            "Authorization": f"Bearer {_beheerder_token(edge_ip)}",
         },
         timeout=15,
     )
@@ -339,7 +339,7 @@ def test_openformulieren_form_has_valid_objects_api_backend():
     assert "ERRORS:{}" in output, output
 
 
-def test_full_productaanvraag_flow_creates_a_zaak(traefik_ip):
+def test_full_productaanvraag_flow_creates_a_zaak(edge_ip):
     """
     The real thing, not a proxy for it: post a productaanvraag object to
     Objects API (exactly what Open Formulieren's objects_api registration
@@ -353,7 +353,7 @@ def test_full_productaanvraag_flow_creates_a_zaak(traefik_ip):
     from this flow's own manual verification while it was being built.
     """
     kenmerk = f"pytest-{int(time.time())}"
-    zaaktype_url = _zaaktype_url(traefik_ip)
+    zaaktype_url = _zaaktype_url(edge_ip)
 
     create_response = requests.post(
         host_url(OBJECTEN_HOST, "/api/v2/objects"),
@@ -389,7 +389,7 @@ def test_full_productaanvraag_flow_creates_a_zaak(traefik_ip):
     deadline = time.time() + 60
     matching_zaak = None
     while time.time() < deadline and matching_zaak is None:
-        zaken = _openzaak_get(traefik_ip, "/zaken/api/v1/zaken", zaaktype=zaaktype_url)
+        zaken = _openzaak_get(edge_ip, "/zaken/api/v1/zaken", zaaktype=zaaktype_url)
         matching_zaak = next((z for z in zaken["results"] if kenmerk in z["toelichting"]), None)
         if matching_zaak is None:
             time.sleep(3)

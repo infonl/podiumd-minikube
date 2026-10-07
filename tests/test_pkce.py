@@ -85,7 +85,7 @@ DJANGO_APP_CLIENT_IDS = (
 ITA_KISS_CLIENT_IDS = ("ita", "kiss")
 
 
-def _keycloak_admin_token(traefik_ip):
+def _keycloak_admin_token(edge_ip):
     response = requests.post(
         host_url(KEYCLOAK_HOST, "/realms/master/protocol/openid-connect/token"),
         data={
@@ -100,7 +100,7 @@ def _keycloak_admin_token(traefik_ip):
     return response.json()["access_token"]
 
 
-def _zac_experimental_pkce_live(traefik_ip):
+def _zac_experimental_pkce_live(edge_ip):
     """
     Whether the zac 5.4.2/PKCE experiment (top-level zac.experimentalPkce
     in values.yaml, off by default - see scripts/lib/chart.py)
@@ -121,7 +121,7 @@ def _zac_experimental_pkce_live(traefik_ip):
     signal test_ita_and_kiss_clients_do_not_require_pkce and
     test_django_app_client_does_not_require_pkce already use.
     """
-    token = _keycloak_admin_token(traefik_ip)
+    token = _keycloak_admin_token(edge_ip)
     response = requests.get(
         host_url(KEYCLOAK_HOST, "/admin/realms/zaakafhandelcomponent/clients"),
         headers={"Authorization": f"Bearer {token}"},
@@ -133,7 +133,7 @@ def _zac_experimental_pkce_live(traefik_ip):
     return bool(clients) and clients[0]["attributes"].get("pkce.code.challenge.method", "") == "S256"
 
 
-def test_pabc_challenge_always_sends_a_pkce_code_challenge(traefik_ip):
+def test_pabc_challenge_always_sends_a_pkce_code_challenge(edge_ip):
     """
     PABC's own ASP.NET Core OpenIdConnect middleware sends a real
     code_challenge/code_challenge_method=S256 unconditionally, regardless
@@ -164,7 +164,7 @@ def test_pabc_challenge_always_sends_a_pkce_code_challenge(traefik_ip):
     assert len(params.get("code_challenge", [""])[0]) > 0
 
 
-def test_pabc_pkce_login_accepted_by_keycloak(traefik_ip):
+def test_pabc_pkce_login_accepted_by_keycloak(edge_ip):
     """
     Full round trip: PABC's own code_challenge, Keycloak's real login form,
     real credentials, and the resulting authorization code all the way
@@ -243,7 +243,7 @@ def test_pabc_pkce_login_accepted_by_keycloak(traefik_ip):
     assert callback.status_code in (302, 200), f"pabc.local/signin-oidc rejected the callback: {callback.status_code}"
 
 
-def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
+def test_zac_client_now_sends_a_pkce_code_challenge(edge_ip):
     """
     The other side of the same story, now flipped: ZAC's own image (chart
     1.0.289/app 5.4.2, past PR #6490) genuinely sends a code_challenge on
@@ -268,7 +268,7 @@ def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
     / scripts/lib/keycloak.py both keep those two in sync either way, this
     just isn't the experiment being tested here).
     """
-    if not _zac_experimental_pkce_live(traefik_ip):
+    if not _zac_experimental_pkce_live(edge_ip):
         pytest.skip("zac.experimentalPkce is off on this cluster")
 
     initial = requests.get(
@@ -287,7 +287,7 @@ def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
 
 
 @pytest.mark.parametrize("client_id", DJANGO_APP_CLIENT_IDS)
-def test_django_app_client_does_not_require_pkce(traefik_ip, client_id):
+def test_django_app_client_does_not_require_pkce(edge_ip, client_id):
     """
     Guards the permanent negative case this module's own docstring explains:
     none of the seven Django-based ZGW components' shared OIDC library
@@ -307,7 +307,7 @@ def test_django_app_client_does_not_require_pkce(traefik_ip, client_id):
     can drift after a manual live fix (confirmed happen twice already this
     project, see this module's own docstring).
     """
-    token = _keycloak_admin_token(traefik_ip)
+    token = _keycloak_admin_token(edge_ip)
     response = requests.get(
         host_url(KEYCLOAK_HOST, "/admin/realms/zaakafhandelcomponent/clients"),
         headers={"Authorization": f"Bearer {token}"},
@@ -326,9 +326,9 @@ def test_django_app_client_does_not_require_pkce(traefik_ip, client_id):
 
 
 @pytest.mark.parametrize("client_id", ITA_KISS_CLIENT_IDS)
-def test_ita_and_kiss_clients_do_not_require_pkce(traefik_ip, client_id):
+def test_ita_and_kiss_clients_do_not_require_pkce(edge_ip, client_id):
     """The ita/kiss clients do not require PKCE, as the podiumd chart's realm config."""
-    token = _keycloak_admin_token(traefik_ip)
+    token = _keycloak_admin_token(edge_ip)
     response = requests.get(
         host_url(KEYCLOAK_HOST, "/admin/realms/zaakafhandelcomponent/clients"),
         headers={"Authorization": f"Bearer {token}"},

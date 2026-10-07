@@ -8,8 +8,7 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
 ## Prerequisites
 
 - [minikube](https://minikube.sigs.k8s.io/), Docker, `kubectl`, `helm`
-  (see `scripts/provision-cluster` for the Traefik chart version pin if
-  your `helm` binary is old)
+  (3.8 or newer, for the NGINX Gateway Fabric OCI chart)
 - 6 CPUs / 16Gi free for the minikube VM (default sizing) — see
   Troubleshooting if the cluster becomes sluggish
 - Python 3 + `pip` if you want to run the test suite
@@ -21,7 +20,7 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
 ```bash
 ./scripts/set-podiumd-version <version> --disable-monitoring-logging  # required — see below
                                      # (or --path <dir> for a local podiumd chart checkout)
-./scripts/provision-cluster      # starts minikube, installs Traefik, pre-loads every image
+./scripts/provision-cluster      # starts minikube, installs NGINX Gateway Fabric, pre-loads every image
 ./scripts/deploy --full          # renders and applies the chart (every optional profile on)
 ./scripts/setup-tunnel           # starts `minikube tunnel`, prints the /etc/hosts line to add
 ```
@@ -36,6 +35,15 @@ Then run `./scripts/update-hosts` (adds the `*.local` names to `/etc/hosts`)
 and open `https://zac.local` in a browser — it redirects to Keycloak, and back
 to the authenticated app on login.
 
+### Edge
+
+As ExternalsPodiumD: NGINX Gateway Fabric with Gateway `public-gateway` in
+namespace `ingress-basic`; `deploy` turns every rendered Ingress into an
+HTTPRoute (`scripts/lib/gateway.py`). Two consequences of its nginx, both as
+there: request bodies above 1 MB get 413, and request bodies are buffered.
+One deviation: larger response-header buffers, for KISS's login cookie
+(`.claude/plans/plan.md`).
+
 ### HTTPS
 
 Every host serves HTTPS (and still plain HTTP), as in the real PodiumD
@@ -43,10 +51,10 @@ environments, with a certificate from a local CA instead of Let's Encrypt:
 
 - `provision-cluster` creates the CA once per checkout in `.pki/` (gitignored)
   and installs cert-manager with a ClusterIssuer for it; `deploy` issues one
-  certificate for all ingress hosts and serves it from Traefik.
+  certificate for all ingress hosts and serves it from the edge.
 - To trust it, import `.pki/ca.crt` in your browser, or pass it to clients:
   `curl --cacert .pki/ca.crt https://openzaak.local/`.
-- Inside the cluster the `*.local` hosts resolve to Traefik and every pod
+- Inside the cluster the `*.local` hosts resolve to the edge and every pod
   trusts the CA, so the apps call each other on `https://<app>.local`.
 
 Leave off `--full` on `scripts/deploy` to deploy just the core profile (ZAC,
@@ -138,7 +146,7 @@ automatically either direction.
 
 | Script | What it does |
 |---|---|
-| `scripts/provision-cluster` | Starts minikube (sized for the full stack), installs Traefik, pre-pulls every image, runs `helm dependency update` |
+| `scripts/provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
 | `scripts/deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
 | `scripts/setup-tunnel` | Starts `minikube tunnel`; idempotent |
 | `scripts/teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
@@ -148,13 +156,13 @@ automatically either direction.
 | `scripts/show-port-mappings` | Prints how host traffic reaches each deployed app (Ingress hostname → backend Service:port) |
 | `scripts/expose-postgres [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |
 | `scripts/flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
-| `scripts/update-hosts` | Writes the `*.local` → Traefik IP line to `/etc/hosts` (uses sudo) |
+| `scripts/update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
 | `scripts/deploy-extended` | `deploy --full` without metrics and WireMock mappings, with openzaak's and openklant's Celery workers |
 | `scripts/apply-pabc-migrations [--force]` | The only safe way to (re)create the `pabc-migrations` Job — refuses against an already-seeded database unless `--force` |
 | `scripts/seed-fixtures` | Loads the objecten/objecttypen demo data; skips apps already seeded (`deploy` runs it too) |
 
 `scripts/reset-namespace` vs `scripts/teardown-cluster`: use `scripts/reset-namespace` to
-wipe app data and redeploy clean (keeps the cluster/Traefik/images);
+wipe app data and redeploy clean (keeps the cluster, the edge and the images);
 `scripts/teardown-cluster` only when the cluster itself is broken.
 
 The scripts are Python (every one takes `--help`); their shared code is the

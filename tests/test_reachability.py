@@ -1,5 +1,5 @@
 """
-External reachability via Traefik, replaying the same Host-header-based
+External reachability via the edge, replaying the same Host-header-based
 curl checks used throughout manual verification of this chart.
 
 Expected status codes:
@@ -40,7 +40,7 @@ HOSTS = [
 
 
 @pytest.mark.parametrize(("hostname", "expected_status", "profile"), HOSTS)
-def test_ingress_host_reachable(traefik_ip, enabled_profiles, hostname, expected_status, profile):
+def test_ingress_host_reachable(edge_ip, enabled_profiles, hostname, expected_status, profile):
     if profile is not None and not enabled_profiles.get(profile):
         pytest.skip(f"'{profile}' profile is not deployed")
     response = requests.get(
@@ -51,7 +51,7 @@ def test_ingress_host_reachable(traefik_ip, enabled_profiles, hostname, expected
     assert response.status_code == expected_status
 
 
-def test_openformulieren_admin_login_reachable(traefik_ip, enabled_profiles):
+def test_openformulieren_admin_login_reachable(edge_ip, enabled_profiles):
     """
     openformulieren's own root path (/) returns a real, app-rendered 403 -
     expected since no demo form was ever imported (see plan.md's

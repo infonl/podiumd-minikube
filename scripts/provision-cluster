@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Creates the minikube cluster: minikube, Traefik, dependencies and every image the chart uses.
+"""Creates the minikube cluster: minikube, NGINX Gateway Fabric, dependencies and every image the chart uses.
 
 Sizes from MINIKUBE_CPUS (default 6) and MINIKUBE_MEMORY in MB (default: half the memory Docker sees).
 """

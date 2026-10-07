@@ -4861,3 +4861,21 @@ public-gateway (proxy_buffer_size 16k, proxy_buffers 4 16k,
 proxy_busy_buffers_size 32k), recorded as a deviation; writeup for
 ExternalsPodiumD in the untracked `ngf-response-header-buffer-issue.md`.
 Verified: policy Accepted, the directives in `nginx -T`.
+
+## Switched to NGINX Gateway Fabric
+
+After podiumd-tests' pre-switch run through the Gateway (227 passed, KISS,
+ITA, PABC, OI and ZAC logins included):
+- `paths.EDGE_NAMESPACE`/`EDGE_SERVICE` (ingress-basic/public-gateway-nginx)
+  replace Traefik's; `kube.edge_ip`, CoreDNS (`dns.apply_hosts`), tunnel,
+  update-hosts and show-port-mappings use them; tests' fixture `edge_ip`.
+- Gone: Traefik's install (provision), its TLSStore and Certificate
+  (`tls.certificate` is now only the Gateway's), the `buffering` Middleware
+  and `manifests.buffer_requests` (nginx buffers request bodies itself), and
+  every `className: traefik` (the Ingresses only feed `lib.gateway` now).
+  `gateway.apply` fails when NGF is missing.
+- Live: deploy moved CoreDNS to the Gateway; then `helm uninstall traefik`,
+  namespace `traefik` and its 21 CRDs deleted.
+
+Verified live: suite 107 passed through the Gateway alone, ITA's chunked
+logboek POST included (no middleware), and the 2 MB request rejected.

@@ -1,17 +1,14 @@
-"""lib.tls: the Traefik default certificate."""
-
-import yaml
+"""lib.tls: the edge certificate."""
 
 from lib import manifests
 from lib import tls
 
 
-def test_certificate_covers_the_hosts_and_is_traefiks_default():
-    certificate, store = yaml.safe_load_all(tls.certificate_manifests(["zac.local", "pabc.local"]))
+def test_certificate_covers_the_hosts_in_the_namespace():
+    certificate = tls.certificate("ingress-basic", ["zac.local", "pabc.local"])
+    assert certificate["metadata"]["namespace"] == "ingress-basic"
     assert certificate["spec"]["dnsNames"] == ["zac.local", "pabc.local"]
     assert certificate["spec"]["issuerRef"]["name"] == "podiumd-local-ca"
-    assert store["metadata"]["name"] == "default"
-    assert store["spec"]["defaultCertificate"]["secretName"] == certificate["spec"]["secretName"]
 
 
 def test_ingress_hosts_are_sorted_and_unique():

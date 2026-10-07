@@ -62,7 +62,6 @@ metadata:
   labels:
     {{- include "podiumd-minikube.labels" . | nindent 4 }}
 spec:
-  ingressClassName: traefik
   rules:
     - host: mailpit.local
       http:

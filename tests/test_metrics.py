@@ -17,7 +17,7 @@ def _skip_if_metrics_disabled(enabled_profiles):
         pytest.skip("'metrics' profile is not deployed")
 
 
-def test_grafana_datasources_provisioned(traefik_ip):
+def test_grafana_datasources_provisioned(edge_ip):
     response = requests.get(
         host_url("grafana.local", "/api/datasources"),
         timeout=10,
@@ -27,7 +27,7 @@ def test_grafana_datasources_provisioned(traefik_ip):
     assert names == {"Prometheus", "Tempo"}
 
 
-def test_prometheus_scrape_targets_healthy(traefik_ip):
+def test_prometheus_scrape_targets_healthy(edge_ip):
     response = requests.get(
         host_url("grafana.local", "/api/datasources/proxy/uid/prometheus/api/v1/targets"),
         timeout=10,

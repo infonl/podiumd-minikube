@@ -14,12 +14,12 @@ cluster this suite runs against in the first place.
   `../scripts/deploy --full` (all optional profiles need to be running
   for the full suite to pass, not just the core ones).
 - `kubectl` is configured against the cluster (current context).
-- Traefik has a real LoadBalancer external IP — run `../scripts/setup-tunnel`
-  first if `kubectl get svc traefik -n traefik` shows `<pending>`.
+- The edge has a real LoadBalancer external IP — run `../scripts/setup-tunnel`
+  first if `kubectl get svc public-gateway-nginx -n ingress-basic` shows `<pending>`.
 
 No `/etc/hosts` edits are needed to run the suite: every test reaches
-services by Traefik's IP directly, with an explicit `Host` header per
-request, resolved automatically at test time.
+services through the edge's IP: `*.local` resolves to it inside the test
+process, at test time.
 
 ## Running
 

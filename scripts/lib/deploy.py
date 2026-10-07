@@ -26,7 +26,6 @@ from lib import postgres
 from lib import process
 from lib import prune
 from lib import seed
-from lib import tls
 from lib import values
 from lib.paths import NAMESPACE
 from lib.paths import RELEASE_NAME
@@ -183,7 +182,6 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     _apply_full_manifest(render, expected_storage_errors(storage))
     print()
     chart_hosts = hosts.chart_hosts()
-    tls.apply_certificate(chart_hosts)
     dns.apply_hosts(chart_hosts)
     gateway.apply(render.docs, chart_hosts)
 

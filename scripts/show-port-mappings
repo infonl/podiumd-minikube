@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shows Traefik's entry point and each live Ingress host's backend Service and port."""
+"""Shows the edge's entry point and each live Ingress host's backend Service and port."""
 
 import argparse
 import sys

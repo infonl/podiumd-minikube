@@ -6,7 +6,7 @@ settings chain defaults SESSION_COOKIE_SECURE/CSRF_COOKIE_SECURE to True
 (driven by an IS_HTTPS-style env var, either a dedicated
 settings.isHttps values.yaml field or, where the chart doesn't expose one,
 set directly via extraEnvVars) - the browser silently drops both cookies
-over plain http://, so these logins go over https://*.local (Traefik
+over plain http://, so these logins go over https://*.local (the edge
 terminates TLS, as in ExternalsPodiumD). See each app's own
 values.yaml comment (isHttps / extraEnvVars) for the exact mechanism used.
 
@@ -37,7 +37,7 @@ import requests
 from conftest import host_url
 
 
-def _login(traefik_ip, hostname, username, password):
+def _login(edge_ip, hostname, username, password):
     session = requests.Session()
     headers = {"Referer": f"https://{hostname}/admin/login/"}
 
@@ -99,7 +99,7 @@ def _assert_logged_in(response, username, hostname):
     )
 
 
-def test_objecttypen_admin_login(traefik_ip, enabled_profiles):
+def test_objecttypen_admin_login(edge_ip, enabled_profiles):
     """
     Only meaningful for the "classic" podiumd shape, where objecttypen is
     its own subchart (see scripts/lib/chart.py). Once
@@ -121,11 +121,11 @@ def test_objecttypen_admin_login(traefik_ip, enabled_profiles):
             "is off, or podiumd is on the merged 'openobject' shape "
             "(no separate objecttypen subchart to test against either way)"
         )
-    response = _login(traefik_ip, "objecttypen.local", "admin", "admin")
+    response = _login(edge_ip, "objecttypen.local", "admin", "admin")
     _assert_logged_in(response, "admin", "objecttypen.local")
 
 
-def test_openzaak_admin_login(traefik_ip):
+def test_openzaak_admin_login(edge_ip):
     """
     Always-on core app - credentials match compose's
     OPENZAAK_SUPERUSER_USERNAME/DJANGO_SUPERUSER_PASSWORD exactly (see
@@ -137,11 +137,11 @@ def test_openzaak_admin_login(traefik_ip):
     and a fresh superuser with no registered device is forced into 2FA
     device setup instead of being granted admin access.
     """
-    response = _login(traefik_ip, "openzaak.local", "admin", "admin")
+    response = _login(edge_ip, "openzaak.local", "admin", "admin")
     _assert_logged_in(response, "admin", "openzaak.local")
 
 
-def test_opennotificaties_admin_login(traefik_ip, enabled_profiles):
+def test_opennotificaties_admin_login(edge_ip, enabled_profiles):
     """
     Optional profile - credentials match compose's
     OPENNOTIFICATIES_SUPERUSER_USERNAME/DJANGO_SUPERUSER_PASSWORD exactly.
@@ -150,11 +150,11 @@ def test_opennotificaties_admin_login(traefik_ip, enabled_profiles):
     """
     if not enabled_profiles.get("opennotificaties"):
         pytest.skip("'opennotificaties' profile is not deployed")
-    response = _login(traefik_ip, "opennotificaties.local", "admin", "admin")
+    response = _login(edge_ip, "opennotificaties.local", "admin", "admin")
     _assert_logged_in(response, "admin", "opennotificaties.local")
 
 
-def test_openformulieren_admin_login(traefik_ip, enabled_profiles):
+def test_openformulieren_admin_login(edge_ip, enabled_profiles):
     """
     Optional profile - unlike the other three, this chart's own
     configuration.superuser field is wired to nothing at all (confirmed
@@ -171,11 +171,11 @@ def test_openformulieren_admin_login(traefik_ip, enabled_profiles):
     """
     if not enabled_profiles.get("openformulieren"):
         pytest.skip("'openformulieren' profile is not deployed")
-    response = _login(traefik_ip, "openformulieren-nginx.local", "admin", "admin")
+    response = _login(edge_ip, "openformulieren-nginx.local", "admin", "admin")
     _assert_logged_in(response, "admin", "openformulieren-nginx.local")
 
 
-def test_openklant_admin_login(traefik_ip):
+def test_openklant_admin_login(edge_ip):
     """
     Always-on core app - like openformulieren, this chart's own
     configuration.superuser field doesn't exist at all (confirmed live: no
@@ -189,11 +189,11 @@ def test_openklant_admin_login(traefik_ip):
     installed package's own source inside the running pod) - a plain
     settings.disable2fa=true is enough.
     """
-    response = _login(traefik_ip, "openklant.local", "admin", "admin")
+    response = _login(edge_ip, "openklant.local", "admin", "admin")
     _assert_logged_in(response, "admin", "openklant.local")
 
 
-def test_openarchiefbeheer_admin_login(traefik_ip, enabled_profiles):
+def test_openarchiefbeheer_admin_login(edge_ip, enabled_profiles):
     """
     Optional profile - the cookie/2FA fixes (settings.cookie.*,
     djangoSettingsModule) were already done in the original build; only
@@ -213,11 +213,11 @@ def test_openarchiefbeheer_admin_login(traefik_ip, enabled_profiles):
     """
     if not enabled_profiles.get("openarchiefbeheer"):
         pytest.skip("'openarchiefbeheer' profile is not deployed")
-    response = _login(traefik_ip, "openarchiefbeheer-web.local", "admin", "admin")
+    response = _login(edge_ip, "openarchiefbeheer-web.local", "admin", "admin")
     _assert_logged_in(response, "admin", "openarchiefbeheer-web.local")
 
 
-def test_objecten_admin_login(traefik_ip, enabled_profiles):
+def test_objecten_admin_login(edge_ip, enabled_profiles):
     """
     objecten's own admin (objects-api), distinct from objecttypen's -
     unlike openformulieren/openklant/openarchiefbeheer, this chart's
@@ -235,5 +235,5 @@ def test_objecten_admin_login(traefik_ip, enabled_profiles):
     """
     if not enabled_profiles.get("objecten"):
         pytest.skip("'objecten' profile is not deployed")
-    response = _login(traefik_ip, "objecten.local", "admin", "admin")
+    response = _login(edge_ip, "objecten.local", "admin", "admin")
     _assert_logged_in(response, "admin", "objecten.local")

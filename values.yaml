@@ -474,7 +474,6 @@ podiumd:
       endpoint: http://otel-collector:4317
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: zac.local
           paths:
@@ -771,11 +770,11 @@ podiumd:
       # Default ALLOWED_HOSTS only covers the chart's own in-cluster
       # fullname/namespace-qualified name (which already covers ZAC's
       # backend calls via the "openzaak" Service DNS name) - found live:
-      # browsing via the Traefik Ingress hostname got Django's own
+      # browsing via the ingress hostname got Django's own
       # DisallowedHost 400 error page, since "openzaak.local" was never in
       # that list.
       allowedHosts: openzaak.local
-      # As ExternalsPodiumD: Secure cookies and https URLs (Traefik
+      # As ExternalsPodiumD: Secure cookies and https URLs (the edge
       # terminates TLS). Its domain for URLs built outside a request comes
       # from sites_config in configuration.data.
       isHttps: true
@@ -858,7 +857,6 @@ podiumd:
         readOnly: true
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: openzaak.local
           paths:
@@ -992,7 +990,6 @@ podiumd:
         resultBackendl: redis://redis:6379/8
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: openklant.local
           paths:
@@ -1310,7 +1307,6 @@ podiumd:
         clientSecret: pabcAdminClientSecret
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: pabc.local
           paths:
@@ -1657,7 +1653,6 @@ podiumd:
         resultBackendl: redis://redis:6379/2
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: objecten.local
           paths:
@@ -1803,7 +1798,6 @@ podiumd:
         axes: redis:6379/0
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: objecttypen.local
           paths:
@@ -2074,7 +2068,6 @@ podiumd:
         readOnly: true
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: opennotificaties.local
           paths:
@@ -2239,7 +2232,6 @@ podiumd:
         readOnly: true
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: openarchiefbeheer-web.local
           paths:
@@ -2473,7 +2465,6 @@ podiumd:
         allowAllOrigins: true
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: openformulieren-nginx.local
           paths:
@@ -2561,7 +2552,6 @@ podiumd:
         axes: redis:6379/15
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: referentielijsten.local
           paths:
@@ -2742,7 +2732,6 @@ podiumd:
     ingress:
       enabled: true
       hostname: omc.local
-      ingressClass: traefik
 
   # --- frankgateway + openbao (profile: frankgateway) ---
   # As ExternalsPodiumD's dim1 Frank!Gateway branch: outway only, OpenBao
@@ -2902,7 +2891,6 @@ podiumd:
       enableSsl: "false"
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: ita.local
           paths:
@@ -3017,7 +3005,6 @@ podiumd:
           - Terugbelverzoek
     ingress:
       enabled: true
-      className: traefik
       hosts:
         - host: contact.local
           paths:
@@ -3130,7 +3117,6 @@ monitoring-logging:
         from_address: noreply@example.com
     ingress:
       enabled: true
-      ingressClassName: traefik
       hosts:
         - grafana.local
       path: /
