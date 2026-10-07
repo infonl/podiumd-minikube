@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# Runs the "Before committing" checks on all Python code in this repository,
+# fastest first, stopping at the first failure. Tool settings live in
+# pyproject.toml and .jscpd.json.
+set -euo pipefail
+
+usage() {
+    cat <<'HELP'
+Usage: run_python_checks [-h|--help]
+
+Runs ruff check, shellcheck, ruff format --check, jscpd, pymarkdown,
+vulture, bandit, basedpyright, pylint and pytest (scripts/tests/ only;
+tests/ needs a live cluster) on scripts/ and tests/, fastest first. Stops at
+the first failure. Uses .venv/bin when present.
+HELP
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    exit 0
+fi
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+if [[ -d .venv/bin ]]; then
+    PATH="$PWD/.venv/bin:$PATH"
+fi
+
+# Prints the step's name, runs it and prints its time, to keep the
+# fastest-first order honest; set -e stops at a failure.
+step() {
+    local name=$1 start=${EPOCHREALTIME//[!0-9]/}
+    shift
+    echo "=== $name ==="
+    "$@"
+    local hundredths=$(((${EPOCHREALTIME//[!0-9]/} - start) / 10000))
+    printf '    (%d.%02d s)\n' $((hundredths / 100)) $((hundredths % 100))
+}
+
+# Arrays keep each file name one argument (SC2046). set -e misses failures
+# inside <(...), so `wait "$!"` checks each one (SC2312).
+# Extensionless Python scripts must be passed to every tool explicitly.
+mapfile -t python_scripts < <(find scripts -maxdepth 1 -type f -perm -u+x -exec grep -l '^#!.*python' {} +)
+wait "$!"
+mapfile -t unit_test_files < <(find scripts/tests -name '*.py' -not -path '*/__pycache__/*' | sort)
+wait "$!"
+mapfile -t live_test_files < <(find tests -name '*.py' -not -path '*/__pycache__/*' | sort)
+wait "$!"
+# Shell scripts: sh/bash/dash/ksh shebang, or *.sh; vendor/ is upstream's.
+mapfile -t shell_scripts < <(
+    find . \( -path ./.venv -o -path ./.git -o -path ./vendor -o -path '*/__pycache__' \) -prune -o -type f -print0 |
+        xargs -0 awk 'FNR == 1 && (/^#!.*[\/ ](ba|da|k)?sh([ \t]|$)/ || FILENAME ~ /\.sh$/) {print FILENAME} {nextfile}' |
+        sort
+)
+wait "$!"
+mapfile -t markdown_files < <(find . -maxdepth 2 \( -path ./.venv -o -path ./vendor -o -path ./.claude \) -prune -o -name '*.md' -print | sort)
+wait "$!"
+code=(scripts/lib "${python_scripts[@]}")
+
+tests_pylint_disable=$(python3 -c '
+import tomllib
+with open("pyproject.toml", "rb") as f:
+    print(",".join(tomllib.load(f)["tool"]["podiumd-minikube"]["pylint-tests"]["disable"]))')
+
+step "ruff check" ruff check . "${python_scripts[@]}"
+if ((${#shell_scripts[@]})); then
+    step "shellcheck (${#shell_scripts[@]} shell script(s))" shellcheck "${shell_scripts[@]}"
+fi
+step "ruff format --check" ruff format --check . "${python_scripts[@]}"
+step "jscpd (duplicate code)" jscpd "${code[@]}"
+step "pymarkdown (${#markdown_files[@]} file(s))" pymarkdown --config pyproject.toml scan "${markdown_files[@]}"
+step "vulture (dead code)" vulture "${code[@]}"
+# Test directories excluded: every assert would flag B101.
+step "bandit (security)" bandit -c pyproject.toml -r "${code[@]}" -q
+step "basedpyright (type checking)" basedpyright "${code[@]}" scripts/tests tests
+step "pylint (lib + scripts)" pylint "${code[@]}"
+# Separate runs: each test directory imports its own conftest. PYTHONPATH
+# lets pylint resolve lib.* and conftest without analyzing them.
+step "pylint (scripts/tests)" env PYTHONPATH=scripts:scripts/tests pylint --disable="$tests_pylint_disable" "${unit_test_files[@]}"
+step "pylint (tests)" env PYTHONPATH=tests pylint --disable="$tests_pylint_disable" "${live_test_files[@]}"
+step "pytest (scripts/tests)" python3 -m pytest -q
+
+echo "=== all checks passed ==="

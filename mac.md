@@ -1,12 +1,12 @@
 # Running this chart on Apple Silicon
 
-This project's tooling (`scripts/provision-cluster.sh`, `scripts/deploy.sh`)
+This project's tooling (`scripts/provision-cluster`, `scripts/deploy`)
 assumes a `minikube` cluster on the **docker driver**, backed by a real
 Docker daemon reachable via the `docker` CLI — which is what you get for
 free with Docker Desktop. This machine has no Docker Desktop installed, so
 that daemon comes from [colima](https://github.com/abiosoft/colima)
 instead. Getting there took several wrong turns, logged here so the next
-person (or the next `provision-cluster.sh` run) doesn't repeat them.
+person (or the next `scripts/provision-cluster` run) doesn't repeat them.
 
 None of this is specific to *this* chart — it's entirely about getting a
 working `minikube --driver=docker` on an Apple Silicon Mac with no Docker
@@ -22,7 +22,7 @@ colima start --runtime docker --arch aarch64 --vm-type vz --vz-rosetta \
   --cpus 8 --memory 20 --disk 100
 ```
 
-Then `scripts/provision-cluster.sh` as documented in the main README - no
+Then `scripts/provision-cluster` as documented in the main README - no
 further changes needed.
 
 ### Why `--arch aarch64`, not `--arch x86_64`
@@ -54,7 +54,7 @@ requires it to be requested explicitly.
 prints a warning and silently falls back to a slower QEMU-based binfmt
 handler instead of failing loudly:
 
-```
+```text
 Unable to enable Rosetta: Rosetta2 is not installed
 ```
 
@@ -80,10 +80,10 @@ colima start --runtime docker --arch aarch64 --vm-type vz --vz-rosetta \
   --cpus 8 --memory 20 --disk 100
 ```
 
-## `provision-cluster.sh`'s own Apple Silicon fix
+## `scripts/provision-cluster`'s own Apple Silicon fix
 
 Two bugs specific to this architecture combination are already fixed in
-`scripts/provision-cluster.sh` (see that file's own comments for the full
+`scripts/provision-cluster` (see that file's own comments for the full
 "confirmed live" detail) - documented here as the *reason*, not a to-do:
 
 1. **Don't set `DOCKER_DEFAULT_PLATFORM=linux/amd64` globally.** Doing so
@@ -118,7 +118,7 @@ Two bugs specific to this architecture combination are already fixed in
    tarball straight from the registry, bypassing the local Docker/containerd
    export path entirely, and `minikube image load` accepts its output the
    same as a `docker save` tarball. Worth trying first if
-   `provision-cluster.sh`'s own `docker save`+`minikube image load` step
+   `scripts/provision-cluster`'s own `docker save`+`minikube image load` step
    fails for a *specific* image tag with no obvious cause (check the saved
    tarball's size before assuming the load itself is broken).
 
@@ -129,21 +129,21 @@ the exact platform mismatch above, before the fix - makes minikube
 silently fall back to its `qemu2` driver instead of failing loudly. That
 driver is a same-architecture VM that doesn't solve the amd64-image
 problem at all, and isn't what the rest of this project's tooling (e.g.
-`provision-cluster.sh`'s own `docker inspect` memory check) assumes.
-`provision-cluster.sh` passes `--driver=docker` explicitly so a real
+`scripts/provision-cluster`'s own `docker inspect` memory check) assumes.
+`scripts/provision-cluster` passes `--driver=docker` explicitly so a real
 failure surfaces as a real failure instead of a cluster that looks fine
 but can't run this chart's images.
 
-## `setup-tunnel.sh` needs a real terminal
+## `scripts/setup-tunnel` needs a real terminal
 
-`minikube tunnel` (which `scripts/setup-tunnel.sh` wraps) does its own
+`minikube tunnel` (which `scripts/setup-tunnel` wraps) does its own
 `sudo` escalation internally, for the one operation that needs it (adding
 a network route) - and that needs an actual interactive terminal
 (Terminal.app, iTerm, etc.) to prompt for a password. Running it through
 an agent/CI-style shell with no real TTY (including Claude Code's own `!`
 prefix, which still runs inside a non-interactive session) just fails with
 `sudo: a terminal is required to read the password`. Run
-`./scripts/setup-tunnel.sh` yourself in a real terminal window instead.
+`./scripts/setup-tunnel` yourself in a real terminal window instead.
 
 ## Test suite
 

@@ -1,0 +1,15 @@
+# Runtime: scripts/ and the live-cluster suite in tests/.
+pyyaml
+pytest>=8.0
+requests>=2.31
+pytest-playwright>=0.5
+# Lint tools for run_python_checks; unpinned on purpose, new rules are welcome.
+ruff
+pymarkdownlnt
+pylint
+vulture
+bandit
+basedpyright
+jscpd
+types-PyYAML
+types-requests

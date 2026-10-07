@@ -5,7 +5,7 @@ automatically, with no manual post-deploy step. This is the same flow
 verified live (by hand) while building it - see values.yaml's own
 podiumd.zac.productaanvraag comment,
 templates/{zac,openformulieren}/productaanvraag-*.yaml, and
-scripts/lib/seed-fixtures.sh's own objecttypen loaddata step for the pieces
+scripts/seed-fixtures's own objecttypen loaddata step for the pieces
 this module exercises, and .claude/plans/plan.md's own "productaanvraag
 flow" entry for the story of how each piece was found and wired.
 
@@ -19,12 +19,14 @@ import hashlib
 import hmac
 import json
 import time
-from urllib.parse import urlparse
 
 import pytest
 import requests
 
-from conftest import NAMESPACE, host_url, host_headers, kubectl
+from conftest import NAMESPACE
+from conftest import host_headers
+from conftest import host_url
+from conftest import kubectl
 
 OPENZAAK_HOST = "openzaak.local"
 OBJECTEN_HOST = "objecten.local"
@@ -64,7 +66,7 @@ BEHEERDER_PASSWORD = "beheerder1newiam"
 # setup_configuration mechanism covers (see each one's own template header) -
 # checked by name below. The third gap (the productaanvraag objecttype's
 # own schema) isn't a Job at all - it's seeded by
-# scripts/lib/seed-fixtures.sh, checked directly further down instead
+# scripts/seed-fixtures, checked directly further down instead
 # (test_productaanvraag_objecttype_is_registered_and_published). The four
 # subchart-bundled config Jobs (objecten-config/objecttypen-config/
 # opennotificaties-config/openformulieren-config) are NOT included here
@@ -81,7 +83,7 @@ EXPECTED_SUCCEEDED_JOBS = (
 )
 
 # "objecttypen" deliberately excluded: on the merged/openobject shape (see
-# scripts/lib/detect-objecten-shape.sh) there is no separate objecttypen
+# scripts/lib/chart.py) there is no separate objecttypen
 # subchart/pod/Ingress at all - its functionality lives inside "objecten"
 # itself - so requiring it here would skip this entire module every time
 # merged shape is deployed, even though the flow works fully either way
@@ -94,10 +96,7 @@ REQUIRED_PROFILES = ("objecten", "opennotificaties", "openformulieren")
 def _skip_if_flow_not_deployed(enabled_profiles):
     missing = [p for p in REQUIRED_PROFILES if not enabled_profiles.get(p)]
     if missing:
-        pytest.skip(
-            f"productaanvraag flow needs {missing} enabled too (this is only "
-            "wired up under --full)"
-        )
+        pytest.skip(f"productaanvraag flow needs {missing} enabled too (this is only wired up under --full)")
 
 
 def _zgw_jwt(client_id, secret):
@@ -112,9 +111,7 @@ def _zgw_jwt(client_id, secret):
         "user_id": client_id,
         "user_representation": client_id,
     }
-    signing_input = b64url(json.dumps(header).encode()) + b"." + b64url(
-        json.dumps(payload).encode()
-    )
+    signing_input = b64url(json.dumps(header).encode()) + b"." + b64url(json.dumps(payload).encode())
     signature = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
     return (signing_input + b"." + b64url(signature)).decode()
 
@@ -182,9 +179,7 @@ def test_seed_job_succeeded(job_name):
     way), none of these three set ttlSecondsAfterFinished, so they're
     expected to still be around to check.
     """
-    status = kubectl(
-        "get", "job", job_name, "-n", NAMESPACE, "-o", "jsonpath={.status.succeeded}"
-    ).strip()
+    status = kubectl("get", "job", job_name, "-n", NAMESPACE, "-o", "jsonpath={.status.succeeded}").strip()
     assert status == "1", f"{job_name} has not succeeded (status.succeeded={status!r})"
 
 
@@ -234,7 +229,7 @@ def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement():
 
 def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enabled_profiles):
     """
-    scripts/lib/seed-fixtures.sh's own objecttypen loaddata (+ its
+    scripts/seed-fixtures's own objecttypen loaddata (+ its
     draft-to-published fixup), verified against the real Objecttypen API
     rather than just trusting the script's exit code.
 
@@ -250,7 +245,7 @@ def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enab
     exists.
     """
     host = OBJECTTYPEN_HOST if enabled_profiles.get("objecttypen") else OBJECTEN_HOST
-    # Same token substitution as scripts/lib/fixup-merged-objecten-shape.py's
+    # Same token substitution as scripts/lib/manifests.py's
     # own openformulieren-configuration fixup, and for the same reason:
     # "openFormulierenToObjecttypenToken" only ever existed in classic
     # shape's separate objecttypen app's own token table - merged shape's
@@ -278,7 +273,7 @@ def test_productaanvraag_objecttype_is_registered_and_published(traefik_ip, enab
     assert versions.status_code == 200
     assert any(v["status"] == "published" for v in versions.json()["results"]), (
         "expected at least one published version - "
-        "seed-fixtures.sh's own fixup should have flipped every draft "
+        "scripts/seed-fixtures's own fixup should have flipped every draft "
         "version this fixture defines"
     )
 
@@ -345,9 +340,7 @@ def test_openformulieren_form_has_valid_objects_api_backend():
         "print('VALID:' + str(valid))\n"
         "print('ERRORS:' + str(serializer.errors))\n"
     )
-    output = kubectl(
-        "exec", "-n", NAMESPACE, pod, "--", "python", "src/manage.py", "shell", "-c", script
-    )
+    output = kubectl("exec", "-n", NAMESPACE, pod, "--", "python", "src/manage.py", "shell", "-c", script)
     assert "VALID:True" in output, output
     assert "ERRORS:{}" in output, output
 
@@ -404,9 +397,7 @@ def test_full_productaanvraag_flow_creates_a_zaak(traefik_ip):
     matching_zaak = None
     while time.time() < deadline and matching_zaak is None:
         zaken = _openzaak_get(traefik_ip, "/zaken/api/v1/zaken", zaaktype=zaaktype_url)
-        matching_zaak = next(
-            (z for z in zaken["results"] if kenmerk in z["toelichting"]), None
-        )
+        matching_zaak = next((z for z in zaken["results"] if kenmerk in z["toelichting"]), None)
         if matching_zaak is None:
             time.sleep(3)
 

@@ -8,10 +8,11 @@ Expected status codes:
   - 200 for everything else (each app's own home/API root page)
 """
 
-import requests
 import pytest
+import requests
 
-from conftest import host_url, host_headers
+from conftest import host_headers
+from conftest import host_url
 
 # (hostname, expected_status, profile_key or None if always-on)
 HOSTS = [
@@ -33,7 +34,7 @@ HOSTS = [
 ]
 
 
-@pytest.mark.parametrize("hostname,expected_status,profile", HOSTS)
+@pytest.mark.parametrize(("hostname", "expected_status", "profile"), HOSTS)
 def test_ingress_host_reachable(traefik_ip, enabled_profiles, hostname, expected_status, profile):
     if profile is not None and not enabled_profiles.get(profile):
         pytest.skip(f"'{profile}' profile is not deployed")

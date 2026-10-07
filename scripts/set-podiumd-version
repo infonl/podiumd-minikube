@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Selects the podiumd and monitoring-logging dependency versions and fetches them.
+
+The selection lives in .podiumd-versions.yaml (gitignored); Chart.yaml keeps placeholders.
+After a podiumd change, re-check the image.tag pins in values.yaml (openzaak, objecten,
+opennotificaties, openformulieren). Published versions: helm search repo dimpact/podiumd -l
+"""
+
+import argparse
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import process
+from lib import versions
+
+DISABLE = "--disable-monitoring-logging"
+
+
+def main() -> None:
+    """Parses `<version> <monitoring-logging-version|--disable-monitoring-logging>` or `--path <dir>`."""
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "--path", type=Path, help="local podiumd chart checkout; monitoring-logging follows its sibling"
+    )
+    parser.add_argument("version", nargs="?", help="published podiumd version")
+    parser.add_argument("monitoring_logging", nargs="?", help=f"monitoring-logging version (enables it), or {DISABLE}")
+    parser.add_argument(DISABLE, dest="disable", action="store_true", help="disable monitoring-logging")
+    args = parser.parse_args()
+    if args.path:
+        if args.version:
+            parser.error("--path takes no version")
+        versions.set_path(args.path, disable_monitoring_logging=args.disable)
+        return
+    if not args.version or (args.monitoring_logging is None) == (not args.disable):
+        parser.error(f"give <version> and either <monitoring-logging-version> or {DISABLE}")
+    versions.set_version(args.version, None if args.disable else args.monitoring_logging)
+
+
+process.main(main)

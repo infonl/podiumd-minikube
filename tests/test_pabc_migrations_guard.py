@@ -1,5 +1,5 @@
 """
-Verifies scripts/lib/apply-pabc-migrations.sh actually prevents the destructive
+Verifies scripts/apply-pabc-migrations actually prevents the destructive
 scenario it exists for: the pabc-migrations Job clears PABC's database
 before reloading its seed dataset every time it's created (confirmed live,
 not idempotent), so recreating it against an already-seeded database must
@@ -14,16 +14,17 @@ restore reloads the exact same vendored seed dataset, so the end state
 the assertions themselves.
 """
 
-import os
 import subprocess
+import sys
+
+from pathlib import Path
 
 import pytest
 
-from conftest import NAMESPACE, kubectl
+from conftest import NAMESPACE
+from conftest import kubectl
 
-SCRIPT_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "scripts", "lib", "apply-pabc-migrations.sh"
-)
+SCRIPT_PATH = str(Path(__file__).resolve().parent.parent / "scripts" / "apply-pabc-migrations")
 JOB_NAME = "pabc-migrations-1"
 
 
@@ -63,7 +64,7 @@ def _mapping_row_count():
 
 def _run_guard_script(*args):
     return subprocess.run(
-        ["bash", SCRIPT_PATH, *args],
+        [sys.executable, SCRIPT_PATH, *args],
         capture_output=True,
         text=True,
         timeout=150,
@@ -79,9 +80,7 @@ def _skip_if_pabc_not_deployed(pods):
 def test_guard_leaves_succeeded_job_alone():
     """The steady state: Job already succeeded - the script should be a
     read-only no-op, not touch the database at all."""
-    status = kubectl(
-        "get", "job", JOB_NAME, "-n", NAMESPACE, "-o", "jsonpath={.status.succeeded}"
-    ).strip()
+    status = kubectl("get", "job", JOB_NAME, "-n", NAMESPACE, "-o", "jsonpath={.status.succeeded}").strip()
     if status != "1":
         pytest.skip(f"{JOB_NAME} is not currently in a succeeded state")
 
@@ -109,7 +108,7 @@ def test_guard_refuses_to_recreate_job_when_data_exists():
     try:
         result = _run_guard_script()
         assert result.returncode == 1
-        assert "Refusing" in result.stdout
+        assert "refusing" in result.stderr
         assert _mapping_row_count() == before, "the guard should not have touched the data"
     finally:
         # Restore: recreate the Job with --force. This reloads the exact

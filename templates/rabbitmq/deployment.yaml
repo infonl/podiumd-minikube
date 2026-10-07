@@ -5,7 +5,7 @@ persisted schedules (see values.yaml's own opennotificaties.image.tag
 comment for the ADR link). podiumd 4.8.4's bundled opennotificaties is
 past that line, so the current default (opennotificaties.rabbitmqEnabled:
 false) doesn't deploy this at all - but this project also needs to keep
-working against podiumd 4.7.x (see set-podiumd-version.sh), whose bundled
+working against podiumd 4.7.x (see scripts/set-podiumd-version), whose bundled
 opennotificaties predates 1.16.0 and still needs a real broker. Gated on
 an explicit flag rather than deleted: flip opennotificaties.rabbitmqEnabled
 to true (and see that same comment for the other settings that need to

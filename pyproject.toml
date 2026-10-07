@@ -1,0 +1,230 @@
+# ruff, pylint, isort, vulture, bandit, basedpyright, pymarkdown and pytest
+# config for all Python code in this repository: scripts/ (extensionless
+# scripts, lib/, tests/) and the live-cluster suite in tests/. vendor/ holds
+# verbatim upstream copies and is not checked.
+
+[tool.ruff]
+# Shared with [tool.ruff.format] and pylint max-line-length.
+line-length = 120
+indent-width = 4
+force-exclude = true
+extend-exclude = ["vendor", ".claude"]
+
+[tool.ruff.lint]
+select = [
+    "A",     # flake8-builtins
+    "AIR",
+    # "ANN", # flake8-annotations
+    "ARG",
+    "ASYNC",
+    "B",    # flake8-bugbear
+    "BLE",
+    "C4",   # flake8-comprehensions
+    "C90",  # maccabe
+    "COM",  # flake8-commas
+    #"D",    # pydocstyle
+    "DJ",
+    "DTZ",
+    "E",    # pycodestyle
+    "EM",
+    "ERA",  # flake8-eradicate
+    "EXE",  # flake8-executable
+    "F",    # Pyflakes
+    "FA",   # flake8-future-annotations
+    "FBT",  # flake8-boolean-trap
+    "FLY",  # pyflint
+    "FURB", # refurb
+    "G",    # flake8-logging-format
+    "I",    # isort
+    "ICN",  # flake8-import-conventions
+    "ISC",  # flake8-implicit-str-concat
+    "INP",
+    "INT",
+    "LOG",  # flake8-logging
+    "N",    # pep8-naming
+    "NPY",
+    "PD",
+    "PERF", # perflint
+    "PGH",
+    "PIE",  # flake8-pie
+    "PT",   # flake8-pytest-style
+    "PTH",  # flake8-use-pathlib
+    "PYI",
+    "Q",    # flake8-quotes
+    "RET",  # flake8-return
+    "RSE",  # flake8-raise
+    "RUF",  # ruff
+    "S",    # flake8-bandit
+    "SIM",  # flake8-simplify
+    "SLF",  # flake8-self
+    "SLOT", # flake8-slots
+    "T10",
+    "T20",
+    "TCH",
+    "TID",
+    "TRY",  # tryceratops
+    "UP",   # pyupgrade
+    "W",    # pycodestyle
+    "YTT",  # flake8-2020
+]
+ignore = [
+    "COM812", # Conflicts when used with the formatter
+    "ISC001", # Rule may cause conflicts when used with the formatter, disable is recommended by ruff
+    "T201", # 'print' statement found, sometimes these are deliberate
+    "EXE001", # shebang permission mismatch between host and Docker container
+    "E501", # line-too-long: pylint's job now (C0301), avoid flagging the same line twice
+    "ERA001", # commented-out-code: current hits are prose that resembles code
+]
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.isort]
+# Mirror [tool.isort] below so ruff and isort agree on import layout.
+force-single-line = true
+lines-between-types = 1
+# No target-version is set, so ruff doesn't know tomllib (3.11+) is stdlib.
+extra-standard-library = ["tomllib"]
+# scripts/ puts its own directory on sys.path, so lib.* is first-party.
+known-first-party = ["lib"]
+
+[tool.ruff.lint.flake8-bandit]
+check-typed-exception = true  # Enable additional checks for try-except-pass
+
+[tool.ruff.lint.per-file-ignores]
+# Extensionless scripts patch sys.path before importing lib.* (E402) and are
+# no package (INP001).
+"scripts/*" = ["E402", "INP001"]
+
+# tests/ and scripts/tests/: pytest asserts, fixture/mock params (ARG),
+# private-helper access (SLF001), no __init__.py (INP001), composite asserts
+# (PT018), unused unpacked vars (RUF059), fixed-argv kubectl/helm calls
+# (S603/S607), fake tokens and dev passwords (S105/S106). bandit does not
+# scan them either.
+"**/tests/**" = ["S101", "ARG001", "ARG005", "SLF001", "INP001", "PT018", "RUF059", "S603", "S607", "S105", "S106"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# pylint covers checks ruff lacks; overlapping rules are owned by one tool.
+# Extensionless scripts must be passed explicitly (see run_python_checks).
+# Both tests/ directories also disable [tool.podiumd-minikube.pylint-tests]:
+# pylint has no per-directory config.
+
+[tool.pylint.basic]
+# Allow hyphens for the kebab-case script names (e.g. "provision-cluster").
+module-rgx = "^(([a-z_][a-z0-9_-]*)|(__.*__))$"
+
+[tool.pylint.format]
+# Matches [tool.ruff] line-length.
+max-line-length = 120
+
+# Added by run_python_checks to pylint's --disable for tests only.
+[tool.podiumd-minikube.pylint-tests]
+disable = [
+    # False positives under tests/:
+    "missing-function-docstring",
+    "wrong-import-position",
+    "unused-argument",
+    "protected-access",
+    "unused-variable",
+    "redefined-outer-name",
+    "duplicate-code",
+    # Not enforced for tests:
+    "import-outside-toplevel",
+    "consider-using-from-import",
+    "use-implicit-booleaness-not-comparison",
+    "too-many-positional-arguments",
+    "too-many-arguments",
+    "too-many-locals",
+    "import-error",
+    "superfluous-parens",
+    "too-many-lines",
+    "subprocess-run-check",
+    "missing-class-docstring",
+    "useless-return",
+    "unnecessary-lambda",
+    "too-few-public-methods",
+    "line-too-long",
+    "comparison-of-constants",
+]
+
+[tool.isort]
+# Compatible with 'ruff format'; mirrored by [tool.ruff.lint.isort]. The two
+# attach comments between imports differently: fence such blocks with
+# "# isort: off" / "# isort: on".
+line_length = 120
+multi_line_output = 3
+lines_between_types = 1
+use_parentheses = true
+include_trailing_comma = true
+force_single_line = true
+default_section = "THIRDPARTY"
+extra_standard_library = ["tomllib"]
+known_first_party = ["lib"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+
+# vulture runs on scripts/lib/ + the scripts only (see run_python_checks):
+# test fixtures and mock params look like dead code. False positives go here,
+# each with its reason.
+[tool.vulture]
+ignore_names = []
+
+[tool.bandit]
+skips = [
+    # covered by ruff:
+    "B108",
+    "B110",  # S110 in ruff
+    "B501",
+]
+
+[tool.basedpyright]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "vendor",
+]
+typeCheckingMode = "strict"
+reportUnusedImport = false  # done by ruff F401
+reportUntypedBaseClass = false # done by ruff N801
+
+# Extensionless scripts import lib.* from scripts/.
+[[tool.basedpyright.executionEnvironments]]
+root = "scripts/tests"
+extraPaths = ["scripts"]
+reportMissingParameterType = false
+reportUnknownLambdaType = false
+reportUnknownArgumentType = false
+reportUnknownParameterType = false
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+
+# Live-cluster suite: test modules import helpers from tests/conftest.py.
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["tests"]
+reportMissingParameterType = false
+reportUnknownLambdaType = false
+reportUnknownArgumentType = false
+reportUnknownParameterType = false
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+
+[[tool.basedpyright.executionEnvironments]]
+root = "scripts"
+
+[tool.pymarkdown]
+# Long prose lines and headings in README/plan text are fine.
+plugins.md013.enabled = false
+
+[tool.pytest.ini_options]
+# A plain `pytest` from the repo root runs the offline unit tests; the
+# live-cluster suite runs from tests/ (its own pytest.ini).
+testpaths = ["scripts/tests"]
+pythonpath = ["scripts", "scripts/tests"]
+addopts = "-ra"

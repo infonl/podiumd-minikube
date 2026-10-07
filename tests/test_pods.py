@@ -27,7 +27,7 @@ ONE_SHOT_JOB_PREFIXES = (
     # two custom ones this project adds for the pieces that mechanism
     # doesn't cover (see templates/{zac,openformulieren}/productaanvraag-*.yaml -
     # the third gap, the productaanvraag objecttype's own schema, is seeded
-    # by scripts/lib/seed-fixtures.sh instead, not a Job at all).
+    # by scripts/seed-fixtures instead, not a Job at all).
     "objecten-config",
     "objecttypen-config",
     "opennotificaties-config",
@@ -60,9 +60,9 @@ def test_long_running_pods_are_ready(pods):
     for pod in pods:
         if is_one_shot(pod["name"]):
             continue
-        for status in pod["container_statuses"]:
-            if not status.get("ready", False):
-                not_ready.append(f"{pod['name']}/{status['name']}")
+        not_ready.extend(
+            f"{pod['name']}/{status['name']}" for status in pod["container_statuses"] if not status.get("ready", False)
+        )
     assert not not_ready, f"containers not ready: {not_ready}"
 
 
@@ -89,6 +89,6 @@ def test_core_profile_pod_present(pods, core_pod_prefix):
     """The always-on core stack should be present regardless of which
     optional profiles are also enabled."""
     names = {p["name"] for p in pods}
-    assert any(
-        n == core_pod_prefix or n.startswith(core_pod_prefix + "-") for n in names
-    ), f"no pod found matching '{core_pod_prefix}'"
+    assert any(n == core_pod_prefix or n.startswith(core_pod_prefix + "-") for n in names), (
+        f"no pod found matching '{core_pod_prefix}'"
+    )

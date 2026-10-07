@@ -10,7 +10,7 @@ safe no-op like any other Job here.
 Depends on podiumd.openformulieren's own bundled configuration Job having
 already created the "local-objects-api" ObjectsAPIGroupConfig this form's
 registration backend references - no explicit ordering between the two
-(this whole chart applies everything in one batch, see scripts/deploy.sh's
+(this whole chart applies everything in one batch, see scripts/deploy's
 own header for why it's `kubectl apply`, not `helm install`/`upgrade`), but
 this Job's own backoffLimit/restartPolicy-driven retries give the other Job
 time to succeed first, same as every other cross-app dependency in this

@@ -1,12 +1,12 @@
 {{- if and .Values.podiumd.objecten.enabled .Values.objecten.merged }}
 # Merged shape only (open-object >=4.0.0, "OBJECTEN_MERGED" in
-# detect-objecten-shape.sh) - that podiumd version has no separate
+# scripts/lib/chart.py) - that podiumd version has no separate
 # objecttypen subchart at all, so the plain "objecttypen" Service other
 # apps' config still points at (openformulieren/openzaak/zac zgw_consumers
 # entries, this chart's own objecten.configuration.data block) would
 # otherwise dangle. A DNS CNAME onto the merged "objecten" Service lets
 # every existing "http://objecttypen.podiumd-minikube/..." reference keep
-# working unchanged, on either shape - see set-podiumd-version.sh's --path
+# working unchanged, on either shape - see scripts/set-podiumd-version's --path
 # header for the two shapes.
 apiVersion: v1
 kind: Service

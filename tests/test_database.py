@@ -6,7 +6,8 @@ one just to run the test suite).
 
 import pytest
 
-from conftest import NAMESPACE, kubectl
+from conftest import NAMESPACE
+from conftest import kubectl
 
 EXPECTED_DATABASES = {
     "zac",

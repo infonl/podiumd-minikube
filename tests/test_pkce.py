@@ -17,8 +17,8 @@ does - but that chart bump needs a local --path checkout (see
 podiumd.zac.image.tag's own values.yaml comment for the exact recipe)
 until podiumd 4.9 is released, so it's gated behind top-level
 zac.experimentalPkce (off by default - see
-scripts/lib/zac-experimental-pkce.sh). Whichever side that flag is on,
-scripts/lib/fixup-zac-pkce-realm.py and scripts/lib/sync-zac-pkce-realm.sh
+scripts/lib/chart.py). Whichever side that flag is on,
+scripts/lib/manifests.py and scripts/lib/keycloak.py
 both keep the Keycloak client's own pkce.code.challenge.method in sync
 with it - both the vendored realm.json, for future fresh imports, and the
 *already-imported* live realm via the Admin API, since Keycloak only
@@ -73,7 +73,8 @@ a broken/rolled-back version of the app can't send, the exact zac/Django
 incident this whole module exists to prevent).
 """
 
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 
 import pytest
 import requests
@@ -125,7 +126,7 @@ def _keycloak_admin_token(traefik_ip):
 def _zac_experimental_pkce_live(traefik_ip):
     """
     Whether the zac 5.4.2/PKCE experiment (top-level zac.experimentalPkce
-    in values.yaml, off by default - see scripts/lib/zac-experimental-pkce.sh)
+    in values.yaml, off by default - see scripts/lib/chart.py)
     is actually active on the currently-deployed cluster.
 
     Deliberately does NOT check the zac ConfigMap's own AUTH_ENABLE_PKCE key
@@ -152,9 +153,7 @@ def _zac_experimental_pkce_live(traefik_ip):
     )
     response.raise_for_status()
     clients = response.json()
-    return bool(clients) and clients[0]["attributes"].get(
-        "pkce.code.challenge.method", ""
-    ) == "S256"
+    return bool(clients) and clients[0]["attributes"].get("pkce.code.challenge.method", "") == "S256"
 
 
 def _via_traefik(traefik_ip, absolute_url):
@@ -290,9 +289,7 @@ def test_pabc_pkce_login_accepted_by_keycloak(traefik_ip):
         timeout=10,
         allow_redirects=False,
     )
-    assert callback.status_code in (302, 200), (
-        f"pabc.local/signin-oidc rejected the callback: {callback.status_code}"
-    )
+    assert callback.status_code in (302, 200), f"pabc.local/signin-oidc rejected the callback: {callback.status_code}"
 
 
 def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
@@ -314,10 +311,10 @@ def test_zac_client_now_sends_a_pkce_code_challenge(traefik_ip):
     authenticated app shell) and would fail here too if PKCE broke it.
 
     Only meaningful with zac.experimentalPkce actually on (off by default -
-    see scripts/lib/zac-experimental-pkce.sh) - skips otherwise, since with
+    see scripts/lib/chart.py) - skips otherwise, since with
     it off ZAC deliberately doesn't send a challenge and the Keycloak
-    client deliberately doesn't require one (scripts/lib/fixup-zac-pkce-realm.py
-    / sync-zac-pkce-realm.sh both keep those two in sync either way, this
+    client deliberately doesn't require one (scripts/lib/manifests.py
+    / scripts/lib/keycloak.py both keep those two in sync either way, this
     just isn't the experiment being tested here).
     """
     if not _zac_experimental_pkce_live(traefik_ip):
@@ -429,7 +426,5 @@ def _extract_hidden_input(html, name):
     import html as html_module
     import re
 
-    match = re.search(
-        rf'name="{re.escape(name)}"\s+value="([^"]*)"', html, re.IGNORECASE
-    )
+    match = re.search(rf'name="{re.escape(name)}"\s+value="([^"]*)"', html, re.IGNORECASE)
     return html_module.unescape(match.group(1)) if match else None

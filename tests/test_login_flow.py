@@ -95,17 +95,13 @@ def test_full_login_flow_reaches_authenticated_app(traefik_ip):
 
     # 4. Follow the callback - ZAC exchanges the code and redirects to /.
     callback_url, callback_headers = _via_traefik(traefik_ip, callback_location)
-    callback = session.get(
-        callback_url, headers=callback_headers, timeout=15, allow_redirects=False
-    )
+    callback = session.get(callback_url, headers=callback_headers, timeout=15, allow_redirects=False)
     assert callback.status_code == 302
 
     # 5. Final request should land on the real, authenticated app shell -
     #    not bounced back to login, and not ZAC's own "Geen toestemming"
     #    (403) authorization-denied page.
-    final = session.get(
-        f"http://{traefik_ip}/", headers={"Host": ZAC_HOST}, timeout=15
-    )
+    final = session.get(f"http://{traefik_ip}/", headers={"Host": ZAC_HOST}, timeout=15)
     assert final.status_code == 200
     assert "<zac-root>" in final.text
     assert "Geen toestemming" not in final.text

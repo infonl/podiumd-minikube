@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Starts minikube tunnel (unless running) and waits for Traefik's external IP. Do not run with sudo."""
+
+import argparse
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import process
+from lib import tunnel
+
+
+def main() -> None:
+    """Parses the (empty) arguments and sets up the tunnel."""
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    tunnel.setup_tunnel()
+
+
+process.main(main)

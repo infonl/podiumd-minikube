@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Port-forwards the shared Postgres (user postgres, password postgres) to localhost for GUI tools."""
+
+import argparse
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import process
+from lib import services
+
+
+def main() -> None:
+    """Parses the local port and starts forwarding."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("port", nargs="?", type=int, default=services.POSTGRES_PORT, help="local port (default 5432)")
+    services.expose_postgres(parser.parse_args().port)
+
+
+process.main(main)

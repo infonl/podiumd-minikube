@@ -1,7 +1,7 @@
 """
 Confirms every zgw_consumers.Service row seeded into any app's own
 database (both the classic and merged/openobject fixture shapes - see
-scripts/lib/seed-fixtures.sh) actually has a reachable api_root, from
+scripts/seed-fixtures) actually has a reachable api_root, from
 inside the cluster - the same place that app itself makes requests to it.
 
 Exists because both vendored fixtures (objecten/demodata.json and
@@ -41,11 +41,13 @@ live), which is why urllib is used instead.
 """
 
 import json
+
 from urllib.parse import urlparse
 
 import pytest
 
-from conftest import NAMESPACE, kubectl
+from conftest import NAMESPACE
+from conftest import kubectl
 
 # Every app that registers its own zgw_consumers.Service rows via
 # values.yaml's configuration.data mechanism (grep
@@ -141,29 +143,31 @@ def test_zgw_service_api_roots_reachable(app_pod, zgw_services):
         slug, api_root = service["slug"], service["api_root"]
         if not _is_in_cluster_hostname(api_root):
             continue
-        outcome = kubectl(
-            "exec",
-            "-n",
-            NAMESPACE,
-            pod,
-            "--",
-            "python",
-            "-c",
-            "import urllib.request, urllib.error\n"
-            f"url = {api_root!r}\n"
-            "try:\n"
-            "    urllib.request.urlopen(url, timeout=5)\n"
-            "    print('OK')\n"
-            "except urllib.error.HTTPError as e:\n"
-            # A real HTTP error response (401/403/404/...) still proves
-            # something is actually listening - only 5xx/no-response at
-            # all counts as unreachable.
-            "    print('OK' if e.code < 500 else f'FAIL http {e.code}')\n"
-            "except Exception as e:\n"
-            "    print(f'FAIL {e}')\n",
-        ).strip().splitlines()[-1]
+        outcome = (
+            kubectl(
+                "exec",
+                "-n",
+                NAMESPACE,
+                pod,
+                "--",
+                "python",
+                "-c",
+                "import urllib.request, urllib.error\n"
+                f"url = {api_root!r}\n"
+                "try:\n"
+                "    urllib.request.urlopen(url, timeout=5)\n"
+                "    print('OK')\n"
+                "except urllib.error.HTTPError as e:\n"
+                # A real HTTP error response (401/403/404/...) still proves
+                # something is actually listening - only 5xx/no-response at
+                # all counts as unreachable.
+                "    print('OK' if e.code < 500 else f'FAIL http {e.code}')\n"
+                "except Exception as e:\n"
+                "    print(f'FAIL {e}')\n",
+            )
+            .strip()
+            .splitlines()[-1]
+        )
         if not outcome.startswith("OK"):
             failures.append(f"{slug} ({api_root}): {outcome}")
-    assert not failures, (
-        f"unreachable zgw_consumers.Service api_root(s) for '{app}':\n" + "\n".join(failures)
-    )
+    assert not failures, f"unreachable zgw_consumers.Service api_root(s) for '{app}':\n" + "\n".join(failures)

@@ -34,7 +34,8 @@ import re
 import pytest
 import requests
 
-from conftest import host_url, host_headers
+from conftest import host_headers
+from conftest import host_url
 
 
 def _login(traefik_ip, hostname, username, password):
@@ -45,22 +46,15 @@ def _login(traefik_ip, hostname, username, password):
     # splits into a separate /admin/classic-login/?next=/admin/ view) - the
     # POST below must target that final URL, not the original one, or it
     # 404s/re-redirects instead of submitting the form.
-    login_page = session.get(
-        host_url(traefik_ip, "/admin/login/"), headers=headers, timeout=10
-    )
+    login_page = session.get(host_url(traefik_ip, "/admin/login/"), headers=headers, timeout=10)
     assert login_page.status_code == 200
     login_url = login_page.url
 
-    csrf_match = re.search(
-        r'name="csrfmiddlewaretoken" value="([^"]+)"', login_page.text
-    )
+    csrf_match = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', login_page.text)
     assert csrf_match, f"{hostname}: login page did not render a CSRF token"
-    step_match = re.search(
-        r'name="admin_login_view-current_step" value="([^"]+)"', login_page.text
-    )
+    step_match = re.search(r'name="admin_login_view-current_step" value="([^"]+)"', login_page.text)
     assert step_match, (
-        f"{hostname}: login page did not render the two-factor wizard's "
-        "step field - did the form shape change?"
+        f"{hostname}: login page did not render the two-factor wizard's step field - did the form shape change?"
     )
     # Some apps (openformulieren) pre-fill this from a ?next= query param
     # on the redirected URL - extract it rather than hardcoding "", or
@@ -109,7 +103,7 @@ def _assert_logged_in(response, username, hostname):
 def test_objecttypen_admin_login(traefik_ip, enabled_profiles):
     """
     Only meaningful for the "classic" podiumd shape, where objecttypen is
-    its own subchart (see scripts/lib/detect-objecten-shape.sh). Once
+    its own subchart (see scripts/lib/chart.py). Once
     podiumd merges objecten+objecttypen into a single "openobject" chart,
     this subchart - and its ingress/Deployment - stop existing entirely,
     so this test skips whenever `enabled_profiles` doesn't report a live

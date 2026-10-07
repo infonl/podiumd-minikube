@@ -11,10 +11,10 @@ cluster this suite runs against in the first place.
 ## Prerequisites
 
 - The chart is deployed to the `podiumd-minikube` namespace, e.g. via
-  `../scripts/deploy.sh --full` (all optional profiles need to be running
+  `../scripts/deploy --full` (all optional profiles need to be running
   for the full suite to pass, not just the core ones).
 - `kubectl` is configured against the cluster (current context).
-- Traefik has a real LoadBalancer external IP — run `../scripts/setup-tunnel.sh`
+- Traefik has a real LoadBalancer external IP — run `../scripts/setup-tunnel`
   first if `kubectl get svc traefik -n traefik` shows `<pending>`.
 
 No `/etc/hosts` edits are needed to run the suite: every test reaches
@@ -26,7 +26,7 @@ request, resolved automatically at test time.
 ```bash
 python3 -m venv ../.venv
 source ../.venv/bin/activate      # ..\.venv\Scripts\activate on Windows
-pip install -r requirements.txt
+pip install -r ../requirements.txt
 playwright install chromium
 pytest
 ```
@@ -63,7 +63,7 @@ exclusive implementations of the same profile, so `test_metrics.py` and
 | `test_metrics.py` | Grafana's provisioned datasources and Prometheus's scrape targets are actually healthy (raw-templates implementation - skips if `monitoringLogging.enabled=true` instead) |
 | `test_monitoring_logging.py` | Same shape of checks as `test_metrics.py`, against the `monitoring-logging` dependency's own Grafana/Prometheus/Tempo instead, plus Loki actually holding this namespace's forwarded pod logs (proves Alloy's log-collection pipeline works, not just that Loki answers queries) - only runs when `monitoringLogging.enabled=true` |
 | `test_mailpit.py` | A real email sent via `send_mail()` from a component (openzaak) actually arrives in mailpit - confirmed both via its API and via its real (headless Chromium) web UI, not just that mailpit's root path returns 200 |
-| `test_pabc_migrations_guard.py` | `scripts/lib/apply-pabc-migrations.sh` actually refuses to recreate the (non-idempotent) pabc-migrations Job when PABC's database already has data |
+| `test_pabc_migrations_guard.py` | `scripts/apply-pabc-migrations` actually refuses to recreate the (non-idempotent) pabc-migrations Job when PABC's database already has data |
 
 ## Known caveats
 

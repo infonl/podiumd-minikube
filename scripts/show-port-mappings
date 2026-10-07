@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Shows Traefik's entry point and each live Ingress host's backend Service and port."""
+
+import argparse
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import ports
+from lib import process
+
+
+def main() -> None:
+    """Parses the (empty) arguments and shows the mappings."""
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    ports.show_port_mappings()
+
+
+process.main(main)

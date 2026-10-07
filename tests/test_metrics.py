@@ -5,10 +5,11 @@ pods are Running. This is what caught the zac-admin Service / Tempo OTLP
 bind-address fixes actually working end to end.
 """
 
-import requests
 import pytest
+import requests
 
-from conftest import host_url, host_headers
+from conftest import host_headers
+from conftest import host_url
 
 
 @pytest.fixture(autouse=True)

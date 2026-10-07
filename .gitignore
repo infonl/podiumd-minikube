@@ -1,8 +1,8 @@
 # Helm dependency tarballs - fetched fresh via `helm dependency update`,
-# which scripts/provision-cluster.sh already runs as part of setting up any
+# which scripts/provision-cluster already runs as part of setting up any
 # cluster this chart deploys to. Originally committed deliberately (matching
 # podiumd-infra's own convention) for offline reproducibility without that
-# step - reversed once provision-cluster.sh existed to run it automatically,
+# step - reversed once scripts/provision-cluster existed to run it automatically,
 # and once this 3.87MB tarball turned out to be the direct root cause of a
 # real bug: Helm's release record embeds the entire resolved chart including
 # this dependency, exceeding Kubernetes' hardcoded 3MB API request-size
@@ -31,8 +31,8 @@ __pycache__/
 .kube/
 
 # This developer's own local podiumd/monitoring-logging version selection
-# - written by scripts/set-podiumd-version.sh, read by
-# scripts/lib/podiumd-dependency.sh. Deliberately never committed:
+# - written by scripts/set-podiumd-version, read by
+# scripts/lib/dependency.py. Deliberately never committed:
 # Chart.yaml no longer holds a real version for either dependency at all
 # (see its own comment there), specifically so a personal "let me test a
 # different version" choice never shows up as a shared-file diff the way

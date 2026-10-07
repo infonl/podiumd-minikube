@@ -10,10 +10,11 @@ with an added check for Alloy's own log forwarding into Loki, which the
 raw-templates implementation has no equivalent of at all.
 """
 
-import requests
 import pytest
+import requests
 
-from conftest import host_url, host_headers
+from conftest import host_headers
+from conftest import host_url
 
 
 @pytest.fixture(autouse=True)

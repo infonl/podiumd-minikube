@@ -7,7 +7,7 @@ cluster - not unit tests. They assume:
   - `kubectl` is configured against the cluster (current context)
   - the chart is deployed to the `podiumd-minikube` namespace
   - Traefik has a real LoadBalancer external IP (via `minikube tunnel` -
-    see ../scripts/setup-tunnel.sh)
+    see ../scripts/setup-tunnel)
 
 Requests are made by IP with an explicit Host header rather than through
 `/etc/hosts`-resolved hostnames, so the suite runs without needing any
@@ -27,11 +27,10 @@ REQUEST_TIMEOUT = 10
 
 def kubectl(*args):
     """Run kubectl and return stdout, raising if it fails."""
-    result = subprocess.run(
-        ["kubectl", *args], capture_output=True, text=True, timeout=30
-    )
+    result = subprocess.run(["kubectl", *args], capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
-        raise RuntimeError(f"kubectl {' '.join(args)} failed: {result.stderr}")
+        msg = f"kubectl {' '.join(args)} failed: {result.stderr}"
+        raise RuntimeError(msg)
     return result.stdout
 
 
@@ -51,10 +50,7 @@ def traefik_ip():
     except (RuntimeError, FileNotFoundError) as exc:
         pytest.skip(f"could not reach the cluster via kubectl: {exc}")
     if not ip:
-        pytest.skip(
-            "Traefik has no external IP yet - is `minikube tunnel` running? "
-            "See scripts/setup-tunnel.sh."
-        )
+        pytest.skip("Traefik has no external IP yet - is `minikube tunnel` running? See scripts/setup-tunnel.")
     return ip
 
 
@@ -126,8 +122,6 @@ def browser_type_launch_args(browser_type_launch_args, traefik_ip):
     return {
         **browser_type_launch_args,
         "args": [
-            f"--host-resolver-rules=MAP zac.local {traefik_ip},"
-            f"MAP keycloak.local {traefik_ip},"
-            f"MAP mailpit.local {traefik_ip}"
+            f"--host-resolver-rules=MAP zac.local {traefik_ip},MAP keycloak.local {traefik_ip},MAP mailpit.local {traefik_ip}",
         ],
     }

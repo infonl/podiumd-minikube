@@ -1,0 +1,120 @@
+"""lib.manifests: the fixups applied to helm template output."""
+
+import json
+
+import yaml
+
+from lib import manifests
+
+DIGEST = "a" * 64
+
+
+def _docs(text: str) -> list[manifests.Doc]:
+    return [doc for doc in yaml.safe_load_all(text) if doc]
+
+
+def test_strip_image_digests_keeps_the_tag():
+    text = f"image: repo/app:1.2@sha256:{DIGEST}\nimage: other:2\n"
+    assert manifests.strip_image_digests(text) == "image: repo/app:1.2\nimage: other:2\n"
+
+
+def test_images_are_unique_and_sorted():
+    text = 'spec:\n  image: "b:1"\n  image: a:2\n  image: b:1\n'
+    assert manifests.images(text) == ["a:2", "b:1"]
+
+
+def test_disable_service_links_skips_bare_jobs():
+    docs = _docs("""
+kind: Deployment
+spec: {template: {spec: {containers: []}}}
+---
+kind: CronJob
+spec: {jobTemplate: {spec: {template: {spec: {}}}}}
+---
+kind: Job
+spec: {template: {spec: {}}}
+""")
+    manifests.disable_service_links(docs)
+    assert docs[0]["spec"]["template"]["spec"]["enableServiceLinks"] is False
+    assert docs[1]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["enableServiceLinks"] is False
+    assert "enableServiceLinks" not in docs[2]["spec"]["template"]["spec"]
+
+
+def test_fix_up_drops_pabc_job_test_hooks_and_zac_otel_collector():
+    text = """
+kind: Job
+metadata: {name: pabc-migrations-1}
+---
+kind: Pod
+metadata: {name: grafana-test, annotations: {helm.sh/hook: test}}
+---
+kind: Deployment
+metadata: {name: zac-unused-otel-collector}
+---
+kind: Service
+metadata: {name: zac}
+"""
+    render = manifests.fix_up(text, objecten_merged=False, zac_pkce=False)
+    assert [manifests.name_of(doc) for doc in render.docs] == ["zac"]
+
+
+def _configmap(name: str, configuration: object) -> manifests.Doc:
+    return {
+        "kind": "ConfigMap",
+        "metadata": {"name": name},
+        "data": {"configuration.yaml": yaml.safe_dump(configuration)},
+    }
+
+
+def test_fixup_merged_objecten_removes_classic_only_settings():
+    docs = [
+        _configmap(
+            "objecten-configuration", {"objecttypes": {"items": [{"identifier": "x", "service_identifier": "y"}]}}
+        ),
+        _configmap(
+            "openformulieren-configuration",
+            {"zgw_consumers": {"services": [{"identifier": "objecttypes-api", "header_value": "Token old"}]}},
+        ),
+    ]
+    manifests.fixup_merged_objecten(docs)
+    objecten = yaml.safe_load(docs[0]["data"]["configuration.yaml"])
+    openformulieren = yaml.safe_load(docs[1]["data"]["configuration.yaml"])
+    assert objecten["objecttypes"]["items"] == [{"identifier": "x"}]
+    assert openformulieren["zgw_consumers"]["services"][0]["header_value"] == "Token fakeOpenFormulierenObjectsToken"
+
+
+def test_fix_up_leaves_objecten_alone_on_the_classic_shape():
+    doc = _configmap("objecten-configuration", {"objecttypes": {"items": [{"service_identifier": "y"}]}})
+    render = manifests.fix_up(yaml.safe_dump(doc), objecten_merged=False, zac_pkce=False)
+    assert render.docs == [doc]
+
+
+def test_set_zac_pkce_switches_only_the_zac_client():
+    realm = {
+        "clients": [{"clientId": "zaakafhandelcomponent", "attributes": {}}, {"clientId": "other", "attributes": {}}]
+    }
+    doc: manifests.Doc = {
+        "kind": "ConfigMap",
+        "metadata": {"name": "keycloak-realm"},
+        "data": {"zaakafhandelcomponent-realm.json": json.dumps(realm)},
+    }
+    manifests.set_zac_pkce([doc], enabled=True)
+    clients = json.loads(doc["data"]["zaakafhandelcomponent-realm.json"])["clients"]
+    assert clients[0]["attributes"]["pkce.code.challenge.method"] == "S256"
+    assert clients[1]["attributes"] == {}
+    manifests.set_zac_pkce([doc], enabled=False)
+    clients = json.loads(doc["data"]["zaakafhandelcomponent-realm.json"])["clients"]
+    assert clients[0]["attributes"]["pkce.code.challenge.method"] == ""
+
+
+def test_fix_up_splits_off_large_configmaps():
+    large = {
+        "kind": "ConfigMap",
+        "metadata": {"name": "dashboards"},
+        "data": {"x": "y" * manifests.LARGE_CONFIGMAP_BYTES},
+    }
+    small = {"kind": "ConfigMap", "metadata": {"name": "small"}, "data": {"x": "y"}}
+    render = manifests.fix_up(yaml.safe_dump_all([large, small]), objecten_merged=False, zac_pkce=False)
+    assert render.docs == [small]
+    assert render.large_configmaps == [large]
+    assert _docs(render.manifest) == [small]

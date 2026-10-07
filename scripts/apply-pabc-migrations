@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""(Re)creates the pabc-migrations Job unless PABC already has data; --force wipes and reseeds."""
+
+import argparse
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import kube
+from lib import pabc
+from lib import process
+
+
+def main() -> None:
+    """Parses --force and applies the Job."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--force", action="store_true", help="wipe PABC's database and reseed it")
+    force = parser.parse_args().force
+    kube.require_minikube_context()
+    pabc.apply_migrations(force=force)
+
+
+process.main(main)

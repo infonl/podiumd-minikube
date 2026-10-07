@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""deploy --full without metrics and wiremock mappings, with openzaak's and openklant's Celery workers.
+
+opennotificaties needs openzaak's worker to publish notifications. Re-running deploy
+with other flags prunes the difference, so this combination is kept here.
+"""
+
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import deploy
+from lib import process
+
+EXTENDED = [
+    "--full",
+    "--set", "metrics.enabled=false",
+    "--set", "wiremock.enabled=false",
+    "--set", "podiumd.openzaak.worker.replicaCount=1",
+    "--set", "podiumd.openklant.worker.replicaCount=1",
+]  # fmt: skip
+
+process.main(lambda: deploy.main([*EXTENDED, *sys.argv[1:]], __doc__ or ""))

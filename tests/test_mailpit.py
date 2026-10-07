@@ -15,9 +15,12 @@ own* message shows up.
 import uuid
 
 import requests
-from playwright.sync_api import expect
 
-from conftest import NAMESPACE, host_headers, host_url, kubectl
+from conftest import NAMESPACE
+from conftest import host_headers
+from conftest import host_url
+from conftest import kubectl
+from playwright.sync_api import expect
 
 MAILPIT_HOST = "mailpit.local"
 
@@ -49,10 +52,7 @@ def test_mail_sent_by_a_component_arrives_in_mailpit(traefik_ip):
     )
     assert response.status_code == 200
     subjects = [m["Subject"] for m in response.json()["messages"]]
-    assert marker in subjects, (
-        f"no message with subject {marker!r} found in mailpit - "
-        f"got: {subjects}"
-    )
+    assert marker in subjects, f"no message with subject {marker!r} found in mailpit - got: {subjects}"
 
 
 def test_sent_mail_visible_in_mailpit_webui(page):
