@@ -60,18 +60,9 @@ def reset_namespace(*, yes: bool) -> int:
     else:
         print("  (none found)")
     print("Clearing hostPath data on the minikube node...")
-    cleared = process.run(
-        [
-            "minikube",
-            "ssh",
-            "-p",
-            PROFILE,
-            "--",
-            f"sudo rm -rf /data/{NAMESPACE}/* /tmp/hostpath-provisioner/{NAMESPACE}",
-        ],
-        check=False,
-    )
-    if cleared.returncode != 0:
+    try:
+        kube.node(f"sudo rm -rf /data/{NAMESPACE}/* /tmp/hostpath-provisioner/{NAMESPACE}")
+    except process.ProcessError:
         print("  WARNING: could not reach the minikube node to clear hostPath data - do it by hand.", file=sys.stderr)
     print("Deleting monitoring-logging's cluster-scoped RBAC/webhook objects (if any)...")
     kube.kubectl_shown(

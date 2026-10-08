@@ -104,7 +104,7 @@ def workloads(items: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def _crictl(*args: str) -> Any:
-    return json.loads(process.output(["minikube", "ssh", "-p", PROFILE, "--", "sudo", "crictl", *args, "-o", "json"]))
+    return json.loads(kube.node(" ".join(["sudo", "crictl", *args, "-o", "json"])))
 
 
 def _key(label: dict[str, str], names: dict[str, str]) -> str:

@@ -46,6 +46,11 @@ def kubectl_ok(*args: str) -> bool:
     return process.succeeds(["kubectl", *args])
 
 
+def node(command: str) -> str:
+    """Stdout of a shell command run on the minikube node; minikube ssh forwards no stdin."""
+    return process.output(["minikube", "ssh", "-p", PROFILE, "--", command])
+
+
 def get_json(*args: str) -> Any:
     """Parsed `kubectl get <args> -o json`."""
     return json.loads(kubectl("get", *args, "-o", "json"))
