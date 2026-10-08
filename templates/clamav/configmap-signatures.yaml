@@ -1,0 +1,15 @@
+{{/*
+clamd's only signature database (values.yaml podiumd.clamav): the EICAR test
+file's hash line from ClamAV's daily.hdb.
+*/}}
+{{- if .Values.podiumd.clamav.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clamav-signatures
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  eicar.hdb: |
+    44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature
+{{- end }}

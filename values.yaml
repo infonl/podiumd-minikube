@@ -70,6 +70,8 @@ openbeheer:
   enabled: false # with podiumd.openbeheer; needs objecten (objecttypen)
 frankgateway:
   enabled: false # with podiumd.frankgateway and podiumd.openbao; apps then call BRP/KvK/BAG through its outway
+clamav:
+  enabled: false # with podiumd.clamav; EICAR-only signatures (templates/clamav)
 metrics:
   enabled: false
 monitoringLogging:
@@ -196,8 +198,41 @@ podiumd:
     # podiumd-minikube (its Role/RoleBinding land there).
     managedNamespaces:
       - podiumd-minikube
+  # As both reference projects, but laptop budget: clamd loads only the EICAR
+  # signature (13 MiB instead of 973 MiB with the official databases) and
+  # freshclam never runs (no internet needed). The "-" argument makes the
+  # image exec clamd directly.
   clamav:
     enabled: false
+    extraArgs:
+      - --foreground
+    extraVolumes:
+      - name: signatures
+        configMap:
+          name: clamav-signatures
+    # podiumd's clamdConfig reads /var/lib/clamav, where the image ships the
+    # official databases; this mount replaces them.
+    extraVolumeMounts:
+      - name: signatures
+        mountPath: /var/lib/clamav
+        readOnly: true
+    persistentVolume:
+      enabled: false # podiumd's Azure managed-csi PVC; the signatures come from the ConfigMap
+    hpa:
+      enabled: false
+    # clamd starts in about a second with one signature.
+    startupProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    readinessProbe:
+      initialDelaySeconds: 5
+    livenessProbe:
+      initialDelaySeconds: 30
+    resources:
+      requests:
+        memory: 32Mi
+      limits:
+        memory: 128Mi
   zaakbrug:
     enabled: false
 
