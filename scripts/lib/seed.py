@@ -26,6 +26,9 @@ POD_FIXTURE = "/tmp/demodata.json"  # noqa: S108 - path inside the app pod
 # ZAC's dev fixtures add their own Productaanvraag-Dimpact; podiumd-infra has only
 # the chart Job's (11a5f7fd-...), so this one is left out with what depends on it.
 FIXTURE_ONLY_OBJECTTYPE = "021f685e-9482-4620-b157-34cd4003da6b"
+# Open Zaak's docker-compose-only Objects API service used this token; Open Zaak
+# here uses Open Formulieren's (values.yaml), so it is left out too.
+FIXTURE_ONLY_TOKEN = "openzaak"  # nosec B105  # noqa: S105 - a token identifier
 _OBJECTTYPE_FIELDS = ("object_type", "_object_type")
 
 _CREATE_SUPERUSER = """
@@ -72,6 +75,19 @@ def without_objecttype(rows: list[dict[str, Any]], uuid: str) -> list[dict[str, 
     return [row for row in rows if kept(row)]
 
 
+def without_token(rows: list[dict[str, Any]], identifier: str) -> list[dict[str, Any]]:
+    """rows minus the token.tokenauth with identifier and its token.permission rows."""
+    gone = {
+        row["pk"] for row in rows if row["model"] == "token.tokenauth" and row["fields"].get("identifier") == identifier
+    }
+    return [
+        row
+        for row in rows
+        if not (row["model"] == "token.tokenauth" and row["pk"] in gone)
+        and not (row["model"] == "token.permission" and row["fields"].get("token_auth") in gone)
+    ]
+
+
 def seed(deployment: str, fixture: str, app_label: str, model: str) -> None:
     """Loads vendor fixture into deployment unless app_label.model has rows, then ensures the admin user."""
     kube.kubectl_shown(
@@ -82,8 +98,9 @@ def seed(deployment: str, fixture: str, app_label: str, model: str) -> None:
         print(f"'{deployment}' already has {app_label}.{model} data - skipping (not re-seeding).")
         return
     path = VENDOR_DIR / fixture
-    print(f"Seeding '{deployment}' from {path} (without objecttype {FIXTURE_ONLY_OBJECTTYPE})...")
+    print(f"Seeding '{deployment}' from {path} (without the fixture-only objecttype and token)...")
     rows = without_objecttype(json.loads(path.read_text(encoding="utf-8")), FIXTURE_ONLY_OBJECTTYPE)
+    rows = without_token(rows, FIXTURE_ONLY_TOKEN)
     with tempfile.TemporaryDirectory() as directory:
         filtered = Path(directory) / path.name
         filtered.write_text(json.dumps(rows), encoding="utf-8")

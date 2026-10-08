@@ -17,3 +17,14 @@ def test_without_objecttype_drops_the_type_and_what_points_at_it():
     ]
     kept = [(row["model"], row["pk"]) for row in seed.without_objecttype(rows, "drop")]
     assert kept == [("core.objecttype", 1), ("core.object", 30), ("core.objectrecord", 51), ("token.tokenauth", 1)]
+
+
+def test_without_token_drops_the_token_and_its_permissions():
+    rows = [
+        {"model": "token.tokenauth", "pk": 1, "fields": {"identifier": "openzaak"}},
+        {"model": "token.tokenauth", "pk": 2, "fields": {"identifier": "zaakafhandelcomponent"}},
+        {"model": "token.permission", "pk": 1, "fields": {"token_auth": 1}},
+        {"model": "token.permission", "pk": 4, "fields": {"token_auth": 2}},
+    ]
+    kept = [(row["model"], row["pk"]) for row in seed.without_token(rows, "openzaak")]
+    assert kept == [("token.tokenauth", 2), ("token.permission", 4)]

@@ -5137,3 +5137,16 @@ every workload except ZAC (`deploy.rolled_out`), restarts ZAC once when its
 log shows the failed boot, then `tunnel.setup_tunnel`. ExternalsPodiumD sets
 no other ZAC probes, so they stay; a manual `rollout restart deploy/zac` did
 it this time, and the suite passed (111).
+
+## Unused fixture rows removed
+
+Open Zaak's fixture SQL (07-setup-zac-config-after.sql) inserts four
+zgw_consumers services on docker-compose-only hosts: Objects API
+(objecten-api.local:8000), Objects API IntelliJ, Open Notificaties and Open
+Archiefbeheer (host.docker.internal). No Open Zaak configuration points at
+them (checked every Service foreign key live; NotificationsConfig uses our
+notificaties-api), so `templates/postgres/configmap-fixtures.yaml` filters
+those INSERTs out; the vendored file stays as ZAC ships it. The Objecten
+fixture token `openzaak` only served the compose Objects API row and is
+left out at seed time (`seed.without_token`). Live: the 4 services and the
+token (with its 2 permissions) deleted by hand; suite 111 passed.

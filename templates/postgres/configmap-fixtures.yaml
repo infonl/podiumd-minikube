@@ -2,7 +2,9 @@
 One ConfigMap per app's fixture SQL directory - mounted separately (see
 deployment.yaml) since each needs to land in its own subdirectory under
 /docker-entrypoint-initdb.d/fixtures/<app>, which a single combined
-ConfigMap volume mount can't do without per-key subPath entries.
+ConfigMap volume mount can't do without per-key subPath entries. Open Zaak's
+zgw_consumers services on docker-compose-only hosts (host.docker.internal,
+objecten-api.local) are left out: nothing here reaches or uses them.
 */}}
 {{- range $app := list "openzaak" "openklant" "openarchiefbeheer" }}
 apiVersion: v1
@@ -12,6 +14,7 @@ metadata:
   labels:
     {{- include "podiumd-minikube.labels" $ | nindent 4 }}
 data:
-  {{- ($.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/%s/*.sql" $app)).AsConfig | nindent 2 }}
+  {{- $config := ($.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/%s/*.sql" $app)).AsConfig }}
+  {{- regexReplaceAll "(?m)^[ \\t]*INSERT INTO zgw_consumers_service .*'http://(host\\.docker\\.internal|objecten-api\\.local)[:/][^\\n]*\\n" $config "" | nindent 2 }}
 ---
 {{- end }}
