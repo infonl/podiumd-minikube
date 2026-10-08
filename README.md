@@ -172,7 +172,6 @@ automatically either direction.
 | `scripts/update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
 | `scripts/deploy-extended` | `deploy --full` without metrics and WireMock mappings, with openzaak's and openklant's Celery workers |
 | `scripts/apply-pabc-migrations [--force]` | The only safe way to (re)create the `pabc-migrations` Job — refuses against an already-seeded database unless `--force` |
-| `scripts/seed-fixtures` | Loads the objecten/objecttypen demo data; skips apps already seeded (`deploy` runs it too) |
 
 `scripts/reset-namespace` vs `scripts/teardown-cluster`: use `scripts/reset-namespace` to
 wipe app data and redeploy clean (keeps the cluster, the edge and the images);

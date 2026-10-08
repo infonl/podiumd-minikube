@@ -36,7 +36,7 @@ live: the tunnel script's own host list went stale, which is why
    | starting any external process (kubectl, helm, minikube, docker) | `lib.process` (`run`, `output`, `succeeds`, `spawn`; errors are `ProcessError`/`UserError`) |
    | a script's entry point | `process.main(...)` in an extensionless `scripts/<name>`; logic in `scripts/lib/` |
    | refuse to run against a non-minikube kubectl context | `kube.require_minikube_context` |
-   | kubectl calls, the edge IP, a pod, a Django shell | `lib.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `edge_ip`, `first_pod`, `django_shell`) |
+   | kubectl calls, the edge IP, a pod | `lib.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `edge_ip`, `first_pod`) |
    | waiting for a condition | `polling.wait_until` (never a bare sleep) |
    | the rendered manifest, with all local fixups | `deploy.Options.render`; a new fixup is one more step in `manifests.fix_up` |
    | YAML sections that may be null, a resource's name | `manifests.section`, `manifests.name_of` |
@@ -47,7 +47,6 @@ live: the tunnel script's own host list went stale, which is why
    | the ZAC PKCE live realm sync | `keycloak.sync_zac_pkce` |
    | (re)creating the pabc-migrations Job | `pabc.apply_migrations`; never an ad-hoc delete + apply |
    | the monitoring-logging CRDs | `crds.apply_monitoring_logging_crds` |
-   | demo/fixture data in a running app | `seed.seed_fixtures` |
    | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `scripts/tests/conftest.py` |
    | PV/PVC pre-provisioning for an app | `templates/storage-hooks.yaml` |
    | a database and user for an app | the init SQL in `templates/postgres` |

@@ -101,8 +101,3 @@ def first_pod(selector: str) -> str:
         msg = f"no Ready pod with labels {selector} in namespace {NAMESPACE}: check `kubectl get pod -l {selector}`"
         raise process.UserError(msg)
     return name
-
-
-def django_shell(pod: str, code: str) -> str:
-    """Stdout of `manage.py shell -c code` in pod."""
-    return kubectl("exec", "-n", NAMESPACE, pod, "--", "python", "/app/src/manage.py", "shell", "-c", code)

@@ -5167,3 +5167,39 @@ cycle stayed at 1051 (G1 keeps up to 70% free heap); G1 with
 gives a 64 MiB heap and the serial GC. Node 14.1 -> 13.7 GiB; suite 111
 passed; baseline refreshed. All settings and their checks are listed in
 `.claude/memory/memory-tuning.md` (new, imported in CLAUDE.md).
+
+## ZAC's docker-compose demo data removed (user: remove A and B)
+
+Read-only audit of the vendored files and fixture contents against this
+repository and podiumd-tests: unused were ZAC's other zaaktypes
+(test-zaaktype-2/-3, bpmn-test-zaaktype-1..5) with test-2/3's deelzaaktype
+link, three demo documents (attachments of the removed productaanvraag demo
+objects), Open Zaak's BAG service (no Open Zaak configuration uses it;
+ExternalsPodiumD gives Open Zaak no BAG service), the five demo objecttypes
+(Boom, Straatverlichting, Melding, Taak, FormIO) with their objects, and two
+Objecttypen fixture tokens; plus `init-zac-database.sql` (a copy of
+`00-create-databases.sql`), `openarchiefbeheer/data.yaml` (named only in a
+comment) and the fake test PDF. podiumd-tests confirmed none is used there.
+
+`templates/postgres/configmap-fixtures.yaml` loads only `01`, `05` and `07`
+of Open Zaak's fixture SQL and filters `07` down to its sequence resets
+(also the notifications UPDATE, which named a fixture service that no longer
+exists and could have emptied Open Zaak's notification setting on a fresh
+cluster). With every fixture objecttype gone, the Objecten/Objecttypen
+fixtures held nothing used: the tokens, services and notifications setting
+come from values.yaml, the admin users from `configuration.superuser`
+(the images' start scripts), and the chart Job creates its objecttypes
+published. So `lib.seed`, `scripts/seed-fixtures`, the three demodata
+files, `manifests.AFTER_SEED_JOBS` (the objecttypen Job no longer has to
+wait for loaddata) and `kube.django_shell` are removed. Found on the way:
+the earlier `021f685e` seed filter missed the classic fixture's
+`object_type_id` fields, so its objects would have failed loaddata on a fresh
+cluster; moot now. NOTES.md rewritten as source, change and consumer per file.
+
+Live: in Open Zaak 3 documents, 7 zaaktypes (126 dependent rows), 25 orphaned
+informatieobjecttypen and 2 besluittypen in catalogus ALG (PTEST untouched),
+the BAG service; in Objecttypen the 5 objecttypes and 2 tokens; in Objecten
+the 5 objecttypes with 16 objects and 20 records. Suite: 110 passed, and the
+memory test flagged Open Inwoner and Postgres, which had grown from
+podiumd-tests' full tier (active page cache, warm workers, no leak); the
+baseline is now refreshed after a full tier (memory-tuning.md).

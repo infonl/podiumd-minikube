@@ -25,9 +25,6 @@ from lib.paths import RELEASE_NAME
 Doc = dict[str, Any]
 
 PABC_MIGRATION_JOB = "pabc-migrations-1"
-# Creates objecttypes with the next primary keys, which the objecttypen
-# fixtures (lib.seed, by primary key) would overwrite on a fresh cluster.
-AFTER_SEED_JOBS = frozenset({"create-required-objecttypen-job"})
 ZAC_UNUSED_OTEL_COLLECTOR = "zac-unused-otel-collector"
 # The apps' BRP/KvK/BAG base URL (values.yaml), and Frank!Gateway's outway, which
 # serves the same paths (podiumd.frankgateway.instances.outway.routes).
@@ -277,7 +274,6 @@ class Render:
     docs: list[Doc]
     large_configmaps: list[Doc]
     crds: list[Doc] = field(default_factory=list[Doc])
-    after_seed: list[Doc] = field(default_factory=list[Doc])
 
     @property
     def manifest(self) -> str:
@@ -297,16 +293,10 @@ def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool =
     if objecten_merged:
         fixup_merged_objecten(docs)
     fix_realm(docs, zac_pkce=zac_pkce)
-    after_seed = [doc for doc in docs if doc.get("kind") == "Job" and name_of(doc) in AFTER_SEED_JOBS]
     return Render(
-        docs=[
-            doc
-            for doc in docs
-            if not _is_large_configmap(doc) and doc.get("kind") != "CustomResourceDefinition" and doc not in after_seed
-        ],
+        docs=[doc for doc in docs if not _is_large_configmap(doc) and doc.get("kind") != "CustomResourceDefinition"],
         large_configmaps=[doc for doc in docs if _is_large_configmap(doc)],
         crds=[doc for doc in docs if doc.get("kind") == "CustomResourceDefinition"],
-        after_seed=after_seed,
     )
 
 

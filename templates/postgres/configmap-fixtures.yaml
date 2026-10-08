@@ -2,10 +2,20 @@
 One ConfigMap per app's fixture SQL directory - mounted separately (see
 deployment.yaml) since each needs to land in its own subdirectory under
 /docker-entrypoint-initdb.d/fixtures/<app>, which a single combined
-ConfigMap volume mount can't do without per-key subPath entries. Open Zaak's
-zgw_consumers services on docker-compose-only hosts (host.docker.internal,
-objecten-api.local) are left out: nothing here reaches or uses them.
+ConfigMap volume mount can't do without per-key subPath entries.
+Left out of ZAC's Open Zaak fixtures, as nothing here uses them: the
+zaaktypes other than zaaktype-test-1 (with test-2/test-3's deelzaaktype
+link), the demo documents of the removed productaanvraag objects, and every
+zgw_consumers service (docker-compose hosts, and a BAG service that no
+Open Zaak configuration uses) with the notifications setting that points at
+one (values.yaml configures Open Zaak's notifications).
 */}}
+{{- $unusedFiles := list
+  "02-setup-zaaktype-test-3.sql" "03-setup-zaaktype-test-2.sql"
+  "04-setup-bpmn-test-zaaktype-1.sql" "06-setup-bpmn-test-zaaktype-2.sql"
+  "08-setup-bpmn-test-zaaktype-3.sql" "09-setup-bpmn-test-zaaktype-4.sql"
+  "10-setup-bpmn-test-zaaktype-5.sql" }}
+{{- $unusedStatements := "(?ms)^(INSERT INTO (catalogi_zaaktype_deelzaaktypen|documenten_enkelvoudiginformatieobject|documenten_enkelvoudiginformatieobjectcanonical|zgw_consumers_service)|UPDATE notifications_api_common_notificationsconfig)\\b.*?;\\n" }}
 {{- range $app := list "openzaak" "openklant" "openarchiefbeheer" }}
 apiVersion: v1
 kind: ConfigMap
@@ -14,7 +24,11 @@ metadata:
   labels:
     {{- include "podiumd-minikube.labels" $ | nindent 4 }}
 data:
-  {{- $config := ($.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/%s/*.sql" $app)).AsConfig }}
-  {{- regexReplaceAll "(?m)^[ \\t]*INSERT INTO zgw_consumers_service .*'http://(host\\.docker\\.internal|objecten-api\\.local)[:/][^\\n]*\\n" $config "" | nindent 2 }}
+  {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/%s/*.sql" $app) }}
+  {{- if not (has (base $path) $unusedFiles) }}
+  {{ base $path }}: |
+    {{- regexReplaceAll $unusedStatements ($.Files.Get $path) "" | nindent 4 }}
+  {{- end }}
+  {{- end }}
 ---
 {{- end }}

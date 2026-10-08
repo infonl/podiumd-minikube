@@ -3,12 +3,12 @@ PKCE (RFC 9700) verification for every Keycloak client this project wires
 up an OIDC login for - see values.yaml's own
 podiumd.pabc.settings.oidc.pkceEnabled, podiumd.openzaak.configuration.data,
 and podiumd.zac.image.tag comments, and
-vendor/dimpact-zaakafhandelcomponent/NOTES.md's entries on all three, for
+plan.md's PKCE sections, for
 the full story of what's enabled, what isn't, and why.
 
 zac is the deliberate negative case here *by default* - its client's
 pkce.code.challenge.method is kept "" (ZAC itself doesn't support PKCE
-with whatever zac chart podiumd 4.8.x bundles, see NOTES.md). Bumping zac
+with whatever zac chart podiumd 4.8.x bundles, see plan.md). Bumping zac
 to chart 1.0.289/app 5.4.2 (past PR #6490, "feat: add configurable PKCE
 support for the OIDC authorization code flow") flips that - confirmed
 live that ZAC's own container then genuinely sends a code_challenge
@@ -69,7 +69,7 @@ PABC_PASSWORD = "pabcadmin"
 
 # The Keycloak clientId for each of the seven Django-based ZGW components -
 # matches vendor/dimpact-zaakafhandelcomponent/keycloak/
-# zaakafhandelcomponent-realm.json exactly (see NOTES.md's own entry on
+# zaakafhandelcomponent-realm.json exactly (see plan.md's PKCE sections on
 # these seven clients for why they exist ahead of most of them actually
 # being wired up to an OIDC admin login yet).
 DJANGO_APP_CLIENT_IDS = (

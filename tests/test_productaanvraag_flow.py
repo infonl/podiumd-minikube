@@ -4,9 +4,8 @@ Objects API -> Open Notificaties -> ZAC creating a zaak of zaaktype-test-1
 automatically, with no manual post-deploy step. This is the same flow
 verified live (by hand) while building it - see values.yaml's own
 podiumd.zac.productaanvraag comment,
-templates/{zac,openformulieren}/productaanvraag-*.yaml, and
-scripts/seed-fixtures's own objecttypen loaddata step for the pieces
-this module exercises, and .claude/plans/plan.md's own "productaanvraag
+templates/{zac,openformulieren}/productaanvraag-*.yaml and podiumd's
+create-required-objecttypen Job for the pieces this module exercises, and .claude/plans/plan.md's own "productaanvraag
 flow" entry for the story of how each piece was found and wired.
 
 Every piece here is provisioned purely from values.yaml + this chart's own
@@ -63,9 +62,8 @@ BEHEERDER_PASSWORD = "beheerder1newiam"
 
 # The two custom Jobs this project adds for the pieces no bundled
 # setup_configuration mechanism covers (see each one's own template header) -
-# checked by name below. The third gap (the productaanvraag objecttype's
-# own schema) isn't a Job at all - it's seeded by
-# scripts/seed-fixtures, checked directly further down instead
+# checked by name below. The productaanvraag objecttype comes from podiumd's
+# create-required-objecttypen Job, checked further down
 # (test_productaanvraag_objecttype_is_registered_and_published). The four
 # subchart-bundled config Jobs (objecten-config/objecttypen-config/
 # opennotificaties-config/openformulieren-config) are NOT included here
@@ -226,9 +224,8 @@ def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement():
 
 def test_productaanvraag_objecttype_is_registered_and_published(edge_ip, enabled_profiles):
     """
-    scripts/seed-fixtures's own objecttypen loaddata (+ its
-    draft-to-published fixup), verified against the real Objecttypen API
-    rather than just trusting the script's exit code.
+    podiumd's create-required-objecttypen Job (it creates the version
+    published), verified against the real Objecttypen API.
 
     Host header depends on shape: classic has a separate objecttypen
     Ingress (OBJECTTYPEN_HOST); merged has no objecttypen Ingress at all -
@@ -267,9 +264,7 @@ def test_productaanvraag_objecttype_is_registered_and_published(edge_ip, enabled
     )
     assert versions.status_code == 200
     assert any(v["status"] == "published" for v in versions.json()["results"]), (
-        "expected at least one published version - "
-        "scripts/seed-fixtures's own fixup should have flipped every draft "
-        "version this fixture defines"
+        "expected a published version from create-required-objecttypen-job"
     )
 
 

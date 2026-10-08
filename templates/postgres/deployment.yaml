@@ -37,10 +37,6 @@ spec:
               value: postgres
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
-            - name: BAG_API_CLIENT_MP_REST_URL
-              value: {{ .Values.postgres.bagApiClientUrl | quote }}
-            - name: BAG_API_KEY
-              value: {{ .Values.postgres.bagApiKey | quote }}
             - name: SEED_OPENARCHIEFBEHEER
               # Reads podiumd.openarchiefbeheer.enabled specifically, not
               # the top-level openarchiefbeheer.enabled flag next to it -

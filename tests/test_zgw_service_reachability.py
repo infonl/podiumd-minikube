@@ -1,18 +1,12 @@
 """
-Confirms every zgw_consumers.Service row seeded into any app's own
-database (both the classic and merged/openobject fixture shapes - see
-scripts/seed-fixtures) actually has a reachable api_root, from
+Confirms every zgw_consumers.Service row in an app's own database
+(setup_configuration, both the classic and merged objecten shapes)
+actually has a reachable api_root, from
 inside the cluster - the same place that app itself makes requests to it.
 
-Exists because both vendored fixtures (objecten/demodata.json and
-openobject/demodata.json) previously seeded stale docker-compose-era
-values - a nonexistent hostname, and a port the target Service never
-listens on (see values.yaml's Service definitions: only `port: 80` is
-declared, `targetPort` forwards internally to each app's real 8000, so
-port 8000 is never reachable through the Service itself) - that
-`loaddata` accepted without complaint. Fixture rows load successfully
-regardless of whether the URL inside them resolves to anything; this is
-the regression check for that class of bug going unnoticed again.
+A service row is stored whether or not its URL resolves (ZAC's old
+fixtures once held a docker-compose hostname and an unreachable port);
+this is the regression check for that class of bug.
 
 Covers every app that registers its own zgw_consumers.Service rows via
 values.yaml's `configuration.data` mechanism, not just objecten - found
@@ -134,7 +128,7 @@ def test_zgw_services_seeded(app_pod, zgw_services):
     """Sanity check the fixture actually loaded - an empty result here
     means the reachability test below would trivially pass on nothing."""
     app, _ = app_pod
-    assert zgw_services, f"no zgw_consumers.Service rows found for '{app}' - fixture not seeded?"
+    assert zgw_services, f"no zgw_consumers.Service rows found for '{app}': check its configuration Job"
 
 
 def test_zgw_service_api_roots_reachable(app_pod, zgw_services):

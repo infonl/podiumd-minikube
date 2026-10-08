@@ -14,7 +14,7 @@ zac:
   enabled: true # "zac" profile - on by default so the app is visible
   # Off by default. Gates the teammate's zac 5.4.2/chart 1.0.289 PKCE
   # experiment (see podiumd.zac.image.tag's own comment below,
-  # scripts/lib/chart.py, and NOTES.md's PKCE entry for
+  # scripts/lib/chart.py, and plan.md's PKCE sections for
   # the full history) - keeps the experiment fully opt-in instead of
   # silently required just because this values.yaml carries the override.
   # Turning this on ALSO requires the currently-selected podiumd version
@@ -109,16 +109,6 @@ monitoringLogging:
   # server-side-apply path for large ConfigMaps like the bundled Grafana
   # dashboards makes safely pruning that kind harder, not done here).
   enabled: false
-
-# -----------------------------------------------------------------------
-# Raw templates this chart defines itself (Postgres/Redis/Keycloak/Solr/
-# WireMock) - see build order step 2.
-# -----------------------------------------------------------------------
-postgres:
-  # Referenced by the openzaak fixture SQL as psql -v variables, matching
-  # docker-compose.yaml's openzaak-database service defaults exactly.
-  bagApiClientUrl: https://api.bag.kadaster.nl/lvbag/individuelebevragingen/v2/
-  bagApiKey: please-request-a-bag-api-key
 
 # -----------------------------------------------------------------------
 # The podiumd dependency and everything nested inside it.
@@ -301,7 +291,7 @@ podiumd:
     # cluster).
     #
     # The teammate who built this confirmed it live end to end at the
-    # time (see NOTES.md's PKCE entry), against a local chart checkout
+    # time (see plan.md's PKCE sections), against a local chart checkout
     # that isn't currently available - re-verifying the *on* state of
     # this switch (as opposed to the switch mechanism itself, which is:
     # each piece above tested individually, and zac.experimentalPkce's
@@ -334,8 +324,8 @@ podiumd:
       # value - scripts/lib/manifests.py and
       # scripts/lib/keycloak.py both key off
       # zac.experimentalPkce for that instead (see podiumd.zac.image.tag's
-      # own comment above for the full mechanism, and NOTES.md's PKCE
-      # entry for the incident that requirement caused once already, back
+      # own comment above for the full mechanism, and plan.md's PKCE
+      # sections for the incident that requirement caused once already, back
       # when it was flipped on with no matching PKCE-aware chart deployed).
       enablePkce: true
     keycloak:
@@ -591,8 +581,8 @@ podiumd:
       # see vendor/dimpact-zaakafhandelcomponent/keycloak/
       # zaakafhandelcomponent-realm.json's own "openzaak" client for the
       # Keycloak side (secret must match
-      # configuration.secrets.keycloak_client_secret below) and NOTES.md's
-      # own entry on it for the rollout rationale.
+      # configuration.secrets.keycloak_client_secret below) and plan.md's
+      # PKCE sections for the rollout rationale.
       #
       # PKCE (RFC 9700 requires it for every authorization-code-flow
       # client): NOT enabled here, and the Keycloak client's own
@@ -881,32 +871,11 @@ podiumd:
         # db3.
         brokerUrl: redis://redis:6379/5
         resultBackend: redis://redis:6379/5
-    # Compose's openzaak.local service copies a vendored test PDF into
-    # /app/private-media/uploads/2023/{10,11,12}/ before starting (see
-    # copy-test-pdf-and-start-openzaak.sh, referenced by the
-    # 07-setup-zac-config-after.sql fixture). This chart has no
-    # initContainers/extraInitContainers support at all (checked its
-    # deployment.yaml directly), but extraVolumes/extraVolumeMounts do exist
-    # and are tpl-rendered - mounting the same ConfigMap-backed file via
-    # subPath at all three target paths achieves the same result without
-    # needing an initContainer.
     extraVolumes:
-      - name: fake-test-document
-        configMap:
-          name: openzaak-fake-test-document
       - name: no2fa-settings
         configMap:
           name: openzaak-no2fa-settings
     extraVolumeMounts:
-      - name: fake-test-document
-        mountPath: /app/private-media/uploads/2023/10/fake-test-document.pdf
-        subPath: fake-test-document.pdf
-      - name: fake-test-document
-        mountPath: /app/private-media/uploads/2023/11/fake-test-document.pdf
-        subPath: fake-test-document.pdf
-      - name: fake-test-document
-        mountPath: /app/private-media/uploads/2023/12/fake-test-document.pdf
-        subPath: fake-test-document.pdf
       - name: no2fa-settings
         subPath: docker_no2fa.py
         mountPath: /app/src/openzaak/conf/docker_no2fa.py
@@ -1443,8 +1412,8 @@ podiumd:
     # Confluence) - deliberately the latest *3.x* patch, not that release's
     # own 4.1.1: 4.x merges Objecttypen API into Objecten API entirely (a
     # real classic->merged "Open Object" migration - see
-    # scripts/lib/chart.py and scripts/seed-fixtures's own comments
-    # for the shape this project would need to switch to first), not
+    # scripts/lib/chart.py for the shape this project would need to switch
+    # to first), not
     # something to fold into a routine version bump. docker-compose.yaml
     # itself has already fully moved to the merged open-object:4.0.2 image
     # (no classic objecten/objecttypen image pins left there at all) - this
@@ -1490,10 +1459,6 @@ podiumd:
         username: admin
         password: admin
         email: admin@example.com
-      # Identifiers equal those of the rows scripts/seed-fixtures loads from
-      # objecten/demodata.json, so this Job's re-run on every deploy updates
-      # those rows instead of colliding with them (duplicate token).
-      #
       # objecttypes-api: dotted Service DNS form, not bare "objecttypen" -
       # same URLValidator gotcha as ZAC's own zgwApis.url above (Django
       # rejects single-label hostnames on any field that round-trips a URL
@@ -1506,13 +1471,10 @@ podiumd:
       # vng_api_common_credentials entry registered on opennotificaties's
       # own configuration.data above.
       #
-      # objecttypes_config: registers (not creates - the schema itself is
-      # seeded into Objecttypen API by scripts/seed-fixtures's own
-      # objecttypen loaddata call, since Objecttypen API's own
-      # setup_configuration has no step for creating an objecttype/version,
-      # only tokens - confirmed by reading its bundled
-      # objecttypes/setup_configuration/steps/ directly) this Objects API's
-      # own reference to that objecttype, by UUID + which service serves it.
+      # objecttypes_config: registers this Objects API's reference to each
+      # objecttype by UUID; podiumd.objecttypen.create_required_objecttypen_job
+      # creates the objecttypes themselves (Objecttypen's setup_configuration
+      # only has a step for tokens).
       #
       # tokenauth: fakeZacObjectsToken matches podiumd.zac.objectenApi.token
       # above (zac.local's own existing config, never previously valid since
@@ -1753,17 +1715,9 @@ podiumd:
     configuration:
       enabled: true
       job:
-        # Only creates the two read tokens below - Objecttypen API's own
-        # bundled setup_configuration has no step for creating an
-        # objecttype/version itself (confirmed by reading its bundled
-        # objecttypes/setup_configuration/steps/ directly: token_auth is the
-        # only one registered). The productaanvraag objecttype's own schema
-        # is seeded separately, by scripts/seed-fixtures's own
-        # objecttypen loaddata call (already covers the vendored
-        # objecttypen/demodata.json fixture this schema lives in - that
-        # script also flips every version it loads from draft to published,
-        # since Objects API's own object-create validation only resolves a
-        # published version).
+        # Only creates the tokens below: Objecttypen's setup_configuration has
+        # no step for objecttypes; create_required_objecttypen_job creates them,
+        # published.
         enabled: true
       # No compose equivalent to match (objecttypen isn't part of
       # dimpact-zaakafhandelcomponent's docker-compose stack at all - see
@@ -2181,15 +2135,9 @@ podiumd:
     configuration:
       job:
         enabled: true # compose's openarchiefbeheer-web-init runs the equivalent setup-configuration step for real, unlike the other apps' fixture-import containers - replicated here via configuration.data below
-      # Matches compose's vendored data.yaml (ZGW consumer services
-      # pointing at ZAC's own openzaak client credentials), with API roots
-      # repointed from openzaak.local:8000 to the in-cluster Service
-      # address - see
-      # vendor/dimpact-zaakafhandelcomponent/openarchiefbeheer/NOTES entry.
-      # oidc_db_config_enable stays false, matching the vendored file - this
-      # app's OIDC admin login isn't configured/needed for the admin login
-      # form compose actually exercises (see settings.djangoSettingsModule
-      # override below for how that login form is reached instead).
+      # ZGW consumer services with ZAC's Open Zaak client credentials, as
+      # ZAC's docker-compose setup. oidc_db_config_enable stays false: the
+      # admin login form is reached through settings.djangoSettingsModule.
       data: |-
         zgw_consumers_config_enable: true
         zgw_consumers:
@@ -2253,9 +2201,7 @@ podiumd:
     # module, which pulls in django-debug-toolbar (not installed in this
     # production image) - so a small custom settings module that mirrors
     # just the DISABLE_2FA handling, without the dev-only dependencies,
-    # mounted via the same ConfigMap+extraVolumes+extraVolumeMounts pattern
-    # already used for
-    # openzaak's fake-test-document.pdf.
+    # mounted with a ConfigMap and extraVolumes/extraVolumeMounts.
     settings:
       djangoSettingsModule: openarchiefbeheer.conf.docker_no2fa
       secretKey: oabSecretKey

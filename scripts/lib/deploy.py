@@ -25,7 +25,6 @@ from lib import polling
 from lib import postgres
 from lib import process
 from lib import prune
-from lib import seed
 from lib import values
 from lib.paths import NAMESPACE
 from lib.paths import RELEASE_NAME
@@ -86,7 +85,7 @@ def expected_storage_errors(storage: manifests.Render) -> int:
 
 def jobs(render: manifests.Render) -> list[str]:
     """The Jobs in render (all idempotent; pabc-migrations is not in a render)."""
-    return [manifests.name_of(doc) for doc in [*render.docs, *render.after_seed] if doc.get("kind") == "Job"]
+    return [manifests.name_of(doc) for doc in render.docs if doc.get("kind") == "Job"]
 
 
 def _rerun_jobs(render: manifests.Render) -> None:
@@ -192,18 +191,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     print("\nApplying pabc-migrations (guarded - see scripts/lib/pabc.py)...")
     pabc.apply_migrations(force=False)
     print(f"\nPruning {', '.join(prune.PRUNABLE_KINDS)} not part of this render...")
-    prune.prune([*render.docs, *render.large_configmaps, *render.after_seed], force=force_prune)
-
-    # Live state after pruning decides, so a profile just switched off is not seeded.
-    print()
-    if kube.exists("deployment/objecten"):
-        print("Seeding fixture data (see scripts/lib/seed.py)...")
-        seed.seed_fixtures(merged=chart.objecten_shape().merged)
-    else:
-        print("'objecten' profile not deployed - skipping seeding.")
-    if render.after_seed:
-        print("\nApplying the Job(s) that must run after seeding...")
-        kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(render.after_seed))
+    prune.prune([*render.docs, *render.large_configmaps], force=force_prune)
     _wait_ready(render)
     print("\nDone. Next: ./scripts/setup-tunnel for external reachability, or run the suite in tests/ to verify.")
 
