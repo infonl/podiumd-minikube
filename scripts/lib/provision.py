@@ -78,8 +78,10 @@ def _load(image: str) -> process.ProcessError | None:
     return None
 
 
-def _in_batches(images: list[str], label: str, action: Callable[[str], process.ProcessError | None]) -> None:
-    with ThreadPoolExecutor(max_workers=BATCH_SIZE) as pool:
+def _in_batches(
+    images: list[str], label: str, action: Callable[[str], process.ProcessError | None], workers: int = BATCH_SIZE
+) -> None:
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         for image, error in zip(images, pool.map(action, images), strict=True):
             if error:
                 print(f"WARNING: {label} {image} failed: {error}", file=sys.stderr)
@@ -98,7 +100,11 @@ def load_images(images: list[str]) -> None:
         print(f"Pulling batch: {' '.join(batch)}")
         _in_batches(batch, "pulling", _pull)
         print(f"Loading batch into minikube: {' '.join(batch)}")
-        _in_batches(batch, "loading", _load)
+        # One at a time: parallel loads into containerd lose images without an error.
+        _in_batches(batch, "loading", _load, workers=1)
+    still_missing = missing_images(images, process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines())
+    if still_missing:
+        print(f"WARNING: not in minikube after loading: {' '.join(still_missing)}", file=sys.stderr)
 
 
 def provision() -> None:
