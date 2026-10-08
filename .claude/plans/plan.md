@@ -5309,3 +5309,18 @@ nothing, and KISS's Elasticsearch keeps 860 MiB anonymous memory (about 600
 MiB outside the heap: direct memory, threads, metaspace), so 1Gi would leave
 164 MiB of headroom. Baseline refreshed after the tier: containers 12990 ->
 12884 MiB.
+
+## MALLOC_ARENA_MAX=2 (user: "do MALLOC_ARENA_MAX after the Elasticsearch round")
+
+glibc gives a threaded process up to 8 malloc arenas per CPU; podiumd runs
+uWSGI with 2-4 threads, Celery workers and JVMs are threaded too, and the
+fragmented arenas stay resident. `MALLOC_ARENA_MAX=2` is now one more entry
+in `manifests.CAPACITY_ENV`, so every container gets it (musl images and
+Go ignore it); no reference project and no podiumd chart sets it, and it
+changes no behaviour. After the deploy and podiumd-tests' next full tier
+(14:06-14:13 UTC, 274 passed), settled: containers 12884 -> 12466 MiB, node
+15790 -> 15391 MiB; Open Formulieren worker -98, Open Zaak worker -83, the
+23 Maykin containers 6306 -> 6012 MiB together. Caveat: the deploy restarted
+every pod, while the baseline's pods had run longer; part of the drop may be
+fragmentation that has not built up yet. The memory test against the
+refreshed baseline will show any regrowth.

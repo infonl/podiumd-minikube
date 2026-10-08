@@ -34,13 +34,15 @@ OUTWAY_URL = f"http://{OUTWAY_SERVICE}:9080/"
 # ECK resources; ECK renders their StatefulSets and Deployments itself.
 ECK_KINDS = ("Elasticsearch", "Kibana")
 # Laptop budget: these runtimes size themselves by the CPUs they see (all of the
-# host's) and keep memory for throughput; each variable is ignored by every other
-# runtime. .NET: workstation GC without the background GC, compacting more.
+# host's) and keep memory for throughput; other runtimes ignore the variables.
+# .NET: workstation GC without the background GC, compacting more. glibc: up to
+# 8 malloc arenas per CPU in threaded processes (uWSGI threads, JVMs).
 CAPACITY_ENV = {
     "DOTNET_gcServer": "0",
     "DOTNET_gcConcurrent": "0",
     "DOTNET_GCConserveMemory": "7",
     "APISIX_WORKER_PROCESSES": "2",
+    "MALLOC_ARENA_MAX": "2",
 }
 GO_MEMORY_LIMIT = "GOMEMLIMIT"
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
