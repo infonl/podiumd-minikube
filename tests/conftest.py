@@ -34,6 +34,11 @@ CA_FILE = str(Path(__file__).resolve().parents[1] / ".pki" / "ca.crt")
 os.environ["REQUESTS_CA_BUNDLE"] = CA_FILE
 
 
+def pytest_addoption(parser):
+    """--update-memory-baseline: test_memory writes the measured memory to memory-baseline.json."""
+    parser.addoption("--update-memory-baseline", action="store_true", help="rewrite tests/memory-baseline.json")
+
+
 def kubectl(*args):
     """Run kubectl and return stdout, raising if it fails."""
     result = subprocess.run(["kubectl", *args], capture_output=True, text=True, timeout=30)

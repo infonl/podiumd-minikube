@@ -4927,3 +4927,25 @@ stop` stops the tunnel and removes the route. Found live: it first also ran
 keeps running, so stop hung; dropped. Verified live: stop removed the route
 and the IP, start brought both back (zac.local 302), the tunnel in the
 background without sudo.
+
+## Memory baseline and budget test
+
+`tests/test_memory.py` records and checks memory (user's request: a reference
+to check improvements and regressions against). It reads the node's use from
+`docker stats` and each container's working set from `crictl stats` in the
+node, keyed `namespace/workload/container`, and fails when the node is over
+the laptop budget (16 GiB default, 20 GiB with any optional profile) or a
+container is more than 20% + 64 MiB above `tests/memory-baseline.json`.
+`--update-memory-baseline` rewrites that file.
+
+First baseline, 2026-10-08, `deploy --full` (OMC off) plus podiumd-tests'
+bootstrap objects, right after its bootstrap: node 22.5 GiB, containers
+19.9 GiB over 69 containers. The budget test fails: 2.5 GiB over the 20 GiB
+budget. Largest: KISS Elasticsearch 1.8 GiB (heap sized from its 2Gi
+limit), Open Inwoner Elasticsearch 1.5 GiB, Open Inwoner low-latency worker
+1.2 GiB (Celery -c 8), ZAC 1.1 GiB, Open Inwoner 1.0 GiB (4 uWSGI processes),
+Open Formulieren 0.9 GiB and its worker 0.8 GiB, Open Zaak worker 0.7 GiB
+(Celery -c 4, the chart default; ExternalsPodiumD sets none), kube-apiserver
+0.8 GiB, Kibana 0.6 GiB.
+Per-process PSS: a Celery prefork child 100-195 MiB, a uWSGI process
+160-240 MiB.

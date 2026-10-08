@@ -64,6 +64,7 @@ exclusive implementations of the same profile, so `test_metrics.py` and
 | `test_monitoring_logging.py` | Same shape of checks as `test_metrics.py`, against the `monitoring-logging` dependency's own Grafana/Prometheus/Tempo instead, plus Loki actually holding this namespace's forwarded pod logs (proves Alloy's log-collection pipeline works, not just that Loki answers queries) - only runs when `monitoringLogging.enabled=true` |
 | `test_mailpit.py` | A real email sent via `send_mail()` from a component (openzaak) actually arrives in mailpit - confirmed both via its API and via its real (headless Chromium) web UI, not just that mailpit's root path returns 200 |
 | `test_pabc_migrations_guard.py` | `scripts/apply-pabc-migrations` actually refuses to recreate the (non-idempotent) pabc-migrations Job when PABC's database already has data |
+| `test_memory.py` | The minikube node within the laptop budget (16 GiB default profile, 20 GiB with any optional profile), and no container more than 20% + 64 MiB above `memory-baseline.json`; `--update-memory-baseline` rewrites that file |
 
 ## Known caveats
 

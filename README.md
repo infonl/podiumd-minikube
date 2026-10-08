@@ -119,9 +119,16 @@ No `metrics-server` is installed, so `kubectl top` isn't available — use
 `docker stats minikube --no-stream` (real usage) and `kubectl describe
 node minikube` (requested/limited).
 
-With Open Inwoner, KISS and ITA (both Elasticsearch clusters, Kibana) a settled
-`deploy --full` uses 18.4 GiB of a 32 GiB cap; a 16 GiB cap thrashes.
-Earlier, without them, idle-ish, 20Gi-capped container:
+`tests/memory-baseline.json` holds the last reference measurement (node
+and working set per container); `tests/test_memory.py` checks the budget and
+regressions against it. Refresh it after an intended change, on a settled
+cluster:
+
+```bash
+pytest tests/test_memory.py --update-memory-baseline
+```
+
+Earlier, without Open Inwoner, KISS and ITA, idle-ish, 20Gi-capped container:
 
 | | `monitoringLogging.enabled=true` | `=false` |
 |---|---|---|
