@@ -158,6 +158,18 @@ def test_limit_runtimes_adds_capacity_env_unless_the_container_sets_it():
     assert docs[2] == {"kind": "Service", "spec": {}}
 
 
+def test_limit_runtimes_reaches_the_containers_of_eck_pod_templates():
+    docs: list[manifests.Doc] = [
+        {"kind": "Elasticsearch", "spec": {"nodeSets": [{"name": "default", "podTemplate": {"spec": {"containers": [{"name": "elasticsearch"}]}}}]}},
+        {"kind": "Kibana", "spec": {"podTemplate": {"spec": {"containers": [{"name": "kibana"}]}}}},
+    ]  # fmt: skip
+    manifests.limit_runtimes(docs)
+    elasticsearch = docs[0]["spec"]["nodeSets"][0]["podTemplate"]["spec"]["containers"][0]["env"]
+    kibana = docs[1]["spec"]["podTemplate"]["spec"]["containers"][0]["env"]
+    assert {"name": "MALLOC_ARENA_MAX", "value": "2"} in elasticsearch
+    assert {"name": "MALLOC_ARENA_MAX", "value": "2"} in kibana
+
+
 def test_limit_runtimes_gives_containers_with_a_memory_limit_gomemlimit():
     docs: list[manifests.Doc] = [
         {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [

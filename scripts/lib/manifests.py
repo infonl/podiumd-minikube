@@ -143,6 +143,19 @@ def _pod_spec(doc: Doc) -> Doc | None:
     return node if path else None
 
 
+def _runtime_pod_specs(doc: Doc) -> list[Doc]:
+    """doc's pod specs: a workload's or Job's, and the podTemplate specs ECK expands into its own StatefulSets."""
+    spec = _pod_spec(doc)
+    if spec is not None:
+        return [spec]
+    kind, body = doc.get("kind"), section(doc, "spec")
+    node_sets: list[Doc] = (body.get("nodeSets") or []) if kind == "Elasticsearch" else []
+    templates = [section(node_set, "podTemplate") for node_set in node_sets]
+    if kind == "Kibana":
+        templates = [section(body, "podTemplate")]
+    return [section(template, "spec") for template in templates]
+
+
 def trust_ca(docs: list[Doc]) -> None:
     """Mounts the local CA (pki.TRUST_CONFIGMAP) in every workload and Job, with its env.
 
@@ -167,15 +180,14 @@ def trust_ca(docs: list[Doc]) -> None:
 
 
 def limit_runtimes(docs: list[Doc]) -> None:
-    """Adds CAPACITY_ENV to every container of every workload and Job, and GOMEMLIMIT where a memory limit is set.
+    """Adds CAPACITY_ENV to every container of every workload, Job and ECK podTemplate, and GOMEMLIMIT where limited.
 
     Without GOMEMLIMIT the Go runtime only collects when its heap has doubled
     and runs into the OOM killer under a peak (Tempo, at 256Mi); the value
     comes from the container's own limit through the downward API.
     """
     for doc in docs:
-        spec = _pod_spec(doc)
-        for container in _containers(spec) if spec is not None else []:
+        for container in [c for spec in _runtime_pod_specs(doc) for c in _containers(spec)]:
             add_env(container, CAPACITY_ENV)
             if section(section(container, "resources"), "limits").get("memory"):
                 limit = {"resourceFieldRef": {"containerName": container["name"], "resource": "limits.memory"}}

@@ -25,7 +25,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 |---|---|---|---|
 | Celery workers (Open Zaak, Open Formulieren, Open Inwoner incl. low-latency) | concurrency 1 | `values.yaml` `worker.concurrency`; Open Inwoner: `extraEnvVars` `CELERY_WORKER_CONCURRENCY` (its chart ignores `worker.concurrency`) | -2.3 GiB |
 | uWSGI (all Maykin apps) | 2 processes | `settings.uwsgi.processes`; Open Archiefbeheer: `extraEnvVars` `UWSGI_PROCESSES` (its chart ignores the key) | -1.3 GiB |
-| Elasticsearch (KISS, Open Inwoner) | heap 256m, limit 1536Mi | `values.yaml` nodeSets `podTemplate` `ES_JAVA_OPTS`; old gen peaks under 100 MiB. KISS keeps about 600 MiB outside the heap, so 1Gi leaves too little room (it OOMKilled at 512m) | -1.2 GiB (heap 512m), then 1143 -> 862 and 955 -> 669 MiB (256m) |
+| Elasticsearch (KISS, Open Inwoner) | heap 256m, `node.processors: 1`, limit 1536Mi; the capacity variables reach ECK pod templates through `limit_runtimes` | `values.yaml` nodeSets `podTemplate` `ES_JAVA_OPTS`; old gen peaks under 100 MiB. KISS keeps about 600 MiB outside the heap, so 1Gi leaves too little room (it OOMKilled at 512m) | -1.2 GiB (heap 512m), then 1143 -> 862 and 955 -> 669 MiB (256m), then KISS 994 -> 697 MiB, 186 -> 60 threads (processors 1 and MALLOC_ARENA_MAX) |
 | .NET (brp-personen-mock, contact-web, ita-web, pabc, adapter) | workstation GC, no background GC, `GCConserveMemory` 7 | `manifests.CAPACITY_ENV`, added to every container by `manifests.limit_runtimes` | -0.9 GiB (workstation GC), then -0.11 GiB |
 | Go runtimes with a memory limit (Tempo, Grafana, Prometheus, otel-collector, OpenBao, etcd, Mailpit, ECK operator) | `GOMEMLIMIT` = the container's memory limit (downward API `resourceFieldRef: limits.memory`) | `manifests.limit_runtimes`, for every container with a memory limit (other runtimes ignore it) | Tempo under a full tier: OOMKilled twice at 256Mi without it, peak 156 MiB and no restarts with it |
 | glibc malloc (Python, JVM, .NET; musl images ignore it) | `MALLOC_ARENA_MAX=2` | `manifests.CAPACITY_ENV` | after a full tier: containers 12884 -> 12466 MiB; Open Formulieren worker -98, Open Zaak worker -83, the 23 Maykin containers -294 MiB |
@@ -55,6 +55,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 - Celery: `ps`/`/proc/*/cmdline` in the worker shows `-c 1`; uWSGI: count the
   `uwsgi` processes in the web pod (master + http + 2 workers = 4).
 - Control plane: `kubectl -n kube-system get pod kube-apiserver-minikube etcd-minikube -o jsonpath='{..env}'` shows `GOGC=50`; kube-apiserver's `/metrics` `go_gc_gogc_percent` is 50.
+- Elasticsearch: `_nodes/os` shows `allocated_processors` 1; the java process' environ has `MALLOC_ARENA_MAX=2` (ECK builds the pods, so a fixup that misses its pod templates misses them).
 - .NET: the env of the five apps has `DOTNET_gcServer=0`,
   `DOTNET_gcConcurrent=0`, `DOTNET_GCConserveMemory=7`.
 - Per-process cost: PSS from `/proc/<pid>/smaps_rollup` (a Celery child

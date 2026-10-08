@@ -5350,3 +5350,17 @@ design); all came back Ready. After podiumd-tests' next full tier
 containers 12692 -> 12156 MiB. Caveat: kube-apiserver had run for about two
 hours before and grew over that time (848 -> 913 MiB); the memory test
 against the refreshed baseline shows any regrowth.
+
+## Elasticsearch: processors 1, capacity variables in ECK pods (user: "go ahead with 1")
+
+KISS's Elasticsearch grew to 994 MiB with 36 documents: the server JVM had
+909 MiB anonymous memory (heap 256 committed, non-heap 203, direct 25) and
+186 threads, plus the 8.x launcher JVM (123 MiB RSS, already -Xmx64m serial).
+`limit_runtimes` only walked workloads and Jobs, so MALLOC_ARENA_MAX and the
+other capacity variables never reached the pods ECK builds from an
+Elasticsearch or Kibana podTemplate; it now walks those templates too.
+Both nodeSets set `node.processors: 1` (the JVM saw 6 CPUs; thread pools
+are sized from it). After podiumd-tests' next full tier (15:00-15:08 UTC,
+284 passed): KISS 994 -> 697 MiB, 186 -> 60 threads; Open Inwoner 679 -> 656
+MiB; no restarts. Same tier: kube-apiserver 421 -> 577 MiB, regrowth after
+its GOGC restart as expected; still well under the 913 MiB before GOGC.
