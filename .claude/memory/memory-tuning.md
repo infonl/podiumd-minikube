@@ -13,7 +13,10 @@ prevent regressions; each setting was found and measured separately.
 `tests/test_memory.py` (part of the live suite): node within the budget, no
 container more than 20% + 64 MiB above `tests/memory-baseline.json`. Refresh
 the baseline only after an intended change, on a settled cluster (it refuses
-while a container is younger than 5 minutes):
+while a container is younger than 5 minutes), and after podiumd-tests' full
+tier has run: the working set includes active page cache and warm worker
+memory, so a baseline taken after our suite alone is too low (Open Inwoner
+473 -> 758 MiB, Postgres 180 -> 337 MiB after a full tier, no leak):
 `pytest tests/test_memory.py --update-memory-baseline`.
 
 ## Settings
