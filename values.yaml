@@ -943,6 +943,42 @@ podiumd:
               token: openklantOpenarchiefbeheerToken
               contact_person: Open Archiefbeheer
               email: openarchiefbeheer@example.com
+
+        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+          - identifier: keycloak-provider
+            oidc_use_nonce: true
+            oidc_nonce_size: 32
+            oidc_state_size: 32
+            endpoint_config:
+              oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+          - identifier: admin-oidc
+            enabled: true
+            oidc_rp_client_id: openklant
+            oidc_rp_client_secret: keycloakOpenklantClientSecret
+            oidc_rp_scopes_list:
+            - openid
+            - email
+            - profile
+            oidc_rp_sign_algo: RS256
+            oidc_provider_identifier: keycloak-provider
+            userinfo_claims_source: id_token
+            options:
+              user_settings:
+                claim_mappings:
+                  username:
+                  - sub
+                  first_name:
+                  - given_name
+                  email:
+                  - email
+                username_case_sensitive: true
+              groups_settings:
+                sync: false
+                make_users_staff: true
       # No compose equivalent to match (compose never sets openklant
       # SUPERUSER credentials either) and, unlike openzaak/opennotificaties/
       # objecttypen/openformulieren, this chart's values.yaml has no
@@ -1649,6 +1685,42 @@ podiumd:
               token: objectenOpenarchiefbeheerToken
               contact_person: Open Archiefbeheer
               email: openarchiefbeheer@example.com
+
+        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+          - identifier: keycloak-provider
+            oidc_use_nonce: true
+            oidc_nonce_size: 32
+            oidc_state_size: 32
+            endpoint_config:
+              oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+          - identifier: admin-oidc
+            enabled: true
+            oidc_rp_client_id: objecten
+            oidc_rp_client_secret: keycloakObjectenClientSecret
+            oidc_rp_scopes_list:
+            - openid
+            - email
+            - profile
+            oidc_rp_sign_algo: RS256
+            oidc_provider_identifier: keycloak-provider
+            userinfo_claims_source: id_token
+            options:
+              user_settings:
+                claim_mappings:
+                  username:
+                  - sub
+                  first_name:
+                  - given_name
+                  email:
+                  - email
+                username_case_sensitive: true
+              groups_settings:
+                sync: false
+                make_users_staff: true
     # See templates/objecten/configmap-no-solo-cache-settings.yaml's own
     # header for why this shim exists (django-solo's own cache for
     # NotificationsConfig intermittently going stale, confirmed live while
@@ -1795,6 +1867,42 @@ podiumd:
               organization: Open Beheer
               application: Open Beheer
               administration: Open Beheer
+
+        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+          - identifier: keycloak-provider
+            oidc_use_nonce: true
+            oidc_nonce_size: 32
+            oidc_state_size: 32
+            endpoint_config:
+              oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+          - identifier: admin-oidc
+            enabled: true
+            oidc_rp_client_id: objecttypen
+            oidc_rp_client_secret: keycloakObjecttypenClientSecret
+            oidc_rp_scopes_list:
+            - openid
+            - email
+            - profile
+            oidc_rp_sign_algo: RS256
+            oidc_provider_identifier: keycloak-provider
+            userinfo_claims_source: id_token
+            options:
+              user_settings:
+                claim_mappings:
+                  username:
+                  - sub
+                  first_name:
+                  - given_name
+                  email:
+                  - email
+                username_case_sensitive: true
+              groups_settings:
+                sync: false
+                make_users_staff: true
       # For create_required_objecttypen_job.
       oidcUrl: https://objecttypen.local
       token: objecttypenIntegratieteamToken
@@ -1954,7 +2062,41 @@ podiumd:
             - domain: opennotificaties.local
               name: Open Notificaties
 
-        oidc_db_config_enable: False
+        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+          - identifier: keycloak-provider
+            oidc_use_nonce: true
+            oidc_nonce_size: 32
+            oidc_state_size: 32
+            endpoint_config:
+              oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+          - identifier: admin-oidc
+            enabled: true
+            oidc_rp_client_id: opennotificaties
+            oidc_rp_client_secret: keycloakOpennotificatiesClientSecret
+            oidc_rp_scopes_list:
+            - openid
+            - email
+            - profile
+            oidc_rp_sign_algo: RS256
+            oidc_provider_identifier: keycloak-provider
+            userinfo_claims_source: id_token
+            options:
+              user_settings:
+                claim_mappings:
+                  username:
+                  - sub
+                  first_name:
+                  - given_name
+                  email:
+                  - email
+                username_case_sensitive: true
+              groups_settings:
+                sync: false
+                make_users_staff: true
 
         zgw_consumers_config_enable: True
         zgw_consumers:
@@ -2165,8 +2307,7 @@ podiumd:
       job:
         enabled: true # compose's openarchiefbeheer-web-init runs the equivalent setup-configuration step for real, unlike the other apps' fixture-import containers - replicated here via configuration.data below
       # ZGW consumer services with ZAC's Open Zaak client credentials, as
-      # ZAC's docker-compose setup. oidc_db_config_enable stays false: the
-      # admin login form is reached through settings.djangoSettingsModule.
+      # ZAC's docker-compose setup.
       data: |-
         zgw_consumers_config_enable: true
         zgw_consumers:
@@ -2232,7 +2373,41 @@ podiumd:
             enabled: true
             services_identifiers:
               - objecten-api
-        oidc_db_config_enable: false
+        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+          - identifier: keycloak-provider
+            oidc_use_nonce: true
+            oidc_nonce_size: 32
+            oidc_state_size: 32
+            endpoint_config:
+              oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+          - identifier: admin-oidc
+            enabled: true
+            oidc_rp_client_id: openarchiefbeheer
+            oidc_rp_client_secret: keycloakOpenarchiefbeheerClientSecret
+            oidc_rp_scopes_list:
+            - openid
+            - email
+            - profile
+            oidc_rp_sign_algo: RS256
+            oidc_provider_identifier: keycloak-provider
+            userinfo_claims_source: id_token
+            options:
+              user_settings:
+                claim_mappings:
+                  username:
+                  - sub
+                  first_name:
+                  - given_name
+                  email:
+                  - email
+                username_case_sensitive: true
+              groups_settings:
+                sync: false
+                make_users_staff: true
       # No compose equivalent to match (compose never sets openarchiefbeheer
       # SUPERUSER credentials either - it only ever gets as far as a
       # commented-out wish to disable 2FA, see settings.djangoSettingsModule
@@ -2494,6 +2669,42 @@ podiumd:
               catalogue_domain: ALG
               catalogue_rsin: "002564440"
               organisatie_rsin: "002564440"
+
+        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+          - identifier: keycloak-provider
+            oidc_use_nonce: true
+            oidc_nonce_size: 32
+            oidc_state_size: 32
+            endpoint_config:
+              oidc_op_discovery_endpoint: https://keycloak.local/realms/zaakafhandelcomponent/
+          items:
+          - identifier: admin-oidc
+            enabled: true
+            oidc_rp_client_id: openformulieren
+            oidc_rp_client_secret: keycloakOpenformulierenClientSecret
+            oidc_rp_scopes_list:
+            - openid
+            - email
+            - profile
+            oidc_rp_sign_algo: RS256
+            oidc_provider_identifier: keycloak-provider
+            userinfo_claims_source: id_token
+            options:
+              user_settings:
+                claim_mappings:
+                  username:
+                  - sub
+                  first_name:
+                  - given_name
+                  email:
+                  - email
+                username_case_sensitive: true
+              groups_settings:
+                sync: false
+                make_users_staff: true
     # See settings.djangoSettingsModule below for why the no2fa-settings
     # mount exists - same ConfigMap+extraVolumes+extraVolumeMounts pattern
     # already used for openzaak's/opennotificaties's/openarchiefbeheer's

@@ -5484,3 +5484,22 @@ logins 26.4 -> 27.4 s, Keycloak discovery p95 4-5 -> 7 ms. Kept: a few
 hundred ms per tier for about 0.2 GiB. Baseline refreshed; it now includes
 podiumd-tests' perf volume data (2,000 zaken, 500 partijen, 300 objects),
 which stays.
+
+## Admin login through Keycloak for every Django app (podiumd-tests' question; user: "yes, go ahead")
+
+`/oidc/authenticate/?next=/admin/` redirected to Keycloak only for Open
+Zaak and Open Inwoner (and Referentielijsten, Open Beheer); Open Klant,
+Objecten, Objecttypen, Open Notificaties, Open Formulieren and Open
+Archiefbeheer answered 500 (`ImproperlyConfigured: Setting
+OIDC_OP_AUTHORIZATION_ENDPOINT not found` from mozilla_django_oidc: without
+a configuration the view crashes instead of declining, a small product
+flaw). ExternalsPodiumD (dim1) enables `oidc_db_config_enable` for all ten
+Django apps; podiumd-infra (test00) too, except Objecttypen ("objecttypes-api
+3.4.x oidc_provider_identifier default "" fails own regex validation").
+minikube had them unset or explicitly off, with no recorded reason (a
+docker-compose leftover). The six apps now get the same setup-configuration
+block as Open Zaak: provider on https://keycloak.local, their own realm
+client and secret, username from `sub`, staff without group sync. Objecttypen
+3.4.2 accepted it with an explicit `oidc_provider_identifier`. Verified: all
+eight apps redirect to Keycloak; the login round trip is podiumd-tests'
+test_sso (TA 92).
