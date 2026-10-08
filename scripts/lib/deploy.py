@@ -166,15 +166,15 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     namespace = kube.kubectl("create", "namespace", NAMESPACE, "--dry-run=client", "-o", "yaml")
     kube.kubectl("apply", "-f", "-", stdin=namespace)
 
+    if not pki.CA_CERT.is_file():
+        msg = f"no local CA in {pki.PKI_DIR}: run scripts/provision-cluster (it creates the CA and its issuer)"
+        raise process.UserError(msg)
+    # Before anything with pods: every pod, the storage Job included, mounts it.
+    pki.apply_trust(NAMESPACE)
     storage = _apply_storage_hooks(selected)
     if values.monitoring_logging_enabled():
         print("\nApplying monitoring-logging's own CRDs first...")
         crds.apply_monitoring_logging_crds()
-
-    if not pki.CA_CERT.is_file():
-        msg = f"no local CA in {pki.PKI_DIR}: run scripts/provision-cluster (it creates the CA and its issuer)"
-        raise process.UserError(msg)
-    pki.apply_trust(NAMESPACE)
     postgres.create_missing_databases()
     render = selected.render()
     _rerun_jobs(render)
@@ -182,8 +182,9 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     _apply_full_manifest(render, expected_storage_errors(storage))
     print()
     chart_hosts = hosts.chart_hosts()
-    dns.apply_hosts(chart_hosts)
+    # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
     gateway.apply(render.docs, chart_hosts)
+    dns.apply_hosts(chart_hosts)
 
     print()
     keycloak.sync_realm(zac_pkce=selected.zac_pkce)
@@ -207,6 +208,14 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     print("\nDone. Next: ./scripts/setup-tunnel for external reachability, or run the suite in tests/ to verify.")
 
 
+def rolled_out(workload: dict[str, Any]) -> bool:
+    """Whether a Deployment's or StatefulSet's every replica runs the current spec and is ready."""
+    wanted = workload.get("spec", {}).get("replicas", 1)
+    status = workload.get("status", {})
+    current = status.get("observedGeneration", 0) >= workload["metadata"].get("generation", 0)
+    return current and status.get("updatedReplicas", 0) >= wanted and status.get("readyReplicas", 0) >= wanted
+
+
 def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
     """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live."""
     by_name = {job["metadata"]["name"]: job for job in live}
@@ -225,10 +234,21 @@ def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[
 def _wait_ready(render: manifests.Render) -> None:
     """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs."""
     print("\nWaiting until every rendered workload has rolled out and every Job has completed...")
-    for doc in render.docs:
-        if doc.get("kind") in ("Deployment", "StatefulSet"):
-            resource = f"{doc['kind'].lower()}/{manifests.name_of(doc)}"
-            kube.kubectl("rollout", "status", resource, "-n", NAMESPACE, f"--timeout={READY_TIMEOUT}s")
+    workloads = [
+        f"{doc['kind'].lower()}/{manifests.name_of(doc)}"
+        for doc in render.docs
+        if doc.get("kind") in ("Deployment", "StatefulSet")
+    ]
+
+    # Not `rollout status`: it gives up at the progress deadline (600s), which a
+    # first deploy passes while pods wait for Elasticsearch, yet still converge.
+    def all_rolled_out() -> bool:
+        return all(rolled_out(kube.get_json(w, "-n", NAMESPACE)) for w in workloads)
+
+    if not polling.wait_until(all_rolled_out, timeout=READY_TIMEOUT, interval=10):
+        stuck = [w for w in workloads if not rolled_out(kube.get_json(w, "-n", NAMESPACE))]
+        msg = f"not rolled out after {READY_TIMEOUT}s: {', '.join(stuck)}"
+        raise process.UserError(msg)
     names = jobs(render)
 
     def settled() -> tuple[list[str], list[str]] | None:

@@ -17,6 +17,7 @@ import yaml
 
 from lib import kube
 from lib import manifests
+from lib import polling
 from lib import process
 from lib import tls
 from lib.paths import EDGE_NAMESPACE
@@ -197,6 +198,9 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         *route_manifests(docs),
     ]
     kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
+    if not polling.wait_until(lambda: kube.exists(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3):
+        msg = f"NGF created no Service {EDGE_NAMESPACE}/{EDGE_SERVICE} for Gateway {GATEWAY} within 120s"
+        raise process.UserError(msg)
     wanted = {(doc["kind"], manifests.name_of(doc)) for doc in objects}
     for kind in ("HTTPRoute", "Service"):
         live = kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]

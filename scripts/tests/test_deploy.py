@@ -81,3 +81,13 @@ def test_unfinished_jobs_splits_running_and_failed():
 
     jobs = [job("done", "Complete"), job("broken", "Failed"), job("busy", None)]
     assert deploy.unfinished_jobs(jobs, ["done", "broken", "busy", "missing"]) == (["busy", "missing"], ["broken"])
+
+
+def test_rolled_out_needs_current_generation_and_ready_replicas():
+    def workload(generation: int, observed: int, updated: int, ready: int) -> dict[str, object]:
+        status = {"observedGeneration": observed, "updatedReplicas": updated, "readyReplicas": ready}
+        return {"metadata": {"generation": generation}, "spec": {"replicas": 1}, "status": status}
+
+    assert deploy.rolled_out(workload(2, 2, 1, 1))
+    assert not deploy.rolled_out(workload(2, 1, 1, 1))
+    assert not deploy.rolled_out(workload(2, 2, 1, 0))

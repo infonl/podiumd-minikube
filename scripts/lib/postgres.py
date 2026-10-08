@@ -54,6 +54,8 @@ def create_missing_databases() -> None:
     """Creates the init SQL's databases that the running Postgres lacks."""
     if not kube.exists("deployment/postgres"):
         return
+    # Its pod may still be starting, e.g. after an interrupted first deploy.
+    kube.kubectl("rollout", "status", "deployment/postgres", "-n", NAMESPACE, "--timeout=300s")
     databases = _names("select datname from pg_database;")
     roles = _names("select rolname from pg_roles;")
     missing, script = missing_sql(INIT_SQL.read_text(encoding="utf-8"), databases, roles)
