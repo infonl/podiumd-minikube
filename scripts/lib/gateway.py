@@ -32,6 +32,10 @@ GATEWAY = "public-gateway"
 GATEWAY_CLASS = "nginx"
 LABELS = {"app.kubernetes.io/part-of": "podiumd-minikube", "app.kubernetes.io/component": "gateway"}
 _SELECTOR = ",".join(f"{key}={value}" for key, value in LABELS.items())
+# minikube tunnel exposes a LoadBalancer Service at its ClusterIP, which Kubernetes picks
+# at random per Service; fixed, the /etc/hosts line survives a rebuild. In the static band
+# (the first 256 addresses of 10.96.0.0/12) that the allocator leaves to fixed ClusterIPs.
+EDGE_CLUSTER_IP = "10.96.0.200"
 
 
 def ngf_values(dns_ip: str) -> dict[str, Any]:
@@ -54,16 +58,17 @@ def ngf_values(dns_ip: str) -> dict[str, Any]:
                     "disableIPv6": False,
                 },
             },
-            "service": {"type": "LoadBalancer", "externalTrafficPolicy": "Cluster"},
+            "service": {
+                "type": "LoadBalancer",
+                "externalTrafficPolicy": "Cluster",
+                "patches": [{"type": "Merge", "value": {"spec": {"clusterIP": EDGE_CLUSTER_IP}}}],
+            },
         },
     }
 
 
 def install() -> None:
-    """Installs the Gateway API CRDs and NGF unless NGF is there."""
-    if kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
-        print(f"NGINX Gateway Fabric already installed in namespace '{EDGE_NAMESPACE}' - skipping.")
-        return
+    """Installs or upgrades the Gateway API CRDs and NGF (an upgrade keeps its values current)."""
     print(f"Installing the Gateway API CRDs {GATEWAY_API_VERSION} and NGINX Gateway Fabric {NGF_VERSION}...")
     crds = (
         f"https://github.com/kubernetes-sigs/gateway-api/releases/download/{GATEWAY_API_VERSION}/standard-install.yaml"
@@ -185,6 +190,28 @@ def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
     return [*services.values(), *routes]
 
 
+def _pin_cluster_ip() -> None:
+    """Recreates the edge Service once when it lacks EDGE_CLUSTER_IP (a ClusterIP is immutable; NGF recreates it)."""
+    live = kube.kubectl("get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}").strip()
+    if live == EDGE_CLUSTER_IP:
+        return
+    print(
+        f"  edge Service has ClusterIP {live}, not {EDGE_CLUSTER_IP}: recreating it (once; then ./scripts/update-hosts)"
+    )
+    kube.kubectl("delete", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE)
+
+    def pinned() -> bool:
+        result = process.run(
+            ["kubectl", "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}"],
+            check=False,
+        )
+        return result.stdout.strip() == EDGE_CLUSTER_IP
+
+    if not polling.wait_until(pinned, timeout=120, interval=3):
+        msg = f"NGF did not recreate {EDGE_SERVICE} with ClusterIP {EDGE_CLUSTER_IP}: run scripts/provision-cluster"
+        raise process.UserError(msg)
+
+
 def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
     """Applies the certificate, Gateway and routes; deletes routes no longer rendered."""
     if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
@@ -201,6 +228,7 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
     if not polling.wait_until(lambda: kube.exists(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3):
         msg = f"NGF created no Service {EDGE_NAMESPACE}/{EDGE_SERVICE} for Gateway {GATEWAY} within 120s"
         raise process.UserError(msg)
+    _pin_cluster_ip()
     wanted = {(doc["kind"], manifests.name_of(doc)) for doc in objects}
     for kind in ("HTTPRoute", "Service"):
         live = kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]

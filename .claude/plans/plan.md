@@ -5248,3 +5248,22 @@ the baseline (`!` above the tolerance). The measuring moved out of
 into `lib.status`, which both now import, so the script and the tests
 measure and mark the same way. CPU per container comes from two `crictl
 stats` samples a second apart. Runs in about 6 s.
+
+## Fixed edge IP 10.96.0.200
+
+The user asked why the edge IP kept changing: minikube tunnel exposes a
+LoadBalancer Service at its ClusterIP, which Kubernetes picks at random per
+Service; the Traefik Service was never recreated (10.111.241.129 for
+months), the NGF switch (10.105.251.255) and today's rebuild (10.97.186.76)
+each created a new one, and every change broke /etc/hosts. NGF's Helm
+values now patch its Service with `spec.clusterIP: 10.96.0.200` (static
+band of 10.96.0.0/12), `gateway.install` upgrades NGF on every provision
+instead of skipping it, and `gateway.apply` recreates the Service once when
+it lacks that IP (a ClusterIP is immutable). Verified: provision + deploy
+recreated it once, edge and CoreDNS on 10.96.0.200, suite 111 passed.
+Found on the way: `cluster-lock run` named its command argument `command`,
+which overwrote argparse's subcommand dest, so `run` fell through and did
+nothing; fixed, with a CLI test.
+
+From podiumd-tests' full tier on the fresh cluster (265 passed): Tempo was
+OOMKilled twice at its 256 MiB limit under the traces; next memory round.

@@ -46,7 +46,9 @@ namespace `ingress-basic`; `deploy` turns every rendered Ingress into an
 HTTPRoute (`scripts/lib/gateway.py`). Two consequences of its nginx, both as
 there: request bodies above 1 MB get 413, and request bodies are buffered.
 One deviation: larger response-header buffers, for KISS's login cookie
-(`.claude/plans/plan.md`).
+(`.claude/plans/plan.md`). The edge Service has the fixed ClusterIP
+`10.96.0.200`, which `minikube tunnel` exposes, so the `/etc/hosts` line
+stays valid across rebuilds.
 
 ### HTTPS
 

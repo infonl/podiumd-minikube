@@ -1,5 +1,6 @@
 """The extensionless scripts: --help works offline and arguments are validated."""
 
+import os
 import subprocess
 import sys
 
@@ -39,3 +40,17 @@ def test_set_podiumd_version_rejects_ambiguous_arguments(args: list[str]):
     result = _run(str(SCRIPTS_DIR / "set-podiumd-version"), *args)
     assert result.returncode == 2
     assert "error:" in result.stderr
+
+
+def test_cluster_lock_run_runs_its_command_under_the_lock(tmp_path: Path):
+    lock_file = tmp_path / "lock"
+    marker = tmp_path / "ran"
+    env = {**os.environ, "MINIKUBE_LOCK_FILE": str(lock_file)}
+    script = f"import pathlib; pathlib.Path({str(marker)!r}).write_text(pathlib.Path({str(lock_file)!r}).read_text())"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "cluster-lock"), "--who", "kees", "run", "test", "--", sys.executable, "-c", script],
+        capture_output=True, text=True, check=False, env=env,
+    )  # fmt: skip
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text(encoding="utf-8").startswith("kees test ")
+    assert not lock_file.exists()

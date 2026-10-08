@@ -31,7 +31,7 @@ def main() -> int:
     commands.add_parser("release", help="release a lock you took")
     run = commands.add_parser("run", help="hold it while COMMAND runs")
     run.add_argument("what", help="what the command changes")
-    run.add_argument("command", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
+    run.add_argument("argv", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
     breaking = commands.add_parser("break", help="remove a stale lock")
     breaking.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
     args = parser.parse_args()
@@ -50,10 +50,12 @@ def main() -> int:
         else:
             print(f"not held by {args.who}: {lock.describe(found) if found else 'free'}")
     elif args.command == "run":
-        command = [part for part in args.command if part != "--"]
+        command = [part for part in args.argv if part != "--"]
         if not command:
             parser.error("run needs a command after --")
         return lock.run(args.what, command, who=args.who)
+    elif args.command != "break":
+        parser.error(f"unknown command {args.command}")
     elif hold is None:
         print("free")
     elif teardown.confirmed(f"Remove the lock held by {lock.describe(hold)}?", yes=args.yes):
