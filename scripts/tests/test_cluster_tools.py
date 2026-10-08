@@ -122,3 +122,8 @@ def test_tune_control_plane_leaves_tuned_static_pods_alone(fake_run: FakeRun):
     fake_run.on("minikube", "ssh", stdout=provision.with_control_plane_env(STATIC_POD) or "")
     provision.tune_control_plane()
     assert not fake_run.ran("minikube", "cp")
+
+
+def test_cpuset_args_pin_the_node_to_its_first_cpus_only_when_the_host_has_more():
+    assert provision.cpuset_args(6, 24) == ["--cpuset-cpus=0-5"]
+    assert not provision.cpuset_args(6, 6)

@@ -62,12 +62,19 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
     )
 
 
+def cpuset_args(cpus: int, host_cpus: int) -> list[str]:
+    """`--cpuset-cpus` for the first cpus host CPUs, or nothing when the host has no more."""
+    return [f"--cpuset-cpus=0-{cpus - 1}"] if cpus < host_cpus else []
+
+
 def start_node() -> None:
     """start_minikube sized from MINIKUBE_CPUS (default 6) and lib.memory, then requires its kubectl context."""
     cpus = _env_int("MINIKUBE_CPUS", 6)
     start_minikube(cpus, memory.wanted())
-    # The docker driver applies --memory but not --cpus on Linux (seen: NanoCpus 0).
-    process.run(["docker", "update", f"--cpus={cpus}", PROFILE])
+    # The docker driver applies --memory but not --cpus on Linux (seen: NanoCpus 0). A CPU
+    # quota alone still shows every host CPU to nproc, nginx's worker_processes auto and
+    # GOMAXPROCS; the cpuset makes them see `cpus` (seen: 24 nginx workers).
+    process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, os.cpu_count() or cpus), PROFILE])
     kube.require_minikube_context()
     tune_control_plane()
 
