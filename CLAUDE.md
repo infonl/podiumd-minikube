@@ -12,6 +12,7 @@ Rules for working in this repository:
 @.claude/memory/laptop-resources.md
 @.claude/memory/memory-tuning.md
 @.claude/memory/remove-unused.md
+@.claude/memory/test-scope.md
 
 For usage instructions (provisioning, deploying, the test suite, script
 reference) see [`README.md`](README.md). This file is oriented at AI coding
