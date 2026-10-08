@@ -4943,7 +4943,7 @@ bootstrap objects, right after its bootstrap: node 22.5 GiB, containers
 19.9 GiB over 69 containers. The budget test fails: 2.5 GiB over the 20 GiB
 budget. Largest: KISS Elasticsearch 1.8 GiB (heap sized from its 2Gi
 limit), Open Inwoner Elasticsearch 1.5 GiB, Open Inwoner low-latency worker
-1.2 GiB (Celery -c 8), ZAC 1.1 GiB, Open Inwoner 1.0 GiB (4 uWSGI processes),
+1.2 GiB (Celery -c 8), ZAC 1.1 GiB, Open Inwoner 0.9 GiB (4 uWSGI processes),
 Open Formulieren 0.9 GiB and its worker 0.8 GiB, Open Zaak worker 0.7 GiB
 (Celery -c 4, the chart default; ExternalsPodiumD sets none), kube-apiserver
 0.8 GiB, Kibana 0.6 GiB.
