@@ -191,8 +191,8 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     openbao.bootstrap(render)
     print("\nApplying pabc-migrations (guarded - see scripts/lib/pabc.py)...")
     pabc.apply_migrations(force=False)
-    print("\nPruning Deployments/StatefulSets/DaemonSets/Services/Secrets/Ingresses not part of this render...")
-    prune.prune(render.docs, force=force_prune)
+    print(f"\nPruning {', '.join(prune.PRUNABLE_KINDS)} not part of this render...")
+    prune.prune([*render.docs, *render.large_configmaps, *render.after_seed], force=force_prune)
 
     # Live state after pruning decides, so a profile just switched off is not seeded.
     print()

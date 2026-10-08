@@ -5,16 +5,18 @@ or monitoringLogging.enabled left the old Deployments, Services and Ingresses
 running (two Grafanas answering grafana.local).
 
 Not pruned: Jobs and CronJobs (pabc-migrations is excluded from the render on
-purpose; CronJob runs are never rendered), ConfigMaps (large ones are applied
-outside the render), anything with an ownerReference (operator-created,
-like Prometheus' StatefulSet and prometheus-operated Service), and anything
-without this chart's labels (podiumd-tests' Secret was deleted twice).
+purpose; CronJob runs are never rendered), the objects the scripts create
+outside the render (SCRIPT_MADE), anything with an ownerReference
+(operator-created, like Prometheus' StatefulSet and prometheus-operated
+Service), and anything without this chart's labels (podiumd-tests' Secret was
+deleted twice).
 """
 
 import json
 import sys
 
 from lib import kube
+from lib import pki
 from lib import process
 from lib.manifests import ECK_KINDS
 from lib.manifests import Doc
@@ -26,8 +28,9 @@ PRUNABLE_KINDS = (
     "Deployment", "StatefulSet", "DaemonSet",
     "Prometheus", "PrometheusRule", "ServiceMonitor", "PodMonitor",
     *ECK_KINDS,
-    "Service", "Secret", "Ingress",
+    "Service", "Secret", "Ingress", "ConfigMap", "ServiceAccount", "HorizontalPodAutoscaler",
 )  # fmt: skip
+SCRIPT_MADE = frozenset({("ConfigMap", pki.TRUST_CONFIGMAP)})
 
 # A deliberate profile toggle prunes a few objects; a deploy without --full
 # against a --full cluster prunes dozens (this once removed every optional profile).
@@ -54,7 +57,9 @@ def is_ours(item: Doc) -> bool:
 
 def orphans(desired_docs: list[Doc]) -> list[tuple[str, str]]:
     """(kind, name) of this chart's live, unowned objects of PRUNABLE_KINDS that desired_docs lack."""
-    desired = {(doc["kind"], doc["metadata"]["name"]) for doc in desired_docs if doc.get("kind") in PRUNABLE_KINDS}
+    desired = SCRIPT_MADE | {
+        (doc["kind"], doc["metadata"]["name"]) for doc in desired_docs if doc.get("kind") in PRUNABLE_KINDS
+    }
     found: list[tuple[str, str]] = []
     for kind in PRUNABLE_KINDS:
         for item in live_objects(kind) or []:
@@ -68,7 +73,7 @@ def prune(desired_docs: list[Doc], *, force: bool) -> None:
     """Deletes orphans; refuses more than LARGE_PRUNE_THRESHOLD unless force."""
     to_delete = orphans(desired_docs)
     if not to_delete:
-        print("No orphaned workload(s)/monitoring CR(s) found - nothing to prune.")
+        print("No orphaned objects found - nothing to prune.")
         return
     if len(to_delete) > LARGE_PRUNE_THRESHOLD and not force:
         listing = "\n".join(f"  {kind}/{name}" for kind, name in to_delete)
@@ -81,4 +86,4 @@ def prune(desired_docs: list[Doc], *, force: bool) -> None:
         raise process.UserError(msg)
     for kind, name in to_delete:
         kube.kubectl_shown("delete", kind, name, "-n", NAMESPACE)
-    print("Pruned orphaned workload(s) not part of the current render: " + ", ".join(f"{k}/{n}" for k, n in to_delete))
+    print("Pruned objects not part of the current render: " + ", ".join(f"{k}/{n}" for k, n in to_delete))

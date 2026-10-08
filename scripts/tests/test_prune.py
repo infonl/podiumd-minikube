@@ -53,3 +53,9 @@ def test_orphans_never_include_objects_without_this_charts_labels(fake_run: Fake
         ]}),
     )  # fmt: skip
     assert prune.orphans([]) == [("Secret", "old-chart-secret")]
+
+
+def test_orphans_keep_the_ca_configmap_the_scripts_create(fake_run: FakeRun):
+    fake_run.on("kubectl", "get", stdout=_items())
+    fake_run.on("kubectl", "get", "ConfigMap", stdout=_items("podiumd-ca", "clamav-clamd"))
+    assert prune.orphans([]) == [("ConfigMap", "clamav-clamd")]

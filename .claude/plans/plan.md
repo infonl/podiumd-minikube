@@ -5053,3 +5053,21 @@ Found live: podiumd's ClamAV PVC uses storage class `managed-csi` (Azure), so
 the pod stays Pending on minikube (`persistentVolume.storageClass: standard`
 fixes it); the chart enables an HPA (max 5 replicas). prune left the HPA, two
 ConfigMaps and the ServiceAccount (kinds it does not cover); removed by hand.
+
+ClamAV profile (user's choice: EICAR-only, opt-in, in `--full`): clamd loads
+one hash signature from ConfigMap `clamav-signatures`, mounted at
+/var/lib/clamav over the image's bundled official databases (podiumd's
+`clamdConfig` text reads that directory and wins over `clamdConfigDict`;
+the first try with a `/signatures` directory loaded the bundled databases and
+was OOMKilled at 128Mi). `extraArgs: [--foreground]` makes the image exec
+clamd directly, so freshclam never runs and no internet is needed. No PVC,
+no HPA. Measured: clamd 19 MiB PSS, ready 6s after start;
+`tests/test_clamav.py` finds EICAR and passes a clean file. Open Inwoner's
+`enable_virus_scan` (clamav:3310) is podiumd-tests' wiring.
+Found live: a StatefulSet does not replace a crash-looping pod when its spec
+changes; `kubectl delete pod clamav-0` was needed once.
+
+prune now also covers ConfigMaps, ServiceAccounts and HPAs (ClamAV's were
+left behind), receives the whole render (large ConfigMaps and after-seed
+Jobs included), and keeps `podiumd-ca` (`prune.SCRIPT_MADE`), which
+`pki.apply_trust` creates outside the render with our labels.
