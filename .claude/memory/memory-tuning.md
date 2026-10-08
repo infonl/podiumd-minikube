@@ -39,6 +39,9 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 
 ## Checks
 
+- First `./scripts/show-cluster-status`: node and containers against the
+  budget and the baseline (`!` above the tolerance), and whether the cluster
+  has settled.
 - A GC change is measured per app after a warm-up (the suite) and 5 idle
   minutes: the serial GC suits small, low-allocation heaps (Keycloak, Solr);
   for ZAC it grew the heap.

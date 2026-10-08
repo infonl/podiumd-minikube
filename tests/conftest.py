@@ -18,10 +18,14 @@ import json
 import os
 import socket
 import subprocess
+import sys
 
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from lib import status
 
 NAMESPACE = "podiumd-minikube"
 # The edge: NGINX Gateway Fabric's Service for Gateway public-gateway (scripts/lib/paths.py).
@@ -103,42 +107,8 @@ def pods(edge_ip):
 
 @pytest.fixture(scope="session")
 def enabled_profiles(pods):
-    """
-    Which optional profile groups are actually deployed right now, derived
-    from pod name prefixes rather than values.yaml - so the suite adapts to
-    whatever's really running instead of assuming every profile is on.
-    """
-    names = {p["name"] for p in pods}
-
-    def any_pod_named(prefix):
-        return any(n == prefix or n.startswith(prefix + "-") for n in names)
-
-    return {
-        "objecten": any_pod_named("objecten"),
-        "objecttypen": any_pod_named("objecttypen"),
-        "opennotificaties": any_pod_named("opennotificaties"),
-        "openarchiefbeheer": any_pod_named("openarchiefbeheer"),
-        "openformulieren": any_pod_named("openformulieren"),
-        "openinwoner": any_pod_named("openinwoner"),
-        "ita": any_pod_named("ita-web"),
-        "kiss": any_pod_named("contact-web"),
-        "omc": any_pod_named("omc"),
-        "referentielijsten": any_pod_named("referentielijsten"),
-        "openbeheer": any_pod_named("openbeheer"),
-        "frankgateway": any_pod_named("frankgateway-outway"),
-        "clamav": any_pod_named("clamav"),
-        "metrics": any_pod_named("grafana"),
-        # The monitoring-logging dependency's own subcharts are all prefixed
-        # with the release name ("podiumd-minikube-grafana", not plain
-        # "grafana" like templates/metrics/grafana.yaml's raw template) -
-        # exactly what tells the two mutually-exclusive "metrics" profile
-        # implementations apart (see values.yaml's own monitoringLogging
-        # comment). Deliberately its own key, not folded into "metrics"
-        # above: a test that only makes sense against one implementation
-        # (e.g. Loki-specific checks) needs to skip on the *other*
-        # implementation too, not just when the whole profile is off.
-        "monitoringLogging": any_pod_named("podiumd-minikube-grafana"),
-    }
+    """Which optional profiles run, from the pods actually running (scripts/lib/status.py)."""
+    return status.enabled_profiles([p["name"] for p in pods])
 
 
 def host_url(hostname, path="/"):

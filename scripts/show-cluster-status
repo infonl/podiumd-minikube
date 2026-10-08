@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""Shows the cluster's state: node and container memory and CPU, profiles, problems, tunnel, lock and disk.
+
+Reads only; containers are compared with tests/memory-baseline.json.
+"""
+
+import argparse
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import kube
+from lib import process
+from lib import status
+
+
+def main() -> None:
+    """Parses --top/--all and prints the status."""
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--top", type=int, default=20, help="containers to list, largest first (default 20)")
+    parser.add_argument("--all", action="store_true", help="list every container")
+    args = parser.parse_args()
+    kube.require_minikube_context()
+    status.report(0 if args.all else args.top)
+
+
+process.main(main)

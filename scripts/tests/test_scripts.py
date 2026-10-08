@@ -20,7 +20,7 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_every_shell_script_was_converted():
-    assert len(SCRIPTS) == 15
+    assert len(SCRIPTS) == 16
     assert not list(SCRIPTS_DIR.rglob("*.sh"))
 
 

@@ -5235,3 +5235,16 @@ start-cluster, provision, apply-pabc-migrations, flush-redis and
 deploy calling pabc) do not block on it. `scripts/cluster-lock`
 status/take/release/run/break; a hold older than 2 hours is flagged as
 possibly stale. README section "Shared cluster: the lock".
+
+## show-cluster-status
+
+`scripts/show-cluster-status` (`lib.status`, user's design approval): node
+memory and CPU against the docker cap and the laptop budget, disk, running
+profiles, how long ago the youngest container started (settled or not),
+tunnel/edge/`/etc/hosts`, the lock, problems (pods not Ready, restarts in the
+last hour, failed Jobs) and the containers by working set and CPU against
+the baseline (`!` above the tolerance). The measuring moved out of
+`tests/test_memory.py` and the profile detection out of `tests/conftest.py`
+into `lib.status`, which both now import, so the script and the tests
+measure and mark the same way. CPU per container comes from two `crictl
+stats` samples a second apart. Runs in about 6 s.
