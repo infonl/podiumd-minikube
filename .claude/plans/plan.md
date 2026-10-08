@@ -5447,3 +5447,24 @@ configures none of it. minikube now does the same. Neither estate sets the
 archive configuration in its values, so that check still fails, as there.
 Verified after the deploy: services_presence, services_configuration
 (connection checks with the new tokens), openklant and objecten pass.
+
+## uWSGI 1 process (user: "yes", footprint ideas #1)
+
+Every Maykin web app ran 2 uWSGI workers; the second cost 72-231 MiB PSS.
+Now 1 process everywhere, with threads so requests stay concurrent: Open
+Zaak and Open Klant keep podiumd's 4 threads, Objecttypen, Referentielijsten
+and Open Beheer podiumd's 2, and Open Formulieren, Open Inwoner, Objecten,
+Open Notificaties and Open Archiefbeheer (1 thread before) get 2, so their
+concurrency stays 2. Never 1 x 1: an app that calls itself during a request
+would block. After podiumd-tests' full tier (17:47-17:55 UTC, 288 passed, no
+timeouts, 7:20 against 6:56/7:31 earlier) and a perf tier (averages equal
+within noise, p95 swinging per run both before and after; single slow
+requests up to 800 ms p99 once): web pods 3243 -> 2225 MiB, containers
+11452 -> 10841 MiB, node 12605 -> 12124 MiB (kube-apiserver +181 regrowth in
+the same period). Baseline written from the measurement at 17:59 UTC, just
+before podiumd-tests' perf seeding took the lock.
+
+Considered and not done: Celery `--pool=threads` (#2). Only Open
+Notificaties' start script supports it; the others would need their
+`/celery_worker.sh` replaced, and a thread pool ignores the apps' Celery
+time limits and `--max-tasks-per-child`. Behaviour, not capacity.

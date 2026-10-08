@@ -809,6 +809,9 @@ podiumd:
         password: admin
         email: noreply@example.com
     settings:
+      # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
+      uwsgi:
+        processes: 1
       # Matches docker-compose.yaml's openzaak.local value exactly. Found
       # live: left unset, Django refuses every request with
       # "ImproperlyConfigured: The SECRET_KEY setting must not be empty" -
@@ -967,6 +970,9 @@ podiumd:
     tags:
       redis: false
     settings:
+      # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
+      uwsgi:
+        processes: 1
       # See openzaak's own allowedHosts comment above - same gap, same fix.
       allowedHosts: openklant.local
       # As ExternalsPodiumD, which sets Open Klant's domain here, not in
@@ -1163,9 +1169,10 @@ podiumd:
             - domain: openinwoner.local
               name: Open Inwoner
     settings:
-      # Laptop budget: 2 web processes (image default 4).
+      # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
       uwsgi:
-        processes: 2
+        processes: 1
+        threads: 2
       secretKey: openInwonerSecretKey
       allowedHosts: openinwoner.local,openinwoner-nginx.podiumd-minikube.svc.cluster.local
       isHttps: true
@@ -1658,9 +1665,10 @@ podiumd:
         mountPath: /app/src/objects/conf/docker_no_solo_cache.py
         readOnly: true
     settings:
-      # Laptop budget: 2 web processes (image default 4).
+      # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
       uwsgi:
-        processes: 2
+        processes: 1
+        threads: 2
       secretKey: objectenApiSecretKey
       allowedHosts: objecten.local
       # See openzaak's isHttps comment.
@@ -1808,6 +1816,9 @@ podiumd:
         mountPath: /app/src/objecttypes/conf/docker_no2fa.py
         readOnly: true
     settings:
+      # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
+      uwsgi:
+        processes: 1
       secretKey: objecttypesApiSecretKey
       allowedHosts: objecttypen.local
       # Confirmed live (the hard way - an earlier version of this comment
@@ -2037,9 +2048,10 @@ podiumd:
               kanalen:
                 - naam: objecten
     settings:
-      # Laptop budget: 2 web processes (image default 4).
+      # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
       uwsgi:
-        processes: 2
+        processes: 1
+        threads: 2
       secretKey: opennotificatiesApiSecretKey
       allowedHosts: opennotificaties.local
       # See openzaak's isHttps comment.
@@ -2131,10 +2143,12 @@ podiumd:
   # --- openarchiefbeheer ---
   openarchiefbeheer:
     enabled: false
-    # Laptop budget: 2 web processes (image default 4); the chart ignores
-    # settings.uwsgi.processes.
+    # Laptop budget: 1 web process with 2 threads (image default 4 x 1); the
+    # chart ignores settings.uwsgi.
     extraEnvVars:
       - name: UWSGI_PROCESSES
+        value: "1"
+      - name: UWSGI_THREADS
         value: "2"
     # replicaCount/worker/beat/nginx/flower all already default to 1 - no
     # override needed (confirmed live against the chart: unlike the other
@@ -2493,9 +2507,10 @@ podiumd:
         mountPath: /app/src/openforms/conf/docker_no2fa.py
         readOnly: true
     settings:
-      # Laptop budget: 2 web processes (image default 4).
+      # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
       uwsgi:
-        processes: 2
+        processes: 1
+        threads: 2
       secretKey: openFormulierenSecretKey
       allowedHosts: openformulieren-nginx.local,openformulieren-web.local
       # As ExternalsPodiumD and podiumd-infra: the public host. Mails drop links
@@ -2613,6 +2628,9 @@ podiumd:
                   superuser_group_names:
                     - administrators
     settings:
+      # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
+      uwsgi:
+        processes: 1
       allowedHosts: referentielijsten.local
       secretKey: referentielijstenSecretKey
       disable2fa: true
@@ -2729,6 +2747,9 @@ podiumd:
           selectielijst_service_identifier: selectielijst-service
           objecttypen_service_identifier: objecttypen-service
     settings:
+      # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
+      uwsgi:
+        processes: 1
       allowedHosts: openbeheer.local,openbeheer-nginx.podiumd-minikube.svc.cluster.local
       apiDomain: openbeheer.local
       secretKey: openbeheerSecretKey
