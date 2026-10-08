@@ -8,6 +8,7 @@ from lib import kube
 from lib import lock
 from lib import openbao
 from lib import process
+from lib import tunnel
 from lib.manifests import name_of
 from lib.manifests import section
 from lib.paths import NAMESPACE
@@ -94,11 +95,9 @@ def teardown_cluster(*, yes: bool) -> int:
     """Stops minikube tunnel and deletes the profile; 1 when not confirmed."""
     if not confirmed(TEARDOWN_SUMMARY, yes=yes):
         return 1
-    if process.running("minikube tunnel"):
-        print("Stopping the running 'minikube tunnel' process...")
-        process.run(["pkill", "-f", "minikube tunnel"], check=False)
+    tunnel.stop_tunnel()
     print(f"Deleting minikube profile '{PROFILE}'...")
     process.run(["minikube", "delete", "-p", PROFILE], capture=False)
     openbao.forget_vault()
-    print("\nDone. /etc/hosts '*.local' entries now point at a stale IP: re-run update-hosts after setup-tunnel.")
+    print("\nDone. After provision-cluster and deploy, run setup-tunnel; /etc/hosts stays valid (fixed edge IP).")
     return 0
