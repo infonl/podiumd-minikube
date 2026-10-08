@@ -5364,3 +5364,14 @@ are sized from it). After podiumd-tests' next full tier (15:00-15:08 UTC,
 284 passed): KISS 994 -> 697 MiB, 186 -> 60 threads; Open Inwoner 679 -> 656
 MiB; no restarts. Same tier: kube-apiserver 421 -> 577 MiB, regrowth after
 its GOGC restart as expected; still well under the 913 MiB before GOGC.
+
+## Open Formulieren BASE_URL (podiumd-tests' finding; user: "go do it")
+
+minikube set no `openformulieren.settings.baseUrl`, so BASE_URL was the
+chart default https://open-forms.test.maykin.opengem.nl. Open Formulieren
+removes mail links whose host is neither BASE_URL's nor in the netloc
+allowlist, so the pause mail's resume link arrived empty. ExternalsPodiumD
+(every environment, e.g. dim1 https://ontw-formulier.dev.dimpact.nl) and
+podiumd-infra (e.g. test00 https://formulier.test00.pd.test-rig.nl) set it
+to the public form host; minikube now sets https://openformulieren-nginx.local.
+Verified: ConfigMap, process env and `settings.BASE_URL` in the pod.

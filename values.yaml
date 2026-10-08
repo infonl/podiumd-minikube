@@ -2461,6 +2461,9 @@ podiumd:
         processes: 2
       secretKey: openFormulierenSecretKey
       allowedHosts: openformulieren-nginx.local,openformulieren-web.local
+      # As ExternalsPodiumD and podiumd-infra: the public host. Mails drop links
+      # to any other host (the pause mail's resume link).
+      baseUrl: "https://openformulieren-nginx.local"
       # See openzaak's isHttps comment.
       isHttps: true
       # Confirmed live: DISABLE_2FA is only read by openforms.conf.dev,
