@@ -84,13 +84,15 @@ def test_unfinished_jobs_splits_running_and_failed():
 
 
 def test_rolled_out_needs_current_generation_and_ready_replicas():
-    def workload(generation: int, observed: int, updated: int, ready: int) -> dict[str, object]:
-        status = {"observedGeneration": observed, "updatedReplicas": updated, "readyReplicas": ready}
+    def workload(generation: int, observed: int, updated: int, ready: int, pods: int = 1) -> dict[str, object]:
+        status = {"observedGeneration": observed, "replicas": pods, "updatedReplicas": updated, "readyReplicas": ready}
         return {"metadata": {"generation": generation}, "spec": {"replicas": 1}, "status": status}
 
     assert deploy.rolled_out(workload(2, 2, 1, 1))
     assert not deploy.rolled_out(workload(2, 1, 1, 1))
     assert not deploy.rolled_out(workload(2, 2, 1, 0))
+    # The old pod is ready, the new one not yet.
+    assert not deploy.rolled_out(workload(2, 2, 1, 1, pods=2))
 
 
 def test_rolled_out_reads_ecks_own_status_for_elasticsearch():

@@ -4987,3 +4987,9 @@ openarchiefbeheer `extraEnvVars` `UWSGI_PROCESSES=2` (its chart has the key
 but no template reads it). Result: node 19.3 -> 18.4 GiB, containers 16.5 ->
 15.6 GiB (openinwoner -443 MiB, openformulieren -289, objecten -195,
 openarchiefbeheer -179, opennotificaties -165). Suite: 109 passed.
+
+The readiness wait still had a gap, found on the uWSGI deploy: it reported
+"All workloads rolled out" while the new openinwoner pod was 0/1, because
+`readyReplicas` also counts the old pod during a rolling update.
+`deploy.rolled_out` now also requires that no old pods remain
+(`status.replicas <= updatedReplicas`).

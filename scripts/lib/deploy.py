@@ -220,7 +220,10 @@ def rolled_out(workload: dict[str, Any]) -> bool:
     if workload.get("kind") in ECK_KINDS:
         return current and status.get("health") in ("green", "yellow") and status.get("phase", "Ready") == "Ready"
     wanted = workload.get("spec", {}).get("replicas", 1)
-    return current and status.get("updatedReplicas", 0) >= wanted and status.get("readyReplicas", 0) >= wanted
+    updated = status.get("updatedReplicas", 0)
+    # readyReplicas also counts old pods while a rollout replaces them.
+    old_gone = status.get("replicas", 0) <= updated
+    return current and updated >= wanted and old_gone and status.get("readyReplicas", 0) >= wanted
 
 
 def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
