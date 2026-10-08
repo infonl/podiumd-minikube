@@ -10,6 +10,7 @@ Rules for working in this repository:
 @.claude/memory/comments-and-help-texts.md
 @.claude/memory/reference-environments.md
 @.claude/memory/laptop-resources.md
+@.claude/memory/memory-tuning.md
 @.claude/memory/remove-unused.md
 
 For usage instructions (provisioning, deploying, the test suite, script
