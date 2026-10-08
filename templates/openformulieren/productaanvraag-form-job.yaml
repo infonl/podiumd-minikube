@@ -58,7 +58,7 @@ spec:
             - name: OBJECTS_API_GROUP_IDENTIFIER
               value: local-objects-api
             - name: PRODUCTAANVRAAG_OBJECTTYPE_UUID
-              value: "021f685e-9482-4620-b157-34cd4003da6b"
+              value: "11a5f7fd-013e-4e29-9cd1-738249fc3479"
             # Shared with podiumd.zac.productaanvraag.productaanvraagtype
             # (single source of truth) - this is the value ZAC's own
             # ProductaanvraagService matches an incoming productaanvraag

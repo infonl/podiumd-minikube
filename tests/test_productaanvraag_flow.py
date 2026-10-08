@@ -48,7 +48,7 @@ CATALOGUS_DOMEIN = "ALG"
 CATALOGUS_RSIN = "002564440"
 ZAAKTYPE_IDENTIFICATIE = "zaaktype-test-1"
 PRODUCTAANVRAAGTYPE = "productaanvraag-test-zaaktype-1"
-PRODUCTAANVRAAG_OBJECTTYPE_UUID = "021f685e-9482-4620-b157-34cd4003da6b"
+PRODUCTAANVRAAG_OBJECTTYPE_UUID = "11a5f7fd-013e-4e29-9cd1-738249fc3479"
 
 # Matches values.yaml's own podiumd.objecten.configuration.data tokenauth
 # entry for "open-formulieren" - a fake, fully-public dev/test credential

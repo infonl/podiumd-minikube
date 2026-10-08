@@ -5090,3 +5090,37 @@ Jobs included), and keeps `podiumd-ca` (`prune.SCRIPT_MADE`), which
   seeds no productaanvraag objecttype. minikube also has ZAC's fixture
   objecttype `021f685e...`, which all of its own wiring uses (form Job, Open
   Zaak token, flow test); `11a5f7fd` is unused here.
+
+## KvK through KvK's test API; one Productaanvraag-Dimpact (user's choices)
+
+KvK (podiumd-tests asked; both reference projects do it): the api-proxy's
+kvkSearch/kvkBasic/kvkBranch go to `https://api.kvk.nl/test/api/...` with
+Host `api.kvk.nl` and KvK's public test-environment key (as podiumd-infra;
+ExternalsPodiumD dim1 the same routes with a REP placeholder key). KvK calls
+need internet. The KvK WireMock mappings are removed (vendored
+`wiremocks/kvk-wiremock/` deleted); BAG stays on WireMock (Kadaster's key is
+not public). Tests use KvK's test dataset (68750110 "Test BV Donald").
+Frank!Gateway outway: the chart routes doc's KvK routes (`/test/` rewrite,
+key read from OpenBao at request time by openbao-secret-header.lua).
+`lib.openbao` now stores the key at `secret/frankgateway` field
+`kvk_api_key` and mints the outway's scoped reader token (policy
+`frankgateway-reader` on `secret/data/frankgateway` and `/*`) into Secret
+`frankgateway-openbao-token`, which the chart expects but never creates; the
+outway restarts once to read it (OPENBAO_TOKEN is an env var). The token
+minting is shared with the config token (`_mint_token`), and the Secret now
+goes over stdin; before, the config token was on kubectl's command line.
+
+Productaanvraag-Dimpact as podiumd-infra: one objecttype, the chart Job's
+`11a5f7fd-013e-4e29-9cd1-738249fc3479`; Objecten registers it; the ZAC and
+Open Formulieren tokens get `read_and_write` on it only (were is_superuser;
+podiumd-infra's `zaak` and `formulier`); Open Zaak's objecten-api service
+uses Open Formulieren's token (podiumd-infra's Open Zaak uses `formulier`).
+ZAC's fixture objecttype `021f685e...` is left out at seed time
+(`seed.without_objecttype`, the vendored files unchanged).
+Live: the deploy minted the outway's reader token and restarted it; the
+existing `021f685e...` rows were deleted by hand (seeding skips existing
+data): in Objecttypen the type and its version, in Objecten 20 objects with
+20 records (the fixture's demo objects and earlier flow-test objects), the
+type and its 5 permissions. Verified: KvK search and basisprofiel through the
+api-proxy and the outway (key from OpenBao) answer for 68750110; the
+productaanvraag flow passes on `11a5f7fd`; suite 111 passed.

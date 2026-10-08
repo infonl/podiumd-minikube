@@ -6,7 +6,12 @@ step is skipped when its model already has rows, so seeding runs on every
 deploy.
 """
 
+import json
 import sys
+import tempfile
+
+from pathlib import Path
+from typing import Any
 
 from lib import kube
 from lib import process
@@ -18,6 +23,10 @@ from lib.process import UserError
 # its column, so any ObjectType write fails (upstream bug, see plan.md).
 KNOWN_OBJECTEN_BUG = 'column "service_id" of relation "core_objecttype" does not exist'
 POD_FIXTURE = "/tmp/demodata.json"  # noqa: S108 - path inside the app pod
+# ZAC's dev fixtures add their own Productaanvraag-Dimpact; podiumd-infra has only
+# the chart Job's (11a5f7fd-...), so this one is left out with what depends on it.
+FIXTURE_ONLY_OBJECTTYPE = "021f685e-9482-4620-b157-34cd4003da6b"
+_OBJECTTYPE_FIELDS = ("object_type", "_object_type")
 
 _CREATE_SUPERUSER = """
 from django.contrib.auth import get_user_model
@@ -45,6 +54,24 @@ print(f'published {{updated}} {model} row(s)')
     print(kube.django_shell(pod, code).strip())
 
 
+def without_objecttype(rows: list[dict[str, Any]], uuid: str) -> list[dict[str, Any]]:
+    """rows minus the core.objecttype with uuid and every row that points at it (directly or via its objects)."""
+    gone = {row["pk"] for row in rows if row["model"] == "core.objecttype" and row["fields"].get("uuid") == uuid}
+    objects = {
+        row["pk"]
+        for row in rows
+        if row["model"] == "core.object" and any(row["fields"].get(f) in gone for f in _OBJECTTYPE_FIELDS)
+    }
+
+    def kept(row: dict[str, Any]) -> bool:
+        fields = row["fields"]
+        if row["model"] == "core.objecttype":
+            return row["pk"] not in gone
+        return not any(fields.get(f) in gone for f in _OBJECTTYPE_FIELDS) and fields.get("object") not in objects
+
+    return [row for row in rows if kept(row)]
+
+
 def seed(deployment: str, fixture: str, app_label: str, model: str) -> None:
     """Loads vendor fixture into deployment unless app_label.model has rows, then ensures the admin user."""
     kube.kubectl_shown(
@@ -55,8 +82,12 @@ def seed(deployment: str, fixture: str, app_label: str, model: str) -> None:
         print(f"'{deployment}' already has {app_label}.{model} data - skipping (not re-seeding).")
         return
     path = VENDOR_DIR / fixture
-    print(f"Seeding '{deployment}' from {path}...")
-    kube.kubectl_shown("cp", str(path), f"{NAMESPACE}/{pod}:{POD_FIXTURE}")
+    print(f"Seeding '{deployment}' from {path} (without objecttype {FIXTURE_ONLY_OBJECTTYPE})...")
+    rows = without_objecttype(json.loads(path.read_text(encoding="utf-8")), FIXTURE_ONLY_OBJECTTYPE)
+    with tempfile.TemporaryDirectory() as directory:
+        filtered = Path(directory) / path.name
+        filtered.write_text(json.dumps(rows), encoding="utf-8")
+        kube.kubectl_shown("cp", str(filtered), f"{NAMESPACE}/{pod}:{POD_FIXTURE}")
     loaddata = ["python", "/app/src/manage.py", "loaddata", POD_FIXTURE]
     loaded = process.run(["kubectl", "exec", "-n", NAMESPACE, pod, "--", *loaddata], check=False)
     print(loaded.stdout, end="")
