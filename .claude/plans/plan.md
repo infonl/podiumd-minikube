@@ -5071,3 +5071,22 @@ prune now also covers ConfigMaps, ServiceAccounts and HPAs (ClamAV's were
 left behind), receives the whole render (large ConfigMaps and after-seed
 Jobs included), and keeps `podiumd-ca` (`prune.SCRIPT_MADE`), which
 `pki.apply_trust` creates outside the render with our labels.
+
+## Known gaps, checked
+
+- KISS logboek (user: option a, copy ExternalsPodiumD): both reference
+  projects point `kiss.settings.logboek` at the Activiteitenlog objecttype
+  with the `contact` token, which has no Activiteitenlog permission (only
+  `ita` has). Objecten filters silently: `GET objects?type=<Activiteitenlog>`
+  with KISS's LOGBOEK_TOKEN gives 200, count 0. Kept as the references;
+  podiumd-tests pins it with a test; untracked writeup
+  `kiss-logboek-activiteitenlog-permission-issue.md` for ExternalsPodiumD.
+- BRP on the Frank!Gateway outway: not a gap. The chart's routes doc puts
+  the real BRP on the outway and its in-cluster mock example on `internal`;
+  the values comment said otherwise and is corrected.
+- Productaanvraag-Dimpact: podiumd-infra (QA) has one objecttype, the chart
+  Job's fixed `11a5f7fd-013e-4e29-9cd1-738249fc3479`, registered in Objecten
+  with permissions for the `zaak` and `formulier` tokens; podiumd-testautomation
+  seeds no productaanvraag objecttype. minikube also has ZAC's fixture
+  objecttype `021f685e...`, which all of its own wiring uses (form Job, Open
+  Zaak token, flow test); `11a5f7fd` is unused here.
