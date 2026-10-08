@@ -4879,3 +4879,32 @@ ITA, PABC, OI and ZAC logins included):
 
 Verified live: suite 107 passed through the Gateway alone, ITA's chunked
 logboek POST included (no middleware), and the 2 MB request rejected.
+
+## Fresh rebuild (teardown, provision, deploy --full)
+
+First build from empty since the TLS, Gateway, OpenBao and database-step
+work, agreed with podiumd-tests. Found and fixed (all invisible on the
+long-lived cluster):
+- `teardown-cluster`/`reset-namespace` delete the vault with Postgres; the
+  stale `.openbao/root-token` made the bootstrap refuse. Now moved aside
+  (`openbao.forget_vault`); the seal key stays.
+- `manifests.images` took the line after a bare `image:` key (a CRD schema),
+  so provision tried to pull "description:".
+- minikube now defaults to containerd (the old profile ran Docker); six
+  parallel `minikube image load`s into containerd lost 23 images without an
+  error. Loads are sequential and verified against `minikube image ls`.
+- The storage Job mounts the CA trust ConfigMap, which deploy created only
+  after the storage hooks: the Job waited forever. Trust comes first now.
+- CoreDNS read the Gateway's Service before the Gateway existed (NGF creates
+  it asynchronously). Gateway first, then wait for the Service, then DNS.
+- `create_missing_databases` exec'd into a Postgres pod still starting; it
+  waits for the rollout.
+- The readiness wait used `rollout status`, which gives up at the 600s
+  progress deadline; Open Inwoner passes it on a first deploy while its
+  search-index init waits for Elasticsearch, yet converges. It polls
+  updated/ready replicas now (`deploy.rolled_out`).
+
+Result: deploy --full green from empty; OpenBao initialised and unsealed,
+6 profile databases created by the init SQL, objecttypes created after the
+fixtures, Postgres max_connections 500; node at 46.8 GiB (half the host),
+20.6 GiB used.
