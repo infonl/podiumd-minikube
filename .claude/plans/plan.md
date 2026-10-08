@@ -5414,3 +5414,20 @@ Ready condition that changed after the node container's start
 (`docker inspect` State.StartedAt), then checks the workloads as before.
 Checked live on the restarted cluster: no stale pods. The early "ready"
 itself only shows on the next node restart.
+
+## Open Archiefbeheer UI on one host (podiumd-tests' finding; user: "yes")
+
+The SPA at openarchiefbeheer-ui.local failed with "Failed to fetch": its
+calls to https://openarchiefbeheer-web.local/api/v1/ were refused by the
+nginx sidecar's CSP (`default-src 'self'`, no connect-src). ExternalsPodiumD
+(dim1: frontendUrl, frontend.apiUrl and oidcUrl all
+https://ontw-abc.dev.dimpact.nl) and podiumd-infra (test00: all
+https://abc.test00.pd.test-rig.nl) serve UI and API on one host;
+`frontend.apiUrl` is now https://openarchiefbeheer-ui.local, the UI's own
+host (the same nginx serves /api/ on both hosts, which stay reachable).
+Verified: OAB_API_URL in the ConfigMap, the served bundle only names
+openarchiefbeheer-ui.local, /api/v1/whoami/ on that host answers 403
+(unauthenticated) instead of a CSP refusal. Checked on the way:
+`resultBackendl` in the app blocks is not a typo of ours to remove; the
+openforms, openarchiefbeheer and openklant charts' configmap.yaml read
+that key.

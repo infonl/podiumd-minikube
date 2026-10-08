@@ -2253,7 +2253,9 @@ podiumd:
         resultBackend: redis://redis:6379/14
         resultBackendl: redis://redis:6379/14
       frontend:
-        apiUrl: https://openarchiefbeheer-web.local
+        # As ExternalsPodiumD and podiumd-infra: the UI's own host. The UI's CSP
+        # (default-src 'self') refuses an API on another host.
+        apiUrl: https://openarchiefbeheer-ui.local
         apiPath: /api/v1
         zaakUrlTemplate: "https://zac.local/zaken/{identificatie}"
       frontendUrl: https://openarchiefbeheer-ui.local
