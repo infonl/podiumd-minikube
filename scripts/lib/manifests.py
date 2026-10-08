@@ -163,7 +163,7 @@ def trust_ca(docs: list[Doc]) -> None:
             mounts: list[Doc] = container.get("volumeMounts") or []
             container["volumeMounts"] = mounts
             mounts.append({"name": pki.TRUST_CONFIGMAP, "mountPath": pki.TRUST_DIR, "readOnly": True})
-            _add_env(container, pki.TRUST_ENV)
+            add_env(container, pki.TRUST_ENV)
 
 
 def limit_runtimes(docs: list[Doc]) -> None:
@@ -176,7 +176,7 @@ def limit_runtimes(docs: list[Doc]) -> None:
     for doc in docs:
         spec = _pod_spec(doc)
         for container in _containers(spec) if spec is not None else []:
-            _add_env(container, CAPACITY_ENV)
+            add_env(container, CAPACITY_ENV)
             if section(section(container, "resources"), "limits").get("memory"):
                 limit = {"resourceFieldRef": {"containerName": container["name"], "resource": "limits.memory"}}
                 _add_env_from(container, {GO_MEMORY_LIMIT: limit})
@@ -186,7 +186,7 @@ def _containers(spec: Doc) -> list[Doc]:
     return [*(spec.get("initContainers") or []), *(spec.get("containers") or [])]
 
 
-def _add_env(container: Doc, values: dict[str, str]) -> None:
+def add_env(container: Doc, values: dict[str, str]) -> None:
     """Appends values to container's env; a variable the container already sets wins."""
     _merge_env(container, [{"name": name, "value": value} for name, value in values.items()])
 

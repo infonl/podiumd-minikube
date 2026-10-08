@@ -5324,3 +5324,29 @@ changes no behaviour. After the deploy and podiumd-tests' next full tier
 every pod, while the baseline's pods had run longer; part of the drop may be
 fragmentation that has not built up yet. The memory test against the
 refreshed baseline will show any regrowth.
+
+## Control plane GOGC=50 (user: "yes, do #1 and measure")
+
+kube-apiserver was the third-largest container (848-913 MiB) with about
+322 MiB live heap (heap profile: CRD schemas/OpenAPI/CEL 60-80 MiB, watch
+decoding 50 MiB, nothing dominant); the rest was Go's GOGC=100 slack.
+kube-apiserver and etcd are static pods without a memory limit, so the
+GOMEMLIMIT fixup does not reach them, and `--extra-config` passes only flags.
+`provision.tune_control_plane` adds `GOGC=50` to both files in
+`/etc/kubernetes/manifests` on the node: it stages the file in
+`/etc/kubernetes` (outside the directory the kubelet watches, same
+filesystem; `/tmp` on the node is tmpfs) and renames it in, then waits until
+both mirror pods are Ready with the variable. minikube start rewrites these
+files, so `start_node` runs it, which covers provision-cluster and
+start-cluster; a tuned file is left alone. `minikube ssh` forwards no stdin
+(a piped command hung), hence `minikube cp`. `kube.node` is the one helper
+for commands on the node now (status' crictl, teardown's hostPath cleanup).
+
+The roughly 30 s API outage made cert-manager, cainjector, NGF,
+storage-provisioner and the ECK operator exit once (lost leader election, by
+design); all came back Ready. After podiumd-tests' next full tier
+(14:42-14:49 UTC, 276 passed): kube-apiserver 913 -> 400 MiB (heap in use
+293 MiB, RSS 448 MiB, `go_gc_gogc_percent` 50), etcd 159 -> 90 MiB,
+containers 12692 -> 12156 MiB. Caveat: kube-apiserver had run for about two
+hours before and grew over that time (848 -> 913 MiB); the memory test
+against the refreshed baseline shows any regrowth.

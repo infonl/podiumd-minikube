@@ -98,3 +98,27 @@ def test_replace_hosts_line_is_unchanged_when_the_line_is_current():
     line = "10.0.0.1 zac.local  # podiumd-minikube"
     text = f"127.0.0.1 localhost\n{line}\n"
     assert tunnel.replace_hosts_line(text, line) == text
+
+
+STATIC_POD = """apiVersion: v1
+kind: Pod
+metadata:
+  name: etcd
+spec:
+  containers:
+  - command:
+    - etcd
+    name: etcd
+"""
+
+
+def test_with_control_plane_env_adds_gogc_once():
+    tuned = provision.with_control_plane_env(STATIC_POD)
+    assert tuned is not None and "GOGC" in tuned and "- etcd" in tuned
+    assert provision.with_control_plane_env(tuned) is None
+
+
+def test_tune_control_plane_leaves_tuned_static_pods_alone(fake_run: FakeRun):
+    fake_run.on("minikube", "ssh", stdout=provision.with_control_plane_env(STATIC_POD) or "")
+    provision.tune_control_plane()
+    assert not fake_run.ran("minikube", "cp")

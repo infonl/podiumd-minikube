@@ -29,6 +29,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 | .NET (brp-personen-mock, contact-web, ita-web, pabc, adapter) | workstation GC, no background GC, `GCConserveMemory` 7 | `manifests.CAPACITY_ENV`, added to every container by `manifests.limit_runtimes` | -0.9 GiB (workstation GC), then -0.11 GiB |
 | Go runtimes with a memory limit (Tempo, Grafana, Prometheus, otel-collector, OpenBao, etcd, Mailpit, ECK operator) | `GOMEMLIMIT` = the container's memory limit (downward API `resourceFieldRef: limits.memory`) | `manifests.limit_runtimes`, for every container with a memory limit (other runtimes ignore it) | Tempo under a full tier: OOMKilled twice at 256Mi without it, peak 156 MiB and no restarts with it |
 | glibc malloc (Python, JVM, .NET; musl images ignore it) | `MALLOC_ARENA_MAX=2` | `manifests.CAPACITY_ENV` | after a full tier: containers 12884 -> 12466 MiB; Open Formulieren worker -98, Open Zaak worker -83, the 23 Maykin containers -294 MiB |
+| Control plane (kube-apiserver, etcd; static pods, no memory limit) | `GOGC=50` | `provision.tune_control_plane`, run by `start_node` (provision-cluster and start-cluster): minikube start rewrites `/etc/kubernetes/manifests` | after a full tier: kube-apiserver 913 -> 400 MiB, etcd 159 -> 90 MiB |
 | APISIX (Frank!Gateway outway) | 2 nginx workers | `CAPACITY_ENV` `APISIX_WORKER_PROCESSES` (`auto` started 25) | -0.45 GiB |
 | ZAC (WildFly bootable jar) | `-Xms64m -Xmx768m`, G1 with `-XX:G1PeriodicGCInterval=60000 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30` | `values.yaml` `zac.javaOptions` (`_JAVA_OPTIONS`) | 1056 -> 882 MiB (heap 555 -> 390 committed). Not the serial GC: it kept the heap near -Xmx (+133 MiB) |
 | Keycloak (Quarkus) | `-Xms64m -Xmx512m -XX:-UseG1GC -XX:+UseSerialGC` | `templates/keycloak/deployment.yaml` `JAVA_OPTS_APPEND`; kc.sh sets `-XX:+UseG1GC`, so `-XX:-UseG1GC` is required | 592 -> 416 MiB |
@@ -53,6 +54,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
   (`base_memory_*`), e.g. from the openzaak pod with python's urllib.
 - Celery: `ps`/`/proc/*/cmdline` in the worker shows `-c 1`; uWSGI: count the
   `uwsgi` processes in the web pod (master + http + 2 workers = 4).
+- Control plane: `kubectl -n kube-system get pod kube-apiserver-minikube etcd-minikube -o jsonpath='{..env}'` shows `GOGC=50`; kube-apiserver's `/metrics` `go_gc_gogc_percent` is 50.
 - .NET: the env of the five apps has `DOTNET_gcServer=0`,
   `DOTNET_gcConcurrent=0`, `DOTNET_GCConserveMemory=7`.
 - Per-process cost: PSS from `/proc/<pid>/smaps_rollup` (a Celery child
