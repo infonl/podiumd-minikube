@@ -8,16 +8,16 @@ from conftest import host_url
 PROXY = "api-proxy.local"
 
 
-# The KvK mappings match on the Accept header ZAC sends.
+# KvK: its test API's dataset (68750110 "Test BV Donald"), with the Accept header ZAC sends; BAG: WireMock.
 @pytest.mark.parametrize(
     ("path", "accept"),
     [
-        ("/api/v2/zoeken?kvkNummer=12345678&type=rechtspersoon", "application/hal+json"),
-        ("/api/v1/basisprofielen/12345678?geoData=false", "application/hal+json"),
+        ("/api/v2/zoeken?kvkNummer=68750110&type=rechtspersoon", "application/hal+json"),
+        ("/api/v1/basisprofielen/68750110?geoData=false", "application/hal+json"),
         ("/lvbag/individuelebevragingen/v2/adressen/0363200003761447", "*/*"),
     ],
 )
-def test_kvk_and_bag_mocks(edge_ip, path, accept):
+def test_kvk_and_bag(edge_ip, path, accept):
     response = requests.get(host_url(PROXY, path), headers={"Accept": accept}, timeout=10)
     assert response.status_code == 200, response.text[:300]
 

@@ -1,4 +1,4 @@
-"""OpenBao for the frankgateway profile: its seal key, one-time init and config token.
+"""OpenBao for the frankgateway profile: its seal key, one-time init, config token and the outway's keys.
 
 The chart's static seal unseals OpenBao on every start, but the vault still
 has to be initialised once, and the chart's openbao-config Job needs a token
@@ -19,6 +19,7 @@ from lib import kube
 from lib import manifests
 from lib import polling
 from lib import process
+from lib import values
 from lib.paths import CHART_DIR
 from lib.paths import NAMESPACE
 from lib.paths import RELEASE_NAME
@@ -49,6 +50,19 @@ path "identity/group-alias"      { capabilities = ["create", "update"] }
 path "identity/group-alias/id/*" { capabilities = ["read", "update"] }
 """
 STARTUP_TIMEOUT = 300
+# The Frank!Gateway outway reads its API keys at request time from KV_MOUNT/OUTWAY_KV_PATH
+# (files/frankgateway/openbao-secret-header.lua) with the token in READER_SECRET
+# (podiumd.frankgateway.openbao.tokenSecret, which the chart never creates).
+OUTWAY = "frankgateway-outway"
+KV_MOUNT = "secret"
+OUTWAY_KV_PATH = "frankgateway"
+READER_SECRET = "frankgateway-openbao-token"  # nosec B105  # noqa: S105 - a Secret name
+READER_POLICY = "frankgateway-reader"
+# frankgateway-openbao.md: the path itself and everything below it.
+READER_POLICY_HCL = f"""\
+path "{KV_MOUNT}/data/{OUTWAY_KV_PATH}"   {{ capabilities = ["read"] }}
+path "{KV_MOUNT}/data/{OUTWAY_KV_PATH}/*" {{ capabilities = ["read"] }}
+"""
 
 
 def _write_private(path_name: str, value: str) -> None:
@@ -97,23 +111,37 @@ def _initialise() -> None:
     _write_private(RECOVERY_KEY.name, out["recovery_keys_b64"][0])
 
 
-def _mint_config_token() -> None:
-    root = ROOT_TOKEN.read_text(encoding="utf-8").strip()
-    _bao("policy", "write", POLICY, "-", token=root, stdin=POLICY_HCL)
+def _mint_token(root: str, policy: str, hcl: str, secret_name: str) -> None:
+    """Writes policy, creates an orphan periodic token with it and stores it as key `token` of Secret secret_name."""
+    _bao("policy", "write", policy, "-", token=root, stdin=hcl)
     token = _bao(
-        "token", "create", "-orphan", f"-policy={POLICY}", "-period=768h", f"-display-name={POLICY}", "-field=token",
+        "token", "create", "-orphan", f"-policy={policy}", "-period=768h", f"-display-name={policy}", "-field=token",
         token=root,
     ).stdout.strip()  # fmt: skip
-    secret = kube.kubectl(
-        "create", "secret", "generic", BOOTSTRAP_SECRET, "-n", NAMESPACE,
-        f"--from-literal=token={token}", "--dry-run=client", "-o", "yaml",
-    )  # fmt: skip
-    kube.kubectl("apply", "-f", "-", stdin=secret)
-    print(f"  minted the config token into Secret {BOOTSTRAP_SECRET}")
+    secret = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": secret_name, "namespace": NAMESPACE},
+        "stringData": {"token": token},
+    }
+    kube.kubectl("apply", "-f", "-", stdin=json.dumps(secret))
+    print(f"  minted a {policy} token into Secret {secret_name}")
+
+
+def _wire_outway(root: str) -> None:
+    """Stores the outway's API keys in OpenBao and gives the outway its reader token (restarting it once)."""
+    _bao(
+        "kv", "put", f"-mount={KV_MOUNT}", OUTWAY_KV_PATH, "kvk_api_key=-", token=root, stdin=values.kvk_test_api_key()
+    )
+    if kube.exists(f"secret/{READER_SECRET}"):
+        return
+    _mint_token(root, READER_POLICY, READER_POLICY_HCL, READER_SECRET)
+    # OPENBAO_TOKEN comes from that Secret as an env var, read at start only.
+    kube.kubectl_shown("rollout", "restart", f"deployment/{OUTWAY}", "-n", NAMESPACE)
 
 
 def bootstrap(render: manifests.Render) -> None:
-    """Initialises OpenBao once, mints the config token once, then re-runs the openbao-config Job."""
+    """Initialises OpenBao once, mints the config token once, re-runs the openbao-config Job, wires the outway."""
     if not kube.exists(f"statefulset/{RELEASE_NAME}-openbao"):
         return
     print("Bootstrapping OpenBao (see scripts/lib/openbao.py)...")
@@ -130,9 +158,12 @@ def bootstrap(render: manifests.Render) -> None:
     if polling.wait_until(lambda: (s := _status()) is not None and s.get("is_self"), timeout=120, interval=3) is None:
         msg = f"OpenBao did not become active: check the seal key in {SEAL_KEY} and `kubectl logs {POD}`"
         raise process.UserError(msg)
+    root = ROOT_TOKEN.read_text(encoding="utf-8").strip()
     if not kube.exists(f"secret/{BOOTSTRAP_SECRET}"):
-        _mint_config_token()
+        _mint_token(root, POLICY, POLICY_HCL, BOOTSTRAP_SECRET)
     jobs = [doc for doc in render.docs if doc.get("kind") == "Job" and manifests.name_of(doc) == CONFIG_JOB]
     kube.kubectl_shown("delete", "job", CONFIG_JOB, "-n", NAMESPACE, "--ignore-not-found")
     kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(jobs))
     kube.kubectl_shown("wait", "--for=condition=complete", f"job/{CONFIG_JOB}", "-n", NAMESPACE, "--timeout=180s")
+    if kube.exists(f"deployment/{OUTWAY}"):
+        _wire_outway(root)

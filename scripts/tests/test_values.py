@@ -37,3 +37,13 @@ def test_set_flag_changes_only_its_own_block_and_keeps_formatting(tmp_path: Path
     assert path.read_text(encoding="utf-8") == VALUES.replace("  enabled: false\nother", "  enabled: true\nother")
     values.set_flag("zac", "enabled", value=False, path=path)
     assert "  enabled: false # comment kept" in path.read_text(encoding="utf-8")
+
+
+def test_kvk_test_api_key_follows_the_yaml_anchor(tmp_path):
+    path = tmp_path / "values.yaml"
+    path.write_text(
+        "podiumd:\n  apiproxy:\n    locations:\n      kvkSearch:\n        apikey: &k public-test-key\n"
+        "      kvkBasic:\n        apikey: *k\n",
+        encoding="utf-8",
+    )
+    assert values.kvk_test_api_key(path) == "public-test-key"

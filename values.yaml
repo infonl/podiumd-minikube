@@ -678,16 +678,16 @@ podiumd:
               client_id: zaak
               secret: zaakSecret
             # As ExternalsPodiumD; Open Zaak validates zaakobject URLs with
-            # it. Token: the vendored fixtures' Objecten token "openzaak".
-            # Their own service row (http://objecten-api.local:8000) only
-            # works in docker-compose.
+            # it. Token: Open Formulieren's Objecten token, as podiumd-infra
+            # (its "formulier"). The fixtures' own service row
+            # (http://objecten-api.local:8000) only works in docker-compose.
             - identifier: objecten-api
               label: Objecten API
               api_root: https://objecten.local/api/v2/
               api_type: orc
               auth_type: api_key
               header_key: Authorization
-              header_value: Token cd63e158f3aca276ef284e3033d020a22899c728
+              header_value: Token fakeOpenFormulierenObjectsToken
 
         vng_api_common_credentials_config_enable: true
         vng_api_common_credentials:
@@ -1385,8 +1385,9 @@ podiumd:
 
   # --- api-proxy (always on - core), as ExternalsPodiumD ---
   # Apps call BRP, KvK and BAG at http://api-proxy/<path>, as ExternalsPodiumD.
-  # BRP goes to brp-personen-mock as there; KvK and BAG go to WireMock instead
-  # of the real APIs (their mappings come with the wiremock profile).
+  # BRP goes to brp-personen-mock and KvK to KvK's test API, as both reference
+  # projects (needs internet); BAG goes to WireMock instead of Kadaster's API,
+  # whose key is not public.
   # templates/api-proxy/ingress.yaml serves the same paths on api-proxy.local.
   # podiumd's frankgateway replaces it in time; no reference environment
   # routes through it yet.
@@ -1400,18 +1401,23 @@ podiumd:
       brp:
         hostHeader: brp-personen-mock
         targetUrl: http://brp-personen-mock:5010/haalcentraal/api/brp/
+      # KvK's public test-environment key (developers.kvk.nl), as podiumd-infra;
+      # lib.openbao also stores it for the Frank!Gateway outway.
       kvkSearch:
-        hostHeader: wiremock
+        apikey: &kvkTestApiKey l7xx1f2691f2520d487b902f4e0b57a0b197
+        hostHeader: api.kvk.nl
         path: /api/v2/zoeken
-        targetUrl: http://wiremock:8080/api/v2/zoeken
+        targetUrl: https://api.kvk.nl/test/api/v2/zoeken
       kvkBasic:
-        hostHeader: wiremock
+        apikey: *kvkTestApiKey
+        hostHeader: api.kvk.nl
         path: /api/v1/basisprofielen
-        targetUrl: http://wiremock:8080/api/v1/basisprofielen
+        targetUrl: https://api.kvk.nl/test/api/v1/basisprofielen
       kvkBranch:
-        hostHeader: wiremock
+        apikey: *kvkTestApiKey
+        hostHeader: api.kvk.nl
         path: /api/v1/vestigingsprofielen
-        targetUrl: http://wiremock:8080/api/v1/vestigingsprofielen
+        targetUrl: https://api.kvk.nl/test/api/v1/vestigingsprofielen
 
   # --- Profile-gated apps (build order step 5). Each one's `enabled` flag
   # here is the one that actually controls whether podiumd renders it (its
@@ -1511,10 +1517,8 @@ podiumd:
       # above (zac.local's own existing config, never previously valid since
       # no token row existed until this) - fakeOpenFormulierenObjectsToken
       # is what podiumd.openformulieren's own objects_api service below
-      # authenticates with. Both is_superuser: true - a dev-only shortcut
-      # (bypasses per-objecttype token_permission grants entirely) matching
-      # every other fake-credential-with-full-access pattern already used
-      # throughout this file (e.g. openzaak's own Applicatie rows).
+      # authenticates with (Open Zaak too). Both only on Productaanvraag-Dimpact,
+      # as podiumd-infra's "zaak" and "formulier" tokens.
       data: |-
         sites_config_enable: true
         sites_config:
@@ -1562,8 +1566,10 @@ podiumd:
         # OBJECTEN_MERGED=true (see scripts/deploy's render() pipeline).
         objecttypes:
           items:
+            # podiumd-infra's only Productaanvraag-Dimpact, created by
+            # podiumd.objecttypen.create_required_objecttypen_job.
             - service_identifier: objecttypes-api
-              uuid: 021f685e-9482-4620-b157-34cd4003da6b
+              uuid: 11a5f7fd-013e-4e29-9cd1-738249fc3479
               name: Productaanvraag-Dimpact
             # KISS/ITA, as ExternalsPodiumD; UUIDs fixed by
             # podiumd.objecttypen.create_required_objecttypen_job.
@@ -1597,13 +1603,17 @@ podiumd:
               contact_person: ZAC
               email: zac@example.com
               application: ZAC
-              is_superuser: true
+              permissions:
+                - object_type: 11a5f7fd-013e-4e29-9cd1-738249fc3479
+                  mode: read_and_write
             - identifier: openformulieren
               token: fakeOpenFormulierenObjectsToken
               contact_person: Open Formulieren
               email: openformulieren@example.com
               application: Open Formulieren
-              is_superuser: true
+              permissions:
+                - object_type: 11a5f7fd-013e-4e29-9cd1-738249fc3479
+                  mode: read_and_write
             # As ExternalsPodiumD (icat).
             - identifier: contact
               token: objectenContactToken
@@ -2817,8 +2827,9 @@ podiumd:
   # As ExternalsPodiumD's dim1 Frank!Gateway branch: outway only, OpenBao
   # with a static seal and Keycloak login, one replica each (single node).
   # Beyond it (user's choice, the chart runbook's step 6): the outway carries
-  # the api-proxy's paths to the same mocks, as the chart's reference routes
-  # without their API-key functions, and lib.manifests.route_outbound points
+  # the api-proxy's paths to the same targets, as the chart's reference routes
+  # (only KvK's carries its API-key function; BAG's WireMock needs no key), and
+  # lib.manifests.route_outbound points
   # the apps' http://api-proxy/ URLs at it. BRP on the outway, as the routes
   # doc places the real BRP; the mock stands in for it (the doc's internal
   # example routes the in-cluster mock east-west).
@@ -2873,42 +2884,36 @@ podiumd:
               upstream_host: wiremock
               nodes:
                 "wiremock:8080": 1
-          apiproxy-kvk-search:
-            uri: "/api/v2/zoeken*"
-            name: apiproxy-kvk-search
-            labels:
-              managed-by: iac
-            upstream:
-              type: roundrobin
-              scheme: http
-              pass_host: rewrite
-              upstream_host: wiremock
-              nodes:
-                "wiremock:8080": 1
+          # The chart routes doc's KvK routes: the test dataset (/test/ prefix),
+          # the key read from OpenBao at request time (lib.openbao stores it).
           apiproxy-kvk-basic:
+            <<: &kvkRoute
+              labels:
+                managed-by: iac
+              plugins:
+                proxy-rewrite:
+                  regex_uri: ["^/(.*)", "/test/$1"]
+                serverless-pre-function:
+                  phase: rewrite
+                  functions:
+                    - 'local set_secret_header = require("openbao-secret-header") return set_secret_header({ path = "frankgateway", field = "kvk_api_key", header = "apikey" })'
+              upstream:
+                type: roundrobin
+                scheme: https
+                pass_host: rewrite
+                upstream_host: api.kvk.nl
+                nodes:
+                  "api.kvk.nl:443": 1
             uri: "/api/v1/basisprofielen*"
             name: apiproxy-kvk-basic
-            labels:
-              managed-by: iac
-            upstream:
-              type: roundrobin
-              scheme: http
-              pass_host: rewrite
-              upstream_host: wiremock
-              nodes:
-                "wiremock:8080": 1
           apiproxy-kvk-branch:
+            <<: *kvkRoute
             uri: "/api/v1/vestigingsprofielen*"
             name: apiproxy-kvk-branch
-            labels:
-              managed-by: iac
-            upstream:
-              type: roundrobin
-              scheme: http
-              pass_host: rewrite
-              upstream_host: wiremock
-              nodes:
-                "wiremock:8080": 1
+          apiproxy-kvk-search:
+            <<: *kvkRoute
+            uri: "/api/v2/zoeken*"
+            name: apiproxy-kvk-search
   openbao:
     enabled: false
     configuration:

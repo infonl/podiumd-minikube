@@ -72,7 +72,7 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | Path | Answered by |
 |---|---|
 | `/haalcentraal/api/brp/` | brp-personen-mock |
-| `/api/v2/zoeken`, `/api/v1/basisprofielen`, `/api/v1/vestigingsprofielen` | WireMock (KvK mappings) |
+| `/api/v2/zoeken`, `/api/v1/basisprofielen`, `/api/v1/vestigingsprofielen` | KvK's test API (`https://api.kvk.nl/test/...`, needs internet), as both reference projects |
 | `/lvbag/individuelebevragingen/v2/` | WireMock (BAG mappings) |
 
 **Optional profiles** (each its own `values.yaml` flag, off by default —

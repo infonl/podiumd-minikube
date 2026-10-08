@@ -38,7 +38,7 @@ def _status_from_api_proxy(*curl_args):
 @pytest.mark.parametrize(
     "curl_args",
     [
-        ["-H", "Accept: application/hal+json", f"{OUTWAY}/api/v2/zoeken?kvkNummer=12345678&type=rechtspersoon"],
+        ["-H", "Accept: application/hal+json", f"{OUTWAY}/api/v2/zoeken?kvkNummer=68750110&type=rechtspersoon"],
         [f"{OUTWAY}/lvbag/individuelebevragingen/v2/adressen/0363200003761447"],
         [
             "-H", "Content-Type: application/json",

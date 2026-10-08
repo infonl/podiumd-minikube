@@ -1,8 +1,10 @@
-"""Reads and writes boolean flags in values.yaml's top-level blocks, keeping its formatting."""
+"""Reads values.yaml: flags in its top-level blocks (written back keeping its formatting) and single settings."""
 
 import re
 
 from pathlib import Path
+
+import yaml
 
 from lib.paths import VALUES_YAML
 
@@ -49,3 +51,9 @@ def monitoring_logging_enabled(path: Path = VALUES_YAML) -> bool:
 def zac_experimental_pkce(path: Path = VALUES_YAML) -> bool:
     """zac.experimentalPkce."""
     return flag("zac", "experimentalPkce", path)
+
+
+def kvk_test_api_key(path: Path = VALUES_YAML) -> str:
+    """podiumd.apiproxy.locations.kvkSearch.apikey: KvK's public test-environment key."""
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return str(loaded["podiumd"]["apiproxy"]["locations"]["kvkSearch"]["apikey"])

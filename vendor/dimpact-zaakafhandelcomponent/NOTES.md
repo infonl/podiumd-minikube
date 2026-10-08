@@ -17,7 +17,7 @@ here is a live reference — this project never reads
   `initContainers`/`extraInitContainers` support at all (only
   `extraVolumes`/`extraVolumeMounts`, which turned out sufficient - see
   `plan.md`'s step 3 notes).
-- `wiremocks/{smartdocuments-wiremock,kvk-wiremock,bag-wiremock}/`
+- `wiremocks/{smartdocuments-wiremock,bag-wiremock}/`
   ← `scripts/docker-compose/imports/{same-name}/` (full `mappings`/`__files`
   directories, plus each service's own `README.md`).
 - `postgres/fixtures/openzaak/*.sql` (10 files)

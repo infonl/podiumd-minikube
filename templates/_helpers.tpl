@@ -31,9 +31,9 @@ spec:
                   number: {{ .port | default 80 }}
 {{- end -}}
 {{/*
-The vendored WireMock mapping sets to load, space-separated: KvK and BAG
-behind the api-proxy always, SmartDocuments with the wiremock profile.
+The vendored WireMock mapping sets to load, space-separated: BAG behind the
+api-proxy always, SmartDocuments with the wiremock profile.
 */}}
 {{- define "podiumd-minikube.wiremockSets" -}}
-kvk-wiremock bag-wiremock{{ if .Values.wiremock.enabled }} smartdocuments-wiremock{{ end }}
+bag-wiremock{{ if .Values.wiremock.enabled }} smartdocuments-wiremock{{ end }}
 {{- end -}}
