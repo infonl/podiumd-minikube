@@ -4908,3 +4908,12 @@ Result: deploy --full green from empty; OpenBao initialised and unsealed,
 6 profile databases created by the init SQL, objecttypes created after the
 fixtures, Postgres max_connections 500; node at 46.8 GiB (half the host),
 20.6 GiB used.
+
+Fresh rebuild, continued: `scripts/setup-tunnel` does not work on this host.
+It caches sudo credentials up front and then starts `minikube tunnel`
+detached, but Debian's sudo caches per terminal (timestamp_type=tty), so the
+detached tunnel could not add its route ("sudo: a terminal is required") and
+the Gateway stayed `<pending>`. Running `minikube tunnel --cleanup` and then
+`minikube tunnel` in a terminal of its own (as the user, not root) works.
+Open: rework setup-tunnel (user's choice pending). Suite on the fresh
+cluster: 107 passed.
