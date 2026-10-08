@@ -55,9 +55,10 @@ spec:
             - name: KC_IMPORT
               value: /opt/keycloak/data/import/zaakafhandelcomponent-realm.json
             # Bounded heap that follows what is in use: kc.sh sets -XX:+UseG1GC,
-            # which the later -XX:-UseG1GC switches off for the serial GC.
+            # which the later -XX:-UseG1GC switches off for the serial GC. TieredStopAtLevel=1:
+            # only the C1 compiler, less code cache and compiler memory.
             - name: JAVA_OPTS_APPEND
-              value: "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2 -XX:-UseG1GC -XX:+UseSerialGC"
+              value: "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2 -XX:-UseG1GC -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
           ports:
             - name: http
               containerPort: 8080

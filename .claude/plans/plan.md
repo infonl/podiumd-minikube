@@ -5468,3 +5468,19 @@ Considered and not done: Celery `--pool=threads` (#2). Only Open
 Notificaties' start script supports it; the others would need their
 `/celery_worker.sh` replaced, and a thread pool ignores the apps' Celery
 time limits and `--max-tasks-per-child`. Behaviour, not capacity.
+
+## ZAC and Keycloak C1 only (user: "do the JVM round after the uWSGI measurement")
+
+`-XX:TieredStopAtLevel=1` for ZAC (`zac.javaOptions`) and Keycloak
+(`JAVA_OPTS_APPEND`): only the C1 compiler, so less code cache and no C2
+compiler arenas. ZAC's code cache was only 31 MiB (Metaspace 224 MiB is
+most of its non-heap), so the expected gain was small. After podiumd-tests'
+full tier (18:14-18:21 UTC, 287 passed, 1 Playwright wait flake on the new
+volume data, fixed on their side) and a perf tier: ZAC 821 -> 737 MiB (code
+cache 11 MiB, non-heap committed 296 -> 264), Keycloak 551 -> 409 MiB (20
+more users since the measurement before). Cost: tier 7:20 -> 7:31 (within
+today's 6:56-7:31), summed ZAC tests 2.9 -> 3.7 s, Keycloak 2.2 -> 2.6 s,
+logins 26.4 -> 27.4 s, Keycloak discovery p95 4-5 -> 7 ms. Kept: a few
+hundred ms per tier for about 0.2 GiB. Baseline refreshed; it now includes
+podiumd-tests' perf volume data (2,000 zaken, 500 partijen, 300 objects),
+which stays.

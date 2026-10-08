@@ -304,7 +304,8 @@ podiumd:
     # that it's ready to, once it can be tested.
     # Laptop budget: ExternalsPodiumD runs -Xmx1024m -Xms1024m. A small -Xms and a
     # periodic G1 cycle give unused heap back (the serial GC kept ZAC's heap near -Xmx).
-    javaOptions: "-Xms64m -Xmx768m -XX:ActiveProcessorCount=2 -XX:G1PeriodicGCInterval=60000 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30"
+    # TieredStopAtLevel=1: only the C1 compiler, less code cache and compiler memory.
+    javaOptions: "-Xms64m -Xmx768m -XX:ActiveProcessorCount=2 -XX:G1PeriodicGCInterval=60000 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30 -XX:TieredStopAtLevel=1"
     contextUrl: https://zac.local
     db:
       host: postgres
