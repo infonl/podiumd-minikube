@@ -4922,5 +4922,8 @@ setup-tunnel reworked (user's design): it adds the route `10.96.0.0/12 via
 <minikube ip>` with `sudo ip route replace` in the foreground (password asked
 in the user's terminal), then starts `minikube tunnel` detached; the tunnel
 finds the route present and needs no sudo ("router: no errors"). `setup-tunnel
-stop` stops the tunnel, runs `minikube tunnel --cleanup` and removes the
-route. Verified live: background tunnel, Gateway IP back, zac.local 302.
+stop` stops the tunnel and removes the route. Found live: it first also ran
+`minikube tunnel --cleanup`, which after cleaning starts a new tunnel and
+keeps running, so stop hung; dropped. Verified live: stop removed the route
+and the IP, start brought both back (zac.local 302), the tunnel in the
+background without sudo.

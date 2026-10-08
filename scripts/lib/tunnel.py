@@ -64,7 +64,6 @@ def stop_tunnel() -> None:
         process.run(["pkill", "-f", TUNNEL_PATTERN], check=False)
     else:
         print("No 'minikube tunnel' runs.")
-    process.run(["minikube", "tunnel", "--cleanup", "-p", PROFILE], check=False)
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
     print(f"Removing the route {SERVICE_CIDR} via {node_ip} (sudo may ask for your password)...")
     process.run(route_args("del", node_ip), capture=False, check=False)
