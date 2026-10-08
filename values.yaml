@@ -3009,7 +3009,7 @@ podiumd:
           objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/90984726-2692-49d8-8f9d-742075cb761d
           schedule: "15 6-14 * * 1-5"
           clientId: contact_intern
-          clientSecret: contactAdapterSecret
+          clientSecret: contactAdapterSecret-hs256-needs-over-32-bytes
         vac:
           manageFromKiss: true
           baseUrl: https://objecten.local
@@ -3024,7 +3024,8 @@ podiumd:
     adapter:
       baseUrl: http://podiumd-minikube-adapter
       clientId: contact_intern
-      secret: contactAdapterSecret
+      # Same as syncJobs.medewerkers.clientSecret; HS256 signing needs over 32 bytes.
+      secret: contactAdapterSecret-hs256-needs-over-32-bytes
       objecten:
         baseUrl: https://objecten.local
         token: objectenContactToken

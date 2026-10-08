@@ -4993,3 +4993,11 @@ The readiness wait still had a gap, found on the uWSGI deploy: it reported
 `readyReplicas` also counts the old pod during a rolling update.
 `deploy.rolled_out` now also requires that no old pods remain
 (`status.replicas <= updatedReplicas`).
+
+KISS `contact-smoelenboek-sync` failed on every run (found by podiumd-tests'
+test_jobs_succeeded): the sync signs an HS256 token for the adapter with the
+`contact_intern` client secret, and our 20-character dev value is below
+HS256's 256-bit minimum (IDX10720). ExternalsPodiumD configures the same
+keys with a generated secret. The dev value (`syncJobs.medewerkers.clientSecret`
+and `adapter.secret`, which must match) is now 46 characters; a manual run
+completes and indexes search-smoelenboek.
