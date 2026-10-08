@@ -92,3 +92,9 @@ def test_route_args_cover_the_service_network_via_the_node():
     assert tunnel.route_args("replace", "192.168.49.2") == [
         "sudo", "ip", "route", "replace", "10.96.0.0/12", "via", "192.168.49.2",
     ]  # fmt: skip
+
+
+def test_replace_hosts_line_is_unchanged_when_the_line_is_current():
+    line = "10.0.0.1 zac.local  # podiumd-minikube"
+    text = f"127.0.0.1 localhost\n{line}\n"
+    assert tunnel.replace_hosts_line(text, line) == text

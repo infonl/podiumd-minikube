@@ -36,7 +36,9 @@ def setup_tunnel() -> None:
     kube.require_minikube_context()
     pid = process.running(TUNNEL_PATTERN)
     if pid and kube.edge_ip():
-        print(f"'minikube tunnel' runs (PID {pid}) and the edge has external IP {kube.edge_ip()} - already up.")
+        ip = kube.edge_ip()
+        print(f"'minikube tunnel' runs (PID {pid}) and the edge has external IP {ip} - already up.")
+        print(f"\n{hosts_hint(ip)}")
         print(STOP_HINT)
         return
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
@@ -53,7 +55,7 @@ def setup_tunnel() -> None:
         msg = f"no external IP for the edge after {TIMEOUT_SECONDS}s; tunnel log above ({TUNNEL_LOG})"
         raise UserError(msg)
     print(f"Tunnel is up in the background. Edge external IP: {ip}")
-    print("\nRun ./scripts/update-hosts to add/refresh the /etc/hosts entry for it.")
+    print(f"\n{hosts_hint(ip)}")
     print(STOP_HINT)
 
 
@@ -76,6 +78,19 @@ def replace_hosts_line(text: str, line: str) -> str:
     return "\n".join([*kept, line]) + "\n"
 
 
+def wanted_hosts_line(ip: str) -> str:
+    """The /etc/hosts line update-hosts writes for ip."""
+    return hosts.hosts_line(ip, hosts.chart_hosts())
+
+
+def hosts_hint(ip: str) -> str:
+    """What to do about /etc/hosts for ip: run update-hosts, or nothing."""
+    current = ETC_HOSTS.read_text(encoding="utf-8")
+    if replace_hosts_line(current, wanted_hosts_line(ip)) == current:
+        return "/etc/hosts already points the *.local hosts at it."
+    return "Run ./scripts/update-hosts to add/refresh the /etc/hosts entry for it."
+
+
 def update_hosts() -> None:
     """Writes the current edge IP line to /etc/hosts (backup in /etc/hosts.bak)."""
     kube.require_minikube_context()
@@ -83,10 +98,13 @@ def update_hosts() -> None:
     if not ip:
         msg = "the edge has no external IP yet: run ./scripts/setup-tunnel first"
         raise UserError(msg)
+    current = ETC_HOSTS.read_text(encoding="utf-8")
+    line = wanted_hosts_line(ip)
+    if replace_hosts_line(current, line) == current:
+        print(f"/etc/hosts is up to date:\n{line}")
+        return
     print("Caching sudo credentials up front...")
     process.run(["sudo", "-v"], capture=False)
-    current = ETC_HOSTS.read_text(encoding="utf-8")
-    line = hosts.hosts_line(ip, hosts.chart_hosts())
     process.run(["sudo", "cp", str(ETC_HOSTS), f"{ETC_HOSTS}.bak"])
     process.run(["sudo", "tee", str(ETC_HOSTS)], stdin=replace_hosts_line(current, line))
     print(f"Done. /etc/hosts now has:\n{line}")
