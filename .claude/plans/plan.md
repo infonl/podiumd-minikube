@@ -5400,3 +5400,17 @@ before): containers 12149 -> 11564 MiB, node 15227 -> 12595 MiB. Most of
 that is the node restart itself (fresh page cache, kube-apiserver -125,
 etcd -43 after their restart); attributable to the cpuset: the edge nginx
 96 -> 54 MiB and a few MiB per Go component. Baseline refreshed.
+
+## start-cluster waited on stale pod states (user: "go ahead")
+
+After the cpuset restart podiumd-tests' doctor got a 502 from ZAC at 15:59:19
+UTC, after start-cluster had reported every workload ready. ZAC's first
+container failed its startup probe (503, Open Zaak not up yet) and was
+restarted by the kubelet at 15:58:36; it was Ready at 15:59:45. Right after
+`minikube start` the pods still report Ready from before the stop, so
+`deploy.rolled_out` saw ready workloads before the kubelet had restarted
+them. `restart.start` now first waits until every pod (not Jobs') has a
+Ready condition that changed after the node container's start
+(`docker inspect` State.StartedAt), then checks the workloads as before.
+Checked live on the restarted cluster: no stale pods. The early "ready"
+itself only shows on the next node restart.
