@@ -18,6 +18,7 @@ from lib import dependency
 from lib import disk
 from lib import gateway
 from lib import kube
+from lib import lock
 from lib import manifests
 from lib import memory
 from lib import pki
@@ -52,7 +53,10 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
 
 def start_node() -> None:
     """start_minikube sized from MINIKUBE_CPUS (default 6) and lib.memory, then requires its kubectl context."""
-    start_minikube(_env_int("MINIKUBE_CPUS", 6), memory.wanted())
+    cpus = _env_int("MINIKUBE_CPUS", 6)
+    start_minikube(cpus, memory.wanted())
+    # The docker driver applies --memory but not --cpus on Linux (seen: NanoCpus 0).
+    process.run(["docker", "update", f"--cpus={cpus}", PROFILE])
     kube.require_minikube_context()
 
 
@@ -113,6 +117,7 @@ def load_images(images: list[str]) -> None:
         print(f"WARNING: not in minikube after loading: {' '.join(still_missing)}", file=sys.stderr)
 
 
+@lock.holding("provision-cluster")
 def provision() -> None:
     """Runs every provisioning step; each skips what is already done."""
     disk.check(disk.PROVISION)
