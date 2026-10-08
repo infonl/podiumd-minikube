@@ -22,7 +22,7 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
                                      # (or --path <dir> for a local podiumd chart checkout)
 ./scripts/provision-cluster      # starts minikube, installs NGINX Gateway Fabric, pre-loads every image
 ./scripts/deploy --full          # renders and applies the chart (every optional profile on)
-./scripts/setup-tunnel           # starts `minikube tunnel`, prints the /etc/hosts line to add
+./scripts/setup-tunnel           # asks sudo for the route, then runs `minikube tunnel` in the background
 ```
 
 `scripts/set-podiumd-version` is required on a fresh clone — `Chart.yaml` holds
@@ -148,7 +148,7 @@ automatically either direction.
 |---|---|
 | `scripts/provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
 | `scripts/deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
-| `scripts/setup-tunnel` | Starts `minikube tunnel`; idempotent |
+| `scripts/setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
 | `scripts/teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
 | `scripts/reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
 | `scripts/set-podiumd-version <version> <monitoring-logging-version\|--disable-monitoring-logging>` | Sets both Helm dependency versions in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. `--path <dir>` points `podiumd` at a local checkout instead, auto-detecting a sibling `monitoring-logging/` directory |

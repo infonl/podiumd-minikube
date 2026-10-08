@@ -86,3 +86,9 @@ def test_serving_pod_skips_terminating_and_unready_pods():
 
     assert kube.serving_pod([pod("old", deleting=True), pod("starting", ready=False), pod("new")]) == "new"
     assert kube.serving_pod([pod("old", deleting=True)]) == ""
+
+
+def test_route_args_cover_the_service_network_via_the_node():
+    assert tunnel.route_args("replace", "192.168.49.2") == [
+        "sudo", "ip", "route", "replace", "10.96.0.0/12", "via", "192.168.49.2",
+    ]  # fmt: skip

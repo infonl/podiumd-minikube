@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Starts minikube tunnel (unless running) and waits for the edge's external IP. Do not run with sudo."""
+"""Starts minikube tunnel in the background and waits for the edge's external IP; `stop` stops it.
+
+sudo asks for your password in the foreground (for the route). Do not run with sudo.
+"""
 
 import argparse
 import sys
@@ -16,9 +19,13 @@ from lib import tunnel
 
 
 def main() -> None:
-    """Parses the (empty) arguments and sets up the tunnel."""
-    argparse.ArgumentParser(description=__doc__).parse_args()
-    tunnel.setup_tunnel()
+    """Parses the arguments and starts or stops the tunnel."""
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("action", nargs="?", choices=["start", "stop"], default="start", help="default: start")
+    if parser.parse_args().action == "stop":
+        tunnel.stop_tunnel()
+    else:
+        tunnel.setup_tunnel()
 
 
 process.main(main)

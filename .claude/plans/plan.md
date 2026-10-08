@@ -4917,3 +4917,10 @@ the Gateway stayed `<pending>`. Running `minikube tunnel --cleanup` and then
 `minikube tunnel` in a terminal of its own (as the user, not root) works.
 Open: rework setup-tunnel (user's choice pending). Suite on the fresh
 cluster: 107 passed.
+
+setup-tunnel reworked (user's design): it adds the route `10.96.0.0/12 via
+<minikube ip>` with `sudo ip route replace` in the foreground (password asked
+in the user's terminal), then starts `minikube tunnel` detached; the tunnel
+finds the route present and needs no sudo ("router: no errors"). `setup-tunnel
+stop` stops the tunnel, runs `minikube tunnel --cleanup` and removes the
+route. Verified live: background tunnel, Gateway IP back, zac.local 302.
