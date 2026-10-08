@@ -163,6 +163,20 @@ podiumd:
               - ingest
               - master
             node.store.allow_mmap: false
+          # Laptop budget: an explicit heap (ECK's default 2Gi sizes it at 1 GiB);
+          # 1Gi OOMKilled it with this heap.
+          podTemplate:
+            spec:
+              containers:
+                - name: elasticsearch
+                  resources:
+                    requests:
+                      memory: 1536Mi
+                    limits:
+                      memory: 1536Mi
+                  env:
+                    - name: ES_JAVA_OPTS
+                      value: "-Xms512m -Xmx512m"
           volumeClaimTemplates:
             - metadata:
                 name: elasticsearch-data
@@ -509,6 +523,7 @@ podiumd:
       # (deliberate divergence from compose parity), so it's available
       # regardless of which other profiles happen to be enabled.
       replicaCount: 1
+      concurrency: 1 # laptop budget; chart default 4
     beat:
       replicaCount: 0 # compose never runs a separate openzaak beat/scheduler service at all
     # nginx.replicaCount left at its chart default (1) - compose runs
@@ -1008,10 +1023,16 @@ podiumd:
   openinwoner:
     enabled: false
     replicaCount: 1
+    # Laptop budget: one Celery child per worker (defaults 4 and 8). The chart
+    # ignores worker.concurrency, so the image default needs an env var.
+    extraEnvVars:
+      - name: CELERY_WORKER_CONCURRENCY
+        value: "1"
     worker:
       replicaCount: 1
     lowLatencyWorker:
       replicaCount: 1
+      concurrency: 1
     beat:
       replicaCount: 1
     nginx:
@@ -1184,8 +1205,9 @@ podiumd:
                       cpu: 1000m
                       memory: 1536Mi
                   env:
+                    # Laptop budget: half of ExternalsPodiumD's 1g heap.
                     - name: ES_JAVA_OPTS
-                      value: "-Xms1g -Xmx1g"
+                      value: "-Xms512m -Xmx512m"
                     - name: PRE_STOP_ADDITIONAL_WAIT_SECONDS
                       value: "15"
           volumeClaimTemplates:
@@ -2270,6 +2292,7 @@ podiumd:
       replicaCount: 1 # compose runs openformulieren-nginx
     worker:
       replicaCount: 1 # compose runs openformulieren-celery
+      concurrency: 1 # laptop budget; chart default 4
     beat:
       replicaCount: 1 # compose runs openformulieren-celery-beat, unlike opennotificaties
     flower:
@@ -2906,6 +2929,7 @@ podiumd:
   # its password before ECK generates one.
   kiss:
     enabled: false
+    replicaCount: 1 # chart default 2
     configuration:
       oidcUrl: https://contact.local
       oidcSecret: kissClientSecret

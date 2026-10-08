@@ -91,3 +91,14 @@ def test_rolled_out_needs_current_generation_and_ready_replicas():
     assert deploy.rolled_out(workload(2, 2, 1, 1))
     assert not deploy.rolled_out(workload(2, 1, 1, 1))
     assert not deploy.rolled_out(workload(2, 2, 1, 0))
+
+
+def test_rolled_out_reads_ecks_own_status_for_elasticsearch():
+    def elasticsearch(observed: int, health: str, phase: str) -> dict[str, object]:
+        status = {"observedGeneration": observed, "health": health, "phase": phase}
+        return {"kind": "Elasticsearch", "metadata": {"generation": 2}, "status": status}
+
+    assert deploy.rolled_out(elasticsearch(2, "yellow", "Ready"))
+    assert not deploy.rolled_out(elasticsearch(2, "green", "ApplyingChanges"))
+    assert not deploy.rolled_out(elasticsearch(2, "unknown", "Ready"))
+    assert not deploy.rolled_out(elasticsearch(1, "green", "Ready"))

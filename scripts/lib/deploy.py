@@ -34,6 +34,7 @@ STORAGE_HOOKS = "templates/storage-hooks.yaml"
 STORAGE_PERMISSIONS_JOB = "storage-permissions-fix"
 # Rollouts and config Jobs of a --full deploy, Elasticsearch included.
 READY_TIMEOUT = 900
+ECK_KINDS = ("Elasticsearch", "Kibana")
 
 # Server-side rejections start "Error from server ("; the others are client-side.
 _CLIENT_SIDE_ERRORS = re.compile(
@@ -209,10 +210,16 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
 
 
 def rolled_out(workload: dict[str, Any]) -> bool:
-    """Whether a Deployment's or StatefulSet's every replica runs the current spec and is ready."""
-    wanted = workload.get("spec", {}).get("replicas", 1)
+    """Whether a workload runs its current spec and is ready.
+
+    Elasticsearch and Kibana: ECK's own status (its StatefulSets are not rendered); a
+    single node is yellow.
+    """
     status = workload.get("status", {})
     current = status.get("observedGeneration", 0) >= workload["metadata"].get("generation", 0)
+    if workload.get("kind") in ECK_KINDS:
+        return current and status.get("health") in ("green", "yellow") and status.get("phase", "Ready") == "Ready"
+    wanted = workload.get("spec", {}).get("replicas", 1)
     return current and status.get("updatedReplicas", 0) >= wanted and status.get("readyReplicas", 0) >= wanted
 
 
@@ -237,7 +244,7 @@ def _wait_ready(render: manifests.Render) -> None:
     workloads = [
         f"{doc['kind'].lower()}/{manifests.name_of(doc)}"
         for doc in render.docs
-        if doc.get("kind") in ("Deployment", "StatefulSet")
+        if doc.get("kind") in ("Deployment", "StatefulSet", *ECK_KINDS)
     ]
 
     # Not `rollout status`: it gives up at the progress deadline (600s), which a

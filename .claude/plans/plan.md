@@ -4949,3 +4949,29 @@ Open Formulieren 0.9 GiB and its worker 0.8 GiB, Open Zaak worker 0.7 GiB
 0.8 GiB, Kibana 0.6 GiB.
 Per-process PSS: a Celery prefork child 100-195 MiB, a uWSGI process
 160-240 MiB.
+
+## Memory savings, first round
+
+Capacity only, ranked by measured saving (user's choice of the proposals):
+Celery `-c 1` for the openzaak, openformulieren and openinwoner workers and
+the openinwoner low-latency worker (chart defaults 4 and 8; ExternalsPodiumD
+and podiumd-infra set none); explicit 512m heaps for both Elasticsearch
+clusters; KISS `contact-web` 1 replica (chart default 2). The openinwoner
+chart ignores `worker.concurrency` (only the low-latency worker gets an env
+var), so its image default `CELERY_WORKER_CONCURRENCY:-4` is set through
+`extraEnvVars`.
+
+Found live: a 1Gi limit OOMKilled the KISS Elasticsearch (8.19) with a 512m
+heap; the Open Inwoner one ran at 943 of 1024 MiB. Both keep
+ExternalsPodiumD's 1536Mi limit; the heap sets the usage. The deploy had said
+"All workloads rolled out" while ECK was still restarting Elasticsearch: the
+readiness wait covered only rendered Deployments/StatefulSets, and ECK's
+StatefulSets are not rendered. `deploy.rolled_out` now also reads the
+Elasticsearch and Kibana resources' own status (current generation, phase
+Ready, health green or yellow).
+
+Result, settled 3 minutes after the deploy: node 22.5 -> 19.3 GiB (budget
+20 GiB, test_memory passes), containers 19.9 -> 16.5 GiB. Largest drops:
+low-latency worker -983 MiB, KISS Elasticsearch -610, Open Inwoner
+Elasticsearch -565, the three workers -414 to -501 each, contact-web -119.
+Suite: 109 passed.
