@@ -16,8 +16,7 @@
 # grant) because every zaakafhandelparameters endpoint asserts
 # policyService.readOverigeRechten().beheren, which needs an actual PABC
 # role mapping, not just a valid token - BEHEERDER_USERNAME is one of this
-# project's own vendored test users for exactly this role (see
-# tests/test_login_flow.py's identical credentials).
+# project's own vendored test users for exactly this role.
 #
 # GET-then-PUT, not a hand-built payload: ZAC's own
 # RestZaakafhandelParameters has several fields the frontend requires

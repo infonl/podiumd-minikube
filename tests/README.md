@@ -1,25 +1,23 @@
 # Live-cluster test suite
 
-Integration/smoke tests against a real, already-deployed minikube cluster —
-not unit tests. They formalize the manual `curl`/`kubectl`-based
-verification used throughout this project's build-order steps into a
-repeatable pytest suite.
+Checks that this project's code did its job on a deployed cluster: the
+fixups, templates, scripts and `values.yaml` wiring. How PodiumD's
+applications behave is tested by podiumd-tests, on minikube and on the real
+environments; after a deploy, `podiumd-tests run --env minikube --tier smoke`
+(read-only, takes no lock, about 10 s) checks that the applications answer.
 
-See [`../README.md`](../README.md) for how to provision and deploy the
-cluster this suite runs against in the first place.
+See [`../README.md`](../README.md) for provisioning and deploying the cluster.
 
 ## Prerequisites
 
 - The chart is deployed to the `podiumd-minikube` namespace, e.g. via
-  `../scripts/deploy --full` (all optional profiles need to be running
-  for the full suite to pass, not just the core ones).
-- `kubectl` is configured against the cluster (current context).
-- The edge has a real LoadBalancer external IP — run `../scripts/setup-tunnel`
-  first if `kubectl get svc public-gateway-nginx -n ingress-basic` shows `<pending>`.
+  `../scripts/deploy --full`.
+- `kubectl` points at the cluster.
+- The edge has an external IP: run `../scripts/setup-tunnel` first if
+  `kubectl get svc public-gateway-nginx -n ingress-basic` shows `<pending>`.
 
-No `/etc/hosts` edits are needed to run the suite: every test reaches
-services through the edge's IP: `*.local` resolves to it inside the test
-process, at test time.
+No `/etc/hosts` edits are needed: `*.local` resolves to the edge inside the
+test process.
 
 ## Running
 
@@ -27,59 +25,33 @@ process, at test time.
 python3 -m venv ../.venv
 source ../.venv/bin/activate      # ..\.venv\Scripts\activate on Windows
 pip install -r ../requirements.txt
-playwright install chromium
 pytest
 ```
 
-The venv only needs creating once — on later runs, just `source
-../.venv/bin/activate` before `pytest`. `playwright install chromium`
-also only needs running once (per venv): it downloads Playwright's own
-Chromium build into `~/.cache/ms-playwright`, separate from any browser
-already on the machine, and `test_browser.py` needs it — the rest of
-the suite doesn't.
-
-Tests for optional profile groups (objecten, objecttypen, opennotificaties,
-openarchiefbeheer, openformulieren, metrics, wiremock) auto-skip if that
-profile isn't currently deployed — profile detection is based on which pods
-are actually running, not on reading `values.yaml`, so the suite always
-reflects the real cluster state. `test_monitoring_logging.py` is further
-gated on top of that: it only runs when the `metrics` profile is backed by
-the `monitoring-logging` dependency (`monitoringLogging.enabled=true`)
-rather than `templates/metrics/`'s raw templates — the two are mutually
-exclusive implementations of the same profile, so `test_metrics.py` and
-`test_monitoring_logging.py` never both run against the same deployment.
+Tests for a profile that is not deployed skip; the profiles are read from
+the running pods. `test_metrics.py` runs for `templates/metrics/`,
+`test_monitoring_logging.py` only when `monitoringLogging.enabled=true`.
 
 ## What's covered
 
-| File | What it checks |
+| File | What it checks (the code it guards) |
 |---|---|
-| `test_pods.py` | Every pod is `Running`/`Succeeded`, every long-running container is `Ready`, the core stack is present |
-| `test_reachability.py` | Every Ingress hostname (core + profile-gated) returns its expected status code |
-| `test_login_flow.py` | The full OIDC login flow through `zac.local` — redirect to Keycloak, login form, credential submission, authorization code, callback, landing on the authenticated app shell |
-| `test_pkce.py` | PKCE (RFC 9700): pabc's own middleware always sends a `code_challenge`, Keycloak actually validates it end to end (login form → credentials → authorization code → callback), and zac's client is guarded against having PKCE re-enabled before ZAC itself supports it |
-| `test_browser.py` | Same login flow, but through a real (headless Chromium) browser via Playwright — proves the SPA actually renders/hydrates after login, not just that the HTTP redirect chain succeeds |
-| `test_database.py` | All expected Postgres databases exist, PostGIS is installed where needed, ZAC's own ZGW client credentials are seeded in Open Zaak |
-| `test_zgw_service_reachability.py` | Every `zgw_consumers.Service` row seeded into objecten's database has an `api_root` that's actually reachable from inside the cluster |
-| `test_metrics.py` | Grafana's provisioned datasources and Prometheus's scrape targets are actually healthy (raw-templates implementation - skips if `monitoringLogging.enabled=true` instead) |
-| `test_monitoring_logging.py` | Same shape of checks as `test_metrics.py`, against the `monitoring-logging` dependency's own Grafana/Prometheus/Tempo instead, plus Loki actually holding this namespace's forwarded pod logs (proves Alloy's log-collection pipeline works, not just that Loki answers queries) - only runs when `monitoringLogging.enabled=true` |
-| `test_mailpit.py` | A real email sent via `send_mail()` from a component (openzaak) actually arrives in mailpit - confirmed both via its API and via its real (headless Chromium) web UI, not just that mailpit's root path returns 200 |
-| `test_pabc_migrations_guard.py` | `scripts/apply-pabc-migrations` actually refuses to recreate the (non-idempotent) pabc-migrations Job when PABC's database already has data |
-| `test_memory.py` | The minikube node within the laptop budget (16 GiB default profile, 20 GiB with any optional profile), and no container more than 20% + 64 MiB above `memory-baseline.json`; `--update-memory-baseline` rewrites that file |
+| `test_reachability.py` | Every Ingress host has an HTTPRoute at the edge, accepted with resolved backends (`lib.gateway`) |
+| `test_edge.py` | The edge rejects a 2 MB request body, as ExternalsPodiumD's limit (`lib.gateway`) |
+| `test_keycloak_realm.py` | The live realm matches the realm sync's target, PKCE included (`lib.keycloak`, `manifests.fix_realm`) |
+| `test_database.py` | Databases, PostGIS, ZAC's Open Zaak credentials and Open Notificaties' kanaal/abonnement (`templates/postgres`, `values.yaml`) |
+| `test_zgw_service_reachability.py` | The apps' zgw_consumers api_roots answer from inside their pods (`lib.dns`, `manifests.trust_ca`) |
+| `test_metrics.py` | Grafana's datasources and Prometheus's scrape targets (`templates/metrics`) |
+| `test_monitoring_logging.py` | The scrape jobs `values.yaml` adds to monitoring-logging's Prometheus |
+| `test_kiss_ita.py` | KISS's Elasticsearch is green with its heap and limit; the edge forwards ITA's chunked bodies |
+| `test_frankgateway.py` | OpenBao unsealed (`lib.openbao`), the outway's routes, ZAC pointed at the outway (`manifests.route_outbound`) |
+| `test_clamav.py` | ClamAV runs with the EICAR-only signatures (`templates/clamav`) |
+| `test_pabc_migrations_guard.py` | `scripts/apply-pabc-migrations` refuses to recreate the Job when PABC's database has data |
+| `test_memory.py` | The node within the laptop budget, no container more than 20% + 64 MiB above `memory-baseline.json`; `--update-memory-baseline` rewrites it |
 
-## Known caveats
+## Caveats
 
-- `test_login_flow.py` uses a dev-only Keycloak test user
-  (`beheerder1newiam`) whose password was set directly via the Keycloak
-  Admin API during live verification, not a compose default. If a fresh
-  cluster doesn't have this password set, see that file's docstring for how
-  to reset it.
-- `test_database.py` shells out to `kubectl exec` into the postgres pod
-  rather than connecting directly — no port-forward is assumed to be
-  running.
-- `test_pabc_migrations_guard.py`'s second test genuinely mutates cluster
-  state (it deletes the real `pabc-migrations-1` Job to reach the scenario
-  the guard protects against), unlike every other test in this suite,
-  which is read-only. It's fully recoverable - the `finally` block restores
-  the Job via `--force`, reloading the same seed dataset the database
-  already had - but be aware if running this suite against a cluster
-  someone else is actively using.
+- `test_database.py` runs `psql` through `kubectl exec` in the postgres pod.
+- `test_pabc_migrations_guard.py` changes the cluster: it deletes the
+  `pabc-migrations-1` Job and restores it in a `finally` block, holding the
+  cluster lock while it does.

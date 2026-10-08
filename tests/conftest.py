@@ -114,27 +114,3 @@ def enabled_profiles(pods):
 def host_url(hostname, path="/"):
     """https URL of an ingress host; the edge_ip fixture resolves *.local to the edge."""
     return f"https://{hostname}{path}"
-
-
-@pytest.fixture(scope="session")
-def browser_type_launch_args(browser_type_launch_args, edge_ip):
-    """
-    Extends pytest-playwright's own fixture: makes the browser resolve
-    every *.local hostname straight to the edge's IP (Chromium's own
-    --host-resolver-rules), so browser-based tests can navigate to real
-    URLs like https://zac.local/ with no `/etc/hosts` edit needed - same
-    "no local hosts-file changes required" property as the rest of this
-    suite, just done at the browser level instead of a manual Host header.
-    """
-    return {
-        **browser_type_launch_args,
-        "args": [
-            f"--host-resolver-rules=MAP zac.local {edge_ip},MAP keycloak.local {edge_ip},MAP mailpit.local {edge_ip}",
-        ],
-    }
-
-
-@pytest.fixture(scope="session")
-def browser_context_args(browser_context_args):
-    """Accepts the local CA's certificates: Chromium would need it in an NSS database."""
-    return {**browser_context_args, "ignore_https_errors": True}

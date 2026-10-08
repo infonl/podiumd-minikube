@@ -95,3 +95,14 @@ def test_openzaak_zac_client_credentials_seeded(pods, existing_databases):
         "SELECT secret FROM vng_api_common_jwtsecret WHERE identifier = 'zac_client';",
     )
     assert secret == "openzaakZaakafhandelcomponentClientSecret"
+
+
+def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement(enabled_profiles):
+    """podiumd.opennotificaties.configuration.data: the productaanvraag flow's kanaal and ZAC's abonnement."""
+    if not enabled_profiles.get("opennotificaties"):
+        pytest.skip("'opennotificaties' profile is not deployed")
+    assert "objecten" in psql("opennotificaties", "SELECT naam FROM datamodel_kanaal;").split()
+    assert (
+        "https://zac.local/rest/notificaties"
+        in psql("opennotificaties", "SELECT callback_url FROM datamodel_abonnement;").split()
+    )

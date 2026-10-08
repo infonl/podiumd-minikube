@@ -2,7 +2,6 @@
 pyyaml
 pytest>=8.0
 requests>=2.31
-pytest-playwright>=0.5
 # Lint tools for run_python_checks; unpinned on purpose, new rules are welcome.
 ruff
 pymarkdownlnt

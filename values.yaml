@@ -615,10 +615,8 @@ podiumd:
       # have PKCE support at any version, `grep -ri pkce` across the whole
       # installed package finds nothing, and the upstream project's own
       # CHANGELOG.rst and every GitHub issue/PR (searched directly) never
-      # mention it either. See tests/test_pkce.py's own
-      # test_django_app_client_does_not_require_pkce (parametrized over all
-      # seven) for the live guard, and that test module's own docstring for
-      # the full investigation.
+      # mention it either. tests/test_keycloak_realm.py guards that their
+      # clients never require PKCE.
       data: |-
         sites_config_enable: true
         sites_config:

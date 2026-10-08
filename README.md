@@ -212,14 +212,15 @@ logs, the test suite) needs no lock.
 python3 -m venv .venv
 source .venv/bin/activate      # .venv\Scripts\activate on Windows
 pip install -r requirements.txt
-playwright install chromium
 cd tests
 pytest
 ```
 
-Live-cluster integration tests, not unit tests — see
-[`tests/README.md`](tests/README.md) for full coverage and caveats. Tests
-for profiles that aren't currently deployed auto-skip.
+These live tests check that this project's code did its job on the cluster
+(fixups, templates, scripts, `values.yaml` wiring); see
+[`tests/README.md`](tests/README.md). How the applications behave is tested
+by podiumd-tests; after a deploy, `podiumd-tests run --env minikube --tier
+smoke` checks that they answer (read-only, no lock).
 
 The scripts have offline unit tests in `scripts/tests/`. Before committing,
 run every check on all Python code (ruff, shellcheck, jscpd, pymarkdown,

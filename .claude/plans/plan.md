@@ -5503,3 +5503,27 @@ client and secret, username from `sub`, staff without group sync. Objecttypen
 3.4.2 accepted it with an explicit `oidc_provider_identifier`. Verified: all
 eight apps redirect to Keycloak; the login round trip is podiumd-tests'
 test_sso (TA 92).
+
+## Live suite scoped to this project's code (user: tests "should only cover everything for the code in this project")
+
+podiumd-tests finished migrating the old suites and proposed (handoff
+"Phase 8") dropping our application checks it covers. A per-test review
+sorted each test into "guards our code" or "application behaviour". Five
+application checks podiumd-tests did not have were handed over first and
+ported there (c7b15a2): PABC's PKCE round trip, ita/kiss clients without
+PKCE, Mailpit's web UI, Open Formulieren's Objects API registration (OMC
+/Events/Version waits with their OMC tests).
+
+Deleted: test_pods, test_browser, test_login_flow, test_mailpit, test_omc,
+test_django_admin_login (the superuser Jobs are checked by deploy's Job
+wait), test_api_proxy, test_productaanvraag_flow, plus pytest-playwright
+and the browser fixtures. Trimmed to our code: test_reachability (every
+Ingress host has an accepted HTTPRoute with resolved backends, lib.gateway),
+test_pkce -> test_keycloak_realm (the live realm has no pending
+client_changes and no missing clients; PKCE per client), test_monitoring_logging
+(only the scrape jobs values.yaml adds), test_zgw_service_reachability (one
+test; the seeded check folded in), test_kiss_ita (Elasticsearch green, the
+edge's chunked forwarding), test_database (gains Open Notificaties'
+kanaal/abonnement from the productaanvraag file). test_frankgateway keeps
+the outway routes: the routes are values.yaml's. Result: 31 passed, 1
+skipped in 20 s (was about 110 tests); podiumd-tests' smoke tier 50 passed.

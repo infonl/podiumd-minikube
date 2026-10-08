@@ -15,8 +15,7 @@ what this Job actually does) - stdlib-only script, no extra packages to
 install.
 
 BEHEERDER_USERNAME/PASSWORD: this project's own vendored Keycloak realm's
-"beheerder1newiam" test user (same credentials tests/test_login_flow.py
-already uses) - every zaakafhandelparameters endpoint requires a real
+"beheerder1newiam" test user - every zaakafhandelparameters endpoint requires a real
 user with the beheerder PABC role, not just a valid token, so a
 client_credentials service-account grant doesn't work here even though one
 would be simpler to wire.
