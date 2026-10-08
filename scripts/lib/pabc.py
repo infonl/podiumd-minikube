@@ -6,6 +6,7 @@ recreating it over existing data destroys that data. The render excludes it
 """
 
 from lib import kube
+from lib import lock
 from lib import manifests
 from lib import process
 from lib.manifests import PABC_MIGRATION_JOB
@@ -25,6 +26,7 @@ def mapping_rows() -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+@lock.holding("apply-pabc-migrations")
 def apply_migrations(*, force: bool) -> None:
     """Creates the Job unless it succeeded before or PABC has data; force wipes and reseeds anyway."""
     succeeded = process.run(

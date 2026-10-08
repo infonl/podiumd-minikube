@@ -204,10 +204,10 @@ reportUnknownParameterType = false
 reportUnknownMemberType = false
 reportUnknownVariableType = false
 
-# Live-cluster suite: test modules import helpers from tests/conftest.py.
+# Live-cluster suite: test modules import helpers from tests/conftest.py, and lib.* (the lock) from scripts/.
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
-extraPaths = ["tests"]
+extraPaths = ["tests", "scripts"]
 reportMissingParameterType = false
 reportUnknownLambdaType = false
 reportUnknownArgumentType = false

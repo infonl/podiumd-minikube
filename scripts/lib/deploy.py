@@ -16,6 +16,7 @@ from lib import gateway
 from lib import hosts
 from lib import keycloak
 from lib import kube
+from lib import lock
 from lib import manifests
 from lib import memory
 from lib import openbao
@@ -153,6 +154,7 @@ def _apply_full_manifest(render: manifests.Render, expected: int) -> None:
         )
 
 
+@lock.holding("deploy")
 def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     """Syncs dependencies, applies the render, then the guarded and post-apply steps."""
     kube.require_minikube_context()

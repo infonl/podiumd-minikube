@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from lib import kube
+from lib import lock
 from lib import polling
 from lib import process
 from lib.paths import NAMESPACE
@@ -47,6 +48,7 @@ def _redis(*args: str) -> str:
     return kube.kubectl("exec", "-n", NAMESPACE, kube.first_pod("app=redis"), "--", "redis-cli", *args).strip()
 
 
+@lock.holding("flush-redis")
 def flush_redis(db: int | None) -> None:
     """FLUSHDB on db, or FLUSHALL when db is None (DBs mix caches and Celery queues per app)."""
     kube.require_minikube_context()

@@ -5203,3 +5203,35 @@ the 5 objecttypes with 16 objects and 20 records. Suite: 110 passed, and the
 memory test flagged Open Inwoner and Postgres, which had grown from
 podiumd-tests' full tier (active page cache, warm workers, no leak); the
 baseline is now refreshed after a full tier (memory-tuning.md).
+
+## Fresh rebuild (2026-10-08) and the lock
+
+Rebuild from empty with podiumd-tests' agreement: teardown -> provision ->
+deploy --full, green; the fresh cluster has exactly the 8 reference
+objecttypes, only zaaktype-test-1 and our own services in Open Zaak, the
+outway's OpenBao reader token, ClamAV; suite 111 passed. Found:
+
+- The CPU cap was never applied by provision: minikube's docker driver
+  applies `--memory` but ignores `--cpus` on Linux (NanoCpus 0 on the fresh
+  node; the earlier cap was a manual `docker update`). `provision.start_node`
+  now runs `docker update --cpus` itself.
+- My long background job (teardown + provision + deploy) hit the 10-minute
+  limit of the agent's background shell and was killed during deploy (at
+  the pabc-migrations wait); the deploy was rerun as a detached process and
+  finished green. Long runs go into a detached process with a log file.
+- The live test `test_pabc_migrations_guard` deletes the pabc-migrations Job
+  and restores it with `apply-pabc-migrations --force`; with the cluster
+  locked, the new lock refused the restore and the Job stayed deleted. The
+  Job was restored inside the hold; the test now holds the lock itself or
+  skips when someone else holds it (it deleted the Job without a lock).
+
+The lock (user: "build the lock"): until now a convention between the two
+agents (podiumd-tests' CLI took it atomically, I took it by hand, people did
+not know it). `lib.lock` takes the same file in podiumd-tests' format
+(O_EXCL); `lock.holding` makes deploy, reset-namespace, teardown-cluster,
+start-cluster, provision, apply-pabc-migrations, flush-redis and
+`setup-tunnel stop` take it themselves; a hold is marked in the environment
+(`MINIKUBE_LOCK_HOLD`), so scripts started inside it (`cluster-lock run`,
+deploy calling pabc) do not block on it. `scripts/cluster-lock`
+status/take/release/run/break; a hold older than 2 hours is flagged as
+possibly stale. README section "Shared cluster: the lock".

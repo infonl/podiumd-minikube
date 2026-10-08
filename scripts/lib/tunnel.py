@@ -6,6 +6,7 @@ from pathlib import Path
 
 from lib import hosts
 from lib import kube
+from lib import lock
 from lib import polling
 from lib import process
 from lib.paths import PROFILE
@@ -59,6 +60,7 @@ def setup_tunnel() -> None:
     print(STOP_HINT)
 
 
+@lock.holding("setup-tunnel stop")
 def stop_tunnel() -> None:
     """Stops the background minikube tunnel and removes its route (sudo may ask)."""
     if process.running(TUNNEL_PATTERN):

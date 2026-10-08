@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from lib import lock
 from lib import process
 
 
@@ -67,4 +68,13 @@ def make_tgz(path: Path, members: dict[str, str]) -> Path:
             info = tarfile.TarInfo(name)
             info.size = len(data)
             archive.addfile(info, BytesIO(data))
+    return path
+
+
+@pytest.fixture(autouse=True)
+def private_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Every test gets its own lock file; the shared cluster's is never touched."""
+    path = tmp_path / "minikube-lock"
+    monkeypatch.setattr(lock, "LOCK_FILE", path)
+    monkeypatch.delenv(lock.HOLD_ENV, raising=False)
     return path

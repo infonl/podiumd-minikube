@@ -5,6 +5,7 @@ import sys
 from typing import Any
 
 from lib import kube
+from lib import lock
 from lib import openbao
 from lib import process
 from lib.manifests import name_of
@@ -41,6 +42,7 @@ It keeps the cluster and the monitoring-logging CRDs (deploy re-applies them).
 """
 
 
+@lock.holding("reset-namespace")
 def reset_namespace(*, yes: bool) -> int:
     """Deletes the namespace and what it leaves behind cluster-wide; 1 when not confirmed."""
     kube.require_minikube_context()
@@ -87,6 +89,7 @@ Docker images on the host survive, so a new cluster loads them without downloadi
 """
 
 
+@lock.holding("teardown-cluster")
 def teardown_cluster(*, yes: bool) -> int:
     """Stops minikube tunnel and deletes the profile; 1 when not confirmed."""
     if not confirmed(TEARDOWN_SUMMARY, yes=yes):

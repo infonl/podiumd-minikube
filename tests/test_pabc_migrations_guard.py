@@ -24,7 +24,12 @@ import pytest
 from conftest import NAMESPACE
 from conftest import kubectl
 
-SCRIPT_PATH = str(Path(__file__).resolve().parent.parent / "scripts" / "apply-pabc-migrations")
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
+SCRIPT_PATH = str(SCRIPTS_DIR / "apply-pabc-migrations")
+sys.path.insert(0, str(SCRIPTS_DIR))
+from lib import lock  # noqa: E402 - needs the sys.path entry above
+from lib.process import UserError  # noqa: E402
+
 JOB_NAME = "pabc-migrations-1"
 
 
@@ -75,6 +80,18 @@ def _run_guard_script(*args):
 def _skip_if_pabc_not_deployed(pods):
     if not any(p["name"].startswith("pabc") for p in pods):
         pytest.skip("pabc is not deployed")
+
+
+@pytest.fixture(autouse=True)
+def _cluster_lock():
+    """These tests change the cluster (and run a script that takes the lock): hold it, or skip when busy."""
+    try:
+        taken = lock.take("test_pabc_migrations_guard")
+    except UserError as exc:
+        pytest.skip(str(exc))
+    yield
+    if taken:
+        lock.release()
 
 
 def test_guard_leaves_succeeded_job_alone():

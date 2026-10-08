@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Shows, takes or releases the lock on the shared cluster (also taken by deploy and the other changing scripts).
+
+status: who holds it and since when. take/release: around manual changes.
+run: holds it while a command runs. break: removes a stale lock.
+"""
+
+import argparse
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import lock
+from lib import process
+from lib import teardown
+
+
+def main() -> int:
+    """Parses the subcommand and acts on the lock."""
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--who", default=lock.person(), help="holder name for take/release/run (default: your user)")
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("status", help="show the holder")
+    take = commands.add_parser("take", help="take it for a manual change")
+    take.add_argument("what", help="what you are changing")
+    commands.add_parser("release", help="release a lock you took")
+    run = commands.add_parser("run", help="hold it while COMMAND runs")
+    run.add_argument("what", help="what the command changes")
+    run.add_argument("command", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
+    breaking = commands.add_parser("break", help="remove a stale lock")
+    breaking.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
+    args = parser.parse_args()
+
+    hold = lock.current()
+    if args.command == "status":
+        print(f"held by {lock.describe(hold)}" if hold else f"free ({lock.LOCK_FILE})")
+    elif args.command == "take":
+        lock.take(args.what, who=args.who)
+        who = "" if args.who == lock.person() else f" --who {args.who}"
+        print(f"taken; release with: ./scripts/cluster-lock{who} release")
+    elif args.command == "release":
+        found = lock.release_held_by(args.who)
+        if found is not None and found.who == args.who:
+            print("released")
+        else:
+            print(f"not held by {args.who}: {lock.describe(found) if found else 'free'}")
+    elif args.command == "run":
+        command = [part for part in args.command if part != "--"]
+        if not command:
+            parser.error("run needs a command after --")
+        return lock.run(args.what, command, who=args.who)
+    elif hold is None:
+        print("free")
+    elif teardown.confirmed(f"Remove the lock held by {lock.describe(hold)}?", yes=args.yes):
+        lock.break_lock()
+        print("removed")
+    return 0
+
+
+process.main(main)

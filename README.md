@@ -161,6 +161,7 @@ automatically either direction.
 | `scripts/provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
 | `scripts/deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
 | `scripts/start-cluster` | After a reboot: starts minikube, waits for the apps, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
+| `scripts/cluster-lock` | Shows, takes, releases or breaks the lock on the shared cluster; `run` holds it around a command (see "Shared cluster: the lock") |
 | `scripts/setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
 | `scripts/teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
 | `scripts/reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
@@ -181,6 +182,25 @@ The scripts are Python (every one takes `--help`); their shared code is the
 `scripts/lib/` package, for example `manifests.py` (the fixups applied to
 `helm template` output), `dependency.py` (`.podiumd-versions.yaml` and
 `charts/*.tgz`) and `kube.py` (kubectl and the minikube-context guard).
+
+## Shared cluster: the lock
+
+Several people and agents (podiumd-tests' CLI among them) change the same
+cluster, so whoever changes it holds the lock file first
+(`../.minikube-lock`, one line: who, what, start time; `MINIKUBE_LOCK_FILE`
+overrides the path). `deploy`, `deploy-extended`, `reset-namespace`,
+`teardown-cluster`, `start-cluster`, `provision-cluster`,
+`apply-pabc-migrations`, `flush-redis` and `setup-tunnel stop` take it
+themselves and refuse while someone else holds it. Reading (kubectl get,
+logs, the test suite) needs no lock.
+
+```bash
+./scripts/cluster-lock status                         # who holds it, since when
+./scripts/cluster-lock take "kubectl cleanup in openzaak"   # around manual changes
+./scripts/cluster-lock release
+./scripts/cluster-lock run "rebuild" -- sh -c './scripts/teardown-cluster -y && ./scripts/provision-cluster'
+./scripts/cluster-lock break                          # only when its holder is gone
+```
 
 ## Testing
 

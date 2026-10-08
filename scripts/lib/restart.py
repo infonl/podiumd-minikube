@@ -4,6 +4,7 @@ from typing import Any
 
 from lib import deploy
 from lib import kube
+from lib import lock
 from lib import polling
 from lib import process
 from lib import provision
@@ -29,6 +30,7 @@ def zac_state() -> str | None:
     return "failed" if BOOT_FAILED in result.stdout else None
 
 
+@lock.holding("start-cluster")
 def start() -> None:
     """Starts the node, waits for the apps, restarts ZAC once if its boot failed, then starts the tunnel."""
     provision.start_node()
