@@ -12,10 +12,12 @@ production never does (seen live: a 16 GiB cap thrashed until etcd restarted).
 
 **How to apply:**
 
-- Budget: the default profile must run well within about 12–16 GiB for the
-  minikube node; `--full` should aim for at most about 20 GiB. Every new
-  component states its memory request/limit and its measured settled usage
-  in plan.md.
+- Minimal, not just within budget: keep usage as low as possible without
+  changing behaviour. The budgets (default profile about 12–16 GiB for the
+  minikube node, `--full` at most about 20 GiB, checked by
+  `tests/test_memory.py`) are ceilings; meeting them never ends the search
+  for savings (the user, 2026-10-08). Every new component states its memory
+  request/limit and its measured settled usage in plan.md.
 - Scale like production in shape, not in size: one replica everywhere, the
   smallest worker/process counts that keep behaviour identical, heap sizes
   set explicitly for JVM/Elasticsearch.
