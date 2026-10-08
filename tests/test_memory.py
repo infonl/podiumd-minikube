@@ -21,6 +21,8 @@ FULL_BUDGET_MIB = 20 * GIB_IN_MIB
 # Settled usage drifts by tens of MiB; a regression is more than this above the baseline.
 GROWTH_FACTOR = 1.2
 GROWTH_SLACK_MIB = 64
+# A container this young has not settled: Celery forks its children, JVMs grow their heap.
+SETTLE_SECONDS = 300
 _UNITS = {"B": 1, "KiB": 1024, "MiB": MIB, "GiB": 1024 * MIB}
 
 
@@ -39,10 +41,25 @@ def node_mib():
     return _mib(_output("docker", "stats", "minikube", "--no-stream", "--format", "{{.MemUsage}}").split(" / ")[0])
 
 
+def _pods():
+    return json.loads(_output("kubectl", "get", "pods", "-A", "-o", "json"))["items"]
+
+
+def youngest_container_seconds():
+    """Seconds since the most recent container start among the running pods."""
+    starts = [
+        datetime.fromisoformat(status["state"]["running"]["startedAt"])
+        for pod in _pods()
+        for status in pod["status"].get("containerStatuses", [])
+        if "running" in status.get("state", {})
+    ]
+    return (datetime.now(UTC) - max(starts)).total_seconds()
+
+
 def workloads():
     """Workload name per 'namespace/pod': a ReplicaSet's Deployment, else the pod's owner, else the pod."""
     names = {}
-    for pod in json.loads(_output("kubectl", "get", "pods", "-A", "-o", "json"))["items"]:
+    for pod in _pods():
         meta = pod["metadata"]
         owner = next(iter(meta.get("ownerReferences", [])), {"kind": "", "name": meta["name"]})
         name = owner["name"].rsplit("-", 1)[0] if owner["kind"] == "ReplicaSet" else owner["name"]
@@ -77,6 +94,9 @@ def measured(edge_ip, request):
         pytest.skip(f"could not measure the minikube node: {exc}")
     snapshot = {"node_mib": node, "containers_mib": sum(containers.values()), "containers": containers}
     if request.config.getoption("--update-memory-baseline"):
+        age = youngest_container_seconds()
+        if age < SETTLE_SECONDS:
+            pytest.fail(f"a container started {age:.0f}s ago; refresh the baseline after {SETTLE_SECONDS}s")
         dated = {"measured": datetime.now(UTC).isoformat(timespec="seconds"), **snapshot}
         BASELINE.write_text(json.dumps(dated, indent=2) + "\n", encoding="utf-8")
     return snapshot
