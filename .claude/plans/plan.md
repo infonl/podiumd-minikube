@@ -5431,3 +5431,19 @@ openarchiefbeheer-ui.local, /api/v1/whoami/ on that host answers 403
 `resultBackendl` in the app blocks is not a typo of ours to remove; the
 openforms, openarchiefbeheer and openklant charts' configmap.yaml read
 that key.
+
+## Open Archiefbeheer external registers (podiumd-tests' remark; user: "yes")
+
+OAB's create page warned "We hebben problemen gevonden in je instellingen".
+Its health checks (`openarchiefbeheer.config.health_checks`) failed on
+archiveconfig (no bronorganisatie, zaaktype, resultaattype,
+informatieobjecttype for the destruction report's zaak) and on the Open
+Klant and Objecten plugins (no service). ExternalsPodiumD (dim1, info, icat,
+mayk) configures the plugins through setup-configuration: services
+objecten-api and openklant-klantinteracties with api_key auth, an
+`openarchiefbeheer` token in Objecten (no object type permissions) and in
+Open Klant, and `external_registers` openklant/objecten; podiumd-infra
+configures none of it. minikube now does the same. Neither estate sets the
+archive configuration in its values, so that check still fails, as there.
+Verified after the deploy: services_presence, services_configuration
+(connection checks with the new tokens), openklant and objecten pass.

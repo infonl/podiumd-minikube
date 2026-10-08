@@ -934,6 +934,11 @@ podiumd:
               token: openklantOmcToken
               contact_person: OMC
               email: omc@example.com
+            # As ExternalsPodiumD: Open Archiefbeheer's Open Klant plugin.
+            - identifier: openarchiefbeheer
+              token: openklantOpenarchiefbeheerToken
+              contact_person: Open Archiefbeheer
+              email: openarchiefbeheer@example.com
       # No compose equivalent to match (compose never sets openklant
       # SUPERUSER credentials either) and, unlike openzaak/opennotificaties/
       # objecttypen/openformulieren, this chart's values.yaml has no
@@ -1631,6 +1636,11 @@ podiumd:
               contact_person: Open Beheer
               email: openbeheer@example.com
               is_superuser: true
+            # As ExternalsPodiumD: Open Archiefbeheer's Objecten plugin, no object type permissions.
+            - identifier: openarchiefbeheer
+              token: objectenOpenarchiefbeheerToken
+              contact_person: Open Archiefbeheer
+              email: openarchiefbeheer@example.com
     # See templates/objecten/configmap-no-solo-cache-settings.yaml's own
     # header for why this shim exists (django-solo's own cache for
     # NotificationsConfig intermittently going stale, confirmed live while
@@ -2179,9 +2189,34 @@ podiumd:
             api_root: https://selectielijst.openzaak.nl/api/v1/
             api_type: orc
             auth_type: no_auth
+          # As ExternalsPodiumD: the external registers' services.
+          - identifier: objecten-api
+            label: Objecten API
+            api_root: https://objecten.local/api/v2/
+            api_type: orc
+            auth_type: api_key
+            header_key: Authorization
+            header_value: Token objectenOpenarchiefbeheerToken
+          - identifier: openklant-klantinteracties
+            label: Open Klant - Klantinteracties API
+            api_root: https://openklant.local/klantinteracties/api/v1/
+            api_type: kc
+            auth_type: api_key
+            header_key: Authorization
+            header_value: Token openklantOpenarchiefbeheerToken
         api_configuration_enabled: true
         api_configuration:
           selectielijst_service_identifier: selectielijst
+        external_registers_enabled: true
+        external_registers:
+          openklant:
+            enabled: true
+            services_identifiers:
+              - openklant-klantinteracties
+          objecten:
+            enabled: true
+            services_identifiers:
+              - objecten-api
         oidc_db_config_enable: false
       # No compose equivalent to match (compose never sets openarchiefbeheer
       # SUPERUSER credentials either - it only ever gets as far as a
