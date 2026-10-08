@@ -5294,3 +5294,18 @@ Next proposal, measured read-only during the tier: both Elasticsearch
 nodes use under 100 MiB of old generation (KISS 80, Open Inwoner 94) with
 36/34 documents; a 256m heap instead of 512m would save an estimated
 0.5 GiB.
+
+## Elasticsearch heap 256m (user: "go ahead with the Elasticsearch heap round")
+
+Both Elasticsearch nodes (KISS 8.19, Open Inwoner 9.2) hold a few dozen
+documents; under podiumd-tests' full tier their old generation peaked at 80
+and 94 MiB of the 512m heap, and the young peak of about 300 MiB was G1
+sizing the young generation in proportion to the heap. ExternalsPodiumD sets
+1g; the heap is now 256m for both. After the next full tier (13:54-14:00
+UTC, 269 passed): KISS 1143 -> 862 MiB, Open Inwoner 955 -> 669 MiB working
+set, old generation peak 91/97 MiB, no full GCs, no circuit breaker trips,
+no restarts. The limit stays 1536Mi: on a single node it caps, it saves
+nothing, and KISS's Elasticsearch keeps 860 MiB anonymous memory (about 600
+MiB outside the heap: direct memory, threads, metaspace), so 1Gi would leave
+164 MiB of headroom. Baseline refreshed after the tier: containers 12990 ->
+12884 MiB.

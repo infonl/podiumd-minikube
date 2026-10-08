@@ -160,7 +160,7 @@ podiumd:
               - master
             node.store.allow_mmap: false
           # Laptop budget: an explicit heap (ECK's default 2Gi sizes it at 1 GiB);
-          # 1Gi OOMKilled it with this heap.
+          # 1Gi OOMKilled it with a 512m heap.
           podTemplate:
             spec:
               containers:
@@ -172,7 +172,7 @@ podiumd:
                       memory: 1536Mi
                   env:
                     - name: ES_JAVA_OPTS
-                      value: "-Xms512m -Xmx512m"
+                      value: "-Xms256m -Xmx256m"
           volumeClaimTemplates:
             - metadata:
                 name: elasticsearch-data
@@ -1218,9 +1218,9 @@ podiumd:
                       cpu: 1000m
                       memory: 1536Mi
                   env:
-                    # Laptop budget: half of ExternalsPodiumD's 1g heap.
+                    # Laptop budget: a quarter of ExternalsPodiumD's 1g heap; old gen stays under 100 MiB.
                     - name: ES_JAVA_OPTS
-                      value: "-Xms512m -Xmx512m"
+                      value: "-Xms256m -Xmx256m"
                     - name: PRE_STOP_ADDITIONAL_WAIT_SECONDS
                       value: "15"
           volumeClaimTemplates:
