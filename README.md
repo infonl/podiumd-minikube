@@ -25,6 +25,10 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
 ./scripts/setup-tunnel           # asks sudo for the route, then runs `minikube tunnel` in the background
 ```
 
+After a reboot or `minikube stop`, `./scripts/start-cluster` brings everything
+back: it starts minikube, waits for the apps, restarts ZAC if its boot failed
+because Open Zaak was not up yet, and starts the tunnel.
+
 `scripts/set-podiumd-version` is required on a fresh clone — `Chart.yaml` holds
 no real podiumd/monitoring-logging version, just a placeholder; the actual
 version lives in `.podiumd-versions.yaml` (gitignored, created by this
@@ -156,6 +160,7 @@ automatically either direction.
 |---|---|
 | `scripts/provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
 | `scripts/deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
+| `scripts/start-cluster` | After a reboot: starts minikube, waits for the apps, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
 | `scripts/setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
 | `scripts/teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
 | `scripts/reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |

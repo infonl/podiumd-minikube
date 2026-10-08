@@ -5124,3 +5124,16 @@ data): in Objecttypen the type and its version, in Objecten 20 objects with
 type and its 5 permissions. Verified: KvK search and basisprofiel through the
 api-proxy and the outway (key from OpenBao) answer for 68750110; the
 productaanvraag flow passes on `11a5f7fd`; suite 111 passed.
+
+## Restart after a reboot (scripts/start-cluster)
+
+After the user's laptop reboot (`minikube start`, `setup-tunnel`) every pod
+came back except ZAC: it booted while Open Zaak was still down, got a 502
+from the Catalogi API, and WildFly gave up on the deployment
+(`WFLYCTL0080`); its liveness probe (`/health/ready`, 16 x 30 s) restarts it
+only after about 8 minutes. The user found that wait too long. New
+`scripts/start-cluster` (`lib.restart`): `provision.start_node`, waits for
+every workload except ZAC (`deploy.rolled_out`), restarts ZAC once when its
+log shows the failed boot, then `tunnel.setup_tunnel`. ExternalsPodiumD sets
+no other ZAC probes, so they stay; a manual `rollout restart deploy/zac` did
+it this time, and the suite passed (111).

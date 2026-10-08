@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Starts the stopped cluster after a reboot: minikube, the apps (ZAC restarted if its boot failed) and the tunnel."""
+
+import argparse
+import sys
+
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# sys.path must be patched before lib.* can be imported.
+# pylint: disable=wrong-import-position
+from lib import process
+from lib import restart
+
+
+def main() -> None:
+    """Parses the (empty) arguments and starts the cluster."""
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    restart.start()
+
+
+process.main(main)

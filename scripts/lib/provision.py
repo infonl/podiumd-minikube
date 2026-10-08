@@ -50,6 +50,12 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
     )
 
 
+def start_node() -> None:
+    """start_minikube sized from MINIKUBE_CPUS (default 6) and lib.memory, then requires its kubectl context."""
+    start_minikube(_env_int("MINIKUBE_CPUS", 6), memory.wanted())
+    kube.require_minikube_context()
+
+
 def chart_images() -> list[str]:
     """Images of a render with every profile and monitoring-logging on, digests stripped."""
     text = manifests.helm_template(*chart.everything_args())
@@ -110,10 +116,7 @@ def load_images(images: list[str]) -> None:
 def provision() -> None:
     """Runs every provisioning step; each skips what is already done."""
     disk.check(disk.PROVISION)
-    cpus = _env_int("MINIKUBE_CPUS", 6)
-    memory_mb = memory.wanted()
-    start_minikube(cpus, memory_mb)
-    kube.require_minikube_context()
+    start_node()
     # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
     kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
     gateway.install()
