@@ -18,7 +18,7 @@ MIGRATION_JOB_TEMPLATE = "charts/podiumd/charts/pabc/templates/migration-job.yam
 def mapping_rows() -> str:
     """Row count of Pabc's mapping table as psql prints it; "" when the database or table is missing."""
     result = process.run(
-        ["kubectl", "exec", "-n", NAMESPACE, "deploy/postgres", "--",
+        ["kubectl", "exec", "-n", NAMESPACE, kube.first_pod("app=postgres"), "--",
          "psql", "-U", "postgres", "-d", "Pabc", "-t", "-A", "-c", "SELECT count(*) FROM mapping;"],
         check=False,
     )  # fmt: skip

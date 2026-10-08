@@ -1,5 +1,7 @@
 """lib.pabc: the guard around the destructive pabc-migrations Job."""
 
+import json
+
 import pytest
 
 from conftest import FakeRun
@@ -8,7 +10,15 @@ from lib import pabc
 from lib.process import UserError
 
 JOB_STATUS = ("kubectl", "get", "job", "pabc-migrations-1")
-PSQL = ("kubectl", "exec", "-n", "podiumd-minikube", "deploy/postgres")
+PSQL = ("kubectl", "exec", "-n", "podiumd-minikube", "postgres-0")
+READY_POSTGRES = json.dumps(
+    {"items": [{"metadata": {"name": "postgres-0"}, "status": {"conditions": [{"type": "Ready", "status": "True"}]}}]}
+)
+
+
+@pytest.fixture(autouse=True)
+def _postgres_pod(fake_run: FakeRun) -> None:
+    fake_run.on("kubectl", "get", "pod", stdout=READY_POSTGRES)
 
 
 def test_a_succeeded_job_is_left_alone(fake_run: FakeRun):

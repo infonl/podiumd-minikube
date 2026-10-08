@@ -34,7 +34,7 @@ def expose_postgres(local_port: int) -> None:
             msg = f"port-forward did not come up within 10s; log: {FORWARD_LOG}"
             raise UserError(msg)
     databases = kube.kubectl(
-        "exec", "-n", NAMESPACE, "deploy/postgres", "--", "psql", "-U", "postgres", "-tA", "-c",
+        "exec", "-n", NAMESPACE, kube.first_pod("app=postgres"), "--", "psql", "-U", "postgres", "-tA", "-c",
         "select datname from pg_database where not datistemplate order by datname;",
     ).split()  # fmt: skip
     print(f"\nConnect with host localhost, port {local_port}, user postgres, password postgres, database postgres.")
@@ -44,7 +44,7 @@ def expose_postgres(local_port: int) -> None:
 
 
 def _redis(*args: str) -> str:
-    return kube.kubectl("exec", "-n", NAMESPACE, "deploy/redis", "--", "redis-cli", *args).strip()
+    return kube.kubectl("exec", "-n", NAMESPACE, kube.first_pod("app=redis"), "--", "redis-cli", *args).strip()
 
 
 def flush_redis(db: int | None) -> None:

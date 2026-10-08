@@ -59,7 +59,7 @@ def apply_hosts(hosts: list[str]) -> None:
     ip = kube.kubectl("get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}")
     corefile = kube.kubectl("get", "configmap", "coredns", "-n", "kube-system", "-o", "jsonpath={.data.Corefile}")
     # Any running pod has the search domains the node hands out.
-    resolv_conf = kube.kubectl("exec", "-n", NAMESPACE, "deploy/postgres", "--", "cat", "/etc/resolv.conf")
+    resolv_conf = kube.kubectl("exec", "-n", NAMESPACE, kube.first_pod("app=postgres"), "--", "cat", "/etc/resolv.conf")
     updated = corefile_with_hosts(corefile, ip, hosts, outside_search_domains(resolv_conf))
     if updated == corefile:
         print(f"CoreDNS already resolves {len(hosts)} ingress host(s) to the edge ({ip}).")

@@ -4,11 +4,15 @@ import json
 
 from typing import Any
 
+from lib import polling
 from lib import process
 from lib.paths import EDGE_NAMESPACE
 from lib.paths import EDGE_SERVICE
 from lib.paths import NAMESPACE
 from lib.paths import PROFILE
+
+# Waiting for a restarted pod; Postgres and Keycloak take up to a few minutes.
+POD_TIMEOUT = 300
 
 
 def require_minikube_context() -> None:
@@ -86,8 +90,13 @@ def serving_pod(pods: list[dict[str, Any]]) -> str:
 
 
 def first_pod(selector: str) -> str:
-    """Name of a serving pod matching the label selector; UserError when there is none."""
-    name = serving_pod(get_json("pod", "-n", NAMESPACE, "-l", selector)["items"])
+    """Name of a serving pod matching the label selector; UserError when none is Ready within POD_TIMEOUT.
+
+    A deploy can restart the pod (a changed pod template) just before it is used.
+    """
+    name = polling.wait_until(
+        lambda: serving_pod(get_json("pod", "-n", NAMESPACE, "-l", selector)["items"]), timeout=POD_TIMEOUT, interval=2
+    )
     if not name:
         msg = f"no Ready pod with labels {selector} in namespace {NAMESPACE}: check `kubectl get pod -l {selector}`"
         raise process.UserError(msg)
