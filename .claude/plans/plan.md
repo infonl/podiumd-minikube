@@ -5150,3 +5150,20 @@ those INSERTs out; the vendored file stays as ZAC ships it. The Objecten
 fixture token `openzaak` only served the compose Objects API row and is
 left out at seed time (`seed.without_token`). Live: the 4 services and the
 token (with its 2 permissions) deleted by hand; suite 111 passed.
+
+## JVM and .NET memory tuning (user: "apply 1 and 2 and measure")
+
+Only ZAC runs WildFly and only Keycloak runs Quarkus; .NET runs in five
+apps. Measured after the suite and 5 idle minutes, against the same
+containers before: Keycloak 592 -> 416 MiB and Solr 425 -> 214 MiB with
+`-Xms64m` and the serial GC (Keycloak's kc.sh sets `-XX:+UseG1GC`, so
+`JAVA_OPTS_APPEND` adds `-XX:-UseG1GC`; Solr's GC is `GC_TUNE`). The .NET
+apps with `DOTNET_gcConcurrent=0` and `DOTNET_GCConserveMemory=7` in
+`CAPACITY_ENV`: 475 -> 364 MiB together. ZAC: the serial GC grew it
+(1056 -> 1189 MiB, heap committed near -Xmx); G1 with `-Xms64m` and a periodic
+cycle stayed at 1051 (G1 keeps up to 70% free heap); G1 with
+`MinHeapFreeRatio=10 MaxHeapFreeRatio=30` and the periodic cycle: 882 MiB
+(heap 390 committed for 340 used). WireMock needs nothing: its 256Mi limit
+gives a 64 MiB heap and the serial GC. Node 14.1 -> 13.7 GiB; suite 111
+passed; baseline refreshed. All settings and their checks are listed in
+`.claude/memory/memory-tuning.md` (new, imported in CLAUDE.md).

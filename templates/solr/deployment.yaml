@@ -60,7 +60,10 @@ spec:
           args: ["solr-precreate", "zac"]
           env:
             - name: SOLR_JAVA_MEM
-              value: "-Xms256m -Xmx512m -XX:ActiveProcessorCount=2"
+              value: "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2"
+            # Replaces Solr's default G1 settings: the serial GC lets the heap follow what is in use.
+            - name: GC_TUNE
+              value: "-XX:+UseSerialGC"
           ports:
             - name: solr
               containerPort: 8983

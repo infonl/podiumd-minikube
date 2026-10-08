@@ -152,7 +152,7 @@ def test_limit_runtimes_adds_capacity_env_unless_the_container_sets_it():
     ]  # fmt: skip
     manifests.limit_runtimes(docs)
     app = {item["name"]: item["value"] for item in docs[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
-    assert app == {"DOTNET_gcServer": "1", "APISIX_WORKER_PROCESSES": "2"}
+    assert app == {**manifests.CAPACITY_ENV, "DOTNET_gcServer": "1"}
     sync = docs[1]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["env"]
     assert {"name": "DOTNET_gcServer", "value": "0"} in sync
     assert docs[2] == {"kind": "Service", "spec": {}}

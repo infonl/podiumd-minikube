@@ -310,8 +310,9 @@ podiumd:
     # release bundling zac 1.0.289+) is actually reachable again. Don't
     # take "on" being wired up here as proof it currently works - only
     # that it's ready to, once it can be tested.
-    # Laptop budget: ExternalsPodiumD runs -Xmx1024m.
-    javaOptions: "-Xms512m -Xmx768m -XX:ActiveProcessorCount=2"
+    # Laptop budget: ExternalsPodiumD runs -Xmx1024m -Xms1024m. A small -Xms and a
+    # periodic G1 cycle give unused heap back (the serial GC kept ZAC's heap near -Xmx).
+    javaOptions: "-Xms64m -Xmx768m -XX:ActiveProcessorCount=2 -XX:G1PeriodicGCInterval=60000 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30"
     contextUrl: https://zac.local
     db:
       host: postgres

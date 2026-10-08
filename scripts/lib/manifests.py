@@ -37,8 +37,14 @@ OUTWAY_URL = f"http://{OUTWAY_SERVICE}:9080/"
 # ECK resources; ECK renders their StatefulSets and Deployments itself.
 ECK_KINDS = ("Elasticsearch", "Kibana")
 # Laptop budget: these runtimes size themselves by the CPUs they see (all of the
-# host's); each variable is ignored by every other runtime.
-CAPACITY_ENV = {"DOTNET_gcServer": "0", "APISIX_WORKER_PROCESSES": "2"}
+# host's) and keep memory for throughput; each variable is ignored by every other
+# runtime. .NET: workstation GC without the background GC, compacting more.
+CAPACITY_ENV = {
+    "DOTNET_gcServer": "0",
+    "DOTNET_gcConcurrent": "0",
+    "DOTNET_GCConserveMemory": "7",
+    "APISIX_WORKER_PROCESSES": "2",
+}
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000
 

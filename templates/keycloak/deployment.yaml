@@ -54,11 +54,10 @@ spec:
               value: keycloak
             - name: KC_IMPORT
               value: /opt/keycloak/data/import/zaakafhandelcomponent-realm.json
-            # Bounded heap - dev-mode Keycloak with one small realm doesn't
-            # need much, and we don't want it auto-sizing off the minikube
-            # VM's full memory allocation.
+            # Bounded heap that follows what is in use: kc.sh sets -XX:+UseG1GC,
+            # which the later -XX:-UseG1GC switches off for the serial GC.
             - name: JAVA_OPTS_APPEND
-              value: "-Xms256m -Xmx512m -XX:ActiveProcessorCount=2"
+              value: "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2 -XX:-UseG1GC -XX:+UseSerialGC"
           ports:
             - name: http
               containerPort: 8080
