@@ -23,6 +23,11 @@ def test_images_are_unique_and_sorted():
     assert manifests.images(text) == ["a:2", "b:1"]
 
 
+def test_images_skip_an_image_key_without_a_value():
+    text = "properties:\n  image:\n    description: The image to run\n  image: c:3\n"
+    assert manifests.images(text) == ["c:3"]
+
+
 def test_disable_service_links_skips_bare_jobs():
     docs = _docs("""
 kind: Deployment

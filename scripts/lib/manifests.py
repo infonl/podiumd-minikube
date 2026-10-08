@@ -38,7 +38,8 @@ OUTWAY_URL = f"http://{OUTWAY_SERVICE}:9080/"
 LARGE_CONFIGMAP_BYTES = 200_000
 
 _DIGEST_SUFFIX = re.compile(r"(:[^\s@]+)@sha256:[0-9a-f]{64}\b")
-_IMAGE_LINE = re.compile(r"""^\s*image:\s*"?([^"\s]+)""", re.MULTILINE)
+# [ \t], not \s: an `image:` key without a value must not take the next line.
+_IMAGE_LINE = re.compile(r"""^[ \t]*image:[ \t]*"?([^"\s]+)""", re.MULTILINE)
 _POD_SPEC_PATHS = {
     "Deployment": ("spec", "template", "spec"),
     "StatefulSet": ("spec", "template", "spec"),
