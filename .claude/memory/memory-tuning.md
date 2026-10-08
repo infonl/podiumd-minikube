@@ -38,7 +38,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 | Kibana | off | `podiumd.kiss-eck.eck-kibana.enabled: false` | -0.7 GiB |
 | ClamAV | EICAR-only signature database | `podiumd.clamav` + `templates/clamav` | 19 MiB instead of 973 |
 | KISS contact-web | 1 replica | `podiumd.kiss.replicaCount` (chart default 2) | -0.12 GiB |
-| minikube node | 6 CPUs: quota and cpuset 0-5 | `provision.start_node` (`MINIKUBE_CPUS`): `docker update --cpus=6 --cpuset-cpus=0-5 minikube`; the quota alone still showed 24 CPUs to `nproc` (24 nginx workers) | caps CPU-scaled defaults (nginx workers, GOMAXPROCS, thread pools) |
+| minikube node | 6 CPUs: quota and cpuset 0-5 | `provision.start_node` (`MINIKUBE_CPUS`): `docker update --cpus=6 --cpuset-cpus=0-5 minikube`; the quota alone still showed 24 CPUs to `nproc` (24 nginx workers) | caps CPU-scaled defaults: edge nginx 24 -> 6 workers (96 -> 54 MiB); full tier 7:31 -> 6:36 |
 
 ## Checks
 

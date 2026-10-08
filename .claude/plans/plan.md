@@ -5375,3 +5375,28 @@ allowlist, so the pause mail's resume link arrived empty. ExternalsPodiumD
 podiumd-infra (e.g. test00 https://formulier.test00.pd.test-rig.nl) set it
 to the public form host; minikube now sets https://openformulieren-nginx.local.
 Verified: ConfigMap, process env and `settings.BASE_URL` in the pod.
+
+## Node pinned to CPUs 0-5 (user: "go ahead with the cpuset proposal")
+
+`docker update --cpus=6` is a CPU quota: every host CPU stays visible, so
+`nproc`, nginx's `worker_processes auto` and GOMAXPROCS saw all 24 of the
+laptop's CPUs (the edge's nginx ran 24 workers; NGF's NginxProxy has no
+worker setting). `start_node` now adds `--cpuset-cpus=0-<cpus-1>` to the
+same docker update when the host has more CPUs. On the Ryzen AI 9 HX 370
+CPUs 0-3 are the 5.2 GHz Zen 5 cores, 4-11 the 3.3 GHz Zen 5c cores (12-23
+their SMT siblings), so 0-5 is four fast and two slow cores.
+
+Applied by a node restart: the tunnel process stopped by `kill` (`setup-tunnel
+stop` needs sudo for the route, which `start-cluster` replaces anyway),
+`minikube stop` under the lock, then the user's `start-cluster`. Verified:
+cpuset 0-5, nproc 6, nginx 6 workers, and the control plane's GOGC=50
+applied again after a real `minikube start`. podiumd-tests' first run at
+15:59:19 UTC stopped in its doctor on a 502 from ZAC, about a minute after
+start-cluster had reported every workload ready (ZAC up at 15:59:58);
+not investigated yet.
+
+After the next full tier (16:00-16:06 UTC, 286 passed, 6:36 against 7:31
+before): containers 12149 -> 11564 MiB, node 15227 -> 12595 MiB. Most of
+that is the node restart itself (fresh page cache, kube-apiserver -125,
+etcd -43 after their restart); attributable to the cpuset: the edge nginx
+96 -> 54 MiB and a few MiB per Go component. Baseline refreshed.
