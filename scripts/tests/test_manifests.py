@@ -144,6 +144,20 @@ def test_trust_ca_mounts_the_ca_in_workloads_and_jobs():
     assert docs[3]["spec"]["template"]["spec"]["containers"][0]["env"]
 
 
+def test_limit_runtimes_adds_capacity_env_unless_the_container_sets_it():
+    docs: list[manifests.Doc] = [
+        {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "DOTNET_gcServer", "value": "1"}]}]}}}},
+        {"kind": "CronJob", "spec": {"jobTemplate": {"spec": {"template": {"spec": {"containers": [{"name": "sync"}]}}}}}},
+        {"kind": "Service", "spec": {}},
+    ]  # fmt: skip
+    manifests.limit_runtimes(docs)
+    app = {item["name"]: item["value"] for item in docs[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert app == {"DOTNET_gcServer": "1", "APISIX_WORKER_PROCESSES": "2"}
+    sync = docs[1]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["env"]
+    assert {"name": "DOTNET_gcServer", "value": "0"} in sync
+    assert docs[2] == {"kind": "Service", "spec": {}}
+
+
 def test_with_https_adds_twins_only_for_local_hosts():
     urls = ["http://zac.local/*", "http://zac.local", "http://localhost:8080/*", "https://kiss.local"]
     assert manifests.with_https(urls) == [*urls, "https://zac.local/*", "https://zac.local"]

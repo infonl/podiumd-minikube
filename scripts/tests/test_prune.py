@@ -17,6 +17,7 @@ def _items(*names: str, owned: bool = False, labels: dict[str, str] | None = Non
 
 
 def test_orphans_skip_desired_owned_and_unknown_kinds(fake_run: FakeRun):
+    fake_run.on("kubectl", "get", stdout=_items())
     fake_run.on("kubectl", "get", "Deployment", stdout=_items("zac", "old-grafana"))
     fake_run.on("kubectl", "get", "StatefulSet", stdout=_items("prometheus-x", owned=True))
     fake_run.on(
@@ -26,8 +27,6 @@ def test_orphans_skip_desired_owned_and_unknown_kinds(fake_run: FakeRun):
         returncode=1,
         stderr='error: the server doesn\'t have a resource type "Prometheus"',
     )
-    for kind in ("DaemonSet", "PrometheusRule", "ServiceMonitor", "PodMonitor", "Service", "Secret", "Ingress"):
-        fake_run.on("kubectl", "get", kind, stdout=_items())
     desired = [{"kind": "Deployment", "metadata": {"name": "zac"}}]
     assert prune.orphans(desired) == [("Deployment", "old-grafana")]
 

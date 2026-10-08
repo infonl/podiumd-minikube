@@ -153,6 +153,10 @@ podiumd:
       enabled: false
     eck-package-registry:
       enabled: false
+    # Laptop budget: Kibana is an admin UI no test uses; enable with
+    # --set podiumd.kiss-eck.eck-kibana.enabled=true (ExternalsPodiumD runs it).
+    eck-kibana:
+      enabled: false
     eck-elasticsearch:
       nodeSets:
         - name: default
@@ -271,7 +275,8 @@ podiumd:
     # release bundling zac 1.0.289+) is actually reachable again. Don't
     # take "on" being wired up here as proof it currently works - only
     # that it's ready to, once it can be tested.
-    javaOptions: "-Xms512m -Xmx1024m -XX:ActiveProcessorCount=2"
+    # Laptop budget: ExternalsPodiumD runs -Xmx1024m.
+    javaOptions: "-Xms512m -Xmx768m -XX:ActiveProcessorCount=2"
     contextUrl: https://zac.local
     db:
       host: postgres

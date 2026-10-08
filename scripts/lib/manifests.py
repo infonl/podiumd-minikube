@@ -34,6 +34,11 @@ ZAC_UNUSED_OTEL_COLLECTOR = "zac-unused-otel-collector"
 API_PROXY_URL = "http://api-proxy/"
 OUTWAY_SERVICE = "frankgateway-outway"
 OUTWAY_URL = f"http://{OUTWAY_SERVICE}:9080/"
+# ECK resources; ECK renders their StatefulSets and Deployments itself.
+ECK_KINDS = ("Elasticsearch", "Kibana")
+# Laptop budget: these runtimes size themselves by the CPUs they see (all of the
+# host's); each variable is ignored by every other runtime.
+CAPACITY_ENV = {"DOTNET_gcServer": "0", "APISIX_WORKER_PROCESSES": "2"}
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000
 
@@ -148,15 +153,31 @@ def trust_ca(docs: list[Doc]) -> None:
         spec["volumes"] = volumes
         if not any(volume.get("name") == pki.TRUST_CONFIGMAP for volume in volumes):
             volumes.append({"name": pki.TRUST_CONFIGMAP, "configMap": {"name": pki.TRUST_CONFIGMAP}})
-        containers: list[Doc] = [*(spec.get("initContainers") or []), *(spec.get("containers") or [])]
-        for container in containers:
+        for container in _containers(spec):
             mounts: list[Doc] = container.get("volumeMounts") or []
             container["volumeMounts"] = mounts
             mounts.append({"name": pki.TRUST_CONFIGMAP, "mountPath": pki.TRUST_DIR, "readOnly": True})
-            env: list[Doc] = container.get("env") or []
-            container["env"] = env
-            present = {item.get("name") for item in env}
-            env.extend({"name": name, "value": value} for name, value in pki.TRUST_ENV.items() if name not in present)
+            _add_env(container, pki.TRUST_ENV)
+
+
+def limit_runtimes(docs: list[Doc]) -> None:
+    """Adds CAPACITY_ENV to every container of every workload and Job."""
+    for doc in docs:
+        spec = _pod_spec(doc)
+        for container in _containers(spec) if spec is not None else []:
+            _add_env(container, CAPACITY_ENV)
+
+
+def _containers(spec: Doc) -> list[Doc]:
+    return [*(spec.get("initContainers") or []), *(spec.get("containers") or [])]
+
+
+def _add_env(container: Doc, values: dict[str, str]) -> None:
+    """Appends values to container's env; a variable the container already sets wins."""
+    env: list[Doc] = container.get("env") or []
+    container["env"] = env
+    present = {item.get("name") for item in env}
+    env.extend({"name": name, "value": value} for name, value in values.items() if name not in present)
 
 
 def _is_test_hook(doc: Doc) -> bool:
@@ -264,6 +285,7 @@ def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool =
     docs = [doc for doc in loaded if doc and not _excluded(doc)]
     disable_service_links(docs)
     route_outbound(docs)
+    limit_runtimes(docs)
     if ca_trust:
         trust_ca(docs)
     if objecten_merged:

@@ -16,6 +16,7 @@ import sys
 
 from lib import kube
 from lib import process
+from lib.manifests import ECK_KINDS
 from lib.manifests import Doc
 from lib.manifests import section
 from lib.paths import NAMESPACE
@@ -24,6 +25,7 @@ from lib.paths import RELEASE_NAME
 PRUNABLE_KINDS = (
     "Deployment", "StatefulSet", "DaemonSet",
     "Prometheus", "PrometheusRule", "ServiceMonitor", "PodMonitor",
+    *ECK_KINDS,
     "Service", "Secret", "Ingress",
 )  # fmt: skip
 

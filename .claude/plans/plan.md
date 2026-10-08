@@ -5001,3 +5001,35 @@ HS256's 256-bit minimum (IDX10720). ExternalsPodiumD configures the same
 keys with a generated secret. The dev value (`syncJobs.medewerkers.clientSecret`
 and `adapter.secret`, which must match) is now 46 characters; a manual run
 completes and indexes search-smoelenboek.
+
+## Memory savings, third round (user: "do all 5")
+
+The user corrected "under budget, so not needed": the budget is a ceiling,
+usage stays minimal (laptop-resources.md updated). Applied:
+
+- `manifests.limit_runtimes` adds `CAPACITY_ENV` to every container:
+  `DOTNET_gcServer=0` (ASP.NET defaults to server GC, one heap per visible
+  CPU; brp-personen-mock 900 -> 115 MiB, contact-web 197 -> 68) and
+  `APISIX_WORKER_PROCESSES=2` (APISIX's `auto` started 25 nginx workers;
+  Frank!Gateway outway 514 -> 60 MiB). Each runtime ignores the other's.
+- Kibana off (`podiumd.kiss-eck.eck-kibana.enabled: false`, 711 MiB; no
+  test in either repo uses it; ExternalsPodiumD runs it). prune now also
+  covers the ECK kinds (`manifests.ECK_KINDS`), which removed the live Kibana.
+- ZAC `-Xmx768m` (ExternalsPodiumD 1024m).
+- The live node capped at 6 CPUs (`docker update --cpus=6 minikube`), the
+  default `provision` already passes to `minikube start`; this node had been
+  created without a cap and saw all 24 host CPUs.
+
+Result, settled: node 18.4 -> 16.6 GiB, containers 15.6 -> 13.1 GiB.
+
+Found live: the env change touched every pod template, so every pod
+restarted at once, Postgres included. `dns.apply_hosts` then exec'd into
+`deploy/postgres`, which picked the terminating pod ("container not found"),
+and the deploy failed. Every exec into Postgres or Redis (dns, postgres,
+services, pabc) now goes through `kube.first_pod`, which waits up to
+`POD_TIMEOUT` for a serving pod. During that restart wave the liveness
+probes restarted openklant and the openinwoner worker once; both recovered.
+The first baseline of this round was taken too early (openinwoner-worker
+before its Celery child forked: 106 instead of ~265 MiB), so
+`--update-memory-baseline` now refuses while a container is younger than
+5 minutes.
