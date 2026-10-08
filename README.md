@@ -122,32 +122,33 @@ set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`, `solr`,
 
 ## Resource usage
 
-No `metrics-server` is installed, so `kubectl top` isn't available — use
-`docker stats minikube --no-stream` (real usage) and `kubectl describe
-node minikube` (requested/limited).
+`./scripts/show-cluster-status` shows the node's and each container's memory
+and CPU against the budget and the baseline, and whether the cluster has
+settled (no `metrics-server`, so no `kubectl top`).
 
-`tests/memory-baseline.json` holds the last reference measurement (node
-and working set per container); `tests/test_memory.py` checks the budget and
-regressions against it. Refresh it after an intended change, on a settled
-cluster:
+Budgets (`tests/test_memory.py`): the default profile at most 16 GiB for the
+minikube node, `--full` at most 20 GiB. Measured with `--full` after a full
+podiumd-tests run (2026-10-08): node 12.3 GiB, containers 11.2 GiB.
+
+`tests/memory-baseline.json` holds that measurement per container; the test
+fails when a container grows more than 20% + 64 MiB above it. Refresh it
+after an intended change, on a settled cluster and after a full test run:
 
 ```bash
 pytest tests/test_memory.py --update-memory-baseline
 ```
 
-Earlier, without Open Inwoner, KISS and ITA, idle-ish, 20Gi-capped container:
+The node gets 6 CPUs (`MINIKUBE_CPUS`), pinned to the host's first CPUs
+(`--cpuset-cpus=0-5`) so that programs sizing themselves by the CPU count
+see 6 instead of all of the host's. On Intel and AMD hybrid CPUs the fast
+cores come first.
 
-| | `monitoringLogging.enabled=true` | `=false` |
-|---|---|---|
-| CPU requests | 3465m / 8 (43%) | 3260m / 8 (40%) |
-| CPU limits | 2650m / 8 (33%) | 200m / 8 (2%) |
-| Memory requests | 10058Mi / 32Gi (31%) | 9416Mi / 32Gi (29%) |
-| Memory limits | 8308Mi / 32Gi (25%) | 5652Mi / 32Gi (17%) |
-| Memory, real | ~17.8Gi / 20Gi (**~89%**) | ~17.0Gi / 20Gi (**~85%**) |
+What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
+`GOMEMLIMIT`, the control plane's `GOGC`) and how to check each setting:
+[`.claude/memory/memory-tuning.md`](.claude/memory/memory-tuning.md).
 
-`monitoringLogging.enabled` is the biggest lever to reduce footprint, but
-the real saving is modest (~4pp / ~0.8Gi) compared to the *limits* column,
-which are ceilings, not actual consumption. Disable it with:
+`monitoringLogging.enabled` replaces the `metrics` profile's Grafana, Tempo
+and Prometheus with a dozen heavier pods. Disable it with:
 
 ```bash
 ./scripts/set-podiumd-version <version> --disable-monitoring-logging
@@ -163,7 +164,7 @@ automatically either direction.
 | `scripts/provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
 | `scripts/deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
 | `scripts/show-cluster-status` | Node and per-container memory and CPU (against the budget and `tests/memory-baseline.json`), profiles, recent restarts and failed Jobs, tunnel, lock and disk; reads only (`--top N`, `--all`) |
-| `scripts/start-cluster` | After a reboot: starts minikube, waits for the apps, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
+| `scripts/start-cluster` | After a reboot: starts minikube, waits until every pod reports its state since the start and the apps are ready, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
 | `scripts/cluster-lock` | Shows, takes, releases or breaks the lock on the shared cluster; `run` holds it around a command (see "Shared cluster: the lock") |
 | `scripts/setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
 | `scripts/teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
