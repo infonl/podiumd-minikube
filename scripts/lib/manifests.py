@@ -42,6 +42,7 @@ CAPACITY_ENV = {
     "DOTNET_GCConserveMemory": "7",
     "APISIX_WORKER_PROCESSES": "2",
 }
+GO_MEMORY_LIMIT = "GOMEMLIMIT"
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000
 
@@ -164,11 +165,19 @@ def trust_ca(docs: list[Doc]) -> None:
 
 
 def limit_runtimes(docs: list[Doc]) -> None:
-    """Adds CAPACITY_ENV to every container of every workload and Job."""
+    """Adds CAPACITY_ENV to every container of every workload and Job, and GOMEMLIMIT where a memory limit is set.
+
+    Without GOMEMLIMIT the Go runtime only collects when its heap has doubled
+    and runs into the OOM killer under a peak (Tempo, at 256Mi); the value
+    comes from the container's own limit through the downward API.
+    """
     for doc in docs:
         spec = _pod_spec(doc)
         for container in _containers(spec) if spec is not None else []:
             _add_env(container, CAPACITY_ENV)
+            if section(section(container, "resources"), "limits").get("memory"):
+                limit = {"resourceFieldRef": {"containerName": container["name"], "resource": "limits.memory"}}
+                _add_env_from(container, {GO_MEMORY_LIMIT: limit})
 
 
 def _containers(spec: Doc) -> list[Doc]:
@@ -177,10 +186,19 @@ def _containers(spec: Doc) -> list[Doc]:
 
 def _add_env(container: Doc, values: dict[str, str]) -> None:
     """Appends values to container's env; a variable the container already sets wins."""
+    _merge_env(container, [{"name": name, "value": value} for name, value in values.items()])
+
+
+def _add_env_from(container: Doc, sources: dict[str, Doc]) -> None:
+    """Appends variables taken from valueFrom sources; a variable the container already sets wins."""
+    _merge_env(container, [{"name": name, "valueFrom": source} for name, source in sources.items()])
+
+
+def _merge_env(container: Doc, items: list[Doc]) -> None:
     env: list[Doc] = container.get("env") or []
     container["env"] = env
     present = {item.get("name") for item in env}
-    env.extend({"name": name, "value": value} for name, value in values.items() if name not in present)
+    env.extend(item for item in items if item["name"] not in present)
 
 
 def _is_test_hook(doc: Doc) -> bool:

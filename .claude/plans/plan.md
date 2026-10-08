@@ -5267,3 +5267,30 @@ nothing; fixed, with a CLI test.
 
 From podiumd-tests' full tier on the fresh cluster (265 passed): Tempo was
 OOMKilled twice at its 256 MiB limit under the traces; next memory round.
+
+## GOMEMLIMIT for Go runtimes (user: "go ahead with the Tempo memory round")
+
+Tempo was OOMKilled twice at its 256 MiB limit under podiumd-tests' full
+tier: the Go runtime only collects when its heap has doubled (GOGC=100) and
+knows nothing of the cgroup limit. `manifests.limit_runtimes` now gives every
+container with a memory limit `GOMEMLIMIT` from its own `limits.memory`
+(downward API `resourceFieldRef`), so Go programs (Tempo, Grafana,
+Prometheus, otel-collector, OpenBao, Mailpit, the ECK operator) collect
+harder near their limit; other runtimes ignore the variable, and a value the
+container sets itself wins. Raising Tempo's limit was the alternative; it
+adds memory, this does not. Checked: Tempo's process env has
+`GOMEMLIMIT=268435456`.
+
+Measured during the next full tier (13:39-13:45 UTC, 266 passed): Tempo
+peak 156 MiB, no restarts. The deploy that added the variable changed every
+pod spec with a limit, Postgres included, so ita-web, contact-web and
+Open Inwoner's worker and celery-monitor restarted once on the lost database
+connection during that rollout (exit 139/1, not OOMKilled); not seen again.
+Baseline refreshed after the tier: containers 13267 -> 12990 MiB (Postgres
+-185, Tempo -73, Open Formulieren worker +82); the node figure (docker
+stats, includes active page cache) 14817 -> 15903 MiB.
+
+Next proposal, measured read-only during the tier: both Elasticsearch
+nodes use under 100 MiB of old generation (KISS 80, Open Inwoner 94) with
+36/34 documents; a 256m heap instead of 512m would save an estimated
+0.5 GiB.

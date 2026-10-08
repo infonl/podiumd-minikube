@@ -158,6 +158,25 @@ def test_limit_runtimes_adds_capacity_env_unless_the_container_sets_it():
     assert docs[2] == {"kind": "Service", "spec": {}}
 
 
+def test_limit_runtimes_gives_containers_with_a_memory_limit_gomemlimit():
+    docs: list[manifests.Doc] = [
+        {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [
+            {"name": "tempo", "resources": {"limits": {"memory": "256Mi"}}},
+            {"name": "zac", "resources": {"requests": {"memory": "1Gi"}}},
+            {"name": "own", "resources": {"limits": {"memory": "1Gi"}}, "env": [{"name": "GOMEMLIMIT", "value": "900MiB"}]},
+        ]}}}},
+    ]  # fmt: skip
+    manifests.limit_runtimes(docs)
+    tempo, zac, own = docs[0]["spec"]["template"]["spec"]["containers"]
+    go = {
+        "name": "GOMEMLIMIT",
+        "valueFrom": {"resourceFieldRef": {"containerName": "tempo", "resource": "limits.memory"}},
+    }
+    assert go in tempo["env"]
+    assert not any(item["name"] == "GOMEMLIMIT" for item in zac["env"])
+    assert [item for item in own["env"] if item["name"] == "GOMEMLIMIT"] == [{"name": "GOMEMLIMIT", "value": "900MiB"}]
+
+
 def test_with_https_adds_twins_only_for_local_hosts():
     urls = ["http://zac.local/*", "http://zac.local", "http://localhost:8080/*", "https://kiss.local"]
     assert manifests.with_https(urls) == [*urls, "https://zac.local/*", "https://zac.local"]
