@@ -5033,3 +5033,23 @@ The first baseline of this round was taken too early (openinwoner-worker
 before its Celery child forked: 106 instead of ~265 MiB), so
 `--update-memory-baseline` now refuses while a container is younger than
 5 minutes.
+
+## ClamAV: measured cost (not enabled)
+
+Both reference projects deploy ClamAV (podiumd-infra `clamav.enabled: true`;
+ExternalsPodiumD sets no `enabled`, and podiumd's condition key is unset, so
+it renders). minikube has `podiumd.clamav.enabled: false`. Measured with a
+temporary `deploy --full --set podiumd.clamav.enabled=true`, then removed:
+
+- clamd 973 MiB PSS (signature databases in memory: main.cvd 89 MB, daily.cvd
+  23 MB, bytecode.cvd 0.3 MB on disk), freshclam 10 MiB; node 16.6 -> 17.7
+  GiB. `ConcurrentDatabaseReload no` is already set (no 2x peak on reload).
+- A second clamd in the same pod with daily + bytecode only (no main): 658
+  MiB, EICAR still found.
+- One-signature hash database (`44d88612...:68:Eicar-Test-Signature`, the
+  daily.hdb line): 13 MiB, EICAR found as `Eicar-Test-Signature.UNOFFICIAL`.
+
+Found live: podiumd's ClamAV PVC uses storage class `managed-csi` (Azure), so
+the pod stays Pending on minikube (`persistentVolume.storageClass: standard`
+fixes it); the chart enables an HPA (max 5 replicas). prune left the HPA, two
+ConfigMaps and the ServiceAccount (kinds it does not cover); removed by hand.
