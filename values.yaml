@@ -2819,8 +2819,9 @@ podiumd:
   # Beyond it (user's choice, the chart runbook's step 6): the outway carries
   # the api-proxy's paths to the same mocks, as the chart's reference routes
   # without their API-key functions, and lib.manifests.route_outbound points
-  # the apps' http://api-proxy/ URLs at it. BRP on the outway, not on the
-  # internal instance where the docs put it, so one gateway serves the paths.
+  # the apps' http://api-proxy/ URLs at it. BRP on the outway, as the routes
+  # doc places the real BRP; the mock stands in for it (the doc's internal
+  # example routes the in-cluster mock east-west).
   # Fixed admin keys: helm template has no cluster for the chart's lookup and
   # would regenerate them on every render. The seal key comes from
   # .openbao/seal-key (lib.openbao), never from this file.
