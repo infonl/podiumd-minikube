@@ -1146,6 +1146,9 @@ podiumd:
             - domain: openinwoner.local
               name: Open Inwoner
     settings:
+      # Laptop budget: 2 web processes (image default 4).
+      uwsgi:
+        processes: 2
       secretKey: openInwonerSecretKey
       allowedHosts: openinwoner.local,openinwoner-nginx.podiumd-minikube.svc.cluster.local
       isHttps: true
@@ -1628,6 +1631,9 @@ podiumd:
         mountPath: /app/src/objects/conf/docker_no_solo_cache.py
         readOnly: true
     settings:
+      # Laptop budget: 2 web processes (image default 4).
+      uwsgi:
+        processes: 2
       secretKey: objectenApiSecretKey
       allowedHosts: objecten.local
       # See openzaak's isHttps comment.
@@ -2012,6 +2018,9 @@ podiumd:
               kanalen:
                 - naam: objecten
     settings:
+      # Laptop budget: 2 web processes (image default 4).
+      uwsgi:
+        processes: 2
       secretKey: opennotificatiesApiSecretKey
       allowedHosts: opennotificaties.local
       # See openzaak's isHttps comment.
@@ -2103,6 +2112,11 @@ podiumd:
   # --- openarchiefbeheer ---
   openarchiefbeheer:
     enabled: false
+    # Laptop budget: 2 web processes (image default 4); the chart ignores
+    # settings.uwsgi.processes.
+    extraEnvVars:
+      - name: UWSGI_PROCESSES
+        value: "2"
     # replicaCount/worker/beat/nginx/flower all already default to 1 - no
     # override needed (confirmed live against the chart: unlike the other
     # Maykin-family apps, this one's chart defaults already match compose's
@@ -2441,6 +2455,9 @@ podiumd:
         mountPath: /app/src/openforms/conf/docker_no2fa.py
         readOnly: true
     settings:
+      # Laptop budget: 2 web processes (image default 4).
+      uwsgi:
+        processes: 2
       secretKey: openFormulierenSecretKey
       allowedHosts: openformulieren-nginx.local,openformulieren-web.local
       # See openzaak's isHttps comment.

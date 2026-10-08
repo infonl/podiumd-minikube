@@ -4975,3 +4975,15 @@ Result, settled 3 minutes after the deploy: node 22.5 -> 19.3 GiB (budget
 low-latency worker -983 MiB, KISS Elasticsearch -610, Open Inwoner
 Elasticsearch -565, the three workers -414 to -501 each, contact-web -119.
 Suite: 109 passed.
+
+## Memory savings, second round: uWSGI
+
+The user pointed out that every Maykin app runs uWSGI. Measured per app: five
+ran 4 web processes (image default `UWSGI_PROCESSES:-4`: objecten,
+opennotificaties, openarchiefbeheer, openformulieren, openinwoner), five
+already 2 (chart values). Neither ExternalsPodiumD nor podiumd-infra sets
+uWSGI values. All ten now run 2: `settings.uwsgi.processes: 2`, and for
+openarchiefbeheer `extraEnvVars` `UWSGI_PROCESSES=2` (its chart has the key
+but no template reads it). Result: node 19.3 -> 18.4 GiB, containers 16.5 ->
+15.6 GiB (openinwoner -443 MiB, openformulieren -289, objecten -195,
+openarchiefbeheer -179, opennotificaties -165). Suite: 109 passed.
