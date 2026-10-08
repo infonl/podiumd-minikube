@@ -24,9 +24,6 @@ from lib.paths import PROFILE
 
 MIB = 1024**2
 BASELINE = CHART_DIR / "tests" / "memory-baseline.json"
-# .claude/memory/laptop-resources.md: the default profile within ~16 GiB, --full within ~20 GiB.
-DEFAULT_BUDGET_MIB = 16 * 1024
-FULL_BUDGET_MIB = 20 * 1024
 # Settled usage drifts by tens of MiB; a regression is more than this above the baseline.
 GROWTH_FACTOR = 1.2
 GROWTH_SLACK_MIB = 64
@@ -152,7 +149,7 @@ def youngest_container_seconds(items: list[dict[str, Any]]) -> float:
 
 def budget_mib(profiles: dict[str, bool]) -> int:
     """The node's memory budget: --full's when any optional profile runs."""
-    return FULL_BUDGET_MIB if any(profiles.values()) else DEFAULT_BUDGET_MIB
+    return memory.FULL_BUDGET_MB if any(profiles.values()) else memory.DEFAULT_BUDGET_MB
 
 
 def _recently_restarted(container: dict[str, Any], now: datetime) -> bool:

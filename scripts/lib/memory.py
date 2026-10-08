@@ -14,9 +14,10 @@ from lib.paths import PROFILE
 MIB = 1024**2
 # Share of the memory Docker sees (the host, or Docker Desktop's VM).
 HOST_FRACTION = 0.5
-# A deploy --full used 18.4 GiB once settled; startup (Elasticsearch
-# pre-touching its heap, Java apps) needs more, and 16 GiB thrashed.
-FULL_STACK_MB = 24 * 1024
+# .claude/memory/laptop-resources.md: the default profile within 16 GiB, --full within 20 GiB.
+# tests/test_memory.py holds usage to them; a --full node needs at least the --full budget.
+DEFAULT_BUDGET_MB = 16 * 1024
+FULL_BUDGET_MB = 20 * 1024
 
 
 def wanted_mb(host_total_mb: int, override: str | None) -> int:
@@ -47,11 +48,11 @@ def check(*, full: bool) -> None:
     one may have been sized on purpose.
     """
     cap = node_mb()
-    if not full or not cap or cap >= FULL_STACK_MB:
+    if not full or not cap or cap >= FULL_BUDGET_MB:
         return
-    raise_to = max(wanted(), FULL_STACK_MB) // 1024
+    raise_to = max(wanted(), FULL_BUDGET_MB) // 1024
     print(
-        f"WARNING: minikube profile '{PROFILE}' has {cap // 1024} GiB, below the ~{FULL_STACK_MB // 1024} GiB "
+        f"WARNING: minikube profile '{PROFILE}' has {cap // 1024} GiB, below the ~{FULL_BUDGET_MB // 1024} GiB "
         f"a deploy --full needs. Raise it live: docker update --memory={raise_to}g --memory-swap=-1 {PROFILE} "
         "(lost on `minikube delete`).",
         file=sys.stderr,
