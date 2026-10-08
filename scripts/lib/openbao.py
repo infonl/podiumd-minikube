@@ -11,6 +11,7 @@ key, root token and recovery key stay in .openbao/ (gitignored), like .pki/.
 import json
 import secrets
 import subprocess  # nosec B404 - only for the CompletedProcess type
+import time
 
 from typing import Any
 
@@ -55,6 +56,15 @@ def _write_private(path_name: str, value: str) -> None:
     path = OPENBAO_DIR / path_name
     path.write_text(value, encoding="utf-8")
     path.chmod(0o600)
+
+
+def forget_vault() -> None:
+    """Moves the root token and recovery key aside once the vault's database is gone; keeps the seal key."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for path in (ROOT_TOKEN, RECOVERY_KEY):
+        if path.is_file():
+            path.rename(path.with_name(f"{path.name}.{stamp}"))
+            print(f"Moved {path.name} aside ({path.name}.{stamp}): its vault was deleted with Postgres.")
 
 
 def seal_key_args() -> list[str]:

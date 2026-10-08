@@ -5,6 +5,7 @@ import sys
 from typing import Any
 
 from lib import kube
+from lib import openbao
 from lib import process
 from lib.manifests import name_of
 from lib.manifests import section
@@ -74,6 +75,7 @@ def reset_namespace(*, yes: bool) -> int:
         "delete", "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration",
         "-l", f"app.kubernetes.io/instance={NAMESPACE}", "--ignore-not-found",
     )  # fmt: skip
+    openbao.forget_vault()
     print(f"\nDone. '{NAMESPACE}' is gone - run ./scripts/deploy to redeploy from scratch.")
     return 0
 
@@ -94,5 +96,6 @@ def teardown_cluster(*, yes: bool) -> int:
         process.run(["pkill", "-f", "minikube tunnel"], check=False)
     print(f"Deleting minikube profile '{PROFILE}'...")
     process.run(["minikube", "delete", "-p", PROFILE], capture=False)
+    openbao.forget_vault()
     print("\nDone. /etc/hosts '*.local' entries now point at a stale IP: re-run update-hosts after setup-tunnel.")
     return 0
