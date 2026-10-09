@@ -8,7 +8,9 @@ zaaktypes other than zaaktype-test-1 (with test-2/test-3's deelzaaktype
 link), the demo documents of the removed productaanvraag objects, and every
 zgw_consumers service (docker-compose hosts, and a BAG service that no
 Open Zaak configuration uses) with the notifications setting that points at
-one (values.yaml configures Open Zaak's notifications).
+one (values.yaml configures Open Zaak's notifications). A zaaktype-
+informatieobjecttype's volgnummer counts on rows that the left-out files
+inserted first; on an empty table it was NULL and the link was lost.
 */}}
 {{- $unusedFiles := list
   "02-setup-zaaktype-test-3.sql" "03-setup-zaaktype-test-2.sql"
@@ -16,6 +18,8 @@ one (values.yaml configures Open Zaak's notifications).
   "08-setup-bpmn-test-zaaktype-3.sql" "09-setup-bpmn-test-zaaktype-4.sql"
   "10-setup-bpmn-test-zaaktype-5.sql" }}
 {{- $unusedStatements := "(?ms)^(INSERT INTO (catalogi_zaaktype_deelzaaktypen|documenten_enkelvoudiginformatieobject|documenten_enkelvoudiginformatieobjectcanonical|zgw_consumers_service)|UPDATE notifications_api_common_notificationsconfig)\\b.*?;\\n" }}
+{{- $volgnummer := "(SELECT id FROM catalogi_zaaktypeinformatieobjecttype ORDER BY volgnummer DESC LIMIT 1) + 1" }}
+{{- $firstVolgnummer := "COALESCE((SELECT MAX(volgnummer) FROM catalogi_zaaktypeinformatieobjecttype), 0) + 1" }}
 {{- range $app := list "openzaak" "openklant" "openarchiefbeheer" }}
 apiVersion: v1
 kind: ConfigMap
@@ -27,7 +31,7 @@ data:
   {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/%s/*.sql" $app) }}
   {{- if not (has (base $path) $unusedFiles) }}
   {{ base $path }}: |
-    {{- regexReplaceAll $unusedStatements ($.Files.Get $path) "" | nindent 4 }}
+    {{- regexReplaceAll $unusedStatements ($.Files.Get $path) "" | replace $volgnummer $firstVolgnummer | nindent 4 }}
   {{- end }}
   {{- end }}
 ---

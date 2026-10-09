@@ -5527,3 +5527,31 @@ edge's chunked forwarding), test_database (gains Open Notificaties'
 kanaal/abonnement from the productaanvraag file). test_frankgateway keeps
 the outway routes: the routes are values.yaml's. Result: 31 passed, 1
 skipped in 20 s (was about 110 tests); podiumd-tests' smoke tier 50 passed.
+
+## ZAC's abonnement and zaaktype-test-1's informatieobjecttypen (podiumd-tests' findings; user: "yes, do both")
+
+ZAC's search and work lists were empty: its abonnement in Open
+Notificaties listened to kanaal objecten only, so no zaken notification
+reached ZAC's Solr indexing. ExternalsPodiumD (dim1) subscribes ZAC to
+objecten, zaken, documenten, besluiten and zaaktypen; minikube now does the
+same (verified in opennotificaties' datamodel_filtergroup). The old
+"deliberately narrow scope" comment went with it. Zaken made before the
+change stay out of the index until a reindex in ZAC's admin; podiumd-tests
+does not need one (its tests make their own zaken).
+
+zaaktype-test-1 had no informatieobjecttypen in Open Zaak, so ZAC could not
+file the ontvangstbevestiging ("e-mail", NoSuchElementException in
+MailService.getEmailInformatieObjectType, then "Failed to create a zaak ...
+for productaanvraag") nor any document. ZAC's own fixture 05 creates the
+"e-mail" and "bijlage" types and their zaaktype links, but each link's
+volgnummer is `(SELECT id ... ORDER BY volgnummer DESC LIMIT 1) + 1`, which
+is NULL on an empty table: in docker-compose fixtures 02-04 filled it first,
+and we leave those out. templates/postgres/configmap-fixtures.yaml now
+replaces it with `COALESCE(MAX(volgnummer), 0) + 1`; the running database
+got the two links once by hand (the same INSERTs, under the lock).
+
+ZAC's inrichtingscheck also wants a besluittype, which ZAC's fixture does
+not give zaaktype-test-1. Open Zaak 1.29.3's BesluitType serializer only
+requires published informatieobjecttypen, not concept zaaktypen, so a
+besluittype for the published zaaktype can be created and published through
+the Catalogi API: podiumd-tests' test setup, not ours.

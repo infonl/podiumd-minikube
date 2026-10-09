@@ -2027,16 +2027,9 @@ podiumd:
         username: admin
         password: admin
         email: admin@example.com
-      # Deliberately narrow scope: only the "objecten" kanaal/abonnement
-      # (needed for the productaanvraag flow) plus the Autorisaties API link
-      # that abonnement's own authorization check depends on - not the full
-      # docker-compose reference config (zaaktypen/zaken/documenten/
-      # besluittypen/besluiten kanalen, the openzaak/open-formulieren/
-      # open-notificaties zgw_consumers services). Those exist to let
-      # openzaak/openklant publish their own notifications, which nothing in
-      # this chart currently consumes - adding them unused would just be
-      # more surface area to keep in sync with openzaak's own vendored JWT
-      # secrets for no live benefit. Revisit if a future profile needs them.
+      # ZAC's abonnement has ExternalsPodiumD's kanalen (dim1): objecten for
+      # productaanvragen, zaken and documenten for its Solr index, besluiten
+      # and zaaktypen.
       #
       # autorisaties-api: confirmed live this is NOT optional - opennotificaties
       # defaults to the public https://autorisaties-api.vng.cloud when no
@@ -2188,6 +2181,10 @@ podiumd:
               auth: openNotificatiesApiSecretKey
               kanalen:
                 - naam: objecten
+                - naam: zaken
+                - naam: documenten
+                - naam: besluiten
+                - naam: zaaktypen
     settings:
       # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
       uwsgi:
