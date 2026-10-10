@@ -5598,3 +5598,21 @@ Formulieren and Open Archiefbeheer now have those settings (checked in each
 app's stored OIDCClient). The only sub-named accounts were podiumd-tests'
 test admin's; podiumd-tests removes them if the duplicate e-mail blocks the
 new login.
+
+## OMC 2.3.1 experiment (user: "yes, let's try this experiment")
+
+podiumd-tests asked for an OMC that accepts Open Notificaties' notifications
+(7 tests blocked). OMC's 2.x line (to v.2.3.1, 2026-10-08) is in no PodiumD
+release (4.9.4 pins 1.17.19) nor in either estate. Tried on minikube with
+`--set omc.enabled=true --set podiumd.omc.enabled=true --set
+podiumd.omc.image.tag=2.3.1` (image loaded with provision.load_images),
+podiumd's chart notifynl-omc-nodep 0.14.1. 2.x requires variables that chart
+does not set (ZGW_AUTH_KEY_OPENVTB first; chart 0.17.4 has them): every
+notification answered 500 until a ConfigMap with placeholders was added to
+the Deployment by hand. Then a zaken notification without `source` was
+processed, but with `"source": "openzaak"` (as Open Zaak 1.29.3 sends every
+notification) it got 206 with inner 422 "Required properties are missing".
+Negative: OMC stays off, podiumd-tests' OMC tests stay blocked upstream.
+Cleaned up by a normal `deploy --full` (pruned OMC) and deleting the
+ConfigMap; the 2.3.1 image stays on the node. Details in the untracked
+`omc-source-property-issue.md`.
