@@ -1230,9 +1230,10 @@ podiumd:
             - domain: openinwoner.local
               name: Open Inwoner
     settings:
-      # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
+      # Laptop budget: 2 web processes (image default 4), not 1: with --lazy-apps and
+      # UWSGI_MAX_REQUESTS=100 a single worker's ~6 s restart stalls every request.
       uwsgi:
-        processes: 1
+        processes: 2
         threads: 2
       secretKey: openInwonerSecretKey
       allowedHosts: openinwoner.local,openinwoner-nginx.podiumd-minikube.svc.cluster.local

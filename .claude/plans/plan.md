@@ -5727,3 +5727,15 @@ That deploy's ZAC productaanvraag seed Job failed: since round 3 ZAC has
 that Job ran against the old ZAC pod. The Job now calls
 `https://zac.local/rest`; nothing else here calls ZAC over http
 (podiumd-tests checked its side too).
+
+## Open Inwoner back to 2 uWSGI processes (podiumd-tests' perf finding; user: "go with 2 processes for Open Inwoner")
+
+With 1 uWSGI process, Open Inwoner's start script (`UWSGI_MAX_REQUESTS=100`,
+`--lazy-apps`) restarted the only worker every 100 requests, and the app
+init takes about 6 s: podiumd-tests measured 6 stalls of 5.9-6.6 s in 60 s
+of single-client searches, and the init took CPU from Open Zaak. The other
+apps load the app in the master and fork, so their restart is short.
+Production's 4 processes hide it; a stalling app is a behaviour difference,
+so Open Inwoner has 2 processes again (threads 2). Right after the deploy
+the container used 446 MiB (258 before); the memory baseline is refreshed
+after the next full tier.
