@@ -5565,3 +5565,22 @@ environment rule. ExternalsPodiumD (dim1, chart default) and podiumd-infra
 `daily-remove-imports`) never ran here: a behaviour difference, not
 capacity. Now 1; the beat started ("DatabaseScheduler: Schedule changed")
 and uses 187 MiB right after start.
+
+## Open Inwoner admin login: the options form (podiumd-tests' finding; user: "yes")
+
+Open Inwoner's `/oidc/callback/` answered 500, `KeyError: 'groups_settings'`
+in mozilla_django_oidc_db's `update_user`. Our config used ExternalsPodiumD's
+deprecated flat fields (`make_users_staff`, `groups_claim`, ...);
+mozilla-django-oidc-db 2.0.1 (in Open Inwoner 2.4.3) converts them into
+`options.group_settings` (setup_configuration/steps.py:149) but reads
+`options.groups_settings` (plugins.py:315). The same settings now go in as
+`options.user_settings`/`options.groups_settings`, which the step stores as
+given; the stored client now has `groups_settings`. Deviation in form only,
+from ExternalsPodiumD; untracked writeup
+`openinwoner-oidc-group-settings-issue.md`. An earlier report that the SSO
+test passed for Open Inwoner was wrong: the test passed on the error page,
+podiumd-tests has tightened it.
+
+Also deleted: three objects and three zaken (kenmerk pytest-17914...) left
+by the former test_productaanvraag_flow.py. The Open Zaak zaak DELETEs
+answered 204 this time, not the 500 of openzaak-delete-zaak-500-issue.md.

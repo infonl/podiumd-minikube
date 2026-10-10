@@ -1117,17 +1117,6 @@ podiumd:
             - identifier: admin-oidc
               oidc_provider_identifier: admin-oidc-provider
               enabled: true
-              claim_mapping:
-                first_name:
-                  - given_name
-                last_name:
-                  - family_name
-              username_claim:
-                - preferred_username
-              groups_claim:
-                - groups
-              superuser_group_names:
-                - administrators
               oidc_rp_scopes_list:
                 - openid
                 - email
@@ -1136,8 +1125,25 @@ podiumd:
               oidc_rp_client_id: openinwoner
               oidc_rp_client_secret: keycloakOpeninwonerClientSecret
               oidc_rp_sign_algo: RS256
-              make_users_staff: true
-              sync_groups: true
+              # ExternalsPodiumD's settings in options: mozilla-django-oidc-db 2.0.1
+              # stores the deprecated flat fields as group_settings, but reads
+              # groups_settings at login (KeyError, a 500 on /oidc/callback/).
+              options:
+                user_settings:
+                  claim_mappings:
+                    username:
+                      - preferred_username
+                    first_name:
+                      - given_name
+                    last_name:
+                      - family_name
+                groups_settings:
+                  claim_mapping:
+                    - groups
+                  superuser_group_names:
+                    - administrators
+                  make_users_staff: true
+                  sync: true
 
         zgw_consumers_config_enable: true
         zgw_consumers:
