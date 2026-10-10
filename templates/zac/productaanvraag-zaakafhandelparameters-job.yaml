@@ -82,8 +82,9 @@ spec:
               value: beheerder1newiam
             - name: BEHEERDER_PASSWORD
               value: beheerder1newiam
+            # ZAC requires https (AUTH_SSL_REQUIRED "all", as ExternalsPodiumD).
             - name: ZAC_BASE_URL
-              value: http://zac/rest
+              value: https://zac.local/rest
             - name: OPENZAAK_BASE_URL
               value: https://openzaak.local
             - name: ZGW_JWT_CLIENT_ID

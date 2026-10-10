@@ -5704,3 +5704,26 @@ What the final comparison found and is left as it is, with the reason:
   host with an IP allowlist on `/admin` (AKS-only addresses), e-Suite
   services, real DigiD metadata, the website crawler, Kibana, real SMTP:
   not available on a laptop.
+
+## Keycloak realm policies as podiumd's templates (podiumd-tests' realm policy test; user: "yes, go ahead")
+
+podiumd-tests' realm policy test compares the minikube realms with podiumd's
+keycloak-podiumd-realm-config.yaml and keycloak-master-realm-config.yaml.
+Realm zaakafhandelcomponent now has `sslRequired: external` (the template
+leaves Keycloak's default; requests reach Keycloak from private addresses
+through the edge) and the password policy `length(12) and
+notUsername(undefined) and notEmail(undefined) and passwordHistory(5)`.
+Realm master gets the template's brute-force protection (factor 5),
+refresh token revocation, events and admin events (30 days) and
+`length(14)` with the same rules: `keycloak.MASTER_REALM_SETTINGS`, synced
+by `sync_realm` like the vendored realm's settings (there is no vendored
+master file). A policy applies only when a password is set; existing
+passwords (admin, the compose test users) stay. podiumd-tests' realm tests
+pass (5/5).
+
+That deploy's ZAC productaanvraag seed Job failed: since round 3 ZAC has
+`AUTH_SSL_REQUIRED` "all" and answers plain `http://zac/rest` with 403
+(`https://zac.local/rest`: 200). The round 3 tier had not caught it because
+that Job ran against the old ZAC pod. The Job now calls
+`https://zac.local/rest`; nothing else here calls ZAC over http
+(podiumd-tests checked its side too).
