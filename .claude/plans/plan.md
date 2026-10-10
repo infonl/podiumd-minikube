@@ -5635,3 +5635,32 @@ so `keycloak.sync_realm` now also brings `REALM_SETTINGS` of a live realm in
 line (`realm_changes`); mappers and roles already synced. Verified live
 after the deploy. podiumd-tests checked beforehand: no test logs in with a
 wrong password or reuses refresh tokens.
+
+## Alignment round 2: app configuration as ExternalsPodiumD (final comparison)
+
+As ExternalsPodiumD (dim1), verified in each app's database after the deploy:
+- Open Formulieren: the ZGW registration backend `openzaak` (zgw_api group,
+  A's json content template), `bijlage` as the Objects API group's document
+  types, service `vng-selectielijst`, CORS only its own host, `numProxies`
+  2 (edge and nginx), `csp.reportSave`. A's `pdok` service is left out:
+  Open Formulieren's migrations already create a service with that api_root
+  without an identifier, and a second one failed the config Job on
+  `zgw_consumers_service_api_root_key`. The groups keep the RSIN 002564440
+  of the catalogus in ZAC's fixtures (A: 856683164).
+- Open Zaak: service `autorisaties-api` (client zaak), Applicaties and
+  credentials `integratieteam` and `objecten` (A's uuids), its nginx
+  Service in `allowedHosts`, `numProxies` 2.
+- Open Notificaties: its own `notifications_config` through service
+  `notificaties-api` as client `notificaties`, retries 5/3/48. Its
+  `numProxies` stays 1: A puts an nginx in front, minikube only the edge,
+  and 2 would trust a client-set X-Forwarded-For.
+- Objecten: service `autorisaties-api` (client objecten), retries 5/3/48,
+  token `integratieteam` (superuser). ITA's token keeps Medewerker: only
+  dim1 leaves it out; A's test environment (dimp/test), icat, info and
+  podiumd-infra have it, and ITA reads a user's groepen from it
+  (podiumd-tests' ITA-035 depends on it, caught before its tier).
+- Tokens: Open Klant `openinwoner`, Objecttypen `zaak`.
+- `email.defaultFrom: noreply@dimpact.nl` on the mailpit apps;
+  Referentielijsten `localhost` in `allowedHosts`.
+- ZAC: BRP protocollering and its INFO log level removed (A: chart
+  defaults, off).

@@ -399,7 +399,6 @@ podiumd:
     # BRP/KvK/BAG through the api-proxy, as ExternalsPodiumD.
     brpApi:
       url: http://api-proxy/haalcentraal/api/brp/
-      logLevel: INFO
       apiKey:
         # Compose defaults both BRP_API_KEY and BRP_API_KEY_HEADER to empty
         # (docker-compose.yaml lines 797-798) - ZAC's own BrpConfiguration
@@ -407,25 +406,6 @@ podiumd:
         # must stay in lockstep, empty together.
         value: ""
         header: ""
-      protocollering:
-        enabled: true
-        doelbinding:
-          perZaaktype: true
-          zoekmet: BRPACT-Totaal
-          raadpleegmet: BRPACT-Totaal
-          header: x-doelbinding
-        originOin:
-          oin: "123443210"
-          header: x-origin-oin
-        verwerking:
-          register: Algemeen
-          header: x-verwerking
-        toepassing:
-          value: ZAC
-          header: x-toepassing
-        gebruiker:
-          header: x-gebruiker
-        systemUser: ZacSystemUser
     kvkApi:
       url: http://api-proxy/
       apiKey: fakeKvkApiKey
@@ -680,6 +660,14 @@ podiumd:
               auth_type: api_key
               header_key: Authorization
               header_value: Token fakeOpenFormulierenObjectsToken
+            # As ExternalsPodiumD.
+            - identifier: autorisaties-api
+              label: Open Zaak - Autorisaties
+              api_root: https://openzaak.local/autorisaties/api/v1/
+              api_type: ac
+              auth_type: zgw
+              client_id: zaak
+              secret: zaakSecret
 
         vng_api_common_credentials_config_enable: true
         vng_api_common_credentials:
@@ -698,6 +686,11 @@ podiumd:
               secret: omcSecret
             - identifier: openbeheer
               secret: openbeheerSecret
+            # As ExternalsPodiumD.
+            - identifier: integratieteam
+              secret: integratieteamSecret
+            - identifier: objecten
+              secret: objectenSecret
 
         vng_api_common_applicaties_config_enable: true
         vng_api_common_applicaties:
@@ -737,6 +730,17 @@ podiumd:
                 - openbeheer
               heeft_alle_autorisaties: true
               label: Open Beheer
+            # As ExternalsPodiumD.
+            - uuid: 3595eece-ba8a-47c9-a388-496086c9677f
+              client_ids:
+                - integratieteam
+              heeft_alle_autorisaties: true
+              label: Integratieteam
+            - uuid: d0782c50-9cc2-4aa3-86e6-03e1cfb29813
+              client_ids:
+                - objecten
+              heeft_alle_autorisaties: true
+              label: Objecten
 
         notifications_config_enable: true
         notifications_config:
@@ -825,7 +829,9 @@ podiumd:
       # browsing via the ingress hostname got Django's own
       # DisallowedHost 400 error page, since "openzaak.local" was never in
       # that list.
-      allowedHosts: openzaak.local
+      # As ExternalsPodiumD: also its nginx Service, and two proxies (edge, nginx).
+      allowedHosts: openzaak.local,openzaak-nginx.podiumd-minikube.svc.cluster.local
+      numProxies: 2
       # As ExternalsPodiumD: Secure cookies and https URLs (the edge
       # terminates TLS). Its domain for URLs built outside a request comes
       # from sites_config in configuration.data.
@@ -852,6 +858,7 @@ podiumd:
         # mailpit doesn't speak STARTTLS, so this must be off or mail
         # delivery fails.
         useTLS: false
+        defaultFrom: noreply@dimpact.nl
       database:
         host: postgres
         port: 5432
@@ -938,6 +945,11 @@ podiumd:
               token: openklantOmcToken
               contact_person: OMC
               email: omc@example.com
+            # As ExternalsPodiumD.
+            - identifier: openinwoner
+              token: openklantOpeninwonerToken
+              contact_person: Open Inwoner
+              email: openinwoner@example.com
             # As ExternalsPodiumD: Open Archiefbeheer's Open Klant plugin.
             - identifier: openarchiefbeheer
               token: openklantOpenarchiefbeheerToken
@@ -1040,6 +1052,7 @@ podiumd:
         # mailpit doesn't speak STARTTLS, so this must be off or mail
         # delivery fails.
         useTLS: false
+        defaultFrom: noreply@dimpact.nl
       database:
         host: postgres
         port: 5432
@@ -1573,9 +1586,21 @@ podiumd:
               client_id: objectsapi
               secret: opennotificatiesObjectsSecret
 
+            # As ExternalsPodiumD.
+            - identifier: autorisaties-api
+              label: Open Zaak - Autorisaties API
+              api_root: https://openzaak.local/autorisaties/api/v1/
+              api_type: ac
+              auth_type: zgw
+              client_id: objecten
+              secret: objectenSecret
+
         notifications_config_enable: true
         notifications_config:
           notifications_api_service_identifier: open-notificaties
+          notification_delivery_max_retries: 5
+          notification_delivery_retry_backoff: 3
+          notification_delivery_retry_backoff_max: 48
 
         objecttypes_config_enable: true
         # service_identifier here is classic-shape syntax (objects-api
@@ -1666,6 +1691,9 @@ podiumd:
               contact_person: ITA
               email: ita@example.com
               application: ITA
+              # As ExternalsPodiumD's test environment (dimp/test, also icat and
+              # info) and podiumd-infra: Medewerker too, ITA reads a user's
+              # groepen from it; dim1 alone leaves it out.
               permissions:
                 - object_type: c8d301f9-80b8-4575-8b29-3e9431f92994
                   mode: read_and_write
@@ -1691,6 +1719,12 @@ podiumd:
               token: objectenOpenbeheerToken
               contact_person: Open Beheer
               email: openbeheer@example.com
+              is_superuser: true
+            # As ExternalsPodiumD.
+            - identifier: integratieteam
+              token: objectenIntegratieteamToken
+              contact_person: Integratieteam
+              email: integratieteam@example.com
               is_superuser: true
             # As ExternalsPodiumD: Open Archiefbeheer's Objecten plugin, no object type permissions.
             - identifier: openarchiefbeheer
@@ -1782,6 +1816,7 @@ podiumd:
         # mailpit doesn't speak STARTTLS, so this must be off or mail
         # delivery fails.
         useTLS: false
+        defaultFrom: noreply@dimpact.nl
       database:
         host: postgres
         port: 5432
@@ -1878,6 +1913,11 @@ podiumd:
               token: objecttypenOmcToken
               contact_person: OMC
               email: omc@example.com
+            # As ExternalsPodiumD.
+            - identifier: zaak
+              token: objecttypenZaakToken
+              contact_person: Open Zaak
+              email: zaak@example.com
             - identifier: openbeheer-token
               token: objecttypenOpenbeheerToken
               contact_person: Open Beheer
@@ -1977,6 +2017,7 @@ podiumd:
         # mailpit doesn't speak STARTTLS, so this must be off or mail
         # delivery fails.
         useTLS: false
+        defaultFrom: noreply@dimpact.nl
       database:
         host: postgres
         port: 5432
@@ -2131,6 +2172,21 @@ podiumd:
               auth_type: zgw
               client_id: notificaties
               secret: notificatiesSecret
+            # As ExternalsPodiumD: its own notifications, as client "notificaties".
+            - identifier: notificaties-api
+              label: Notificaties API
+              api_root: https://opennotificaties.local/api/v1/
+              api_type: nrc
+              auth_type: zgw
+              client_id: notificaties
+              secret: notificatiesSecret
+
+        notifications_config_enable: True
+        notifications_config:
+          notifications_api_service_identifier: notificaties-api
+          notification_delivery_max_retries: 5
+          notification_delivery_retry_backoff: 3
+          notification_delivery_retry_backoff_max: 48
 
         autorisaties_api_config_enable: True
         autorisaties_api:
@@ -2241,6 +2297,7 @@ podiumd:
         # mailpit doesn't speak STARTTLS, so this must be off or mail
         # delivery fails.
         useTLS: false
+        defaultFrom: noreply@dimpact.nl
       database:
         host: postgres
         port: 5432
@@ -2486,6 +2543,7 @@ podiumd:
         # mailpit doesn't speak STARTTLS, so this must be off or mail
         # delivery fails.
         useTLS: false
+        defaultFrom: noreply@dimpact.nl
       database:
         host: postgres
         port: 5432
@@ -2690,6 +2748,16 @@ podiumd:
               header_key: Authorization
               header_value: Token openFormulierenToObjecttypenToken
 
+            # As ExternalsPodiumD. Its "pdok" service is left out: Open
+            # Formulieren's own migrations already create a service with that
+            # api_root (no identifier), and a second one violates
+            # zgw_consumers_service_api_root_key.
+            - identifier: vng-selectielijst
+              label: VNG Selectielijst
+              api_root: https://selectielijst.openzaak.nl/api/v1/
+              api_type: orc
+              auth_type: no_auth
+
         objects_api_config_enable: True
         objects_api:
           groups:
@@ -2699,9 +2767,37 @@ podiumd:
               objecttypes_service_identifier: objecttypes-api
               documenten_service_identifier: openzaak-documenten
               catalogi_service_identifier: openzaak-catalogi
+              document_type_submission_report: bijlage
+              document_type_submission_csv: bijlage
+              document_type_attachment: bijlage
               catalogue_domain: ALG
               catalogue_rsin: "002564440"
               organisatie_rsin: "002564440"
+
+        # As ExternalsPodiumD's "Open Zaak" ZGW registration backend; the RSINs
+        # are those of the catalogus in ZAC's fixtures.
+        zgw_api_config_enable: True
+        zgw_api:
+          groups:
+            - identifier: openzaak
+              name: Open Zaak
+              zaken_service_identifier: openzaak-zaken
+              documenten_service_identifier: openzaak-documenten
+              catalogi_service_identifier: openzaak-catalogi
+              catalogue_domain: ALG
+              catalogue_rsin: "002564440"
+              organisatie_rsin: "002564440"
+              auteur: Aanvrager
+              zaak_vertrouwelijkheidaanduiding: openbaar
+              doc_vertrouwelijkheidaanduiding: openbaar
+              objects_api_json_content_template: |-
+                {
+                  "data": {% json_summary %},
+                  "type": "{{ "{{" }} productaanvraag_type {{ "}}" }}",
+                  "bsn": "{{ "{{" }} variables.auth_bsn {{ "}}" }}",
+                  "submission_id": "{{ "{{" }} submission.kenmerk {{ "}}" }}",
+                  "language_code": "{{ "{{" }} submission.language_code {{ "}}" }}"
+                }
 
         # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
@@ -2787,6 +2883,8 @@ podiumd:
         # mailpit doesn't speak STARTTLS, so this must be off or mail
         # delivery fails.
         useTLS: false
+        defaultFrom: noreply@dimpact.nl
+        defaultFrom: noreply@dimpact.nl
       database:
         host: postgres
         port: 5432
@@ -2808,8 +2906,14 @@ podiumd:
         trustedOrigins:
           - https://openformulieren-nginx.local
           - https://openformulieren-web.local
+      # As ExternalsPodiumD: its own public host only; two proxies (edge, nginx).
       cors:
-        allowAllOrigins: true
+        allowAllOrigins: false
+        allowedOrigins:
+          - https://openformulieren-nginx.local
+      csp:
+        reportSave: true
+      numProxies: 2
     ingress:
       enabled: true
       hosts:
@@ -2882,7 +2986,7 @@ podiumd:
       # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
       uwsgi:
         processes: 1
-      allowedHosts: referentielijsten.local
+      allowedHosts: referentielijsten.local,localhost
       secretKey: referentielijstenSecretKey
       disable2fa: true
       environment: podiumd-minikube
