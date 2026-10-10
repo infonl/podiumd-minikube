@@ -5764,3 +5764,15 @@ it, so the edge's route follows ExternalsPodiumD's. Verified: the zac.local
 route has backend zac-nginx (Accepted, ResolvedRefs), responses carry
 `strict-transport-security` and `x-content-type-options: nosniff`, and the
 login redirect keeps `redirect_uri=https://zac.local/`.
+
+## Network policies: none, no Calico (podiumd-tests' question; user: "no Calico, report-only tests are fine")
+
+Neither ExternalsPodiumD nor podiumd-infra deploys a NetworkPolicy: the
+`networkPolicy` blocks in their values are Bitnami Keycloak's, all
+`enabled: false`, and the podiumd chart's only policy template
+(`frankgateway.networkPolicies`) is off everywhere. podiumd-infra's
+Cyso/Gardener shoots use Calico; the AKS network plugin is in neither repo.
+minikube's kindnet does not enforce NetworkPolicy; `--cni=calico` would
+need a new cluster and memory for a model no reference environment has, so
+minikube keeps kindnet and podiumd-tests' network isolation tests report
+what is reachable instead of failing.
