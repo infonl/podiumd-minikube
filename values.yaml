@@ -559,7 +559,7 @@ podiumd:
       replicaCount: 1
       concurrency: 1 # laptop budget; chart default 4
     beat:
-      replicaCount: 0 # compose never runs a separate openzaak beat/scheduler service at all
+      replicaCount: 1 # as ExternalsPodiumD and podiumd-infra: runs daily-remove-imports
     # nginx.replicaCount left at its chart default (1) - compose runs
     # openzaak-nginx unconditionally (chunked transfer-encoding handling).
     # Its digest-qualified default image tag is handled by

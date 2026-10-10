@@ -5555,3 +5555,13 @@ not give zaaktype-test-1. Open Zaak 1.29.3's BesluitType serializer only
 requires published informatieobjecttypen, not concept zaaktypen, so a
 besluittype for the published zaaktype can be created and published through
 the Catalogi API: podiumd-tests' test setup, not ours.
+
+## Open Zaak's beat back to 1 replica (user: "yes")
+
+`podiumd.openzaak.beat.replicaCount` was 0 ("compose never runs a separate
+openzaak beat"), a docker-compose parity choice from before the reference
+environment rule. ExternalsPodiumD (dim1, chart default) and podiumd-infra
+(test00) run it with 1, so Open Zaak's periodic tasks (1.29.3:
+`daily-remove-imports`) never ran here: a behaviour difference, not
+capacity. Now 1; the beat started ("DatabaseScheduler: Schedule changed")
+and uses 187 MiB right after start.
