@@ -317,7 +317,6 @@ podiumd:
       realm: zaakafhandelcomponent
       clientId: zaakafhandelcomponent
       secret: keycloakZaakafhandelcomponentClientSecret
-      sslRequired: none
       # Left unconditionally true regardless of top-level
       # zac.experimentalPkce - a silent no-op on any zac chart without
       # AUTH_ENABLE_PKCE support (matches compose's own intent, harmless
@@ -1371,50 +1370,11 @@ podiumd:
         clientId: pabc
         clientSecret: pabcClientSecret
         functioneelBeheerderRole: administrator
-        requireHttps: false # defaults to true - would reject our HTTP-only Keycloak's tokens entirely; matches compose's own Oidc__RequireHttps: "false"
-        # Unlike openzaak (see values.yaml's own zac.enablePkce and
-        # podiumd.openzaak.configuration.data comments for that story),
-        # confirmed live safe here: curling /api/challenge directly shows
-        # PABC's ASP.NET Core OpenIdConnect middleware (.NET 8) already
-        # sends a real code_challenge/code_challenge_method=S256 on every
-        # login attempt unconditionally - there's no Oidc__* env var for
-        # it because it's just always on by default in this framework
-        # version, not something this project turned on. Enabling
-        # enforcement on the Keycloak client side (see vendor/
-        # dimpact-zaakafhandelcomponent/keycloak/
-        # zaakafhandelcomponent-realm.json's own "pabc" client) is a pure
-        # formality here, not a functional change - the app was already
-        # sending it, Keycloak just wasn't requiring it yet. Only
-        # meaningful at all if this project ever switches to podiumd's
-        # own keycloak-operator-managed realm instead of the vendored
-        # static realm.json import (keycloak-operator.enabled is false
-        # here) - inert otherwise, kept accurate for when that changes.
-        #
-        # PKCE itself confirmed working end to end: with the Keycloak
-        # client's pkce.code.challenge.method set to S256, a real browser
-        # navigation to the captured authorization URL (code_challenge and
-        # all) lands cleanly on Keycloak's login form, and submitting valid
-        # credentials completes the code exchange and 302s back through
-        # /signin-oidc - no PKCE-related error at any point.
-        #
-        # Known separate limitation (not related to PKCE, found chasing a
-        # full login verification): the actual session never gets
-        # established after that redirect, because PABC's own
-        # AuthenticationExtensions.cs hardcodes
-        # `options.Cookie.SecurePolicy`/`options.NonceCookie.SecurePolicy`/
-        # `options.CorrelationCookie.SecurePolicy` to `CookieSecurePolicy.Always`
-        # - unlike every other app in this project (which all expose an
-        # isHttps/cookie.sessionCookieSecure-style override), there is no
-        # config surface for this at all, checked directly against PABC's
-        # own source (github.com/Platform-Autorisatie-Beheer-Component/
-        # PABC-API, PABC.Server/Auth/AuthenticationExtensions.cs). The
-        # browser silently drops all three Secure cookies over this
-        # project's plain-HTTP ingress, so the OIDC nonce/correlation
-        # cookies never make it back on the callback regardless of PKCE.
-        # The only real fix is genuine TLS termination in front of
-        # pabc.local specifically - deliberately not done here, since this
-        # whole cluster is HTTP-only by design (see CLAUDE.md).
-        pkceEnabled: true
+        # As ExternalsPodiumD: the username claim. requireHttps and
+        # pkceEnabled stay at the chart defaults (Keycloak is https here; the
+        # pabc chart does not read pkceEnabled, the vendored realm's "pabc"
+        # client requires S256, which PABC's middleware always sends).
+        nameClaimType: preferred_username
       keycloakAdmin:
         clientId: pabc-admin-client
         clientSecret: pabcAdminClientSecret
@@ -1795,7 +1755,8 @@ podiumd:
         processes: 1
         threads: 2
       secretKey: objectenApiSecretKey
-      allowedHosts: objecten.local
+      # As ExternalsPodiumD: also its internal Service, which KISS calls.
+      allowedHosts: objecten.local,objecten.podiumd-minikube.svc.cluster.local
       # See openzaak's isHttps comment.
       isHttps: true
       djangoSettingsModule: objects.conf.docker_no_solo_cache
@@ -3386,15 +3347,15 @@ podiumd:
         emailFrom: noreply@example.com
         emailTo: noreply@example.com
       afdelingen:
-        baseUrl: https://objecten.local
+        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
         objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/c8d301f9-80b8-4575-8b29-3e9431f92994
         token: objectenContactToken
       groepen:
-        baseUrl: https://objecten.local
+        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
         objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/cbec27ac-157b-490b-b586-9e8a8f5bbb85
         token: objectenContactToken
       logboek:
-        baseUrl: https://objecten.local
+        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
         objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
         token: objectenContactToken
       managementInformatie:
@@ -3413,7 +3374,7 @@ podiumd:
             token: openklantContactToken
       syncJobs:
         kennisbank:
-          baseUrl: https://objecten.local
+          baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
           objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/e4d2e353-80ea-4962-8276-920d59a3e8de
           schedule: "15 6-14 * * 1-5"
           token: objectenContactToken
@@ -3425,22 +3386,23 @@ podiumd:
           clientSecret: contactAdapterSecret-hs256-needs-over-32-bytes
         vac:
           manageFromKiss: true
-          baseUrl: https://objecten.local
+          baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
           objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/6a0d8f9d-f7e2-4e57-a91b-01656968a62d
           schedule: "15 6-14 * * 1-5"
           token: objectenContactToken
       oidc:
         authority: https://keycloak.local/realms/zaakafhandelcomponent/
         clientSecret: kissClientSecret
+      # As ExternalsPodiumD and podiumd-infra.
       organisatieIds:
-        - "000000000"
+        - "856683164"
     adapter:
       baseUrl: http://podiumd-minikube-adapter
       clientId: contact_intern
       # Same as syncJobs.medewerkers.clientSecret; HS256 signing needs over 32 bytes.
       secret: contactAdapterSecret-hs256-needs-over-32-bytes
       objecten:
-        baseUrl: https://objecten.local
+        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
         token: objectenContactToken
       objecttypen:
         baseUrlIntern: https://objecttypen.local

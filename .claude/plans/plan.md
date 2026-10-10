@@ -4452,7 +4452,9 @@ api_roots, ZAC's API URLs, objecttype URLs, notification callbacks) and the
 `http://*.local` URLs (oidcUrl, CORS/trusted origins, Grafana root_url) are
 now `https://<app>.local`; the ZAC seed Job calls Open Zaak on
 `https://openzaak.local`. In-cluster http stays where ExternalsPodiumD keeps
-it: PABC, the WireMock mocks (its api-proxy), Solr, metrics.
+it: PABC, the WireMock mocks (its api-proxy), Solr, metrics. (Corrected in
+alignment round 3: KISS calls Objecten on its internal Service in
+ExternalsPodiumD too, `http://objecten.podiumd.svc.cluster.local`.)
 
 - `isHttps: true` for openzaak, openklant, objecten, opennotificaties,
   openformulieren and openarchiefbeheer; objecttypen's `IS_HTTPS=False`
@@ -5664,3 +5666,41 @@ As ExternalsPodiumD (dim1), verified in each app's database after the deploy:
   Referentielijsten `localhost` in `allowedHosts`.
 - ZAC: BRP protocollering and its INFO log level removed (A: chart
   defaults, off).
+
+## Alignment round 3: KISS, PABC, ZAC; what stays different and why
+
+As ExternalsPodiumD: KISS calls Objecten (afdelingen, groepen, logboek,
+kennisbank, vac, adapter.objecten) on its internal Service
+`http://objecten.podiumd-minikube.svc.cluster.local`, which Objecten's
+`allowedHosts` now lists; KISS `organisatieIds` 856683164 (both reference
+projects). PABC `nameClaimType: preferred_username`; `requireHttps` and
+`pkceEnabled` back to the chart defaults: their reasons assumed an
+HTTP-only Keycloak, and the pabc chart does not read `pkceEnabled`. ZAC no
+longer sets `auth.sslRequired: none`, so `AUTH_SSL_REQUIRED` is the chart
+default `all`, as ExternalsPodiumD. Checked after the deploy: ZAC and PABC
+still send to Keycloak, Objecten answers on the internal host.
+
+What the final comparison found and is left as it is, with the reason:
+- Client ids, service identifiers and names that come from ZAC's
+  docker-compose fixtures (`zac_client`, `open-formulieren`, `objectsapi`,
+  `objects-api`, `local-objects-api`, Open Archiefbeheer's `zaken-test`
+  services with `zac_client`, the OIDC provider id `keycloak-provider`, the
+  ZAC abonnement's uuid, the selectielijst id): renaming them changes
+  fixture rows and zgw_consumers slugs, a service with the same api_root
+  under a new identifier fails `zgw_consumers_service_api_root_key`; no
+  behaviour depends on the name.
+- ZAC's RSINs (123443210/316245124), gemeente code/naam/mail and the
+  catalogus RSIN 002564440: ZAC's fixtures and every zaak made so far carry
+  them; ExternalsPodiumD's 856683164 would need the fixtures rewritten. KISS
+  alone moved to 856683164.
+- Open Notificaties `numProxies` 1 (round 2), Open Formulieren without a
+  second `pdok` service (round 2).
+- ZAC's signaleringen schedules: ExternalsPodiumD's 09:00/09:30 on weekdays
+  exist to give ZAC time after AKS' daily cluster restart (its own
+  comment); the chart defaults stay.
+- Frank!Gateway `accessLog.jsonFormat`: only on ExternalsPodiumD's
+  frankgateway branch, not its main configuration.
+- OMC's Sentry DSN (an external SaaS account), Keycloak's separate admin
+  host with an IP allowlist on `/admin` (AKS-only addresses), e-Suite
+  services, real DigiD metadata, the website crawler, Kibana, real SMTP:
+  not available on a laptop.
