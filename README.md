@@ -99,7 +99,6 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | `frankgateway` | Frank!Gateway's outway (with etcd) and OpenBao on `https://openbao.local`; apps then call BRP/KvK/BAG at `http://frankgateway-outway:9080/...` instead of the api-proxy. OpenBao's seal key, root token and recovery key live in `.openbao/` (gitignored) |
 | `clamav` | ClamAV's clamd on `clamav:3310` with only the EICAR test signature (no freshclam, no internet); Open Inwoner's virus scan setting is test wiring (podiumd-tests) |
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
-| `wiremock` | SmartDocuments WireMock mappings |
 
 `metrics` has two implementations, picked by `values.yaml`'s
 `monitoringLogging.enabled` (not a `scripts/deploy` flag):
@@ -175,7 +174,7 @@ automatically either direction.
 | `scripts/expose-postgres [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |
 | `scripts/flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
 | `scripts/update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
-| `scripts/deploy-extended` | `deploy --full` without metrics and WireMock mappings, with openzaak's and openklant's Celery workers |
+| `scripts/deploy-extended` | `deploy --full` without metrics, with openzaak's and openklant's Celery workers |
 | `scripts/apply-pabc-migrations [--force]` | The only safe way to (re)create the `pabc-migrations` Job — refuses against an already-seeded database unless `--force` |
 
 `scripts/reset-namespace` vs `scripts/teardown-cluster`: use `scripts/reset-namespace` to

@@ -32,8 +32,8 @@ spec:
 {{- end -}}
 {{/*
 The vendored WireMock mapping sets to load, space-separated: BAG behind the
-api-proxy always, SmartDocuments with the wiremock profile.
+api-proxy.
 */}}
 {{- define "podiumd-minikube.wiremockSets" -}}
-bag-wiremock{{ if .Values.wiremock.enabled }} smartdocuments-wiremock{{ end }}
+bag-wiremock
 {{- end -}}

@@ -26,8 +26,6 @@ zac:
   # PKCE-unaware zac chart never sending it, every login broken) if it
   # detects that isn't the case.
   experimentalPkce: false
-wiremock:
-  enabled: false # SmartDocuments WireMock mappings; KvK/BAG load always (the api-proxy's targets)
   # mailpit (SMTP test server) moved out of this profile - it's now
   # unconditional (templates/mailpit/), since every app's own email
   # settings point at it regardless of which optional profiles are on.

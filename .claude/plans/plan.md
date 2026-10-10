@@ -5776,3 +5776,13 @@ minikube's kindnet does not enforce NetworkPolicy; `--cni=calico` would
 need a new cluster and memory for a model no reference environment has, so
 minikube keeps kindnet and podiumd-tests' network isolation tests report
 what is reachable instead of failing.
+
+## SmartDocuments off, its WireMock removed (podiumd-tests' question; user: "do #1")
+
+ZAC's SmartDocuments is off in every environment of ExternalsPodiumD (all 8)
+and podiumd-infra, and off here. The `wiremock` profile only loaded ZAC's
+docker-compose SmartDocuments mappings into WireMock, which nothing called:
+removed with the vendored `smartdocuments-wiremock` directory, the profile
+flag, its `--set` in `--full` and `deploy-extended`. WireMock keeps serving
+BAG behind the api-proxy (checked: 200). podiumd-tests records its
+SmartDocuments draaiboek cases as out of scope.

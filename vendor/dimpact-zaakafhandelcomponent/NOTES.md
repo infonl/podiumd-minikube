@@ -9,11 +9,11 @@ changes is in `.claude/plans/plan.md`.
 
 ## Copied verbatim
 
-- `wiremocks/{bag-wiremock,smartdocuments-wiremock}/`
-  ← `scripts/docker-compose/imports/{same name}/` (`mappings/`, `__files/`,
+- `wiremocks/bag-wiremock/`
+  ← `scripts/docker-compose/imports/bag-wiremock/` (`mappings/`, `__files/`,
   `README.md`). Read by `templates/wiremock/` through
-  `podiumd-minikube.wiremockSets` (BAG always, SmartDocuments with the
-  `wiremock` profile).
+  `podiumd-minikube.wiremockSets`. ZAC's SmartDocuments mappings are not
+  copied: SmartDocuments is off in ZAC, as in every reference environment.
 - `postgres/fixtures/openzaak/*.sql` (10 files)
   ← `scripts/docker-compose/imports/openzaak-database/database/*.sql`.
   Read by `templates/postgres/configmap-fixtures.yaml`, which loads only

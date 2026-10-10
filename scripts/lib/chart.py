@@ -12,7 +12,6 @@ from lib.process import UserError
 
 # Profiles `deploy --full` turns on; provision-cluster pre-pulls their images too.
 FULL_PROFILE_SETS = [
-    "--set", "wiremock.enabled=true",
     "--set", "objecten.enabled=true", "--set", "podiumd.objecten.enabled=true",
     "--set", "opennotificaties.enabled=true", "--set", "podiumd.opennotificaties.enabled=true",
     "--set", "openarchiefbeheer.enabled=true", "--set", "podiumd.openarchiefbeheer.enabled=true",
