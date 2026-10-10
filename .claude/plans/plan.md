@@ -5739,3 +5739,11 @@ Production's 4 processes hide it; a stalling app is a behaviour difference,
 so Open Inwoner has 2 processes again (threads 2). Right after the deploy
 the container used 446 MiB (258 before); the memory baseline is refreshed
 after the next full tier.
+
+## KISS's Elasticsearch CPU request (podiumd-tests' smoke warning; user: "yes")
+
+podiumd-tests' `test_containers_request_cpu_and_memory` warns about three
+containers without requests: Open Beheer and Referentielijsten (the podiumd
+chart's `resources: {}`) and KISS's Elasticsearch, whose podTemplate here set
+only memory. ExternalsPodiumD sets cpu 200m request and 1000m limit, as
+Open Inwoner's Elasticsearch here already had; KISS's now has them too.

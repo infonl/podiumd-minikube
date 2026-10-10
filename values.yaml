@@ -167,10 +167,13 @@ podiumd:
             spec:
               containers:
                 - name: elasticsearch
+                  # CPU as ExternalsPodiumD.
                   resources:
                     requests:
+                      cpu: 200m
                       memory: 1536Mi
                     limits:
+                      cpu: 1000m
                       memory: 1536Mi
                   env:
                     - name: ES_JAVA_OPTS
