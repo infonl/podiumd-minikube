@@ -73,6 +73,24 @@ def client_changes(client: dict[str, Any], vendored: dict[str, Any], *, zac_pkce
     return changes
 
 
+# Realm settings the vendored file sets as podiumd's realm template; Keycloak
+# imports the file only once, so sync_realm brings an existing realm in line.
+REALM_SETTINGS = (
+    "accessTokenLifespan", "bruteForceProtected", "failureFactor", "revokeRefreshToken", "eventsEnabled",
+    "eventsExpiration", "adminEventsEnabled", "adminEventsDetailsEnabled", "smtpServer",
+)  # fmt: skip
+
+
+def realm_changes(live: dict[str, Any], vendored: dict[str, Any]) -> list[str]:
+    """kcadm `-s` settings that bring the live realm's REALM_SETTINGS in line with vendored; [] when they are."""
+    return [
+        arg
+        for key in REALM_SETTINGS
+        if key in vendored and live.get(key) != vendored[key]
+        for arg in ("-s", f"{key}={json.dumps(vendored[key])}")
+    ]
+
+
 def missing_clients(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Vendored clients the live realm lacks, with the https URI twins of lib.manifests.fix_realm."""
     present = {client.get("clientId") for client in live}
@@ -175,4 +193,8 @@ def sync_realm(*, zac_pkce: bool) -> None:
         process.output([*_kcadm(pod), "update", "users/profile", "-r", REALM, "-f", "-"], stdin=json.dumps(profile))
         print("  declared user attribute samaccountname")
     _sync_groups(pod, realm.get("groups", []))
-    print(f"Keycloak's live '{REALM}' realm clients are in sync.")
+    settings = realm_changes(json.loads(process.output([*_kcadm(pod), "get", f"realms/{REALM}"])), realm)
+    if settings:
+        process.output([*_kcadm(pod), "update", f"realms/{REALM}", *settings])
+        print(f"  updated realm settings {', '.join(arg.split('=')[0] for arg in settings[1::2])}")
+    print(f"Keycloak's live '{REALM}' realm is in sync.")

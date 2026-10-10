@@ -58,3 +58,12 @@ def test_profile_with_samaccountname_once():
     assert added is not None
     assert [a["name"] for a in added["attributes"]] == ["username", "samaccountname"]
     assert keycloak.profile_with_samaccountname(added) is None
+
+
+def test_realm_changes_set_only_differing_realm_settings():
+    vendored = {"accessTokenLifespan": 60, "bruteForceProtected": True, "smtpServer": {"host": "mailpit"}, "realm": "x"}
+    live = {"accessTokenLifespan": 300, "bruteForceProtected": True, "smtpServer": {}}
+    assert keycloak.realm_changes(live, vendored) == [
+        "-s", "accessTokenLifespan=60", "-s", 'smtpServer={"host": "mailpit"}',
+    ]  # fmt: skip
+    assert keycloak.realm_changes(vendored, vendored) == []

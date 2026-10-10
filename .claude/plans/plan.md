@@ -5616,3 +5616,22 @@ Negative: OMC stays off, podiumd-tests' OMC tests stay blocked upstream.
 Cleaned up by a normal `deploy --full` (pruned OMC) and deleting the
 ConfigMap; the 2.3.1 image stays on the node. Details in the untracked
 `omc-source-property-issue.md`.
+
+## Alignment round 1: Keycloak realm as podiumd's realm template (final comparison; user: "yes, go ahead in that order")
+
+A final comparison with ExternalsPodiumD and podiumd-infra (three read-only
+sub-agents, scaling out of scope) found the vendored realm behind
+podiumd's realm template: no `username`/`client roles`→`groups` mappers and
+no `administrators` role on the clients of Open Zaak, Open Klant, Objecten,
+Objecttypen, Open Notificaties, Open Formulieren and Open Archiefbeheer (so
+the superuser-by-group settings of 772c858 had nothing to act on), and the
+realm at access token 300 s, brute-force protection off (failure factor 30),
+refresh token revocation off, events off, no SMTP. podiumd's
+keycloak-podiumd-realm-config.yaml sets 60 s (`accessTokenLifespan`
+default, ExternalsPodiumD does not override it), brute force on with factor
+5, revocation on, events and admin events on (30 days); ExternalsPodiumD's
+SMTP is a real relay, here mailpit. Keycloak imports the realm file once,
+so `keycloak.sync_realm` now also brings `REALM_SETTINGS` of a live realm in
+line (`realm_changes`); mappers and roles already synced. Verified live
+after the deploy. podiumd-tests checked beforehand: no test logs in with a
+wrong password or reuses refresh tokens.

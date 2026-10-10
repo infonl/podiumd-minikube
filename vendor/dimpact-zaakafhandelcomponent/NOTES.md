@@ -42,7 +42,12 @@ changes is in `.claude/plans/plan.md`.
   `opennotificaties`, `openformulieren`, `openarchiefbeheer`, PKCE off:
   their mozilla-django-oidc-db has no PKCE support) and for `ita`, `kiss`,
   `openinwoner`, `referentielijsten`, `openbeheer` and `openbao`, with the
-  podiumd chart's redirect URIs, client roles and mappers.
+  podiumd chart's redirect URIs, client roles and mappers; the seven
+  Django apps' clients also get the `username` and `client roles` (claim
+  `groups`) mappers and the `administrators` role. Realm settings as
+  podiumd's realm template: access token 60 s, brute-force protection
+  (failure factor 5), refresh token revocation, events and admin events,
+  SMTP to mailpit.
   `zaakafhandelcomponent` keeps `S256`; `manifests.fix_realm` clears it in
   the render while `zac.experimentalPkce` is off. Read by
   `templates/keycloak/`; Keycloak imports it once, so `lib.keycloak`

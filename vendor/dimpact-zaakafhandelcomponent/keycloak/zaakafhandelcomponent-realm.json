@@ -4,9 +4,9 @@
   "displayName": "Zaakafhandelcomponent",
   "notBefore": 1692023336,
   "defaultSignatureAlgorithm": "RS256",
-  "revokeRefreshToken": false,
+  "revokeRefreshToken": true,
   "refreshTokenMaxReuse": 0,
-  "accessTokenLifespan": 300,
+  "accessTokenLifespan": 60,
   "accessTokenLifespanForImplicitFlow": 900,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
@@ -36,14 +36,14 @@
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": false,
   "editUsernameAllowed": false,
-  "bruteForceProtected": false,
+  "bruteForceProtected": true,
   "permanentLockout": false,
   "maxFailureWaitSeconds": 900,
   "minimumQuickLoginWaitSeconds": 60,
   "waitIncrementSeconds": 60,
   "quickLoginCheckMilliSeconds": 1000,
   "maxDeltaTimeSeconds": 43200,
-  "failureFactor": 30,
+  "failureFactor": 5,
   "roles": {
     "realm": [
       {
@@ -488,6 +488,62 @@
           "composite": false,
           "clientRole": true,
           "containerId": "b80ce880-e280-471c-8b63-db578837c680",
+          "attributes": {}
+        }
+      ],
+      "openzaak": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "openklant": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "objecten": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "objecttypen": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "opennotificaties": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "openformulieren": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ],
+      "openarchiefbeheer": [
+        {
+          "name": "administrators",
+          "composite": false,
+          "clientRole": true,
           "attributes": {}
         }
       ],
@@ -1267,7 +1323,22 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        },
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {"usermodel.clientRoleMapping.clientId": "openzaak", "claim.name": "groups", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        }
+      ]
     },
     {
       "clientId": "openklant",
@@ -1300,7 +1371,22 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        },
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {"usermodel.clientRoleMapping.clientId": "openklant", "claim.name": "groups", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        }
+      ]
     },
     {
       "clientId": "objecten",
@@ -1333,7 +1419,22 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        },
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {"usermodel.clientRoleMapping.clientId": "objecten", "claim.name": "groups", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        }
+      ]
     },
     {
       "clientId": "objecttypen",
@@ -1366,7 +1467,22 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        },
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {"usermodel.clientRoleMapping.clientId": "objecttypen", "claim.name": "groups", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        }
+      ]
     },
     {
       "clientId": "opennotificaties",
@@ -1399,7 +1515,22 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        },
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {"usermodel.clientRoleMapping.clientId": "opennotificaties", "claim.name": "groups", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        }
+      ]
     },
     {
       "clientId": "openformulieren",
@@ -1432,7 +1563,22 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        },
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {"usermodel.clientRoleMapping.clientId": "openformulieren", "claim.name": "groups", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        }
+      ]
     },
     {
       "clientId": "openarchiefbeheer",
@@ -1465,7 +1611,22 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        },
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {"usermodel.clientRoleMapping.clientId": "openarchiefbeheer", "claim.name": "groups", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true", "lightweight.claim": "false"}
+        }
+      ]
     },
     {
       "id": "c1160d7b-ad3e-496e-9c58-8e07516360f4",
@@ -2398,14 +2559,22 @@
     "xXSSProtection": "1; mode=block",
     "strictTransportSecurity": "max-age=31536000; includeSubDomains"
   },
-  "smtpServer": {},
-  "eventsEnabled": false,
+  "smtpServer": {
+    "host": "mailpit",
+    "port": "1025",
+    "from": "noreply@dimpact.nl",
+    "fromDisplayName": "Noreply Gemeente Dimpact",
+    "starttls": "false",
+    "ssl": "false"
+  },
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
   "eventsListeners": [
     "jboss-logging"
   ],
   "enabledEventTypes": [],
-  "adminEventsEnabled": false,
-  "adminEventsDetailsEnabled": false,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
   "identityProviders": [],
   "identityProviderMappers": [],
   "components": {
