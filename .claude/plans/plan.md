@@ -5747,3 +5747,20 @@ containers without requests: Open Beheer and Referentielijsten (the podiumd
 chart's `resources: {}`) and KISS's Elasticsearch, whose podTemplate here set
 only memory. ExternalsPodiumD sets cpu 200m request and 1000m limit, as
 Open Inwoner's Elasticsearch here already had; KISS's now has them too.
+
+## ZAC's nginx on, as ExternalsPodiumD (podiumd-tests' header finding; user: "yes, switch ZAC's nginx on")
+
+ZAC's responses had no HSTS and no nosniff header: WildFly sets neither,
+ZAC's chart adds both in its optional nginx, and minikube had
+`podiumd.zac.nginx.enabled: false` for parity with the single-container
+docker-compose stack (a reason from before the reference-environment rule).
+podiumd enables it and ExternalsPodiumD runs it (`useXForwardedHost`,
+`allowedHosts`), routing its Gateway route to Service `zac-nginx`; ZAC's
+chart itself still points its Ingress at `zac`. The nginx is on now
+(`allowedHosts: zac.local,zac.podiumd-minikube`), and the render fixup
+`manifests.route_through_nginx` points the Ingress of an app in
+`NGINX_FRONTS` (zac → zac-nginx) at its nginx Service when the render has
+it, so the edge's route follows ExternalsPodiumD's. Verified: the zac.local
+route has backend zac-nginx (Accepted, ResolvedRefs), responses carry
+`strict-transport-security` and `x-content-type-options: nosniff`, and the
+login redirect keeps `redirect_uri=https://zac.local/`.

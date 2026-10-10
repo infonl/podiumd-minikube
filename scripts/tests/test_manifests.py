@@ -210,3 +210,20 @@ def test_route_outbound_only_with_the_outway():
     outway: manifests.Doc = {"kind": "Service", "metadata": {"name": manifests.OUTWAY_SERVICE}}
     manifests.route_outbound([config, outway])
     assert config["data"]["BRP"] == "http://frankgateway-outway:9080/x"
+
+
+def _ingress(service: str) -> manifests.Doc:
+    backend = {"service": {"name": service, "port": {"number": 80}}}
+    return {
+        "kind": "Ingress",
+        "spec": {"rules": [{"host": "zac.local", "http": {"paths": [{"path": "/", "backend": backend}]}}]},
+    }
+
+
+def test_route_through_nginx_only_when_the_nginx_service_is_rendered():
+    with_nginx: list[manifests.Doc] = [_ingress("zac"), {"kind": "Service", "metadata": {"name": "zac-nginx"}}]
+    without: list[manifests.Doc] = [_ingress("zac")]
+    manifests.route_through_nginx(with_nginx)
+    manifests.route_through_nginx(without)
+    assert with_nginx[0]["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"]["name"] == "zac-nginx"
+    assert without[0]["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"]["name"] == "zac"

@@ -120,15 +120,35 @@ def route_outbound(docs: list[Doc]) -> None:
                 data[key] = value.replace(API_PROXY_URL, OUTWAY_URL)
 
 
+# App Service -> the nginx Service in front of it. ZAC's chart points its
+# Ingress at the app even with nginx.enabled; ExternalsPodiumD routes to zac-nginx.
+NGINX_FRONTS = {"zac": "zac-nginx"}
+
+
+def _ingress_rules(docs: list[Doc]) -> list[Doc]:
+    """The rules of every Ingress in docs."""
+    rules: list[Doc] = []
+    for doc in docs:
+        if doc.get("kind") == "Ingress":
+            rules += section(doc, "spec").get("rules") or []
+    return rules
+
+
+def route_through_nginx(docs: list[Doc]) -> None:
+    """Points Ingress backends of NGINX_FRONTS apps at their nginx Service when the render has it."""
+    services = {name_of(doc) for doc in docs if doc.get("kind") == "Service"}
+    for rule in _ingress_rules(docs):
+        paths: list[Doc] = section(rule, "http").get("paths") or []
+        for path in paths:
+            service = section(section(path, "backend"), "service")
+            front = NGINX_FRONTS.get(service.get("name", ""))
+            if front in services:
+                service["name"] = front
+
+
 def ingress_hosts(docs: list[Doc]) -> list[str]:
     """Sorted unique hosts of the Ingresses in docs."""
-    found: set[str] = set()
-    for doc in docs:
-        if doc.get("kind") != "Ingress":
-            continue
-        rules: list[Doc] = section(doc, "spec").get("rules") or []
-        found.update(str(rule["host"]) for rule in rules if rule.get("host"))
-    return sorted(found)
+    return sorted({str(rule["host"]) for rule in _ingress_rules(docs) if rule.get("host")})
 
 
 def _pod_spec(doc: Doc) -> Doc | None:
@@ -319,6 +339,7 @@ def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool =
     docs = [doc for doc in loaded if doc and not _excluded(doc)]
     disable_service_links(docs)
     route_outbound(docs)
+    route_through_nginx(docs)
     limit_runtimes(docs)
     if ca_trust:
         trust_ca(docs)

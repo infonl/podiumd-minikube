@@ -242,13 +242,11 @@ podiumd:
     # earlier version of this fix hardcoded specific tags, which would
     # silently go stale the moment scripts/set-podiumd-version selects a
     # podiumd release whose bundled charts default to different versions).
-    # nginx.enabled: true is podiumd's own override, production-specific -
-    # the underlying zac chart's own default is actually false, matching
-    # compose's single-container architecture (WildFly serves everything,
-    # no separate nginx frontend). Disabling this restores that parity and
-    # avoids the digest-matching issue for this image entirely.
+    # As ExternalsPodiumD: ZAC's nginx in front of WildFly (podiumd enables
+    # it); it adds HSTS and nosniff and allows 150 MB request bodies.
     nginx:
-      enabled: false
+      useXForwardedHost: true
+      allowedHosts: zac.local,zac.podiumd-minikube
     autoscaling:
       enabled: false
     # No image.tag override here by default (top-level zac.experimentalPkce
