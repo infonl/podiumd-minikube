@@ -768,20 +768,22 @@ podiumd:
               user_settings:
                 claim_mappings:
                   username:
-                  - sub
+                  - preferred_username
                   first_name:
                   - given_name
+                  last_name:
+                  - family_name
                   email:
                   - email
                 username_case_sensitive: true
-              # sync: false - no Keycloak group in the vendored realm maps
-              # to openzaak roles yet, so group-based provisioning is
-              # skipped entirely for now; make_users_staff: true is what
-              # actually grants any OIDC-authenticated user access to
-              # /admin/ in the meantime.
+              # As ExternalsPodiumD: administrators are superusers, every user is staff.
               groups_settings:
-                sync: false
+                claim_mapping:
+                - groups
+                superuser_group_names:
+                - administrators
                 make_users_staff: true
+                sync: true
       secrets:
         # Must match the "openzaak" client's own "secret" field in
         # vendor/dimpact-zaakafhandelcomponent/keycloak/
@@ -942,7 +944,7 @@ podiumd:
               contact_person: Open Archiefbeheer
               email: openarchiefbeheer@example.com
 
-        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
           providers:
@@ -968,15 +970,21 @@ podiumd:
               user_settings:
                 claim_mappings:
                   username:
-                  - sub
+                  - preferred_username
                   first_name:
                   - given_name
+                  last_name:
+                  - family_name
                   email:
                   - email
                 username_case_sensitive: true
               groups_settings:
-                sync: false
+                claim_mapping:
+                - groups
+                superuser_group_names:
+                - administrators
                 make_users_staff: true
+                sync: true
       # No compose equivalent to match (compose never sets openklant
       # SUPERUSER credentials either) and, unlike openzaak/opennotificaties/
       # objecttypen/openformulieren, this chart's values.yaml has no
@@ -1690,7 +1698,7 @@ podiumd:
               contact_person: Open Archiefbeheer
               email: openarchiefbeheer@example.com
 
-        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
           providers:
@@ -1716,15 +1724,21 @@ podiumd:
               user_settings:
                 claim_mappings:
                   username:
-                  - sub
+                  - preferred_username
                   first_name:
                   - given_name
+                  last_name:
+                  - family_name
                   email:
                   - email
                 username_case_sensitive: true
               groups_settings:
-                sync: false
+                claim_mapping:
+                - groups
+                superuser_group_names:
+                - administrators
                 make_users_staff: true
+                sync: true
     # See templates/objecten/configmap-no-solo-cache-settings.yaml's own
     # header for why this shim exists (django-solo's own cache for
     # NotificationsConfig intermittently going stale, confirmed live while
@@ -1872,7 +1886,7 @@ podiumd:
               application: Open Beheer
               administration: Open Beheer
 
-        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
           providers:
@@ -1898,15 +1912,21 @@ podiumd:
               user_settings:
                 claim_mappings:
                   username:
-                  - sub
+                  - preferred_username
                   first_name:
                   - given_name
+                  last_name:
+                  - family_name
                   email:
                   - email
                 username_case_sensitive: true
               groups_settings:
-                sync: false
+                claim_mapping:
+                - groups
+                superuser_group_names:
+                - administrators
                 make_users_staff: true
+                sync: true
       # For create_required_objecttypen_job.
       oidcUrl: https://objecttypen.local
       token: objecttypenIntegratieteamToken
@@ -2059,7 +2079,7 @@ podiumd:
             - domain: opennotificaties.local
               name: Open Notificaties
 
-        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
           providers:
@@ -2085,15 +2105,21 @@ podiumd:
               user_settings:
                 claim_mappings:
                   username:
-                  - sub
+                  - preferred_username
                   first_name:
                   - given_name
+                  last_name:
+                  - family_name
                   email:
                   - email
                 username_case_sensitive: true
               groups_settings:
-                sync: false
+                claim_mapping:
+                - groups
+                superuser_group_names:
+                - administrators
                 make_users_staff: true
+                sync: true
 
         zgw_consumers_config_enable: True
         zgw_consumers:
@@ -2374,7 +2400,7 @@ podiumd:
             enabled: true
             services_identifiers:
               - objecten-api
-        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
           providers:
@@ -2400,15 +2426,21 @@ podiumd:
               user_settings:
                 claim_mappings:
                   username:
-                  - sub
+                  - preferred_username
                   first_name:
                   - given_name
+                  last_name:
+                  - family_name
                   email:
                   - email
                 username_case_sensitive: true
               groups_settings:
-                sync: false
+                claim_mapping:
+                - groups
+                superuser_group_names:
+                - administrators
                 make_users_staff: true
+                sync: true
       # No compose equivalent to match (compose never sets openarchiefbeheer
       # SUPERUSER credentials either - it only ever gets as far as a
       # commented-out wish to disable 2FA, see settings.djangoSettingsModule
@@ -2671,7 +2703,7 @@ podiumd:
               catalogue_rsin: "002564440"
               organisatie_rsin: "002564440"
 
-        # As ExternalsPodiumD: admin login through Keycloak; the same settings as openzaak's.
+        # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
           providers:
@@ -2697,15 +2729,21 @@ podiumd:
               user_settings:
                 claim_mappings:
                   username:
-                  - sub
+                  - preferred_username
                   first_name:
                   - given_name
+                  last_name:
+                  - family_name
                   email:
                   - email
                 username_case_sensitive: true
               groups_settings:
-                sync: false
+                claim_mapping:
+                - groups
+                superuser_group_names:
+                - administrators
                 make_users_staff: true
+                sync: true
     # See settings.djangoSettingsModule below for why the no2fa-settings
     # mount exists - same ConfigMap+extraVolumes+extraVolumeMounts pattern
     # already used for openzaak's/opennotificaties's/openarchiefbeheer's

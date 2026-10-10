@@ -5584,3 +5584,17 @@ podiumd-tests has tightened it.
 Also deleted: three objects and three zaken (kenmerk pytest-17914...) left
 by the former test_productaanvraag_flow.py. The Open Zaak zaak DELETEs
 answered 204 this time, not the 500 of openzaak-delete-zaak-500-issue.md.
+
+## Admin OIDC claims as ExternalsPodiumD (podiumd-tests' finding; user: "yes")
+
+Open Zaak's admin OIDC took the username from `sub` and had group sync off;
+the blocks added for the other Django apps copied it. When podiumd-tests
+recreated its Keycloak test admin (a new sub), six apps refused the login
+because the old account with the same e-mail still existed. ExternalsPodiumD
+(dim1) takes `preferred_username`, maps first and last name and the `groups`
+claim, makes `administrators` superusers, staff for everyone, group sync on.
+Open Zaak, Open Klant, Objecten, Objecttypen, Open Notificaties, Open
+Formulieren and Open Archiefbeheer now have those settings (checked in each
+app's stored OIDCClient). The only sub-named accounts were podiumd-tests'
+test admin's; podiumd-tests removes them if the duplicate e-mail blocks the
+new login.
