@@ -3098,7 +3098,7 @@ podiumd:
         environment: Development
       notify:
         api:
-          baseUrl: http://ptest-bootstrap-webhook-receiver.podiumd-minikube/notify
+          baseUrl: http://ptest-bootstrap-mock-server.podiumd-minikube/notify
           # ExternalsPodiumD's NotifyNL test key (name-serviceId-secret).
           key: omcconfigtest-0c9cdaaf-7b0a-4d88-a8d8-dacbccf52734-173e579d-0f99-4d29-a6f8-7b522418f57b
         templateId:
