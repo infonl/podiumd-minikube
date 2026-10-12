@@ -342,12 +342,15 @@ podiumd:
     # live end-to-end (form submit -> objects API -> opennotificaties -> ZAC
     # creates a zaak) before being made declarative here - see plan.md's
     # productaanvraag-flow entry.
+    # The e2e zaaktype podiumd's create_required_catalogi_job creates, as
+    # ExternalsPodiumD's environments use; group behandelaars of podiumd's PABC
+    # dataset. Its own productaanvraagtype: zaaktype-test-1 keeps the old one.
     productaanvraag:
-      zaaktypeIdentificatie: zaaktype-test-1
+      zaaktypeIdentificatie: zaaktype-voor-e2e-testen
       caseDefinitionKey: generiek-zaakafhandelmodel
-      defaultGroepId: behandelaars-test-2
-      nietOntvankelijkResultaatNaam: Geweigerd
-      productaanvraagtype: productaanvraag-test-zaaktype-1
+      defaultGroepId: behandelaars
+      nietOntvankelijkResultaatNaam: Geweigerd e2e
+      productaanvraagtype: productaanvraag-zaaktype-voor-e2e-testen
     klantinteractiesApi:
       url: https://openklant.local
       token: fakeToken
@@ -449,8 +452,14 @@ podiumd:
     # src/podiumd_minikube/manifests.py now, not a hardcoded override here.
     tags:
       redis: false # point at the shared Redis instead of the chart's bundled one
+    # As ExternalsPodiumD: finds catalogus ALG with ZAC's bron RSIN (the fixture
+    # catalogus) and adds its document and besluit types and zaaktype-voor-e2e-testen.
     create_required_catalogi_job:
-      enabled: false # defaults to true with literal placeholder credentials (<openzaak_client_id>/<openzaak_secret>) that would just fail repeatedly, and would try to create its own test zaaktype/catalog - our vendored SQL fixtures already seed this exact data, matching compose
+      enabled: true
+      client_id: integratieteam
+      secret: integratieteamSecret
+      e2eTestZaaktype:
+        create: true
     configuration:
       job:
         # Was disabled (with no configuration.data set, matching compose,
@@ -2550,7 +2559,7 @@ podiumd:
       # podiumd.objecttypen's own tokenauth entries above.
       #
       # local-objects-api group: catalogue_domain/rsin match ZAC's own
-      # "ALG"/"002564440" catalogus (the podiumd/zac chart's own hardcoded
+      # "ALG"/"123443210" catalogus (the podiumd/zac chart's own hardcoded
       # CATALOGUS_DOMEIN default - confirmed live via the running zac pod's
       # own env, not something this values.yaml sets itself) - the
       # productaanvraag form's registration backend (wired by the custom
@@ -2648,11 +2657,11 @@ podiumd:
               document_type_submission_csv: bijlage
               document_type_attachment: bijlage
               catalogue_domain: ALG
-              catalogue_rsin: "002564440"
-              organisatie_rsin: "002564440"
+              catalogue_rsin: "123443210" # podiumd.zac.organizations.bron.rsin
+              organisatie_rsin: "123443210"
 
         # As ExternalsPodiumD's "Open Zaak" ZGW registration backend; the RSINs
-        # are those of the catalogus in ZAC's fixtures.
+        # are ZAC's bron RSIN, which the fixture catalogus carries.
         zgw_api_config_enable: True
         zgw_api:
           groups:
@@ -2662,8 +2671,8 @@ podiumd:
               documenten_service_identifier: openzaak-documenten
               catalogi_service_identifier: openzaak-catalogi
               catalogue_domain: ALG
-              catalogue_rsin: "002564440"
-              organisatie_rsin: "002564440"
+              catalogue_rsin: "123443210" # podiumd.zac.organizations.bron.rsin
+              organisatie_rsin: "123443210"
               auteur: Aanvrager
               zaak_vertrouwelijkheidaanduiding: openbaar
               doc_vertrouwelijkheidaanduiding: openbaar

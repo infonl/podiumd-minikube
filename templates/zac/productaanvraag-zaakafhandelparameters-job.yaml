@@ -93,7 +93,7 @@ spec:
             - name: CATALOGUS_DOMEIN
               value: "ALG"
             - name: CATALOGUS_RSIN
-              value: "002564440"
+              value: {{ .Values.podiumd.zac.organizations.bron.rsin | quote }}
             - name: ZAAKTYPE_IDENTIFICATIE
               value: {{ .Values.podiumd.zac.productaanvraag.zaaktypeIdentificatie | quote }}
             - name: CASE_DEFINITION_KEY

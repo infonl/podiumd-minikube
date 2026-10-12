@@ -65,3 +65,11 @@ def test_cluster_lock_run_runs_its_command_under_the_lock(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     assert marker.read_text(encoding="utf-8").startswith("kees test ")
     assert not lock_file.exists()
+
+
+def test_cluster_lock_run_keeps_the_commands_own_double_dash(tmp_path: Path):
+    env = {**os.environ, "MINIKUBE_LOCK_FILE": str(tmp_path / "lock")}
+    script = "import sys; print(sys.argv[1:])"
+    result = _run("cluster-lock", "run", "test", "--", sys.executable, "-c", script, "--", "-U", env=env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "['--', '-U']"

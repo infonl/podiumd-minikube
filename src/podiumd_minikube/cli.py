@@ -85,7 +85,7 @@ def cluster_lock(argv: list[str]) -> int:
         else:
             print(f"not held by {args.who}: {lock.describe(found) if found else 'free'}")
     elif args.action == "run":
-        command = [part for part in args.argv if part != "--"]
+        command = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
         if not command:
             parser.error("run needs a command after --")
         return lock.run(args.what, command, who=args.who)

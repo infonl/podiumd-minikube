@@ -15,6 +15,15 @@ vendored inserted first; on an empty table it was NULL and the link was lost.
 {{- $unusedStatements := "(?ms)^(INSERT INTO (catalogi_zaaktype_deelzaaktypen|documenten_enkelvoudiginformatieobject|documenten_enkelvoudiginformatieobjectcanonical|zgw_consumers_service)|UPDATE notifications_api_common_notificationsconfig)\\b.*?;\\n" }}
 {{- $volgnummer := "(SELECT id FROM catalogi_zaaktypeinformatieobjecttype ORDER BY volgnummer DESC LIMIT 1) + 1" }}
 {{- $firstVolgnummer := "COALESCE((SELECT MAX(volgnummer) FROM catalogi_zaaktypeinformatieobjecttype), 0) + 1" }}
+{{- /* ZAC's fixtures use RSIN 002564440 for the catalogus and the zaaktype's verantwoordelijke; ZAC's
+     bron RSIN instead, so podiumd's create_required_catalogi_job finds that catalogus, as in ExternalsPodiumD. */}}
+{{- $fixtureRsin := "'002564440'" }}
+{{- $zacRsin := printf "'%s'" .Values.podiumd.zac.organizations.bron.rsin }}
+{{- /* zaaktype-test-1's own document types get their own names: podiumd's job publishes bijlage and
+     e-mail in the same catalogus, and Open Zaak refuses two with one name in one validity period. */}}
+{{- $renames := dict
+  "'ca993ed7-5da1-4b4c-acad-ba64978acefc', 'e-mail'" "'ca993ed7-5da1-4b4c-acad-ba64978acefc', 'e-mail zaaktype-test-1'"
+  "'4a689f8a-11d3-4ddd-ae26-00fb258305a5', 'bijlage'" "'4a689f8a-11d3-4ddd-ae26-00fb258305a5', 'bijlage zaaktype-test-1'" }}
 {{- range $app := list "openzaak" "openklant" "openarchiefbeheer" }}
 apiVersion: v1
 kind: ConfigMap
@@ -25,7 +34,9 @@ metadata:
 data:
   {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/%s/*.sql" $app) }}
   {{ base $path }}: |
-    {{- regexReplaceAll $unusedStatements ($.Files.Get $path) "" | replace $volgnummer $firstVolgnummer | nindent 4 }}
+    {{- $sql := regexReplaceAll $unusedStatements ($.Files.Get $path) "" | replace $volgnummer $firstVolgnummer | replace $fixtureRsin $zacRsin }}
+    {{- range $from, $to := $renames }}{{ $sql = replace $from $to $sql }}{{ end }}
+    {{- $sql | nindent 4 }}
   {{- end }}
 ---
 {{- end }}

@@ -5998,3 +5998,23 @@ ExternalsPodiumD's pipeline does. The e2e zaaktype is not on yet:
 create_required_catalogi_job looks up catalogus ALG with ZAC's bron RSIN
 123443210, but the fixture catalogus has 002564440 (recorded deviation), so
 it would create a second ALG catalogus; waits for the user's decision.
+
+Step 3, e2e zaaktype (user: "go with option 1 for the RSIN"): the fixture
+catalogus (ALG) now carries ZAC's bron RSIN 123443210 instead of 002564440
+(fixture transform in configmap-fixtures.yaml; live catalogus and
+zaaktype-test-1's verantwoordelijke updated by hand; documents keep their
+bronorganisatie), and Open Formulieren's groups and the two seed Jobs read
+`podiumd.zac.organizations.bron.rsin`. podiumd's create_required_catalogi_job
+(client integratieteam) then found that catalogus, as in ExternalsPodiumD,
+but could not publish its bijlage and e-mail: ZAC's fixtures had published
+types with those names in the same catalogus ("komt al voor binnen de
+catalogus en opgegeven geldigheidsperiode"), so its zaaktype stayed concept
+(the script ignores a failed publish). The fixture types became
+"bijlage zaaktype-test-1" and "e-mail zaaktype-test-1" (transform plus live
+rename); everything is published now. ZAC's zaakafhandelparameters seed
+covers zaaktype-voor-e2e-testen (groep behandelaars, resultaat
+"Geweigerd e2e", productaanvraagtype productaanvraag-zaaktype-voor-e2e-testen;
+zaaktype-test-1 keeps productaanvraag-test-zaaktype-1): "valide".
+Found along the way: `cluster-lock run` dropped every `--` from the command,
+including those the command itself needs (kubectl exec); now only the
+separator.
