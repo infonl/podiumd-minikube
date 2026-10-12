@@ -75,19 +75,15 @@ monitoringLogging:
   # Optional alternative implementation for the "metrics" profile - off by
   # default (templates/metrics/'s raw templates stay the default). When
   # true, supersedes those raw templates with the "monitoring-logging"
-  # Chart.yaml dependency's own grafana/tempo/opentelemetry-collector
-  # (+ optionally loki/alloy/kube-prometheus-stack/prometheus-pushgateway)
-  # subcharts instead - see the "monitoring-logging" block further down
+  # Chart.yaml dependency's own grafana, kube-prometheus-stack, loki, alloy,
+  # opentelemetry-collector and prometheus-pushgateway subcharts instead - see the "monitoring-logging" block further down
   # for how each is re-tuned for a single-node minikube box (that chart's
   # own defaults assume a multi-node AKS cluster: Loki in distributed
   # mode with ~17 pods + MinIO, Alloy pinned to an AKS-only node label,
   # managed-csi storage classes, Keycloak OAuth, a production SMTP relay).
   # Requires metrics.enabled=true too - this only decides *which*
   # implementation backs that profile, it doesn't turn the profile on by
-  # itself. Needs podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint
-  # repointed at the new otel-collector Service name too when enabling
-  # this - see that key's own comment, and src/podiumd_minikube/deploy.py's
-  # handling of both together.
+  # itself.
   #
   # Flipping this on an *already-deployed* cluster (either direction) leaves
   # the *other* implementation's Deployments/Services/Secrets/Ingresses
@@ -437,67 +433,11 @@ podiumd:
       createZacCore: false
     solr-operator:
       enabled: false # podiumd's own override defaults this to true (unlike charts/zac's own quiet false default) - we use a plain Solr Deployment instead, see templates/solr.yaml
-    # Correcting an earlier wrong assumption here, found live while
-    # verifying monitoring-logging actually receives ZAC's traces: the
-    # bundled zac chart (1.0.251) does NOT hardcode OTEL_SDK_DISABLED/
-    # OTEL_EXPORTER_OTLP_ENDPOINT unconditionally - its own
-    # templates/config.yaml only renders either env var at all inside
-    # `{{- if index .Values "opentelemetry-collector" "enabled" }}`. With
-    # this false (as it was), ZAC's OTel SDK was silently disabled the
-    # entire time, regardless of metrics.enabled/monitoringLogging.enabled
-    # or the endpoint override below - confirmed live: zero OTEL_* keys in
-    # the rendered zac ConfigMap either way.
-    #
-    # Set true to unlock those two env vars - this is also the exact same
-    # key Chart.yaml's own `condition:` uses to decide whether to deploy
-    # the zac chart's *separate*, unrelated bundled otel-collector subchart
-    # (not the one in templates/metrics/ or monitoring-logging's own, which
-    # are what we actually want ZAC's traces to go to).
-    #
-    # fullnameOverride: without it, this subchart's default fullname
-    # (release name + chart name, both literally "opentelemetry-collector")
-    # collides exactly with monitoring-logging's own otel-collector
-    # Deployment name. This project applies via `kubectl apply`, not `helm
-    # install`/`upgrade` (Helm's release record outgrows the API server's
-    # 3 MB request limit; plan.md), so same-name
-    # resources don't merge by release the way a real Helm release would -
-    # whichever one renders last in the manifest stream simply overwrites
-    # the other's live spec. Confirmed live: without this override, zac's
-    # own copy rendered after monitoring-logging's real one and would have
-    # silently replaced it, breaking the whole Loki/Tempo/Grafana pipeline
-    # it feeds.
-    #
-    # This subchart's own resources (Deployment/Service/ConfigMap/
-    # ServiceAccount) are dropped from the manifest entirely before
-    # `kubectl apply` ever sees them - see deploy.Options.render
-    # and src/podiumd_minikube/manifests.py's own header
-    # for why (short version: `replicaCount: 0` looked like the obvious
-    # way to stop it running, but isn't - confirmed live in this chart's
-    # own deployment.yaml, an omitted `replicas:` field defaults back to
-    # Kubernetes' own default of 1, not 0). fullnameOverride here is what
-    # that filter targets by name.
+    # Off, as ExternalsPodiumD gets by default: ZAC's OTel SDK stays off and its
+    # bundled collector is not deployed. One chart level deeper than podiumd,
+    # Helm renders that collector unless this is set (checked with helm 4.3.0).
     opentelemetry-collector:
-      enabled: true
-      fullnameOverride: zac-unused-otel-collector
-    # Pointed at our own templates/metrics/ otel-collector Service instead
-    # of the bundled (now zero-replica) one above (step 5). When
-    # metrics.enabled is false this Service doesn't exist either, so ZAC's
-    # JVM just harmlessly retries failed trace exports in the background
-    # (noisy log warnings, no functional impact) - same previously-accepted
-    # behavior, now also the actually-working case once metrics is on.
-    #
-    # When monitoringLogging.enabled is true instead, this raw Service
-    # doesn't exist (see templates/metrics/'s own supersession comment) -
-    # the monitoring-logging dependency's own otel-collector Service is
-    # named "podiumd-minikube-opentelemetry-collector" (confirmed live via
-    # `helm template` against that exact chart version), not "otel-
-    # collector". Values.yaml can't express "pick one endpoint or the
-    # other" itself (not templated) - podiumd-minikube deploy reads
-    # monitoringLogging.enabled itself and passes
-    # `--set podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint=...`
-    # to override this default automatically when it's on.
-    opentelemetry_zaakafhandelcomponent:
-      endpoint: http://otel-collector:4317
+      enabled: false
     ingress:
       enabled: true
       hosts:
@@ -3467,9 +3407,9 @@ monitoring-logging:
     # DNS lookup error against the hardcoded name). This whole list has to
     # be repeated here, not just the one url field - it's a YAML list, and
     # Helm value overrides replace lists wholly rather than merging them
-    # (unlike maps). loki/Tempo's own URLs are copied verbatim from
-    # monitoring-logging's own values.yaml (correct already - those two
-    # charts aren't affected by kube-prometheus-stack's own truncation).
+    # (unlike maps). Loki's URL is copied verbatim from
+    # monitoring-logging's own values.yaml (correct already - that chart
+    # isn't affected by kube-prometheus-stack's own truncation).
     datasources:
       datasources.yaml:
         apiVersion: 1
@@ -3496,25 +3436,6 @@ monitoring-logging:
               httpHeaderName1: "X-Scope-OrgID"
             secureJsonData:
               httpHeaderValue1: "1"
-          - name: Tempo
-            type: tempo
-            uid: tempo
-            readOnly: false
-            editable: true
-            access: proxy
-            isDefault: false
-            url: http://podiumd-minikube-tempo:3200
-            jsonData:
-              tracesToLogsV2:
-                datasourceUid: loki
-                filterByTraceID: true
-                filterBySpanID: false
-              tracesToMetrics:
-                datasourceUid: prometheus
-              serviceMap:
-                datasourceUid: prometheus
-              nodeGraph:
-                enabled: true
     grafana.ini:
       auth.generic_oauth:
         enabled: false # no Keycloak client wired up for this dev tool - anonymous admin access instead, matching templates/metrics/grafana.yaml's current GF_AUTH_ANONYMOUS_* behavior
@@ -3582,20 +3503,16 @@ monitoring-logging:
               resources:
                 requests:
                   storage: 2Gi
-        # Matches templates/metrics/prometheus.yaml's own scrape_configs
-        # exactly - zac's WildFly management port (see
+        # Matches templates/metrics/prometheus.yaml's own scrape_configs:
+        # zac's WildFly management port (see
         # templates/metrics/service-zac-admin.yaml, unconditional on
-        # which metrics implementation is active - both need it) and
-        # Tempo's own metrics, neither of which this chart's default
-        # ServiceMonitor discovery would pick up on their own.
+        # which metrics implementation is active - both need it), which
+        # this chart's default ServiceMonitor discovery does not pick up.
         additionalScrapeConfigs:
           - job_name: zac-admin
             fallback_scrape_protocol: PrometheusText1.0.0
             static_configs:
               - targets: ["zac-admin:9990"]
-          - job_name: tempo
-            static_configs:
-              - targets: ["podiumd-minikube-tempo:3200"]
   alloy:
     # monitoring-logging's own umbrella values.yaml (not the alloy chart's
     # own default, which is already {}) hardcodes an AKS-only node label
@@ -3797,35 +3714,15 @@ monitoring-logging:
       replicas: 0
     ingester:
       replicas: 0
-  tempo:
-    # Deviation: neither ExternalsPodiumD nor podiumd-infra runs Tempo; ZAC's
-    # docker-compose stack does, and ZAC exports its traces to it.
-    enabled: true
-    persistence:
-      storageClassName: standard
-      size: 2Gi
   opentelemetry-collector:
-    # Wires the traces pipeline to Tempo - chart default has no traces
-    # pipeline at all (see that key's own upstream comment: "Apply
-    # values-enable-tempo.yaml to enable traces → Tempo"), matching
-    # monitoring-logging's own documented values-enable-tempo.yaml.
+    # The chart's logs and metrics pipelines, no traces (no Tempo), as
+    # ExternalsPodiumD.
     config:
       exporters:
-        otlp/tempo:
-          endpoint: ${env:RELEASE_NAME}-tempo:4317
-          tls:
-            insecure: true
         # Same "${env:RELEASE_NAME}-kube-prometheus-prometheus" mismatch as
         # the grafana Prometheus datasource above (see that key's own
         # comment for the full why) - this chart's default metrics pipeline
-        # already wires this exporter in, so without the fix ZAC's own OTLP
-        # metrics would silently fail to land in Prometheus at all (DNS
-        # lookup failure inside the collector, not a rendering error).
+        # already wires this exporter in; without the fix OTLP metrics fail
+        # to land in Prometheus (DNS lookup failure inside the collector).
         prometheusremotewrite:
           endpoint: http://podiumd-minikube-kube-prom-prometheus:9090/api/v1/write
-      service:
-        pipelines:
-          traces:
-            receivers: [otlp]
-            processors: [memory_limiter, batch]
-            exporters: [otlp/tempo]

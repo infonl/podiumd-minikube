@@ -15,6 +15,3 @@ scrape_configs:
       # (9990) the container also listens on, so this points at a small
       # extra Service (zac-admin) this chart adds just to expose it.
       - targets: [ 'zac-admin:9990' ]
-  - job_name: 'tempo'
-    static_configs:
-      - targets: [ 'tempo:3200' ]

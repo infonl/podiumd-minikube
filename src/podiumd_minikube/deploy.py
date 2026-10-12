@@ -28,7 +28,6 @@ from podiumd_minikube import process
 from podiumd_minikube import prune
 from podiumd_minikube import values
 from podiumd_minikube.paths import NAMESPACE
-from podiumd_minikube.paths import RELEASE_NAME
 
 STORAGE_HOOKS = "templates/storage-hooks.yaml"
 STORAGE_PERMISSIONS_JOB = "storage-permissions-fix"
@@ -63,10 +62,6 @@ def options(*, full: bool, extra: list[str]) -> Options:
         shape = chart.objecten_shape()
         selected.helm_args += [*chart.FULL_PROFILE_SETS, *shape.sets]
         selected.objecten_merged = shape.merged
-    if values.monitoring_logging_enabled():
-        # monitoring-logging's collector Service, named by that chart's fullname template.
-        endpoint = f"http://{RELEASE_NAME}-opentelemetry-collector:4317"
-        selected.helm_args += ["--set", f"podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint={endpoint}"]
     selected.helm_args += [*openbao.seal_key_args(), *extra]
     return selected
 

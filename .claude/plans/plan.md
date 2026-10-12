@@ -5836,3 +5836,28 @@ Grafana). Tempo comes from ZAC's docker-compose stack, which this project
 reproduces: extra opt-in functionality (metrics and monitoringLogging
 profiles), not a different setting for something the estates run. No
 podiumd-tests test can depend on it.
+
+## No Tempo, no ZAC OpenTelemetry export (user: "if no real env uses tempo then it should be disabled, we want to stay as similar as possible to A and B")
+
+Neither reference environment runs Tempo, and in ExternalsPodiumD ZAC's OTel
+SDK is off (the zac chart's `opentelemetry-collector.enabled` default). So
+Tempo is gone from both metrics implementations (`templates/metrics/tempo.yaml`,
+the monitoring-logging `tempo` subchart, the Grafana Tempo datasources, the
+`tempo` scrape jobs, the collector's `otlp/tempo` traces pipeline), ZAC no
+longer exports (`opentelemetry_zaakafhandelcomponent`, the deploy's endpoint
+`--set` and the `zac-unused-otel-collector` render filter removed), and the
+metrics profile's raw otel-collector, which only forwarded ZAC's traces, is
+removed. Prometheus keeps scraping ZAC's WildFly metrics (`zac-admin`).
+monitoring-logging's own collector keeps the chart's pipelines, as
+ExternalsPodiumD.
+
+Found while rendering: one chart level deeper than podiumd (podiumd-minikube
+-> podiumd -> zac), Helm 4.3.0 renders zac's bundled opentelemetry-collector
+subchart even though zac's own default is `enabled: false`; rendering the
+podiumd chart directly with the same values does not. So values.yaml sets
+`podiumd.zac.opentelemetry-collector.enabled: false` explicitly, which gives
+what ExternalsPodiumD gets by default.
+
+Next, agreed with the user: after the monitoring-logging tuning,
+monitoring-logging becomes the only metrics implementation and
+`templates/metrics/` goes, as both reference environments.

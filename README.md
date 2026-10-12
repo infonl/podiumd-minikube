@@ -107,7 +107,7 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | `openbeheer` | Open Beheer on `https://openbeheer.local` (needs `objecten`) |
 | `frankgateway` | Frank!Gateway's outway (with etcd) and OpenBao on `https://openbao.local`; apps then call BRP/KvK/BAG at `http://frankgateway-outway:9080/...` instead of the api-proxy. OpenBao's seal key, root token and recovery key live in `.openbao/` (gitignored) |
 | `clamav` | ClamAV's clamd on `clamav:3310` with only the EICAR test signature (no freshclam, no internet); Open Inwoner's virus scan setting is test wiring (podiumd-tests) |
-| `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
+| `metrics` | Prometheus (scrapes ZAC) and Grafana (or the `monitoringLogging` alternative below) |
 
 `metrics` has two implementations, picked by `values.yaml`'s
 `monitoringLogging.enabled` (not a `podiumd-minikube deploy` flag):
@@ -155,8 +155,8 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 `GOMEMLIMIT`, the control plane's `GOGC`) and how to check each setting:
 [`.claude/memory/memory-tuning.md`](.claude/memory/memory-tuning.md).
 
-`monitoringLogging.enabled` replaces the `metrics` profile's Grafana, Tempo
-and Prometheus with a dozen heavier pods. Disable it with:
+`monitoringLogging.enabled` replaces the `metrics` profile's Grafana and
+Prometheus with a dozen heavier pods. Disable it with:
 
 ```bash
 podiumd-minikube set-podiumd-version <version> --disable-monitoring-logging

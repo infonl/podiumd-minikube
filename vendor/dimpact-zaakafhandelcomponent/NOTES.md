@@ -22,15 +22,18 @@ changes is in `.claude/plans/plan.md`.
 - `postgres/fixtures/{openklant,openarchiefbeheer}/1-setup-applicatie.sql`
   ← `scripts/docker-compose/imports/{openklant,openarchiefbeheer}-database/database/`.
   Read by `templates/postgres/configmap-fixtures.yaml`.
-- `metrics/{otel-collector,tempo,prometheus,grafana-datasources}.yaml`
-  ← `scripts/docker-compose/imports/{otel-collector,tempo,prometheus,grafana}/`.
-  Read by `templates/metrics/` (the `metrics` profile without
-  `monitoringLogging`).
 - `pabc/pabc-mapping-data.json`
   ← `scripts/docker-compose/imports/pabc-database/json-mapping/`.
   Read by `templates/pabc/configmap-mapping-data.yaml` (the pabc-migrations Job).
 
 ## Copied and changed
+
+- `metrics/{prometheus,grafana-datasources}.yaml`
+  ← `scripts/docker-compose/imports/{prometheus,grafana}/`. Changes: no
+  Tempo (neither reference environment runs it), so no `tempo` scrape job
+  and no Tempo datasource, Prometheus is the default; Prometheus scrapes
+  ZAC's WildFly metrics at `zac-admin:9990`. Read by `templates/metrics/`
+  (the `metrics` profile without `monitoringLogging`).
 
 - `keycloak/zaakafhandelcomponent-realm.json`
   ← `scripts/docker-compose/imports/keycloak/realms/zaakafhandelcomponent-realm.json`.

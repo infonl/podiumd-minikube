@@ -1,9 +1,4 @@
-"""
-Metrics profile checks - confirms Grafana's own provisioned datasources and
-Prometheus's own scrape targets are actually healthy, not just that the
-pods are Running. This is what caught the zac-admin Service / Tempo OTLP
-bind-address fixes actually working end to end.
-"""
+"""The metrics profile's raw templates: Grafana's provisioned datasource and Prometheus' ZAC scrape target."""
 
 import pytest
 import requests
@@ -24,7 +19,7 @@ def test_grafana_datasources_provisioned(edge_ip):
     )
     assert response.status_code == 200
     names = {ds["name"] for ds in response.json()}
-    assert names == {"Prometheus", "Tempo"}
+    assert names == {"Prometheus"}
 
 
 def test_prometheus_scrape_targets_healthy(edge_ip):
@@ -38,5 +33,4 @@ def test_prometheus_scrape_targets_healthy(edge_ip):
     unhealthy = [t for t in targets if t["health"] != "up"]
     assert not unhealthy, f"unhealthy scrape targets: {unhealthy}"
 
-    jobs = {t["labels"].get("job") for t in targets}
-    assert {"prometheus", "tempo"} <= jobs
+    assert {t["labels"].get("job") for t in targets} == {"prometheus"}

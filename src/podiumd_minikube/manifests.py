@@ -25,7 +25,6 @@ from podiumd_minikube.paths import RELEASE_NAME
 Doc = dict[str, Any]
 
 PABC_MIGRATION_JOB = "pabc-migrations-1"
-ZAC_UNUSED_OTEL_COLLECTOR = "zac-unused-otel-collector"
 # The apps' BRP/KvK/BAG base URL (values.yaml), and Frank!Gateway's outway, which
 # serves the same paths (podiumd.frankgateway.instances.outway.routes).
 API_PROXY_URL = "http://api-proxy/"
@@ -241,13 +240,9 @@ def _is_test_hook(doc: Doc) -> bool:
 
 
 def _excluded(doc: Doc) -> bool:
-    """The pabc-migrations Job (only pabc.py may create it), Helm test hooks, zac's bundled otel-collector."""
-    name = name_of(doc)
-    return (
-        (doc.get("kind") == "Job" and name == PABC_MIGRATION_JOB)
-        or _is_test_hook(doc)
-        or name == ZAC_UNUSED_OTEL_COLLECTOR
-    )
+    """The pabc-migrations Job (only pabc.py may create it) and Helm test hooks."""
+    is_pabc_job = doc.get("kind") == "Job" and name_of(doc) == PABC_MIGRATION_JOB
+    return is_pabc_job or _is_test_hook(doc)
 
 
 def _configuration_yaml(doc: Doc, configmap: str) -> Any | None:

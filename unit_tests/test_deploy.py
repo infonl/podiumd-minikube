@@ -8,7 +8,6 @@ from podiumd_minikube import chart
 from podiumd_minikube import deploy
 from podiumd_minikube import manifests
 from podiumd_minikube import openbao
-from podiumd_minikube import values
 
 
 def test_apply_errors_counts_server_and_client_side_failures():
@@ -40,21 +39,15 @@ def no_pkce(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.MonkeyPatch, no_pkce: None):
     monkeypatch.setattr(chart, "objecten_shape", lambda: chart.ObjectenShape(merged=True, sets=["--set", "shape=1"]))
-    monkeypatch.setattr(values, "monitoring_logging_enabled", lambda: False)
     selected = deploy.options(full=True, extra=["--set", "x=y"])
     assert selected.objecten_merged
     assert selected.helm_args == [*chart.FULL_PROFILE_SETS, "--set", "shape=1", *SEAL, "--set", "x=y"]
 
 
-def test_options_points_zac_at_monitoring_logging_collector(monkeypatch: pytest.MonkeyPatch, no_pkce: None):
-    monkeypatch.setattr(values, "monitoring_logging_enabled", lambda: True)
+def test_options_core_has_no_profile_sets(no_pkce: None):
     selected = deploy.options(full=False, extra=[])
     assert not selected.objecten_merged
-    assert selected.helm_args == [
-        "--set",
-        "podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint=http://podiumd-minikube-opentelemetry-collector:4317",
-        *SEAL,
-    ]
+    assert selected.helm_args == SEAL
 
 
 def test_parser_passes_unknown_arguments_to_helm():

@@ -19,7 +19,7 @@ def test_added_scrape_jobs_are_up(edge_ip):
         host_url("grafana.local", "/api/datasources/proxy/uid/prometheus/api/v1/targets"), timeout=10
     )
     assert response.status_code == 200
-    targets = [t for t in response.json()["data"]["activeTargets"] if t["labels"].get("job") in {"zac-admin", "tempo"}]
-    assert {t["labels"]["job"] for t in targets} == {"zac-admin", "tempo"}
+    targets = [t for t in response.json()["data"]["activeTargets"] if t["labels"].get("job") == "zac-admin"]
+    assert targets, "scrape job zac-admin missing"
     down = [t["scrapeUrl"] for t in targets if t["health"] != "up"]
     assert not down, f"scrape targets down: {down}"

@@ -45,16 +45,13 @@ spec: {template: {spec: {}}}
     assert "enableServiceLinks" not in docs[2]["spec"]["template"]["spec"]
 
 
-def test_fix_up_drops_pabc_job_test_hooks_and_zac_otel_collector():
+def test_fix_up_drops_pabc_job_and_test_hooks():
     text = """
 kind: Job
 metadata: {name: pabc-migrations-1}
 ---
 kind: Pod
 metadata: {name: grafana-test, annotations: {helm.sh/hook: test}}
----
-kind: Deployment
-metadata: {name: zac-unused-otel-collector}
 ---
 kind: Service
 metadata: {name: zac}
