@@ -35,6 +35,10 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 | Keycloak (Quarkus) | `-Xms64m -Xmx512m -XX:-UseG1GC -XX:+UseSerialGC -XX:TieredStopAtLevel=1` | `templates/keycloak/deployment.yaml` `JAVA_OPTS_APPEND`; kc.sh sets `-XX:+UseG1GC`, so `-XX:-UseG1GC` is required | 592 -> 416 MiB; C1 only: 551 -> 409 MiB, discovery p95 4-5 -> 7 ms |
 | Solr | `-Xms64m -Xmx512m`, `GC_TUNE=-XX:+UseSerialGC` | `templates/solr/deployment.yaml` | 425 -> 214 MiB |
 | WireMock | nothing: its 256Mi limit gives a 64 MiB heap and the serial GC by default | `templates/wiremock/deployment.yaml` limit | |
+| monitoring-logging: components | kube-state-metrics, node-exporter, pushgateway, default rules off, as ExternalsPodiumD | `values.yaml` `monitoring-logging.kube-prometheus-stack`, `prometheus-pushgateway` | containers 1598 -> 1343 MiB; kube-apiserver unchanged (its +460 MiB comes with the CRDs) |
+| monitoring-logging: Prometheus | 384Mi/768Mi, `retentionSize` 1GB, `GOMEMLIMIT` | `prometheusSpec.resources`; the operator builds its pod, so `limit_runtimes` patches the `Prometheus` resource's `containers` | 345 -> 204 MiB |
+| monitoring-logging: otel-collector | limit 256Mi (chart 512Mi); `memory_limiter` is 80% of it | `opentelemetry-collector.resources` | 173 -> 43 MiB |
+| monitoring-logging: Loki, sidecars | Loki 512Mi/1Gi as podiumd-infra; Grafana's and Loki's sidecars 80-96Mi/128-160Mi | `loki.singleBinary.resources`, `grafana.sidecar`, `loki.sidecar` | Loki 310 -> 210 MiB |
 | Kibana | off | `podiumd.kiss-eck.eck-kibana.enabled: false` | -0.7 GiB |
 | ClamAV | EICAR-only signature database | `podiumd.clamav` + `templates/clamav` | 19 MiB instead of 973 |
 | KISS contact-web | 1 replica | `podiumd.kiss.replicaCount` (chart default 2) | -0.12 GiB |

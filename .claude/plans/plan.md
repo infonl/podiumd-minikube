@@ -5904,3 +5904,16 @@ monitoring.coreos.com schemas) are the likely cause; ExternalsPodiumD applies
 the same kube-prometheus-stack CRDs. Containers outside monitoring-logging
 and the API server: 10801 MiB vs 10398 in round 1 (warm-up variation).
 Tier 9:46.
+
+Round 4 (Phase 2 deployed): monitoring-logging's containers 1065 MiB (round 3:
+1343): Prometheus 345 -> 204 (its first GOMEMLIMIT), otel-collector 173 -> 43
+(limit 256Mi), the rest unchanged; no restarts during the tier (451 passed,
+10:28). kube-apiserver 1149. The node stayed at 14848 MiB because the other
+containers keep growing round after round with the data each tier adds
+(10398 -> 10947 MiB over four rounds), so per-component numbers are the
+comparison, not the node. Measured cost of monitoring-logging against the
+plain metrics profile: 1065 + 467 (API server) - 229 = about 1.3 GiB; the
+user set that as the budget ("use the measured budget"). Guarded by the
+refreshed memory baseline (each container at most 20% + 64 MiB above it)
+and the --full node budget of 20 GiB. monitoringLogging is on by default
+from here; templates/metrics/ goes next.

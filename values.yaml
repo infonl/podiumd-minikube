@@ -101,7 +101,7 @@ monitoringLogging:
   # (src/podiumd_minikube/deploy.py's
   # server-side-apply path for large ConfigMaps like the bundled Grafana
   # dashboards makes safely pruning that kind harder, not done here).
-  enabled: false
+  enabled: true
 
 # -----------------------------------------------------------------------
 # The podiumd dependency and everything nested inside it.
