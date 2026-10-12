@@ -163,11 +163,20 @@ def _pod_spec(doc: Doc) -> Doc | None:
 
 
 def _runtime_pod_specs(doc: Doc) -> list[Doc]:
-    """doc's pod specs: a workload's or Job's, and the podTemplate specs ECK expands into its own StatefulSets."""
+    """doc's pod specs: a workload's or Job's, and those an operator expands into its own StatefulSets.
+
+    ECK: the podTemplate specs. Prometheus: its `containers` override, given the
+    prometheus container's resources, which the operator merges into its pod.
+    """
     spec = _pod_spec(doc)
     if spec is not None:
         return [spec]
     kind, body = doc.get("kind"), section(doc, "spec")
+    if kind == "Prometheus":
+        containers: list[Doc] = body.setdefault("containers", [])
+        if not any(c.get("name") == "prometheus" for c in containers):
+            containers.append({"name": "prometheus", "resources": body.get("resources") or {}})
+        return [{"containers": containers}]
     node_sets: list[Doc] = (body.get("nodeSets") or []) if kind == "Elasticsearch" else []
     templates = [section(node_set, "podTemplate") for node_set in node_sets]
     if kind == "Kibana":

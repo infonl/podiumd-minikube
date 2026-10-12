@@ -167,6 +167,15 @@ def test_limit_runtimes_reaches_the_containers_of_eck_pod_templates():
     assert {"name": "MALLOC_ARENA_MAX", "value": "2"} in kibana
 
 
+def test_limit_runtimes_reaches_the_prometheus_container_the_operator_builds():
+    docs: list[manifests.Doc] = [{"kind": "Prometheus", "spec": {"resources": {"limits": {"memory": "512Mi"}}}}]
+    manifests.limit_runtimes(docs)
+    (prometheus,) = docs[0]["spec"]["containers"]
+    assert prometheus["name"] == "prometheus"
+    assert prometheus["resources"] == {"limits": {"memory": "512Mi"}}
+    assert {item["name"] for item in prometheus["env"]} >= {"GOMEMLIMIT", "MALLOC_ARENA_MAX"}
+
+
 def test_limit_runtimes_gives_containers_with_a_memory_limit_gomemlimit():
     docs: list[manifests.Doc] = [
         {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [

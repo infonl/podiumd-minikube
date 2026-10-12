@@ -3378,6 +3378,16 @@ podiumd:
 # -----------------------------------------------------------------------
 monitoring-logging:
   grafana:
+    # Both sidecars (dashboards, datasources); neither reference environment
+    # sets them. Settled at 71 MiB each.
+    sidecar:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 80Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
     persistence:
       storageClassName: standard
       size: 2Gi
@@ -3526,8 +3536,18 @@ monitoring-logging:
         logLevel: warn
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
-        # ExternalsPodiumD: 7d. Capacity only: one day of a laptop's metrics.
+        # ExternalsPodiumD: 7d and the chart's 512Mi/2Gi. Capacity only: one
+        # day of a laptop's metrics; settled at 345 MiB after a full tier, and
+        # the limit gives it GOMEMLIMIT (manifests.limit_runtimes).
         retention: 1d
+        retentionSize: 1GB # of its 2Gi volume
+        resources:
+          requests:
+            cpu: 100m
+            memory: 384Mi
+          limits:
+            cpu: "1"
+            memory: 768Mi
         storageSpec:
           volumeClaimTemplate:
             spec:
@@ -3556,6 +3576,15 @@ monitoring-logging:
   prometheus-pushgateway:
     enabled: false # as ExternalsPodiumD
   loki:
+    # The rules sidecar; neither reference environment sets it. Settled at 82 MiB.
+    sidecar:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 96Mi
+        limits:
+          cpu: 100m
+          memory: 160Mi
     # Chart default (Distributed) runs ~17 separate microservice pods
     # sized for horizontal scale a single-node dev box will never need -
     # SingleBinary is the same functionality (log storage + query) on
@@ -3642,7 +3671,15 @@ monitoring-logging:
       replicas: 0
   opentelemetry-collector:
     # The chart's logs and metrics pipelines, no traces (no Tempo), as
-    # ExternalsPodiumD.
+    # ExternalsPodiumD. Limit 256Mi instead of the chart's 512Mi (settled at
+    # 173 MiB); GOMEMLIMIT and memory_limiter's 80% follow it.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
     config:
       exporters:
         # Same "${env:RELEASE_NAME}-kube-prometheus-prometheus" mismatch as
