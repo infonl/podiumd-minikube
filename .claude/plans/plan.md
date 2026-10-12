@@ -6096,3 +6096,17 @@ stops there. The fix commit's message blames the home router; that is wrong. dns
 domain as a whole with NXDOMAIN (never `local` or another parent of
 cluster.local, whose zone would capture the cluster's own names). Applied with
 dns.apply_hosts; a manual vac sync then finished.
+
+## Pods without the laptop's search domains (user: "vpns come and go ... let's make the real / cleaner change")
+
+The NXDOMAIN block for the host's search domains only helped for the domain
+seen at the last deploy, read from an old pod; a VPN or network change in
+between broke musl pods again. `provision.isolate_pod_dns`, run by
+`start_node` after `tune_control_plane` (minikube start rewrites the kubelet
+configuration too), writes the node's nameserver lines to
+`/etc/kubernetes/pod-resolv.conf` and sets the kubelet's `resolvConf` to it,
+then restarts the kubelet. Pods (ClusterFirst) then search only the cluster's
+domains; CoreDNS (dnsPolicy Default) forwards to the same nameserver as
+before. dns.py's search-domain block and `outside_search_domains` are gone.
+Pods started before keep their search domains until they restart: applied
+live by restarting CoreDNS and every running pod in podiumd-minikube.

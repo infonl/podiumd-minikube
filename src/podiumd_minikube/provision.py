@@ -41,6 +41,10 @@ CONTROL_PLANE_ENV = {"GOGC": "50"}
 CONTROL_PLANE_PODS = ("kube-apiserver", "etcd")
 STATIC_PODS = "/etc/kubernetes/manifests"
 CONTROL_PLANE_TIMEOUT = 300
+KUBELET_CONFIG = "/var/lib/kubelet/config.yaml"
+# The node's resolv.conf without its search domains: pods would inherit the laptop's
+# (DHCP, VPN), and musl stops at a "no data" answer for <name>.<that domain>.
+POD_RESOLV_CONF = "/etc/kubernetes/pod-resolv.conf"
 
 
 def _env_int(name: str, default: int) -> int:
@@ -77,6 +81,7 @@ def start_node() -> None:
     process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, os.cpu_count() or cpus), PROFILE])
     kube.require_minikube_context()
     tune_control_plane()
+    isolate_pod_dns()
 
 
 def with_control_plane_env(manifest: str) -> str | None:
@@ -99,6 +104,48 @@ def _tuned_and_ready(name: str) -> bool:
     return set(CONTROL_PLANE_ENV) <= env and bool(statuses) and all(c.get("ready") for c in statuses)
 
 
+def _write_node_file(path: str, content: str, mode: str) -> None:
+    """Writes content to path on the node, staged and renamed: the kubelet would read a half-written file."""
+    name = Path(path).name
+    staged = f"/etc/kubernetes/.{name}"
+    with tempfile.TemporaryDirectory() as directory:
+        local = Path(directory) / name
+        local.write_text(content, encoding="utf-8")
+        process.run(["minikube", "cp", "-p", PROFILE, str(local), staged])
+    kube.node(f"sudo chown root:root {staged} && sudo chmod {mode} {staged} && sudo mv {staged} {path}")
+
+
+def nameservers_only(resolv_conf: str) -> str:
+    """resolv_conf's nameserver lines."""
+    lines = (line.strip() for line in resolv_conf.splitlines())
+    return "".join(f"{line}\n" for line in lines if line.startswith("nameserver "))
+
+
+def with_pod_resolv_conf(config: str) -> str | None:
+    """The kubelet configuration with resolvConf POD_RESOLV_CONF; None when it has it already."""
+    parsed = yaml.safe_load(config)
+    if parsed.get("resolvConf") == POD_RESOLV_CONF:
+        return None
+    parsed["resolvConf"] = POD_RESOLV_CONF
+    return yaml.safe_dump(parsed, sort_keys=False)
+
+
+def isolate_pod_dns() -> None:
+    """Points the kubelet at POD_RESOLV_CONF; minikube start rewrites its configuration, so every start does this.
+
+    Pods started before keep their search domains until they restart.
+    """
+    wanted = nameservers_only(kube.node("cat /etc/resolv.conf"))
+    if kube.node(f"cat {POD_RESOLV_CONF} 2>/dev/null || true").strip() != wanted.strip():
+        _write_node_file(POD_RESOLV_CONF, wanted, mode="644")
+    config = with_pod_resolv_conf(kube.node(f"sudo cat {KUBELET_CONFIG}"))
+    if config is None:
+        return
+    _write_node_file(KUBELET_CONFIG, config, mode="644")
+    print(f"Restarting the kubelet with resolvConf {POD_RESOLV_CONF} (no search domains of the laptop)...")
+    kube.node("sudo systemctl restart kubelet")
+
+
 def tune_control_plane() -> None:
     """Adds CONTROL_PLANE_ENV to the static pods; minikube start rewrites their files, so every start does this."""
     changed: list[str] = []
@@ -107,13 +154,7 @@ def tune_control_plane() -> None:
         tuned = with_control_plane_env(kube.node(f"sudo cat {path}"))
         if tuned is None:
             continue
-        with tempfile.TemporaryDirectory() as directory:
-            local = Path(directory) / f"{name}.yaml"
-            local.write_text(tuned, encoding="utf-8")
-            # Outside the watched directory, then renamed: the kubelet would start a half-written file.
-            staged = f"/etc/kubernetes/.{name}.yaml"
-            process.run(["minikube", "cp", "-p", PROFILE, str(local), staged])
-        kube.node(f"sudo chown root:root {staged} && sudo chmod 600 {staged} && sudo mv {staged} {path}")
+        _write_node_file(path, tuned, mode="600")
         changed.append(name)
     if not changed:
         return

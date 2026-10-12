@@ -6,12 +6,6 @@ answering them with the edge Service's ClusterIP. Its zones are the host names
 themselves: a zone `local` would also capture cluster.local and break all
 in-cluster DNS. A separate server block leaves minikube's own configuration
 untouched; CoreDNS' reload plugin picks the change up.
-
-Pods inherit the host's search domains (e.g. info.local, home). With ndots:5,
-musl (Alpine) tries objecten.podiumd-minikube.svc.cluster.local.home and
-keycloak.local.home before the name itself and stops at a "no data" answer
-from the host's DNS (a VPN's DNS servers give one for every name), so CoreDNS
-answers each outside search domain with NXDOMAIN and musl moves on.
 """
 
 import json
@@ -19,29 +13,13 @@ import json
 from podiumd_minikube import kube
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import EDGE_SERVICE
-from podiumd_minikube.paths import NAMESPACE
 
 BEGIN = "# BEGIN podiumd-minikube ingress hosts"
 END = "# END podiumd-minikube ingress hosts"
 
 
-def outside_search_domains(resolv_conf: str) -> list[str]:
-    """Search domains in resolv_conf other than cluster.local, its subdomains and its parents (such as local)."""
-    for line in resolv_conf.splitlines():
-        if line.startswith("search "):
-            return [
-                domain
-                for domain in line.split()[1:]
-                if not ("cluster.local".endswith(domain) or domain.endswith("cluster.local"))
-            ]
-    return []
-
-
-def corefile_with_hosts(corefile: str, ip: str, hosts: list[str], search_domains: list[str]) -> str:
-    """corefile with this project's server block (replacing an earlier one) answering hosts with ip.
-
-    The search domains get their own block answering NXDOMAIN.
-    """
+def corefile_with_hosts(corefile: str, ip: str, hosts: list[str]) -> str:
+    """corefile with this project's server block (replacing an earlier one) answering hosts with ip."""
     lines = corefile.rstrip("\n").splitlines()
     if BEGIN in lines:
         lines = lines[: lines.index(BEGIN)] + lines[lines.index(END) + 1 :]
@@ -53,9 +31,6 @@ def corefile_with_hosts(corefile: str, ip: str, hosts: list[str], search_domains
         "    }",
         "}",
     ]
-    if search_domains:
-        zones = " ".join(f"{domain}:53" for domain in search_domains)
-        block += [f"{zones} {{", "    template ANY ANY {", "        rcode NXDOMAIN", "    }", "}"]
     return "\n".join([*lines, BEGIN, *block, END]) + "\n"
 
 
@@ -63,9 +38,7 @@ def apply_hosts(hosts: list[str]) -> None:
     """Points hosts at the edge's ClusterIP inside the cluster."""
     ip = kube.kubectl("get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}")
     corefile = kube.kubectl("get", "configmap", "coredns", "-n", "kube-system", "-o", "jsonpath={.data.Corefile}")
-    # Any running pod has the search domains the node hands out.
-    resolv_conf = kube.kubectl("exec", "-n", NAMESPACE, kube.first_pod("app=postgres"), "--", "cat", "/etc/resolv.conf")
-    updated = corefile_with_hosts(corefile, ip, hosts, outside_search_domains(resolv_conf))
+    updated = corefile_with_hosts(corefile, ip, hosts)
     if updated == corefile:
         print(f"CoreDNS already resolves {len(hosts)} ingress host(s) to the edge ({ip}).")
         return
