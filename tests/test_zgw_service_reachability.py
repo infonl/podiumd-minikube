@@ -1,7 +1,7 @@
 """The api_roots values.yaml gives each app's zgw_consumers services answer from inside that app's pod.
 
 Proves this project's wiring: in-cluster Service names, the *.local hosts
-resolved to the edge (lib.dns) and the local CA trusted (manifests.trust_ca).
+resolved to the edge (podiumd_minikube.dns) and the local CA trusted (manifests.trust_ca).
 Read from each app's live database, so a django-admin edit is checked too.
 """
 

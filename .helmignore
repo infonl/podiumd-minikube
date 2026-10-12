@@ -7,3 +7,7 @@
 .claude/
 .venv/
 tests/
+bin/
+src/
+unit_tests/
+.github/

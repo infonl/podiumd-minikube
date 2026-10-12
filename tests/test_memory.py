@@ -5,17 +5,14 @@ pytest tests/test_memory.py --update-memory-baseline
 """
 
 import json
-import sys
 
 from datetime import UTC
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bin"))
-from lib import process
-from lib import status
+from podiumd_minikube import process
+from podiumd_minikube import status
 
 
 @pytest.fixture(scope="module")

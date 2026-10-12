@@ -7,7 +7,7 @@ app.kubernetes.io/part-of: podiumd-minikube
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 {{/*
-An Ingress from host to a service, the source of lib.gateway's HTTPRoute;
+An Ingress from host to a service, the source of podiumd_minikube.gateway's HTTPRoute;
 dict with root, name, host, service and optional port (80).
 */}}
 {{- define "podiumd-minikube.ingress" -}}

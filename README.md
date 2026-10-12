@@ -11,31 +11,40 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
   (3.8 or newer, for the NGINX Gateway Fabric OCI chart)
 - 6 CPUs / 16Gi free for the minikube VM (default sizing) — see
   Troubleshooting if the cluster becomes sluggish
-- Python 3 + `pip` if you want to run the test suite
+- Python 3.12 or newer, with this project installed in `.venv`:
+
+  ```bash
+  python3 -m venv .venv
+  .venv/bin/pip install -e '.[dev]'
+  source .venv/bin/activate   # puts podiumd-minikube on PATH
+  ```
+
+  `bin/<command>` runs `podiumd-minikube <command>` from `.venv` without
+  activating it.
 - **Apple Silicon Mac with no Docker Desktop**: see [`mac.md`](mac.md) for
   the colima setup this project's tooling needs instead
 
 ## Quick start
 
 ```bash
-./bin/set-podiumd-version <version> --disable-monitoring-logging  # required — see below
+podiumd-minikube set-podiumd-version <version> --disable-monitoring-logging  # required — see below
                                      # (or --path <dir> for a local podiumd chart checkout)
-./bin/provision-cluster      # starts minikube, installs NGINX Gateway Fabric, pre-loads every image
-./bin/deploy --full          # renders and applies the chart (every optional profile on)
-./bin/setup-tunnel           # asks sudo for the route, then runs `minikube tunnel` in the background
+podiumd-minikube provision-cluster      # starts minikube, installs NGINX Gateway Fabric, pre-loads every image
+podiumd-minikube deploy --full          # renders and applies the chart (every optional profile on)
+podiumd-minikube setup-tunnel           # asks sudo for the route, then runs `minikube tunnel` in the background
 ```
 
-After a reboot or `minikube stop`, `./bin/start-cluster` brings everything
+After a reboot or `minikube stop`, `podiumd-minikube start-cluster` brings everything
 back: it starts minikube, waits for the apps, restarts ZAC if its boot failed
 because Open Zaak was not up yet, and starts the tunnel.
 
-`bin/set-podiumd-version` is required on a fresh clone — `Chart.yaml` holds
+`podiumd-minikube set-podiumd-version` is required on a fresh clone — `Chart.yaml` holds
 no real podiumd/monitoring-logging version, just a placeholder; the actual
 version lives in `.podiumd-versions.yaml` (gitignored, created by this
-script). `bin/deploy`/`bin/provision-cluster` both refuse with a clear
+script). `podiumd-minikube deploy`/`podiumd-minikube provision-cluster` both refuse with a clear
 message if you haven't run it yet.
 
-Then run `./bin/update-hosts` (adds the `*.local` names to `/etc/hosts`)
+Then run `podiumd-minikube update-hosts` (adds the `*.local` names to `/etc/hosts`)
 and open `https://zac.local` in a browser — it redirects to Keycloak, and back
 to the authenticated app on login.
 
@@ -43,7 +52,7 @@ to the authenticated app on login.
 
 As ExternalsPodiumD: NGINX Gateway Fabric with Gateway `public-gateway` in
 namespace `ingress-basic`; `deploy` turns every rendered Ingress into an
-HTTPRoute (`bin/lib/gateway.py`). Two consequences of its nginx, both as
+HTTPRoute (`src/podiumd_minikube/gateway.py`). Two consequences of its nginx, both as
 there: request bodies above 1 MB get 413, and request bodies are buffered.
 One deviation: larger response-header buffers, for KISS's login cookie
 (`.claude/plans/plan.md`). The edge Service has the fixed ClusterIP
@@ -63,7 +72,7 @@ environments, with a certificate from a local CA instead of Let's Encrypt:
 - Inside the cluster the `*.local` hosts resolve to the edge and every pod
   trusts the CA, so the apps call each other on `https://<app>.local`.
 
-Leave off `--full` on `bin/deploy` to deploy just the core profile (ZAC,
+Leave off `--full` on `podiumd-minikube deploy` to deploy just the core profile (ZAC,
 Open Zaak, Open Klant, PABC, Postgres/Redis/Solr/Keycloak/WireMock),
 matching `values.yaml`'s own default.
 
@@ -82,7 +91,7 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | `/lvbag/individuelebevragingen/v2/` | WireMock (BAG mappings) |
 
 **Optional profiles** (each its own `values.yaml` flag, off by default —
-`bin/deploy --full` turns all of them on):
+`podiumd-minikube deploy --full` turns all of them on):
 
 | Profile | Adds |
 |---|---|
@@ -101,15 +110,15 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | `metrics` | otel-collector, Tempo, Prometheus, Grafana (or the `monitoringLogging` alternative below) |
 
 `metrics` has two implementations, picked by `values.yaml`'s
-`monitoringLogging.enabled` (not a `bin/deploy` flag):
+`monitoringLogging.enabled` (not a `podiumd-minikube deploy` flag):
 
 - **Default** (`false`): the four raw components above.
 - **`true`**: swaps them for the `monitoring-logging` Helm dependency —
   the same chart used in production, re-tuned for a single-node box. Adds
   Loki + Alloy + kube-prometheus-stack + Pushgateway on top — meaningfully
   heavier (~a dozen extra pods). Still needs `metrics.enabled=true` too.
-  Set it with `./bin/set-podiumd-version <version>
-  <monitoring-logging-version>`; `bin/deploy` handles the rest (CRDs, ZAC's
+  Set it with `podiumd-minikube set-podiumd-version <version>
+  <monitoring-logging-version>`; `podiumd-minikube deploy` handles the rest (CRDs, ZAC's
   OTLP endpoint) automatically. Never runs alongside the default
   implementation.
 
@@ -121,7 +130,7 @@ set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`, `solr`,
 
 ## Resource usage
 
-`./bin/show-cluster-status` shows the node's and each container's memory
+`podiumd-minikube show-cluster-status` shows the node's and each container's memory
 and CPU against the budget and the baseline, and whether the cluster has
 settled (no `metrics-server`, so no `kubectl top`).
 
@@ -150,39 +159,40 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 and Prometheus with a dozen heavier pods. Disable it with:
 
 ```bash
-./bin/set-podiumd-version <version> --disable-monitoring-logging
+podiumd-minikube set-podiumd-version <version> --disable-monitoring-logging
 ```
 
-`bin/deploy` cleans up the other implementation's leftover resources
+`podiumd-minikube deploy` cleans up the other implementation's leftover resources
 automatically either direction.
 
-## Scripts
+## Commands
 
-| Script | What it does |
+| Command | What it does |
 |---|---|
-| `bin/provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
-| `bin/deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
-| `bin/show-cluster-status` | Node and per-container memory and CPU (against the budget and `tests/memory-baseline.json`), profiles, recent restarts and failed Jobs, tunnel, lock and disk; reads only (`--top N`, `--all`) |
-| `bin/start-cluster` | After a reboot: starts minikube, waits until every pod reports its state since the start and the apps are ready, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
-| `bin/cluster-lock` | Shows, takes, releases or breaks the lock on the shared cluster; `run` holds it around a command (see "Shared cluster: the lock") |
-| `bin/setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
-| `bin/teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
-| `bin/reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
-| `bin/set-podiumd-version <version> <monitoring-logging-version\|--disable-monitoring-logging>` | Sets both Helm dependency versions in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. `--path <dir>` points `podiumd` at a local checkout instead, auto-detecting a sibling `monitoring-logging/` directory |
-| `bin/show-podiumd-version` | Prints the current version selection and fetch status per dependency |
-| `bin/show-port-mappings` | Prints how host traffic reaches each deployed app (Ingress hostname → backend Service:port) |
-| `bin/expose-postgres [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |
-| `bin/flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
-| `bin/update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
-| `bin/deploy-extended` | `deploy --full` without metrics, with openzaak's and openklant's Celery workers |
-| `bin/apply-pabc-migrations [--force]` | The only safe way to (re)create the `pabc-migrations` Job — refuses against an already-seeded database unless `--force` |
+| `podiumd-minikube provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
+| `podiumd-minikube deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
+| `podiumd-minikube show-cluster-status` | Node and per-container memory and CPU (against the budget and `tests/memory-baseline.json`), profiles, recent restarts and failed Jobs, tunnel, lock and disk; reads only (`--top N`, `--all`) |
+| `podiumd-minikube start-cluster` | After a reboot: starts minikube, waits until every pod reports its state since the start and the apps are ready, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
+| `podiumd-minikube cluster-lock` | Shows, takes, releases or breaks the lock on the shared cluster; `run` holds it around a command (see "Shared cluster: the lock") |
+| `podiumd-minikube setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
+| `podiumd-minikube teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
+| `podiumd-minikube reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
+| `podiumd-minikube set-podiumd-version <version> <monitoring-logging-version\|--disable-monitoring-logging>` | Sets both Helm dependency versions in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. `--path <dir>` points `podiumd` at a local checkout instead, auto-detecting a sibling `monitoring-logging/` directory |
+| `podiumd-minikube show-podiumd-version` | Prints the current version selection and fetch status per dependency |
+| `podiumd-minikube show-port-mappings` | Prints how host traffic reaches each deployed app (Ingress hostname → backend Service:port) |
+| `podiumd-minikube expose-postgres [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |
+| `podiumd-minikube flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
+| `podiumd-minikube update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
+| `podiumd-minikube deploy-extended` | `deploy --full` without metrics, with openzaak's and openklant's Celery workers |
+| `podiumd-minikube apply-pabc-migrations [--force]` | The only safe way to (re)create the `pabc-migrations` Job — refuses against an already-seeded database unless `--force` |
 
-`bin/reset-namespace` vs `bin/teardown-cluster`: use `bin/reset-namespace` to
+`podiumd-minikube reset-namespace` vs `podiumd-minikube teardown-cluster`: use `podiumd-minikube reset-namespace` to
 wipe app data and redeploy clean (keeps the cluster, the edge and the images);
-`bin/teardown-cluster` only when the cluster itself is broken.
+`podiumd-minikube teardown-cluster` only when the cluster itself is broken.
 
-The scripts are Python (every one takes `--help`); their shared code is the
-`bin/lib/` package, for example `manifests.py` (the fixups applied to
+`podiumd-minikube --help` lists the commands, `podiumd-minikube <command>
+--help` explains one. They are defined in `src/podiumd_minikube/cli.py`; the
+logic is in the rest of the package, for example `manifests.py` (the fixups applied to
 `helm template` output), `dependency.py` (`.podiumd-versions.yaml` and
 `charts/*.tgz`) and `kube.py` (kubectl and the minikube-context guard).
 
@@ -198,32 +208,31 @@ themselves and refuse while someone else holds it. Reading (kubectl get,
 logs, the test suite) needs no lock.
 
 ```bash
-./bin/cluster-lock status                         # who holds it, since when
-./bin/cluster-lock take "kubectl cleanup in openzaak"   # around manual changes
-./bin/cluster-lock release
-./bin/cluster-lock run "rebuild" -- sh -c './bin/teardown-cluster -y && ./bin/provision-cluster'
-./bin/cluster-lock break                          # only when its holder is gone
+podiumd-minikube cluster-lock status                         # who holds it, since when
+podiumd-minikube cluster-lock take "kubectl cleanup in openzaak"   # around manual changes
+podiumd-minikube cluster-lock release
+podiumd-minikube cluster-lock run "rebuild" -- sh -c 'podiumd-minikube teardown-cluster -y && podiumd-minikube provision-cluster'
+podiumd-minikube cluster-lock break                          # only when its holder is gone
 ```
 
 ## Testing
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate      # .venv\Scripts\activate on Windows
-pip install -r requirements.txt
 cd tests
 pytest
 ```
 
 These live tests check that this project's code did its job on the cluster
-(fixups, templates, scripts, `values.yaml` wiring); see
+(fixups, templates, commands, `values.yaml` wiring); see
 [`tests/README.md`](tests/README.md). How the applications behave is tested
 by podiumd-tests; after a deploy, `podiumd-tests run --env minikube --tier
 smoke` checks that they answer (read-only, no lock).
 
-The scripts have offline unit tests in `bin/tests/`. Before committing,
+The commands have offline unit tests in `unit_tests/`. Before committing,
 run every check on all Python code (ruff, shellcheck, jscpd, pymarkdown,
-vulture, bandit, basedpyright, pylint, and those unit tests):
+vulture, bandit, basedpyright, pylint, and those unit tests); it upgrades
+`.venv` first, at most once a day. GitHub Actions runs the same checks
+(`.github/workflows/checks.yml`):
 
 ```bash
 ./run_python_checks
@@ -235,7 +244,7 @@ Helm's own release record embeds the entire resolved chart — including
 the ~3.87MB `podiumd` dependency — which exceeds Kubernetes' 3MB API
 request-size limit. This project uses `helm template | kubectl apply`
 instead, which means Helm's install/upgrade hooks never fire —
-`bin/deploy` handles the one place that matters
+`podiumd-minikube deploy` handles the one place that matters
 (`templates/storage-hooks.yaml`'s PV/PVC pre-provisioning) as a separate
 step instead.
 
@@ -261,9 +270,9 @@ This doesn't persist across `minikube delete`.
 ```text
 Chart.yaml, values.yaml, templates/   # the chart itself (this repo IS the chart, no nested wrapper)
 vendor/dimpact-zaakafhandelcomponent/  # physical copies of file assets from that repo (see vendor/NOTES.md)
-bin/                               # cluster lifecycle + deploy-time tooling (see table above)
-bin/lib/                           # shared Python package for the scripts
-bin/tests/                         # offline unit tests for bin/
+src/podiumd_minikube/                  # the podiumd-minikube command (see table above)
+bin/                                   # bin/<command> runs podiumd-minikube <command>
+unit_tests/                            # offline unit tests for src/
 tests/                                 # live-cluster pytest suite
-run_python_checks, pyproject.toml      # lint/type/test checks for all Python code
+run_python_checks, pyproject.toml      # package, dependencies and checks for all Python code
 ```

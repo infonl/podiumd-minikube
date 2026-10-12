@@ -1,4 +1,4 @@
-"""The edge's routes (lib.gateway): every Ingress host has an HTTPRoute that NGINX Gateway Fabric accepted."""
+"""The edge's routes (podiumd_minikube.gateway): every Ingress host has an HTTPRoute that NGINX Gateway Fabric accepted."""
 
 import json
 
@@ -28,7 +28,9 @@ def _route_conditions():
 
 def test_every_ingress_host_has_a_route(edge_ip):
     missing = _ingress_hosts() - set(_route_conditions())
-    assert not missing, f"no HTTPRoute in {EDGE_NAMESPACE} for {sorted(missing)}: redeploy (lib.gateway.apply)"
+    assert not missing, (
+        f"no HTTPRoute in {EDGE_NAMESPACE} for {sorted(missing)}: redeploy (podiumd_minikube.gateway.apply)"
+    )
 
 
 def test_every_route_is_accepted_with_resolved_backends(edge_ip):

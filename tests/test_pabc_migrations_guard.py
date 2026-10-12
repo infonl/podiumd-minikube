@@ -1,5 +1,5 @@
 """
-Verifies bin/apply-pabc-migrations actually prevents the destructive
+Verifies podiumd-minikube apply-pabc-migrations actually prevents the destructive
 scenario it exists for: the pabc-migrations Job clears PABC's database
 before reloading its seed dataset every time it's created (confirmed live,
 not idempotent), so recreating it against an already-seeded database must
@@ -17,18 +17,13 @@ the assertions themselves.
 import subprocess
 import sys
 
-from pathlib import Path
-
 import pytest
 
 from conftest import NAMESPACE
 from conftest import kubectl
 
-BIN_DIR = Path(__file__).resolve().parent.parent / "bin"
-SCRIPT_PATH = str(BIN_DIR / "apply-pabc-migrations")
-sys.path.insert(0, str(BIN_DIR))
-from lib import lock  # noqa: E402 - needs the sys.path entry above
-from lib.process import UserError  # noqa: E402
+from podiumd_minikube import lock
+from podiumd_minikube.process import UserError
 
 JOB_NAME = "pabc-migrations-1"
 
@@ -69,7 +64,7 @@ def _mapping_row_count():
 
 def _run_guard_script(*args):
     return subprocess.run(
-        [sys.executable, SCRIPT_PATH, *args],
+        [sys.executable, "-m", "podiumd_minikube", "apply-pabc-migrations", *args],
         capture_output=True,
         text=True,
         timeout=150,

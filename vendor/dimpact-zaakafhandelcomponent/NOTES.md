@@ -50,7 +50,7 @@ changes is in `.claude/plans/plan.md`.
   SMTP to mailpit.
   `zaakafhandelcomponent` keeps `S256`; `manifests.fix_realm` clears it in
   the render while `zac.experimentalPkce` is off. Read by
-  `templates/keycloak/`; Keycloak imports it once, so `lib.keycloak`
+  `templates/keycloak/`; Keycloak imports it once, so `podiumd_minikube.keycloak`
   reconciles the live realm on every deploy.
 
 ## Written for this project
@@ -58,7 +58,7 @@ changes is in `.claude/plans/plan.md`.
 - `postgres/00-create-databases.sql`: the databases, roles and PostGIS
   extensions of the single shared Postgres, with each docker-compose
   database container's credentials. Read by `templates/postgres/` (init) and
-  `lib.postgres` (databases added later).
+  `podiumd_minikube.postgres` (databases added later).
 - `postgres/01-seed-fixtures.sh`: ZAC's per-database `init.sh` /
   `fill-data-on-startup.sh` scripts merged into one for the shared
   Postgres; waits for each app's migrations, runs its fixture SQL, then

@@ -2,8 +2,8 @@
 
 Adapted (2026-10-07) from the user's rule for podiumd-tests
 (`infonl/podiumd-tests/.claude/memory/remove-unused.md`). Anything that
-nothing uses is removed, not kept "just in case": code in `bin/` and
-`tests/`, templates, `values.yaml` overrides, vendored files, fixtures,
+nothing uses is removed, not kept "just in case": code in `src/`,
+`unit_tests/` and `tests/`, templates, `values.yaml` overrides, vendored files, fixtures,
 helpers, constants, comments and doc sections.
 
 **Why:** the user's words: "dead code, or dead test seeding should be

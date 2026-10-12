@@ -5795,3 +5795,17 @@ The cluster lifecycle and deploy tooling lives in `bin/`, as helm-charts'
 `scripts/docker-compose/imports` and the podiumd chart's `scripts/` are other
 repositories' paths and keep their name. podiumd-tests only names the
 directory in its docs (`docs/research/podiumd-minikube.md`).
+
+## The podiumd-minikube command, as podiumd-tests (user: "model this project after -tests", with "small stubs for the old commands so that both work")
+
+The Python code is the package `src/podiumd_minikube/` with one command,
+`podiumd-minikube <command>` (`cli.py`), installed into `.venv` by
+`pip install -e '.[dev]'`; `pyproject.toml` replaces `requirements.txt` and
+now lists `certifi`, which `pki` imports directly (it only came in through
+`requests`). The unit tests moved to `unit_tests/`. `bin/<command>` stays
+as a symlink to `bin/.stub`, which runs `.venv/bin/podiumd-minikube
+<command>` (or the one on PATH), so the old command names work without an
+activated venv; `test_cli.py` keeps the symlinks and `cli.COMMANDS` equal.
+`run_python_checks` upgrades `.venv` at most once a day and whenever
+`pyproject.toml` changes, and `.github/workflows/checks.yml` runs it on
+every push to main and every pull request, as podiumd-tests does.

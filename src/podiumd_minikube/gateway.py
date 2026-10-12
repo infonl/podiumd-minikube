@@ -1,0 +1,245 @@
+"""NGINX Gateway Fabric, the edge, as ExternalsPodiumD runs it.
+
+As ExternalsPodiumD (pipelines/includes/haven/gateway-api-*.yml, pipelines/
+values/ngf.yml, gateway-api/gateway.yml, dim1 ssl-gateway.yml and
+services-gateway.yml): Gateway API CRDs v1.5.1 standard, NGF 2.6.7 in
+ingress-basic, Gateway public-gateway with http and https listeners, and per
+host an HTTPRoute to an ExternalName Service in ingress-basic that names the
+app's Service. No ClientSettingsPolicy, so nginx's 1 MB request-body limit
+applies, as in ExternalsPodiumD; one deviation, larger response-header buffers
+(proxy_settings_manifest). The routes come from the rendered Ingresses, so a
+host is defined once.
+"""
+
+from typing import Any
+
+import yaml
+
+from podiumd_minikube import kube
+from podiumd_minikube import manifests
+from podiumd_minikube import polling
+from podiumd_minikube import process
+from podiumd_minikube import tls
+from podiumd_minikube.paths import EDGE_NAMESPACE
+from podiumd_minikube.paths import EDGE_SERVICE
+from podiumd_minikube.paths import NAMESPACE
+
+GATEWAY_API_VERSION = "v1.5.1"
+NGF_CHART = "oci://ghcr.io/nginx/charts/nginx-gateway-fabric"
+NGF_VERSION = "2.6.7"
+NGF_RELEASE = "nginx-gateway-fabric"
+GATEWAY = "public-gateway"
+GATEWAY_CLASS = "nginx"
+LABELS = {"app.kubernetes.io/part-of": "podiumd-minikube", "app.kubernetes.io/component": "gateway"}
+_SELECTOR = ",".join(f"{key}={value}" for key, value in LABELS.items())
+# minikube tunnel exposes a LoadBalancer Service at its ClusterIP, which Kubernetes picks
+# at random per Service; fixed, the /etc/hosts line survives a rebuild. In the static band
+# (the first 256 addresses of 10.96.0.0/12) that the allocator leaves to fixed ClusterIPs.
+EDGE_CLUSTER_IP = "10.96.0.200"
+
+
+def ngf_values(dns_ip: str) -> dict[str, Any]:
+    """ExternalsPodiumD's ngf.yml without its AKS parts (ACR images, nodeSelector, fixed IP, client-IP rewrite)."""
+    return {
+        "nginxGateway": {
+            "gatewayClassName": GATEWAY_CLASS,
+            "gatewayControllerName": "gateway.nginx.org/nginx-gateway-controller",
+            "replicas": 1,
+            "snippets": {"enable": False},
+        },
+        "nginx": {
+            "replicas": 1,
+            # Needed for ExternalName backends.
+            "config": {
+                "dnsResolver": {
+                    "addresses": [{"type": "IPAddress", "value": dns_ip}],
+                    "timeout": "5s",
+                    "cacheTTL": "30s",
+                    "disableIPv6": False,
+                },
+            },
+            "service": {
+                "type": "LoadBalancer",
+                "externalTrafficPolicy": "Cluster",
+                "patches": [{"type": "Merge", "value": {"spec": {"clusterIP": EDGE_CLUSTER_IP}}}],
+            },
+        },
+    }
+
+
+def install() -> None:
+    """Installs or upgrades the Gateway API CRDs and NGF (an upgrade keeps its values current)."""
+    print(f"Installing the Gateway API CRDs {GATEWAY_API_VERSION} and NGINX Gateway Fabric {NGF_VERSION}...")
+    crds = (
+        f"https://github.com/kubernetes-sigs/gateway-api/releases/download/{GATEWAY_API_VERSION}/standard-install.yaml"
+    )
+    kube.kubectl_shown("apply", "-f", crds)
+    dns_ip = kube.kubectl("get", "svc", "kube-dns", "-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")
+    process.run(
+        ["helm", "upgrade", "--install", NGF_RELEASE, NGF_CHART, "--version", NGF_VERSION,
+         "-n", EDGE_NAMESPACE, "--create-namespace", "--wait", "-f", "-"],
+        stdin=yaml.safe_dump(ngf_values(dns_ip)),
+        capture=False,
+    )  # fmt: skip
+
+
+def gateway_manifest() -> dict[str, Any]:
+    """ExternalsPodiumD's public-gateway, without its Azure load balancer annotations."""
+    return {
+        "apiVersion": "gateway.networking.k8s.io/v1",
+        "kind": "Gateway",
+        "metadata": {"name": GATEWAY, "namespace": EDGE_NAMESPACE, "labels": LABELS},
+        "spec": {
+            "gatewayClassName": GATEWAY_CLASS,
+            "listeners": [
+                {"name": "http", "protocol": "HTTP", "port": 80, "allowedRoutes": {"namespaces": {"from": "Same"}}},
+                {
+                    "name": "https",
+                    "protocol": "HTTPS",
+                    "port": 443,
+                    "tls": {"mode": "Terminate", "certificateRefs": [{"kind": "Secret", "name": tls.CERTIFICATE}]},
+                    "allowedRoutes": {"namespaces": {"from": "Same"}},
+                },
+            ],
+        },
+    }
+
+
+def proxy_settings_manifest() -> dict[str, Any]:
+    """Larger response-header buffers than nginx's default 4 KB: a deviation from ExternalsPodiumD.
+
+    KISS's /signin-oidc answer carries a 3.4 KB session cookie (about 5 KB of
+    headers in all), which nginx rejects with "upstream sent too big header"
+    and a 502. ExternalsPodiumD sets no buffer and most likely has the same 502
+    (plan.md). busyBuffersSize must lie between bufferSize and the total of
+    buffers minus one buffer.
+    """
+    return {
+        "apiVersion": "gateway.nginx.org/v1alpha1",
+        "kind": "ProxySettingsPolicy",
+        "metadata": {"name": GATEWAY, "namespace": EDGE_NAMESPACE, "labels": LABELS},
+        "spec": {
+            "targetRefs": [{"group": "gateway.networking.k8s.io", "kind": "Gateway", "name": GATEWAY}],
+            "buffering": {"bufferSize": "16k", "buffers": {"number": 4, "size": "16k"}, "busyBuffersSize": "32k"},
+        },
+    }
+
+
+def _service_port(docs: list[manifests.Doc], service: str, port: Any) -> int:
+    """The number of a backend port, which may be a Service port name."""
+    if isinstance(port, int):
+        return port
+    for doc in docs:
+        if doc.get("kind") == "Service" and manifests.name_of(doc) == service:
+            entries: list[manifests.Doc] = manifests.section(doc, "spec").get("ports") or []
+            for entry in entries:
+                if entry.get("name") == port:
+                    return int(entry["port"])
+    msg = f"Ingress backend {service}:{port}: no such Service port in the render"
+    raise process.UserError(msg)
+
+
+def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
+    """Per Ingress host an HTTPRoute in ExternalsPodiumD's shape, plus the ExternalName Services they target."""
+    services: dict[str, dict[str, Any]] = {}
+    routes: list[dict[str, Any]] = []
+    for doc in docs:
+        if doc.get("kind") != "Ingress":
+            continue
+        rules: list[manifests.Doc] = manifests.section(doc, "spec").get("rules") or []
+        for rule in rules:
+            host = str(rule["host"])
+            paths: list[manifests.Doc] = manifests.section(rule, "http").get("paths") or []
+            backend: manifests.Doc = manifests.section(manifests.section(paths[0], "backend"), "service")
+            ports = manifests.section(backend, "port")
+            port = _service_port(docs, str(backend["name"]), ports.get("number", ports.get("name")))
+            services[backend["name"]] = {
+                "apiVersion": "v1",
+                "kind": "Service",
+                "metadata": {"name": backend["name"], "namespace": EDGE_NAMESPACE, "labels": LABELS},
+                "spec": {
+                    "type": "ExternalName",
+                    "externalName": f"{backend['name']}.{NAMESPACE}.svc.cluster.local",
+                    "ports": [{"port": port, "targetPort": port}],
+                },
+            }
+            headers = [
+                {"name": "X-Forwarded-Host", "value": host},
+                {"name": "X-Forwarded-Proto", "value": "https"},
+                {"name": "X-Forwarded-Port", "value": "443"},
+            ]
+            routes.append({
+                "apiVersion": "gateway.networking.k8s.io/v1",
+                "kind": "HTTPRoute",
+                "metadata": {
+                    "name": f"hr-{host.removesuffix('.local')}", "namespace": EDGE_NAMESPACE, "labels": LABELS,
+                },
+                "spec": {
+                    "parentRefs": [{"name": GATEWAY, "namespace": EDGE_NAMESPACE}],
+                    "hostnames": [host],
+                    "rules": [{
+                        "matches": [{"path": {"type": "PathPrefix", "value": "/"}}],
+                        "filters": [
+                            {"type": "URLRewrite", "urlRewrite": {"hostname": host}},
+                            {"type": "RequestHeaderModifier", "requestHeaderModifier": {"set": headers}},
+                        ],
+                        "backendRefs": [{"name": backend["name"], "port": port}],
+                    }],
+                },
+            })  # fmt: skip
+    return [*services.values(), *routes]
+
+
+def _pin_cluster_ip() -> None:
+    """Recreates the edge Service once when it lacks EDGE_CLUSTER_IP (a ClusterIP is immutable; NGF recreates it)."""
+    live = kube.kubectl("get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}").strip()
+    if live == EDGE_CLUSTER_IP:
+        return
+    print(f"  edge Service has ClusterIP {live}, not {EDGE_CLUSTER_IP}: recreating it; then run update-hosts")
+    kube.kubectl("delete", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE)
+
+    def pinned() -> bool:
+        result = process.run(
+            ["kubectl", "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}"],
+            check=False,
+        )
+        return result.stdout.strip() == EDGE_CLUSTER_IP
+
+    if not polling.wait_until(pinned, timeout=120, interval=3):
+        msg = f"NGF did not give {EDGE_SERVICE} ClusterIP {EDGE_CLUSTER_IP}: run `podiumd-minikube provision-cluster`"
+        raise process.UserError(msg)
+
+
+def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
+    """Applies the certificate, Gateway and routes; deletes routes no longer rendered."""
+    if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
+        msg = f"NGINX Gateway Fabric is not in namespace '{EDGE_NAMESPACE}': run `podiumd-minikube provision-cluster`"
+        raise process.UserError(msg)
+    print("\nApplying the NGINX Gateway Fabric Gateway and routes (gateway.py)...")
+    objects = [
+        tls.certificate(EDGE_NAMESPACE, hosts),
+        gateway_manifest(),
+        proxy_settings_manifest(),
+        *route_manifests(docs),
+    ]
+    kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
+    if not polling.wait_until(lambda: kube.exists(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3):
+        msg = f"NGF created no Service {EDGE_NAMESPACE}/{EDGE_SERVICE} for Gateway {GATEWAY} within 120s"
+        raise process.UserError(msg)
+    _pin_cluster_ip()
+    wanted = {(doc["kind"], manifests.name_of(doc)) for doc in objects}
+    for kind in ("HTTPRoute", "Service"):
+        live = kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]
+        for item in live:
+            if (kind, item["metadata"]["name"]) not in wanted:
+                kube.kubectl("delete", kind.lower(), item["metadata"]["name"], "-n", EDGE_NAMESPACE)
+                print(f"  deleted {kind} {item['metadata']['name']} (no longer rendered)")
+    kube.kubectl_shown(
+        "wait", "--for=condition=Ready", f"certificate/{tls.CERTIFICATE}", "-n", EDGE_NAMESPACE, "--timeout=120s"
+    )
+    ip = kube.kubectl(
+        "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}"
+    )  # fmt: skip
+    print(
+        f"Gateway Service {EDGE_NAMESPACE}/{EDGE_SERVICE}: external IP {ip or '<none - is minikube tunnel running?>'}"
+    )

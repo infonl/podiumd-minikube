@@ -1,7 +1,46 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "podiumd-minikube"
+version = "0.1.0"
+description = "Sets up, deploys and inspects the podiumd-minikube cluster"
+requires-python = ">=3.12"
+dependencies = [
+    "PyYAML",   # values.yaml, the rendered manifest, .podiumd-versions.yaml
+    "certifi",  # public CAs for the local CA's trust bundle (pki)
+]
+
+[project.optional-dependencies]
+# The live suite in tests/ and the tools of run_python_checks; unpinned on purpose, new rules are welcome.
+dev = [
+    "pytest>=8.0",
+    "requests>=2.31",
+    "ruff",
+    "pymarkdownlnt",
+    "pylint",
+    "vulture",
+    "bandit",
+    "basedpyright",
+    "jscpd",
+    "types-PyYAML",
+    "types-requests",
+]
+
+[project.scripts]
+podiumd-minikube = "podiumd_minikube.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+podiumd_minikube = ["py.typed"]
+
 # ruff, pylint, isort, vulture, bandit, basedpyright, pymarkdown and pytest
-# config for all Python code in this repository: bin/ (extensionless
-# scripts, lib/, tests/) and the live-cluster suite in tests/. vendor/ holds
-# verbatim upstream copies and is not checked.
+# config for all Python code in this repository: src/, unit_tests/ and the
+# live-cluster suite in tests/. vendor/ holds verbatim upstream copies and is
+# not checked.
 
 [tool.ruff]
 # Shared with [tool.ruff.format] and pylint max-line-length.
@@ -87,23 +126,18 @@ force-single-line = true
 lines-between-types = 1
 # No target-version is set, so ruff doesn't know tomllib (3.11+) is stdlib.
 extra-standard-library = ["tomllib"]
-# bin/ puts its own directory on sys.path, so lib.* is first-party.
-known-first-party = ["lib"]
+known-first-party = ["podiumd_minikube"]
 
 [tool.ruff.lint.flake8-bandit]
 check-typed-exception = true  # Enable additional checks for try-except-pass
 
 [tool.ruff.lint.per-file-ignores]
-# Extensionless scripts patch sys.path before importing lib.* (E402) and are
-# no package (INP001).
-"bin/*" = ["E402", "INP001"]
-
-# tests/ and bin/tests/: pytest asserts, fixture/mock params (ARG),
+# tests/ and unit_tests/: pytest asserts, fixture/mock params (ARG),
 # private-helper access (SLF001), no __init__.py (INP001), composite asserts
 # (PT018), unused unpacked vars (RUF059), fixed-argv kubectl/helm calls
 # (S603/S607), fake tokens and dev passwords (S105/S106). bandit does not
 # scan them either.
-"**/tests/**" = ["S101", "ARG001", "ARG005", "SLF001", "INP001", "PT018", "RUF059", "S603", "S607", "S105", "S106"]
+"{tests,unit_tests}/**" = ["S101", "ARG001", "ARG005", "SLF001", "INP001", "PT018", "RUF059", "S603", "S607", "S105", "S106"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -112,13 +146,8 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 # pylint covers checks ruff lacks; overlapping rules are owned by one tool.
-# Extensionless scripts must be passed explicitly (see run_python_checks).
-# Both tests/ directories also disable [tool.podiumd-minikube.pylint-tests]:
+# tests/ and unit_tests/ also disable [tool.podiumd-minikube.pylint-tests]:
 # pylint has no per-directory config.
-
-[tool.pylint.basic]
-# Allow hyphens for the kebab-case script names (e.g. "provision-cluster").
-module-rgx = "^(([a-z_][a-z0-9_-]*)|(__.*__))$"
 
 [tool.pylint.format]
 # Matches [tool.ruff] line-length.
@@ -166,10 +195,10 @@ include_trailing_comma = true
 force_single_line = true
 default_section = "THIRDPARTY"
 extra_standard_library = ["tomllib"]
-known_first_party = ["lib"]
+known_first_party = ["podiumd_minikube"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
-# vulture runs on bin/lib/ + the scripts only (see run_python_checks):
+# vulture runs on src/ only (see run_python_checks):
 # test fixtures and mock params look like dead code. False positives go here,
 # each with its reason.
 [tool.vulture]
@@ -193,10 +222,9 @@ typeCheckingMode = "strict"
 reportUnusedImport = false  # done by ruff F401
 reportUntypedBaseClass = false # done by ruff N801
 
-# Extensionless scripts import lib.* from bin/.
 [[tool.basedpyright.executionEnvironments]]
-root = "bin/tests"
-extraPaths = ["bin"]
+root = "unit_tests"
+extraPaths = ["unit_tests"]
 reportMissingParameterType = false
 reportUnknownLambdaType = false
 reportUnknownArgumentType = false
@@ -204,10 +232,10 @@ reportUnknownParameterType = false
 reportUnknownMemberType = false
 reportUnknownVariableType = false
 
-# Live-cluster suite: test modules import helpers from tests/conftest.py, and lib.* (the lock) from bin/.
+# Live-cluster suite: test modules import helpers from tests/conftest.py.
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
-extraPaths = ["tests", "bin"]
+extraPaths = ["tests"]
 reportMissingParameterType = false
 reportUnknownLambdaType = false
 reportUnknownArgumentType = false
@@ -216,7 +244,7 @@ reportUnknownMemberType = false
 reportUnknownVariableType = false
 
 [[tool.basedpyright.executionEnvironments]]
-root = "bin"
+root = "src"
 
 [tool.pymarkdown]
 # Long prose lines and headings in README/plan text are fine.
@@ -225,6 +253,7 @@ plugins.md013.enabled = false
 [tool.pytest.ini_options]
 # A plain `pytest` from the repo root runs the offline unit tests; the
 # live-cluster suite runs from tests/ (its own pytest.ini).
-testpaths = ["bin/tests"]
-pythonpath = ["bin", "bin/tests"]
+testpaths = ["unit_tests"]
+# Test modules import their fakes from unit_tests/conftest.py.
+pythonpath = ["unit_tests"]
 addopts = "-ra"

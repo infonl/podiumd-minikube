@@ -9,8 +9,6 @@
   "ignorePattern": [
     "from .* import .*",
     "import .*",
-    "SCRIPT_DIR = .*",
-    "sys\\.path\\.insert.*",
     " +[a-z_]+: [^=\\n]+,\\n"
   ]
 }

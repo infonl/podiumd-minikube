@@ -45,8 +45,9 @@ hardcode, plus a pointer to the full design/build history.
 
 This repo *is* the chart — no nested `charts/<name>` wrapper. `Chart.yaml`,
 `values.yaml`, `templates/`, `vendor/` live at the repo root, alongside
-`bin/` (cluster lifecycle + deploy-time tooling) and `tests/` (a
-live-cluster pytest suite).
+`src/podiumd_minikube/` (the `podiumd-minikube` command: cluster lifecycle
+and deploy-time tooling; `bin/` holds stubs with the old command names),
+`unit_tests/` and `tests/` (a live-cluster pytest suite).
 
 `vendor/dimpact-zaakafhandelcomponent/` holds physical copies of file assets
 this chart needs from that repo (Keycloak realm JSON, WireMock mappings, DB

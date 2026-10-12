@@ -1,4 +1,4 @@
-"""The live Keycloak realm matches lib.keycloak.sync_realm's target (Keycloak imports the realm file only once).
+"""The live Keycloak realm matches podiumd_minikube.keycloak.sync_realm's target (Keycloak imports the realm file only once).
 
 PKCE: zaakafhandelcomponent follows zac.experimentalPkce; pabc requires S256;
 the Django apps' clients never require it (mozilla-django-oidc-db has no
@@ -12,8 +12,8 @@ import requests
 
 from conftest import host_url
 
-from lib import keycloak
-from lib import values
+from podiumd_minikube import keycloak
+from podiumd_minikube import values
 
 DJANGO_APP_CLIENT_IDS = (
     "openzaak", "openklant", "objecten", "objecttypen", "opennotificaties", "openformulieren", "openarchiefbeheer",

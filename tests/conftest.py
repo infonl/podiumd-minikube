@@ -7,7 +7,7 @@ cluster - not unit tests. They assume:
   - `kubectl` is configured against the cluster (current context)
   - the chart is deployed to the `podiumd-minikube` namespace
   - the edge (NGINX Gateway Fabric) has a real LoadBalancer external IP (via `minikube tunnel` -
-    see ../bin/setup-tunnel)
+    see podiumd-minikube setup-tunnel)
 
 Requests are made by IP with an explicit Host header rather than through
 `/etc/hosts`-resolved hostnames, so the suite runs without needing any
@@ -18,21 +18,19 @@ import json
 import os
 import socket
 import subprocess
-import sys
 
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
-from lib import status
+from podiumd_minikube import status
 
 NAMESPACE = "podiumd-minikube"
-# The edge: NGINX Gateway Fabric's Service for Gateway public-gateway (bin/lib/paths.py).
+# The edge: NGINX Gateway Fabric's Service for Gateway public-gateway (src/podiumd_minikube/paths.py).
 EDGE_NAMESPACE = "ingress-basic"
 EDGE_SERVICE = "public-gateway-nginx"
 REQUEST_TIMEOUT = 10
-# The local CA that signs every ingress host's certificate (bin/lib/pki.py);
+# The local CA that signs every ingress host's certificate (src/podiumd_minikube/pki.py);
 # requests verifies against it everywhere in this suite.
 CA_FILE = str(Path(__file__).resolve().parents[1] / ".pki" / "ca.crt")
 os.environ["REQUESTS_CA_BUNDLE"] = CA_FILE
@@ -107,7 +105,7 @@ def pods(edge_ip):
 
 @pytest.fixture(scope="session")
 def enabled_profiles(pods):
-    """Which optional profiles run, from the pods actually running (bin/lib/status.py)."""
+    """Which optional profiles run, from the pods actually running (src/podiumd_minikube/status.py)."""
     return status.enabled_profiles([p["name"] for p in pods])
 
 

@@ -1,6 +1,6 @@
 ---
 name: reuse-existing-logic
-description: "One concept, one place in podiumd-minikube; check the shared helpers in bin/lib, values.yaml and tests/conftest.py before writing new code"
+description: "One concept, one place in podiumd-minikube; check the shared helpers in src/podiumd_minikube, values.yaml and tests/conftest.py before writing new code"
 metadata:
   type: feedback
 ---
@@ -10,14 +10,14 @@ metadata:
 Adapted (2026-10-07) from the user's rule for podiumd-tests
 (`infonl/podiumd-tests/.claude/memory/reuse-existing-logic.md`), itself from
 helm-charts `charts/podiumd/bin/`. Applies to all of podiumd-minikube:
-`values.yaml`, `templates/`, `bin/`, `bin/lib/` and `tests/`. Code
+`values.yaml`, `templates/`, `src/podiumd_minikube/`, `unit_tests/` and `tests/`. Code
 gets better when it gets smaller while keeping the same or more
 functionality. A change that adds lines for behaviour that already exists
 elsewhere is a regression, even when the tests pass.
 
 **Why:** the user wants a small, consistent code base; copies drift (found
 live: the tunnel script's own host list went stale, which is why
-`bin/lib/hosts.py` exists).
+`src/podiumd_minikube/hosts.py` exists).
 
 **How to apply:**
 
@@ -33,41 +33,44 @@ live: the tunnel script's own host list went stale, which is why
 
    | Concept | Use |
    | --- | --- |
-   | starting any external process (kubectl, helm, minikube, docker) | `lib.process` (`run`, `output`, `succeeds`, `spawn`; errors are `ProcessError`/`UserError`) |
-   | a script's entry point | `process.main(...)` in an extensionless `bin/<name>`; logic in `bin/lib/` |
+   | starting any external process (kubectl, helm, minikube, docker) | `podiumd_minikube.process` (`run`, `output`, `succeeds`, `spawn`; errors are `ProcessError`/`UserError`) |
+   | a command | a function in `cli.py`, listed in `COMMANDS`; logic in its own module. `bin/` holds only symlinks to `bin/.stub` |
    | refuse to run against a non-minikube kubectl context | `kube.require_minikube_context` |
-   | kubectl calls, the edge IP, a pod | `lib.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `edge_ip`, `first_pod`) |
+   | kubectl calls, the edge IP, a pod | `podiumd_minikube.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `edge_ip`, `first_pod`) |
    | waiting for a condition | `polling.wait_until` (never a bare sleep) |
-   | node/container memory and CPU, running profiles, problem pods | `lib.status` (also used by `tests/test_memory.py` and `tests/conftest.py`) |
-   | changing the shared cluster | `lock.holding`/`lock.held` (scripts), `./bin/cluster-lock` (by hand) |
+   | node/container memory and CPU, running profiles, problem pods | `podiumd_minikube.status` (also used by `tests/test_memory.py` and `tests/conftest.py`) |
+   | changing the shared cluster | `lock.holding`/`lock.held` (commands), `podiumd-minikube cluster-lock` (by hand) |
    | the rendered manifest, with all local fixups | `deploy.Options.render`; a new fixup is one more step in `manifests.fix_up` |
    | YAML sections that may be null, a resource's name | `manifests.section`, `manifests.name_of` |
-   | the `*.local` hosts of all Ingresses | `lib.hosts` |
-   | podiumd chart version and `charts/*.tgz` sync | `lib.dependency` (`selection`, `write`, `sync`) |
-   | a flag in a top-level `values.yaml` block | `lib.values` (`flag`, `set_flag`, `monitoring_logging_enabled`, `zac_experimental_pkce`) |
-   | facts from the vendored tarballs (objecten shape, ZAC PKCE support) | `lib.chart` |
+   | the `*.local` hosts of all Ingresses | `podiumd_minikube.hosts` |
+   | podiumd chart version and `charts/*.tgz` sync | `podiumd_minikube.dependency` (`selection`, `write`, `sync`) |
+   | a flag in a top-level `values.yaml` block | `podiumd_minikube.values` (`flag`, `set_flag`, `monitoring_logging_enabled`, `zac_experimental_pkce`) |
+   | facts from the vendored tarballs (objecten shape, ZAC PKCE support) | `podiumd_minikube.chart` |
    | the ZAC PKCE live realm sync | `keycloak.sync_zac_pkce` |
    | (re)creating the pabc-migrations Job | `pabc.apply_migrations`; never an ad-hoc delete + apply |
    | the monitoring-logging CRDs | `crds.apply_monitoring_logging_crds` |
-   | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `bin/tests/conftest.py` |
+   | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `unit_tests/conftest.py` |
    | PV/PVC pre-provisioning for an app | `templates/storage-hooks.yaml` |
    | a database and user for an app | the init SQL in `templates/postgres` |
    | Redis, Mailpit, Keycloak, Solr, RabbitMQ | the existing `templates/<name>` Deployment; never a subchart's bundled copy |
    | common labels | `podiumd-minikube.labels` in `templates/_helpers.tpl` |
-   | an optional profile switch | `<name>.enabled` + `podiumd.<name>.enabled` in `values.yaml`, set by `--full` in `lib.deploy.options` |
+   | an optional profile switch | `<name>.enabled` + `podiumd.<name>.enabled` in `values.yaml`, set by `--full` in `podiumd_minikube.deploy.options` |
    | kubectl from tests | `kubectl` in `tests/conftest.py` |
    | edge address, pod list, enabled profiles | fixtures `edge_ip`, `pods`, `enabled_profiles` |
    | HTTP to an ingress host from tests | `host_url` |
-   | the edge's routes, Gateway and certificate | `lib.gateway` (routes come from the rendered Ingresses) |
+   | the edge's routes, Gateway and certificate | `podiumd_minikube.gateway` (routes come from the rendered Ingresses) |
 
 ## While changing code
 
-- Logic lives in `bin/lib/` with unit tests in `bin/tests/`; the
-  extensionless scripts only parse arguments and call it.
+- Logic lives in `src/podiumd_minikube/` with unit tests in `unit_tests/`;
+  `cli.py` only parses arguments and calls it.
 - A near-copy of existing code is merged in the same change, including copies
   that differ only in a detail.
 - A split or move of code also merges the pieces that do the same thing;
-  never leave a wrapper that only forwards.
+  never leave a wrapper that only forwards. One exception, at the user's
+  request (2026-10-12): `bin/<command>` keeps the old command names working,
+  as symlinks to the single `bin/.stub`; `unit_tests/test_cli.py` checks they
+  match `cli.COMMANDS`.
 - A value that several places need (a host, a URL, a port, a credential)
   comes from one place: `values.yaml`, or one generated list.
 
