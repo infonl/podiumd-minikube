@@ -5868,3 +5868,15 @@ every Job had completed. The rollouts took over 600 s, the config Jobs'
 `ttlSecondsAfterFinished: 600` (60 for kube-prometheus' admission Jobs)
 had deleted them, and a missing Job counted as running. `_wait_ready` now
 polls Jobs and workloads together and keeps each Job's outcome once seen.
+
+monitoring-logging footprint, measured 2026-10-12 (podiumd 4.9.4, `--full`,
+after podiumd-tests' full tier and 5 idle minutes): round 1, the plain
+metrics profile: node 12687 MiB, Grafana 173 + Prometheus 56 = 229 MiB.
+Round 2, monitoringLogging 1.0.15 on: node 14889 MiB (+2202). Its own
+containers 1598 MiB: Prometheus 384, Loki 310 + loki-sc-rules 94,
+otel-collector 173 (receives nothing since ZAC's export is off), Grafana 151 +
+two sidecars 142, Alloy 84 + 33, kube-state-metrics 84, operator 64,
+node-exporter 29, pushgateway 21, Loki gateway 16, Prometheus
+config-reloader 13. kube-apiserver +457 MiB (watches of the operator,
+kube-state-metrics, Alloy and the sidecars). Tier 11:00 instead of 9:22.
+Budget: at most 1 GiB above round 1, so about 1.2 GiB to save.
