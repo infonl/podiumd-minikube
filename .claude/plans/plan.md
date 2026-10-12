@@ -5937,3 +5937,15 @@ replace` when `ip route show 10.96.0.0/12` already routes via the node: on
 2026-10-12 a non-interactive start-cluster stopped there although the route
 from before the restart was still in place. Verified live: setup-tunnel ran
 without a password prompt.
+
+## Open Formulieren's customer interactions, as ExternalsPodiumD's 4.9.4 rollout (user: "copy 1")
+
+ExternalsPodiumD's 4.9.4 branches (dimp test, dim1 ontw; not yet on main)
+give Open Formulieren Open Klant's Klantinteracties API: Open Klant token
+`openformulieren`, service `openklant-api` (kc) and podiumd's
+`customerInteractionsConfigJob` (podiumd 4.9.2+), which creates the customer
+interactions API group `open-klant`. Copied with dimp test's naming;
+podiumd-infra's kees00 4.9.4 values lack it (told its session). Verified:
+the Job's log "Customer interactions API group 'open-klant' created
+(service 'openklant-api')", and the group in Open Formulieren's database.
+podiumd-tests configures no such group (no overlap).

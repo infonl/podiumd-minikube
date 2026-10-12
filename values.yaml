@@ -858,6 +858,11 @@ podiumd:
               token: openklantOpenarchiefbeheerToken
               contact_person: Open Archiefbeheer
               email: openarchiefbeheer@example.com
+            # As ExternalsPodiumD (dimp test, 4.9.4): Open Formulieren's customer interactions.
+            - identifier: openformulieren
+              token: openklantOpenformulierenToken
+              contact_person: Open Formulieren
+              email: openformulieren@example.com
 
         # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
@@ -2474,6 +2479,10 @@ podiumd:
     # own "openformulieren" profile transitively enables all three - see
     # top-level openformulieren.enabled's comment).
     replicaCount: 1
+    # As ExternalsPodiumD (dimp test, 4.9.4): the "Open Klant" customer
+    # interactions API group, from the openklant-api service below.
+    customerInteractionsConfigJob:
+      enabled: true
     # Found live: chart default (3.4.9) differs from both compose's own
     # pinned version and this one - a genuine version pin, unlike nginx's
     # own digest-qualified default just below, which is handled by
@@ -2623,6 +2632,15 @@ podiumd:
               api_root: https://selectielijst.openzaak.nl/api/v1/
               api_type: orc
               auth_type: no_auth
+
+            # As ExternalsPodiumD (dimp test, 4.9.4); customerInteractionsConfigJob uses it.
+            - identifier: openklant-api
+              label: Open Klant - Klantinteracties API
+              api_root: https://openklant.local/klantinteracties/api/v1/
+              api_type: kc
+              auth_type: api_key
+              header_key: Authorization
+              header_value: Token openklantOpenformulierenToken
 
         objects_api_config_enable: True
         objects_api:
