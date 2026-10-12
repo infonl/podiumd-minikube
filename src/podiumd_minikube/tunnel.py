@@ -26,6 +26,12 @@ def route_args(action: str, node_ip: str) -> list[str]:
     return ["sudo", "ip", "route", action, SERVICE_CIDR, "via", node_ip]
 
 
+def route_is_current(node_ip: str) -> bool:
+    """Whether the service network is already routed via the node, so no sudo is needed."""
+    shown = process.output(["ip", "route", "show", SERVICE_CIDR]).split()
+    return shown[1:3] == ["via", node_ip]
+
+
 def setup_tunnel() -> None:
     """Adds the route in the foreground (sudo asks here), then runs minikube tunnel in the background.
 
@@ -43,8 +49,11 @@ def setup_tunnel() -> None:
         print(STOP_HINT)
         return
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
-    print(f"Routing {SERVICE_CIDR} via the minikube node {node_ip} (sudo may ask for your password)...")
-    process.run(route_args("replace", node_ip), capture=False)
+    if route_is_current(node_ip):
+        print(f"{SERVICE_CIDR} is already routed via the minikube node {node_ip}.")
+    else:
+        print(f"Routing {SERVICE_CIDR} via the minikube node {node_ip} (sudo may ask for your password)...")
+        process.run(route_args("replace", node_ip), capture=False)
     if not pid:
         print(f"Starting 'minikube tunnel' in the background (log: {TUNNEL_LOG})...")
         process.spawn(["minikube", "tunnel", "-p", PROFILE], TUNNEL_LOG)

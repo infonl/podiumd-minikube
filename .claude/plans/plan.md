@@ -5931,3 +5931,9 @@ monitoring.coreos.com objects, instead of reading the switch;
 profile is off); `values.set_flag` had no other caller and is removed.
 `zac-admin` moved to `templates/zac/`. The raw Grafana's PVC `grafana` is
 not pruned (no PVC is) and was deleted by hand on this cluster.
+
+`setup-tunnel` (and `start-cluster`, which ends with it) skips `sudo ip route
+replace` when `ip route show 10.96.0.0/12` already routes via the node: on
+2026-10-12 a non-interactive start-cluster stopped there although the route
+from before the restart was still in place. Verified live: setup-tunnel ran
+without a password prompt.
