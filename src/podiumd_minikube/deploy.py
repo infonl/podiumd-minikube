@@ -212,18 +212,21 @@ def rolled_out(workload: dict[str, Any]) -> bool:
     return current and updated >= wanted and old_gone and status.get("readyReplicas", 0) >= wanted
 
 
-def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
-    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live."""
-    by_name = {job["metadata"]["name"]: job for job in live}
-    running: list[str] = []
-    failed: list[str] = []
-    for name in names:
-        conditions: list[dict[str, Any]] = by_name.get(name, {}).get("status", {}).get("conditions") or []
-        done = {c["type"] for c in conditions if c.get("status") == "True"}
-        if "Failed" in done:
-            failed.append(name)
-        elif "Complete" not in done:
-            running.append(name)
+def unfinished_jobs(
+    live: list[dict[str, Any]], names: list[str], outcomes: dict[str, str]
+) -> tuple[list[str], list[str]]:
+    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live.
+
+    outcomes keeps each Job's Complete or Failed once seen: a Job's ttlSecondsAfterFinished
+    deletes it after it finished, which a slow rollout outlasts.
+    """
+    for job in live:
+        conditions: list[dict[str, Any]] = job.get("status", {}).get("conditions") or []
+        done = {c["type"] for c in conditions if c.get("status") == "True"} & {"Complete", "Failed"}
+        if done:
+            outcomes[job["metadata"]["name"]] = "Failed" if "Failed" in done else "Complete"
+    running = [name for name in names if name not in outcomes]
+    failed = [name for name in names if outcomes.get(name) == "Failed"]
     return running, failed
 
 
@@ -235,29 +238,31 @@ def _wait_ready(render: manifests.Render) -> None:
         for doc in render.docs
         if doc.get("kind") in ("Deployment", "StatefulSet", *manifests.ECK_KINDS)
     ]
+    names = jobs(render)
+    outcomes: dict[str, str] = {}
+
+    def job_state() -> tuple[list[str], list[str]]:
+        return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names, outcomes)
+
+    def stuck() -> list[str]:
+        return [w for w in workloads if not rolled_out(kube.get_json(w, "-n", NAMESPACE))]
 
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
-    def all_rolled_out() -> bool:
-        return all(rolled_out(kube.get_json(w, "-n", NAMESPACE)) for w in workloads)
+    # Jobs are polled meanwhile, so their outcome is seen before their TTL deletes them.
+    def settled() -> tuple[list[str]] | None:
+        running, failed = job_state()
+        return None if running or stuck() else (failed,)
 
-    if not polling.wait_until(all_rolled_out, timeout=READY_TIMEOUT, interval=10):
-        stuck = [w for w in workloads if not rolled_out(kube.get_json(w, "-n", NAMESPACE))]
-        msg = f"not rolled out after {READY_TIMEOUT}s: {', '.join(stuck)}"
-        raise process.UserError(msg)
-    names = jobs(render)
-
-    def settled() -> tuple[list[str], list[str]] | None:
-        running, failed = unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
-        return None if running else (running, failed)
-
-    result = polling.wait_until(settled, timeout=READY_TIMEOUT, interval=5)
+    result = polling.wait_until(settled, timeout=READY_TIMEOUT, interval=10)
     if result is None:
-        running, _ = unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
-        msg = f"Job(s) still running after {READY_TIMEOUT}s: {', '.join(running)}"
+        running, _ = job_state()
+        msg = (
+            f"after {READY_TIMEOUT}s: not rolled out: {', '.join(stuck()) or '-'}; running: {', '.join(running) or '-'}"
+        )
         raise process.UserError(msg)
-    if result[1]:
-        msg = f"Job(s) failed: {', '.join(result[1])}: check `kubectl logs job/<name> -n {NAMESPACE}`"
+    if result[0]:
+        msg = f"Job(s) failed: {', '.join(result[0])}: check `kubectl logs job/<name> -n {NAMESPACE}`"
         raise process.UserError(msg)
     print("All workloads rolled out, all Jobs completed.")
 

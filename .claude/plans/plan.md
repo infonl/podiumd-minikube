@@ -5861,3 +5861,10 @@ what ExternalsPodiumD gets by default.
 Next, agreed with the user: after the monitoring-logging tuning,
 monitoring-logging becomes the only metrics implementation and
 `templates/metrics/` goes, as both reference environments.
+
+Found in the monitoring-logging measuring round (2026-10-12): `deploy --full`
+with monitoringLogging failed "Job(s) still running after 900s" although
+every Job had completed. The rollouts took over 600 s, the config Jobs'
+`ttlSecondsAfterFinished: 600` (60 for kube-prometheus' admission Jobs)
+had deleted them, and a missing Job counted as running. `_wait_ready` now
+polls Jobs and workloads together and keeps each Job's outcome once seen.

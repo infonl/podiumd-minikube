@@ -77,7 +77,16 @@ def test_unfinished_jobs_splits_running_and_failed():
         return {"metadata": {"name": name}, "status": {"conditions": conditions}}
 
     jobs = [job("done", "Complete"), job("broken", "Failed"), job("busy", None)]
-    assert deploy.unfinished_jobs(jobs, ["done", "broken", "busy", "missing"]) == (["busy", "missing"], ["broken"])
+    outcomes: dict[str, str] = {}
+    names = ["done", "broken", "busy", "missing"]
+    assert deploy.unfinished_jobs(jobs, names, outcomes) == (["busy", "missing"], ["broken"])
+
+
+def test_unfinished_jobs_remembers_jobs_their_ttl_deleted():
+    outcomes: dict[str, str] = {}
+    finished = [{"metadata": {"name": "config"}, "status": {"conditions": [{"type": "Complete", "status": "True"}]}}]
+    assert deploy.unfinished_jobs(finished, ["config"], outcomes) == ([], [])
+    assert deploy.unfinished_jobs([], ["config"], outcomes) == ([], [])
 
 
 def test_rolled_out_needs_current_generation_and_ready_replicas():
