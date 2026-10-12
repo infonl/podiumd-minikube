@@ -13,8 +13,8 @@
   "ssoSessionIdleTimeoutRememberMe": 0,
   "ssoSessionMaxLifespanRememberMe": 0,
   "offlineSessionIdleTimeout": 2592000,
-  "offlineSessionMaxLifespanEnabled": false,
-  "offlineSessionMaxLifespan": 5184000,
+  "offlineSessionMaxLifespanEnabled": true,
+  "offlineSessionMaxLifespan": 7776000,
   "clientSessionIdleTimeout": 0,
   "clientSessionMaxLifespan": 0,
   "clientOfflineSessionIdleTimeout": 0,
@@ -1284,7 +1284,6 @@
       "optionalClientScopes": [
         "address",
         "phone",
-        "offline_access",
         "microprofile-jwt"
       ]
     },
@@ -1381,7 +1380,6 @@
       "optionalClientScopes": [
         "address",
         "phone",
-        "offline_access",
         "microprofile-jwt"
       ],
       "access": {
@@ -1421,7 +1419,7 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
       "protocolMappers": [
         {
           "name": "username",
@@ -1469,7 +1467,7 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
       "protocolMappers": [
         {
           "name": "username",
@@ -1517,7 +1515,7 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
       "protocolMappers": [
         {
           "name": "username",
@@ -1565,7 +1563,7 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
       "protocolMappers": [
         {
           "name": "username",
@@ -1613,7 +1611,7 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
       "protocolMappers": [
         {
           "name": "username",
@@ -1661,7 +1659,7 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
       "protocolMappers": [
         {
           "name": "username",
@@ -1709,7 +1707,7 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"],
       "protocolMappers": [
         {
           "name": "username",
@@ -1805,7 +1803,6 @@
       "optionalClientScopes": [
         "address",
         "phone",
-        "offline_access",
         "microprofile-jwt"
       ],
       "access": {
@@ -1864,7 +1861,6 @@
       "optionalClientScopes": [
         "address",
         "phone",
-        "offline_access",
         "microprofile-jwt"
       ],
       "access": {
@@ -1939,7 +1935,7 @@
         }
       ],
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"]
     },
     {
       "clientId": "kiss",
@@ -2006,7 +2002,7 @@
         }
       ],
       "defaultClientScopes": ["web-origins", "roles", "profile", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "optionalClientScopes": ["address", "phone", "microprofile-jwt"]
     },
     {
       "clientId": "openinwoner",
@@ -2644,8 +2640,7 @@
   "defaultOptionalClientScopes": [
     "microprofile-jwt",
     "address",
-    "phone",
-    "offline_access"
+    "phone"
   ],
   "browserSecurityHeaders": {
     "contentSecurityPolicyReportOnly": "",
@@ -3378,7 +3373,7 @@
       "name": "Configure OTP",
       "providerId": "CONFIGURE_TOTP",
       "enabled": true,
-      "defaultAction": false,
+      "defaultAction": true,
       "priority": 10,
       "config": {}
     },
@@ -3446,6 +3441,7 @@
   "attributes": {
     "cibaBackchannelTokenDeliveryMode": "poll",
     "cibaAuthRequestedUserHint": "login_hint",
+    "adminEventsExpiration": "2592000",
     "clientOfflineSessionMaxLifespan": "0",
     "oauth2DevicePollingInterval": "5",
     "clientSessionIdleTimeout": "0",

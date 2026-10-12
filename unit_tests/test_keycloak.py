@@ -69,6 +69,12 @@ def test_realm_changes_set_only_differing_realm_settings():
     assert keycloak.realm_changes(vendored, vendored) == []
 
 
+def test_realm_changes_set_listed_realm_attributes():
+    vendored = {"attributes": {"adminEventsExpiration": "2592000", "frontendUrl": "x"}}
+    live = {"attributes": {"frontendUrl": "y"}}
+    assert keycloak.realm_changes(live, vendored) == ["-s", "attributes.adminEventsExpiration=2592000"]
+
+
 def test_group_role_changes_lists_realm_roles_a_live_group_lacks():
     live = [{"name": "beheerders-elk-domein", "realmRoles": ["beheerder_elk_domein"]}, {"name": "other"}]
     vendored = [
@@ -80,3 +86,9 @@ def test_group_role_changes_lists_realm_roles_a_live_group_lacks():
         "beheerders-elk-domein": ["beheerders"],
         "beheerders": ["beheerders"],
     }
+
+
+def test_required_action_changes_lists_differing_default_actions():
+    live = [{"alias": "CONFIGURE_TOTP", "defaultAction": False}, {"alias": "VERIFY_EMAIL"}]
+    vendored = [{"alias": "CONFIGURE_TOTP", "defaultAction": True}, {"alias": "VERIFY_EMAIL", "defaultAction": False}]
+    assert keycloak.required_action_changes(live, vendored) == {"CONFIGURE_TOTP": True}

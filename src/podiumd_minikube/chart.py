@@ -118,4 +118,5 @@ def zac_pkce(charts_dir: Path = CHARTS_DIR) -> ZacPkce:
             "podiumd.zac.image.tag comment), or set zac.experimentalPkce to false."
         )
         raise UserError(msg)
-    return ZacPkce(enabled=True, sets=["--set", f"podiumd.zac.image.tag={ZAC_PKCE_IMAGE_TAG}"])
+    sets = ["--set", f"podiumd.zac.image.tag={ZAC_PKCE_IMAGE_TAG}", "--set", "podiumd.zac.auth.enablePkce=true"]
+    return ZacPkce(enabled=True, sets=sets)

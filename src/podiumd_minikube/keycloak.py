@@ -50,7 +50,7 @@ def _clients(pod: str) -> list[Any] | None:
     ]  # fmt: skip
     if not process.succeeds(login):
         return None
-    fields = "id,clientId,redirectUris,webOrigins,attributes,protocolMappers(name)"
+    fields = "id,clientId,redirectUris,webOrigins,attributes,optionalClientScopes,protocolMappers(name)"
     result = process.run([*_kcadm(pod), "get", "clients", "-r", REALM, "--fields", fields], check=False)
     if result.returncode != 0:
         return None
@@ -78,8 +78,11 @@ def client_changes(client: dict[str, Any], vendored: dict[str, Any], *, zac_pkce
 REALM_SETTINGS = (
     "accessTokenLifespan", "bruteForceProtected", "failureFactor", "revokeRefreshToken", "eventsEnabled",
     "eventsExpiration", "adminEventsEnabled", "adminEventsDetailsEnabled", "smtpServer", "sslRequired",
-    "passwordPolicy",
+    "passwordPolicy", "offlineSessionMaxLifespanEnabled", "offlineSessionMaxLifespan",
 )  # fmt: skip
+REALM_ATTRIBUTES = ("adminEventsExpiration",)
+# podiumd's realm template removes it from the realm's and every client's optional scopes.
+DROPPED_SCOPE = "offline_access"
 # podiumd's keycloak-master-realm-config.yaml; there is no vendored file for master.
 MASTER_REALM_SETTINGS: dict[str, Any] = {
     "bruteForceProtected": True,
@@ -95,12 +98,18 @@ MASTER_REALM_SETTINGS: dict[str, Any] = {
 
 def realm_changes(live: dict[str, Any], wanted: dict[str, Any]) -> list[str]:
     """kcadm `-s` settings that bring the live realm's REALM_SETTINGS in line with wanted; [] when they are."""
-    return [
+    changes = [
         arg
         for key in REALM_SETTINGS
         if key in wanted and live.get(key) != wanted[key]
         for arg in ("-s", f"{key}={json.dumps(wanted[key])}")
     ]
+    live_attributes: dict[str, Any] = live.get("attributes") or {}
+    wanted_attributes: dict[str, Any] = wanted.get("attributes") or {}
+    for key in REALM_ATTRIBUTES:
+        if key in wanted_attributes and live_attributes.get(key) != wanted_attributes[key]:
+            changes += ["-s", f"attributes.{key}={wanted_attributes[key]}"]
+    return changes
 
 
 def _sync_realm_settings(pod: str, name: str, wanted: dict[str, Any]) -> None:
@@ -108,6 +117,41 @@ def _sync_realm_settings(pod: str, name: str, wanted: dict[str, Any]) -> None:
     if settings:
         process.output([*_kcadm(pod), "update", f"realms/{name}", *settings])
         print(f"  updated realm {name} settings {', '.join(arg.split('=')[0] for arg in settings[1::2])}")
+
+
+def required_action_changes(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> dict[str, bool]:
+    """Per live required action whose defaultAction differs from the vendored realm's, the vendored value."""
+    wanted = {action["alias"]: action.get("defaultAction", False) for action in vendored}
+    return {
+        action["alias"]: wanted[action["alias"]]
+        for action in live
+        if action["alias"] in wanted and action.get("defaultAction", False) != wanted[action["alias"]]
+    }
+
+
+def _sync_required_actions(pod: str, vendored: list[dict[str, Any]]) -> None:
+    live = json.loads(process.output([*_kcadm(pod), "get", "authentication/required-actions", "-r", REALM]))
+    for alias, default in required_action_changes(live, vendored).items():
+        path = f"authentication/required-actions/{alias}"
+        process.output([*_kcadm(pod), "update", path, "-r", REALM, "-s", f"defaultAction={json.dumps(default)}"])
+        print(f"  set required action {alias} defaultAction={json.dumps(default)}")
+
+
+def _drop_optional_scope(pod: str, clients: list[dict[str, Any]]) -> None:
+    """Removes DROPPED_SCOPE from the realm's default optional scopes and from every client's optional scopes."""
+    scopes = json.loads(process.output([*_kcadm(pod), "get", "client-scopes", "-r", REALM, "--fields", "id,name"]))
+    scope_id = next((scope["id"] for scope in scopes if scope["name"] == DROPPED_SCOPE), None)
+    if scope_id is None:
+        return
+    defaults = json.loads(process.output([*_kcadm(pod), "get", "default-optional-client-scopes", "-r", REALM]))
+    if any(scope["id"] == scope_id for scope in defaults):
+        process.output([*_kcadm(pod), "delete", f"default-optional-client-scopes/{scope_id}", "-r", REALM])
+        print(f"  removed {DROPPED_SCOPE} from the realm's default optional scopes")
+    for client in clients:
+        if DROPPED_SCOPE in (client.get("optionalClientScopes") or []):
+            path = f"clients/{client['id']}/optional-client-scopes/{scope_id}"
+            process.output([*_kcadm(pod), "delete", path, "-r", REALM])
+            print(f"  removed {DROPPED_SCOPE} from client {client['clientId']}")
 
 
 def missing_clients(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -252,5 +296,7 @@ def sync_realm(*, zac_pkce: bool) -> None:
     _sync_realm_roles(pod, realm["roles"]["realm"])
     _sync_groups(pod, realm.get("groups", []))
     _sync_realm_settings(pod, REALM, realm)
+    _drop_optional_scope(pod, clients)
+    _sync_required_actions(pod, realm.get("requiredActions", []))
     _sync_realm_settings(pod, "master", MASTER_REALM_SETTINGS)
     print(f"Keycloak's live '{REALM}' realm is in sync.")

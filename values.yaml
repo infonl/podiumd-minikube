@@ -243,7 +243,7 @@ podiumd:
     # ghcr.io/infonl/zaakafhandelcomponent:5.4 and :5.4.2 have different
     # digests, 5.4 is frozen at the first 5.4.x patch, not a rolling
     # alias), patches the vendored realm's own PKCE requirement for this
-    # client back on to match (see auth.enablePkce's own comment below,
+    # client back on to match (see auth's comment below,
     # and src/podiumd_minikube/manifests.py), and reconciles that same
     # setting into the *already-imported* live Keycloak realm (Keycloak
     # only ever imports once - see
@@ -276,19 +276,8 @@ podiumd:
       realm: zaakafhandelcomponent
       clientId: zaakafhandelcomponent
       secret: keycloakZaakafhandelcomponentClientSecret
-      # Left unconditionally true regardless of top-level
-      # zac.experimentalPkce - a silent no-op on any zac chart without
-      # AUTH_ENABLE_PKCE support (matches compose's own intent, harmless
-      # either way - see this project's build history for how that was
-      # confirmed). What actually gates real PKCE end to end is the
-      # *realm's own* pkce.code.challenge.method requirement, not this
-      # value - src/podiumd_minikube/manifests.py and
-      # src/podiumd_minikube/keycloak.py both key off
-      # zac.experimentalPkce for that instead (see podiumd.zac.image.tag's
-      # own comment above for the full mechanism, and plan.md's PKCE
-      # sections for the incident that requirement caused once already, back
-      # when it was flipped on with no matching PKCE-aware chart deployed).
-      enablePkce: true
+      # No enablePkce: off as ExternalsPodiumD; zac.experimentalPkce turns it on
+      # together with the realm's PKCE requirement (podiumd_minikube.chart).
     keycloak:
       adminClient:
         id: zaakafhandelcomponent-admin-client
@@ -662,7 +651,8 @@ podiumd:
         oidc_db_config_admin_auth:
           providers:
           - identifier: keycloak-provider
-            oidc_use_nonce: true
+            oidc_use_nonce: false
+            oidc_token_use_basic_auth: true
             oidc_nonce_size: 32
             oidc_state_size: 32
             # Discovery on the public https host, as ExternalsPodiumD.
@@ -677,6 +667,7 @@ podiumd:
             - openid
             - email
             - profile
+            - roles
             oidc_rp_sign_algo: RS256
             oidc_provider_identifier: keycloak-provider
             userinfo_claims_source: id_token
@@ -795,7 +786,6 @@ podiumd:
         # discarded instead of processed). No other app here brokers on
         # db3.
         brokerUrl: redis://redis:6379/5
-        resultBackend: redis://redis:6379/5
     extraVolumes:
       - name: no2fa-settings
         configMap:
@@ -878,7 +868,8 @@ podiumd:
         oidc_db_config_admin_auth:
           providers:
           - identifier: keycloak-provider
-            oidc_use_nonce: true
+            oidc_use_nonce: false
+            oidc_token_use_basic_auth: true
             oidc_nonce_size: 32
             oidc_state_size: 32
             endpoint_config:
@@ -892,6 +883,7 @@ podiumd:
             - openid
             - email
             - profile
+            - roles
             oidc_rp_sign_algo: RS256
             oidc_provider_identifier: keycloak-provider
             userinfo_claims_source: id_token
@@ -1045,7 +1037,6 @@ podiumd:
         oidc_db_config_admin_auth:
           providers:
             - identifier: admin-oidc-provider
-              oidc_token_use_basic_auth: true
               oidc_use_nonce: true
               oidc_nonce_size: 32
               oidc_state_size: 32
@@ -1120,22 +1111,22 @@ podiumd:
               api_type: orc
               auth_type: no_auth
             - identifier: brp-api
-              label: BRP API
+              label: BRP API proxy
               api_root: http://api-proxy/haalcentraal/api/brp/
               api_type: orc
               auth_type: no_auth
             - identifier: kvk-api
-              label: KvK API
+              label: KVK API proxy
               api_root: http://api-proxy/api/
               api_type: orc
               auth_type: no_auth
             - identifier: bag-api
-              label: BAG API
+              label: BAG API proxy
               api_root: http://api-proxy/lvbag/individuelebevragingen/v2/
               api_type: orc
               auth_type: no_auth
             - identifier: notificaties-api
-              label: Open Notificaties
+              label: Notificaties API
               api_root: https://opennotificaties.local/api/v1/
               api_type: nrc
               auth_type: zgw
@@ -1609,7 +1600,8 @@ podiumd:
         oidc_db_config_admin_auth:
           providers:
           - identifier: keycloak-provider
-            oidc_use_nonce: true
+            oidc_use_nonce: false
+            oidc_token_use_basic_auth: true
             oidc_nonce_size: 32
             oidc_state_size: 32
             endpoint_config:
@@ -1623,6 +1615,7 @@ podiumd:
             - openid
             - email
             - profile
+            - roles
             oidc_rp_sign_algo: RS256
             oidc_provider_identifier: keycloak-provider
             userinfo_claims_source: id_token
@@ -1804,7 +1797,8 @@ podiumd:
         oidc_db_config_admin_auth:
           providers:
           - identifier: keycloak-provider
-            oidc_use_nonce: true
+            oidc_use_nonce: false
+            oidc_token_use_basic_auth: true
             oidc_nonce_size: 32
             oidc_state_size: 32
             endpoint_config:
@@ -1818,6 +1812,7 @@ podiumd:
             - openid
             - email
             - profile
+            - roles
             oidc_rp_sign_algo: RS256
             oidc_provider_identifier: keycloak-provider
             userinfo_claims_source: id_token
@@ -1998,7 +1993,8 @@ podiumd:
         oidc_db_config_admin_auth:
           providers:
           - identifier: keycloak-provider
-            oidc_use_nonce: true
+            oidc_use_nonce: false
+            oidc_token_use_basic_auth: true
             oidc_nonce_size: 32
             oidc_state_size: 32
             endpoint_config:
@@ -2012,6 +2008,7 @@ podiumd:
             - openid
             - email
             - profile
+            - roles
             oidc_rp_sign_algo: RS256
             oidc_provider_identifier: keycloak-provider
             userinfo_claims_source: id_token
@@ -2351,7 +2348,6 @@ podiumd:
             - profile
             oidc_rp_sign_algo: RS256
             oidc_provider_identifier: keycloak-provider
-            userinfo_claims_source: id_token
             options:
               user_settings:
                 claim_mappings:
@@ -2363,7 +2359,7 @@ podiumd:
                   - family_name
                   email:
                   - email
-                username_case_sensitive: true
+                username_case_sensitive: false
               groups_settings:
                 claim_mapping:
                 - groups
@@ -2571,17 +2567,17 @@ podiumd:
           services:
             # As ExternalsPodiumD.
             - identifier: brp-api
-              label: BRP API
+              label: BRP API proxy
               api_root: http://api-proxy/haalcentraal/api/brp/
               api_type: orc
               auth_type: no_auth
             - identifier: kvk-api
-              label: KvK API
+              label: KVK API proxy
               api_root: http://api-proxy/api/
               api_type: orc
               auth_type: no_auth
             - identifier: bag-api
-              label: BAG API
+              label: BAG API proxy
               api_root: http://api-proxy/lvbag/individuelebevragingen/v2/
               api_type: orc
               auth_type: no_auth
@@ -2690,7 +2686,8 @@ podiumd:
         oidc_db_config_admin_auth:
           providers:
           - identifier: keycloak-provider
-            oidc_use_nonce: true
+            oidc_use_nonce: false
+            oidc_token_use_basic_auth: true
             oidc_nonce_size: 32
             oidc_state_size: 32
             endpoint_config:
@@ -2704,6 +2701,7 @@ podiumd:
             - openid
             - email
             - profile
+            - roles
             oidc_rp_sign_algo: RS256
             oidc_provider_identifier: keycloak-provider
             userinfo_claims_source: id_token
@@ -2770,7 +2768,6 @@ podiumd:
         # delivery fails.
         useTLS: false
         defaultFrom: noreply@dimpact.nl
-        defaultFrom: noreply@dimpact.nl
       database:
         host: postgres
         port: 5432
@@ -2788,10 +2785,6 @@ podiumd:
         # "resultBackendl" typo.
         resultBackend: redis://redis:6379/10
         resultBackendl: redis://redis:6379/10
-      csrf:
-        trustedOrigins:
-          - https://openformulieren-nginx.local
-          - https://openformulieren-web.local
       # As ExternalsPodiumD: its own public host only; two proxies (edge, nginx).
       cors:
         allowAllOrigins: false

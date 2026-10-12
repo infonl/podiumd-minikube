@@ -6033,3 +6033,28 @@ lookup needs PABC application role brp_zoeken, which podiumd's dataset
 lacks (ZAC brp-rechten.rego); reported to helm-charts, podiumd-tests marks
 the lookup's 403 as an expected failure; minikube does not patch the
 dataset.
+
+## Three-way comparison (ExternalsPodiumD dimp test 4.9.4, minikube, kees00; user: "yes, do both")
+
+compare.py flattened the three podiumd value sets (hosts, secrets, images
+and capacity masked), four sub-agents classified the 1637 differing keys.
+minikube's gaps, now as ExternalsPodiumD: admin OIDC of Open Zaak, Open
+Klant, Open Formulieren, Objecten, Objecttypen and Open Notificaties with
+oidc_use_nonce false, oidc_token_use_basic_auth true and scope roles; Open
+Archiefbeheer username_case_sensitive false and the default userinfo source;
+Open Inwoner token basic auth off; ZAC AUTH_ENABLE_PKCE off (the old comment
+called it a no-op; the zac chart renders it), turned on by
+zac.experimentalPkce together with the realm requirement; Open Zaak without
+Celery result backend; Open Formulieren without csrf.trustedOrigins (a
+docker-compose leftover) and a duplicate defaultFrom; ExternalsPodiumD's
+service labels; realm: offline sessions max lifespan on (7776000 s),
+offline_access out of the default optional scopes and every client,
+adminEventsExpiration 30 days, CONFIGURE_TOTP a default required action
+(podiumd-tests clears it on the users it creates). `keycloak.sync_realm`
+syncs all of it. Not copied: PABC functioneelBeheerderRole "administrators"
+(dimp test): podiumd's realm template names the pabc client role
+"administrator", as the chart default and dim1. kees00's gaps went to its
+session. ExternalsPodiumD-only: e-Suite, Entra ID, ZGW Office Add-in, the
+KISS website crawler, datamigratie, a pdok service that probably never
+applied. Correction: ExternalsPodiumD's Objecten notifies as `notificaties`
+on dimp test, not `objecten` as noted earlier in this file.
