@@ -38,7 +38,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 | monitoring-logging: components | kube-state-metrics, node-exporter, pushgateway, default rules off, as ExternalsPodiumD | `values.yaml` `monitoring-logging.kube-prometheus-stack`, `prometheus-pushgateway` | containers 1598 -> 1343 MiB; kube-apiserver unchanged (its +460 MiB comes with the CRDs) |
 | monitoring-logging: Prometheus | 384Mi/768Mi, `retentionSize` 1GB, `GOMEMLIMIT` | `prometheusSpec.resources`; the operator builds its pod, so `limit_runtimes` patches the `Prometheus` resource's `containers` | 345 -> 204 MiB |
 | monitoring-logging: otel-collector | limit 256Mi (chart 512Mi); `memory_limiter` is 80% of it | `opentelemetry-collector.resources` | 173 -> 43 MiB |
-| monitoring-logging: Loki GC | `GOGC=50` (default 100) | `loki.singleBinary.extraEnv` | grew 202 -> 328 MiB over a day of tiers at GOGC 100; effect to be measured |
+| monitoring-logging: Loki GC | `GOGC=50` (default 100) | `loki.singleBinary.extraEnv` | grew 202 -> 328 MiB over a day of tiers at GOGC 100; at GOGC 50, 2.3 h and a full tier after start: 260 MiB, heap in use 152 MiB, next GC at 160 MiB (the rest of the heap is in-memory chunks, not GC slack) |
 | monitoring-logging: Loki, sidecars | Loki 512Mi/1Gi as podiumd-infra; Grafana's and Loki's sidecars 80-96Mi/128-160Mi | `loki.singleBinary.resources`, `grafana.sidecar`, `loki.sidecar` | Loki 310 -> 210 MiB |
 | Kibana | off | `podiumd.kiss-eck.eck-kibana.enabled: false` | -0.7 GiB |
 | ClamAV | EICAR-only signature database | `podiumd.clamav` + `templates/clamav` | 19 MiB instead of 973 |
