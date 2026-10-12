@@ -38,6 +38,9 @@ spec:
             # ExternalsPodiumD; the edge terminates TLS.
             - name: KC_HOSTNAME
               value: https://keycloak.local
+            # ExternalsPodiumD's adminFrontendUrl; ITA logs in through it there.
+            - name: KC_HOSTNAME_ADMIN
+              value: https://keycloak-admin.local
             - name: KC_HTTP_ENABLED
               value: "true"
             - name: KC_PROXY_HEADERS

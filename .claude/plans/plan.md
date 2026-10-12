@@ -6058,3 +6058,23 @@ session. ExternalsPodiumD-only: e-Suite, Entra ID, ZGW Office Add-in, the
 KISS website crawler, datamigratie, a pdok service that probably never
 applied. Correction: ExternalsPodiumD's Objecten notifies as `notificaties`
 on dimp test, not `objecten` as noted earlier in this file.
+
+## Keycloak admin host for ITA (user: "yes, add the admin host for ITA now")
+
+ExternalsPodiumD sets `keycloak.config.adminFrontendUrl` to a
+`*-keycloak-admin.*` host (Keycloak's `hostname.admin`) and routes it to
+`keycloak-nginx`; ITA's `web.oidc.authority` is that host in 7 of 8
+environments (dimp/ontw uses the public host), KISS uses the public host
+everywhere, PABC differs per environment. kees00 does the same for ITA. Only
+dim1 and dimp/ontw put an IP allowlist on the admin host, so it is not a
+security measure everywhere; the reason is asked in the untracked write-up
+`keycloak-admin-host-oidc-authority-issue.md`. minikube now matches it:
+`keycloak-admin.local` in the Keycloak Ingress (hence edge route, TLS
+certificate, CoreDNS and /etc/hosts), `KC_HOSTNAME_ADMIN`, and ITA web's
+authority on it. PABC stays on the public host, as kees00. Live: discovery through
+the admin host gives issuer and login on keycloak.local (as
+ExternalsPodiumD, whose realm frontendUrl is the public host); ITA's login
+redirects there; the admin console moved to keycloak-admin.local
+(keycloak.local/admin/ is 404); the admin REST API answers 401 anonymously
+on both hosts. No allowlist: no
+public access here. No memory cost.

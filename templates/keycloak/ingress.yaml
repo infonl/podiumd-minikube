@@ -16,3 +16,14 @@ spec:
                 name: keycloak
                 port:
                   name: http
+    # Keycloak's admin host (KC_HOSTNAME_ADMIN), as ExternalsPodiumD's keycloak-admin.
+    - host: keycloak-admin.local
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http

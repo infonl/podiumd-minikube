@@ -11,7 +11,8 @@ from podiumd_minikube.paths import NAMESPACE
 
 TRAFFIC_TYPE = {
     "zac.local": "Web app UI - redirects unauthenticated requests to Keycloak (OIDC)",
-    "keycloak.local": "Identity provider - OIDC login/token endpoints + its own admin console",
+    "keycloak.local": "Identity provider - OIDC login/token endpoints",
+    "keycloak-admin.local": "Same Keycloak: its admin console (KC_HOSTNAME_ADMIN), ITA's OIDC authority",
     "openzaak.local": "ZGW REST API + Django admin",
     "openklant.local": "ZGW REST API + Django admin",
     "pabc.local": "REST API (authorization/role-mapping data ZAC queries)",

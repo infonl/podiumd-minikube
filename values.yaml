@@ -3213,7 +3213,8 @@ podiumd:
       typeVersion: 1
     web:
       oidc:
-        authority: https://keycloak.local/realms/zaakafhandelcomponent
+        # Keycloak's admin host, as ExternalsPodiumD and podiumd-infra.
+        authority: https://keycloak-admin.local/realms/zaakafhandelcomponent
         frontendUrl: https://ita.local/
         clientSecret: itaClientSecret
     smtp:
