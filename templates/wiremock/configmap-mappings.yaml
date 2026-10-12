@@ -1,30 +1,21 @@
 {{/*
-One mappings and one files ConfigMap per set of
-podiumd-minikube.wiremockSets, mounted into the one WireMock pod.
+The vendored BAG mappings and response files, mounted into the WireMock pod.
 */}}
-{{- range $set := splitList " " (include "podiumd-minikube.wiremockSets" $) }}
+{{- $dir := "vendor/dimpact-zaakafhandelcomponent/wiremocks/bag-wiremock" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: wiremock-{{ $set }}-mappings
+  name: wiremock-bag-wiremock-mappings
   labels:
     {{- include "podiumd-minikube.labels" $ | nindent 4 }}
 data:
-  {{- ($.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/mappings/*.json" $set)).AsConfig | nindent 2 }}
+  {{- ($.Files.Glob (printf "%s/mappings/*.json" $dir)).AsConfig | nindent 2 }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: wiremock-{{ $set }}-files
+  name: wiremock-bag-wiremock-files
   labels:
     {{- include "podiumd-minikube.labels" $ | nindent 4 }}
 data:
-  {{- ($.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/__files/*.json" $set)).AsConfig | nindent 2 }}
-binaryData:
-  {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/__files/*" $set) }}
-  {{- if not (hasSuffix ".json" $path) }}
-  {{ base $path }}: {{ $.Files.Get $path | b64enc }}
-  {{- end }}
-  {{- end }}
----
-{{- end }}
+  {{- ($.Files.Glob (printf "%s/__files/*.json" $dir)).AsConfig | nindent 2 }}

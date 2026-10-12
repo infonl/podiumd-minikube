@@ -32,8 +32,7 @@ zac:
 objecten:
   enabled: false
   # Which podiumd objecten shape is currently selected (see
-  # podiumd-minikube set-podiumd-version's --path header, and
-  # src/podiumd_minikube/chart.py) - classic (separate objecttypen
+  # src/podiumd_minikube/chart.py's ObjectenShape) - classic (separate objecttypen
   # subchart) vs merged (single "openobject" chart, aliased back to this
   # same "objecten" key, no objecttypen subchart at all). Set automatically
   # by podiumd-minikube deploy and podiumd-minikube provision-cluster from that detection on every run -
@@ -87,8 +86,8 @@ monitoringLogging:
   # implementation backs that profile, it doesn't turn the profile on by
   # itself. Needs podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint
   # repointed at the new otel-collector Service name too when enabling
-  # this - see that key's own comment, and podiumd-minikube deploy's handling
-  # of both together.
+  # this - see that key's own comment, and src/podiumd_minikube/deploy.py's
+  # handling of both together.
   #
   # Flipping this on an *already-deployed* cluster (either direction) leaves
   # the *other* implementation's Deployments/Services/Secrets/Ingresses
@@ -102,8 +101,8 @@ monitoringLogging:
   # unusually large (as toggling this always is - the whole
   # kube-prometheus-stack/loki/alloy footprint), so re-run podiumd-minikube deploy with
   # the same flags plus --force-prune to confirm it. ConfigMaps are the one
-  # exception that still needs checking by hand afterward (see that
-  # script's own header for why - src/podiumd_minikube/manifests.py's own
+  # exception that still needs checking by hand afterward
+  # (src/podiumd_minikube/deploy.py's
   # server-side-apply path for large ConfigMaps like the bundled Grafana
   # dashboards makes safely pruning that kind harder, not done here).
   enabled: false
@@ -459,7 +458,8 @@ podiumd:
     # (release name + chart name, both literally "opentelemetry-collector")
     # collides exactly with monitoring-logging's own otel-collector
     # Deployment name. This project applies via `kubectl apply`, not `helm
-    # install`/`upgrade` (see podiumd-minikube deploy's own header for why), so same-name
+    # install`/`upgrade` (Helm's release record outgrows the API server's
+    # 3 MB request limit; plan.md), so same-name
     # resources don't merge by release the way a real Helm release would -
     # whichever one renders last in the manifest stream simply overwrites
     # the other's live spec. Confirmed live: without this override, zac's
@@ -469,7 +469,7 @@ podiumd:
     #
     # This subchart's own resources (Deployment/Service/ConfigMap/
     # ServiceAccount) are dropped from the manifest entirely before
-    # `kubectl apply` ever sees them - see podiumd-minikube deploy's render() pipeline
+    # `kubectl apply` ever sees them - see deploy.Options.render
     # and src/podiumd_minikube/manifests.py's own header
     # for why (short version: `replicaCount: 0` looked like the obvious
     # way to stop it running, but isn't - confirmed live in this chart's
@@ -1576,7 +1576,7 @@ podiumd:
         # (this block has to satisfy whichever shape is NOT the one
         # podiumd-minikube deploy strips it for) - src/podiumd_minikube/manifests.py
         # strips it back out of the rendered ConfigMap, but only when
-        # OBJECTEN_MERGED=true (see podiumd-minikube deploy's render() pipeline).
+        # OBJECTEN_MERGED=true (see manifests.fix_up).
         objecttypes:
           items:
             # podiumd-infra's only Productaanvraag-Dimpact, created by
@@ -3553,8 +3553,8 @@ monitoring-logging:
       enabled: false
     # These five create a Service explicitly namespaced to "kube-system"
     # each (scraping the control-plane components that, on a "real" cluster,
-    # run there) - confirmed live that conflicts outright with podiumd-minikube deploy's
-    # own single `kubectl apply -n podiumd-minikube -f -` covering the whole
+    # run there) - confirmed live that conflicts outright with the deploy's
+    # single `kubectl apply -n podiumd-minikube -f -` covering the whole
     # manifest ("the namespace from the provided object 'kube-system' does
     # not match the namespace 'podiumd-minikube'"). Wouldn't usefully scrape
     # anything on minikube regardless - its control-plane runs as static
@@ -3604,16 +3604,15 @@ monitoring-logging:
     # count stays 0 forever without it. NOT overridden here - confirmed live
     # that clearing an inherited map key this deep (root chart's own
     # values.yaml -> monitoring-logging's own values.yaml -> alloy's own
-    # values.yaml) doesn't work on this project's pinned Helm v3.9.0 (see
-    # podiumd-minikube provision-cluster's own comment on why that version's pinned):
+    # values.yaml) did not work, confirmed live on Helm 3.9.0:
     # neither an empty map override (nodeSelector: {} - ordinary reason,
     # Helm's per-key map merge contributes nothing from an empty map) nor a
     # `null` on the exact key (works for a plain two-level override, but not
     # reliably at this subchart-of-a-subchart nesting depth on this Helm
     # version - confirmed --set *can* reach and overwrite the key's value,
     # just not delete it). Simplest reliable fix instead: make minikube's
-    # node actually satisfy the selector - see podiumd-minikube provision-cluster's own
-    # `kubectl label node` step.
+    # node actually satisfy the selector - the `kubectl label node` step in
+    # src/podiumd_minikube/provision.py.
     #
     alloy:
       # monitoring-logging's own umbrella values.yaml hardcodes its entire

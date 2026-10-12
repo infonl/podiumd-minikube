@@ -30,10 +30,3 @@ spec:
                 port:
                   number: {{ .port | default 80 }}
 {{- end -}}
-{{/*
-The vendored WireMock mapping sets to load, space-separated: BAG behind the
-api-proxy.
-*/}}
-{{- define "podiumd-minikube.wiremockSets" -}}
-bag-wiremock
-{{- end -}}

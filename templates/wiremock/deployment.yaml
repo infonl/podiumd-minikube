@@ -1,8 +1,7 @@
+{{- $dir := "vendor/dimpact-zaakafhandelcomponent/wiremocks/bag-wiremock" }}
 {{- $content := "" }}
-{{- range $set := splitList " " (include "podiumd-minikube.wiremockSets" .) }}
-{{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/**" $set) }}
+{{- range $path, $_ := .Files.Glob (printf "%s/**" $dir) }}
 {{- $content = print $content $path ($.Files.Get $path | sha256sum) }}
-{{- end }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -48,24 +47,20 @@ spec:
             # directly in mappings/, it doesn't recurse into subdirectories -
             # so each file is mounted individually via subPath rather than
             # the whole ConfigMap as one subdirectory.
-            {{- range $set := splitList " " (include "podiumd-minikube.wiremockSets" .) }}
-            {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/mappings/*.json" $set) }}
-            - name: {{ $set }}-mappings
+            {{- range $path, $_ := .Files.Glob (printf "%s/mappings/*.json" $dir) }}
+            - name: mappings
               mountPath: /home/wiremock/mappings/{{ base $path }}
               subPath: {{ base $path }}
             {{- end }}
-            {{- range $path, $_ := $.Files.Glob (printf "vendor/dimpact-zaakafhandelcomponent/wiremocks/%s/__files/*" $set) }}
-            - name: {{ $set }}-files
+            {{- range $path, $_ := .Files.Glob (printf "%s/__files/*.json" $dir) }}
+            - name: files
               mountPath: /home/wiremock/__files/{{ base $path }}
               subPath: {{ base $path }}
             {{- end }}
-            {{- end }}
       volumes:
-        {{- range $set := splitList " " (include "podiumd-minikube.wiremockSets" .) }}
-        - name: {{ $set }}-mappings
+        - name: mappings
           configMap:
-            name: wiremock-{{ $set }}-mappings
-        - name: {{ $set }}-files
+            name: wiremock-bag-wiremock-mappings
+        - name: files
           configMap:
-            name: wiremock-{{ $set }}-files
-        {{- end }}
+            name: wiremock-bag-wiremock-files

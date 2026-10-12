@@ -83,8 +83,8 @@ colima start --runtime docker --arch aarch64 --vm-type vz --vz-rosetta \
 ## `podiumd-minikube provision-cluster`'s own Apple Silicon fix
 
 Two bugs specific to this architecture combination are already fixed in
-`podiumd-minikube provision-cluster` (see that file's own comments for the full
-"confirmed live" detail) - documented here as the *reason*, not a to-do:
+`podiumd-minikube provision-cluster` (see `src/podiumd_minikube/provision.py`
+and plan.md for the "confirmed live" detail) - documented here as the *reason*, not a to-do:
 
 1. **Don't set `DOCKER_DEFAULT_PLATFORM=linux/amd64` globally.** Doing so
    forces the minikube *node* container itself to be amd64 - but

@@ -11,8 +11,7 @@ changes is in `.claude/plans/plan.md`.
 
 - `wiremocks/bag-wiremock/`
   ← `scripts/docker-compose/imports/bag-wiremock/` (`mappings/`, `__files/`).
-  Read by `templates/wiremock/` through
-  `podiumd-minikube.wiremockSets`. ZAC's SmartDocuments mappings are not
+  Read by `templates/wiremock/`. ZAC's SmartDocuments mappings are not
   copied: SmartDocuments is off in ZAC, as in every reference environment.
 - `postgres/fixtures/openzaak/{01,05,07}-*.sql`
   ← `scripts/docker-compose/imports/openzaak-database/database/`: `01`
