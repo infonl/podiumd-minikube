@@ -7,10 +7,11 @@ themselves: a zone `local` would also capture cluster.local and break all
 in-cluster DNS. A separate server block leaves minikube's own configuration
 untouched; CoreDNS' reload plugin picks the change up.
 
-Pods inherit the host's search domains (e.g. info.local). With ndots:5, musl
-(Alpine) tries keycloak.local.info.local first and stops at a "no data"
-answer from the host's DNS, so the block also answers those names, with
-NXDOMAIN, and musl moves on to keycloak.local itself.
+Pods inherit the host's search domains (e.g. info.local, home). With ndots:5,
+musl (Alpine) tries objecten.podiumd-minikube.svc.cluster.local.home and
+keycloak.local.home before the name itself and stops at a "no data" answer
+from the host's DNS (a home router gives one for every name), so CoreDNS
+answers each outside search domain with NXDOMAIN and musl moves on.
 """
 
 import json
@@ -25,17 +26,21 @@ END = "# END podiumd-minikube ingress hosts"
 
 
 def outside_search_domains(resolv_conf: str) -> list[str]:
-    """Search domains in resolv_conf that are not the cluster's own."""
+    """Search domains in resolv_conf other than cluster.local, its subdomains and its parents (such as local)."""
     for line in resolv_conf.splitlines():
         if line.startswith("search "):
-            return [domain for domain in line.split()[1:] if not domain.endswith("cluster.local")]
+            return [
+                domain
+                for domain in line.split()[1:]
+                if not ("cluster.local".endswith(domain) or domain.endswith("cluster.local"))
+            ]
     return []
 
 
 def corefile_with_hosts(corefile: str, ip: str, hosts: list[str], search_domains: list[str]) -> str:
     """corefile with this project's server block (replacing an earlier one) answering hosts with ip.
 
-    host.<search domain> names get their own block answering NXDOMAIN.
+    The search domains get their own block answering NXDOMAIN.
     """
     lines = corefile.rstrip("\n").splitlines()
     if BEGIN in lines:
@@ -48,9 +53,9 @@ def corefile_with_hosts(corefile: str, ip: str, hosts: list[str], search_domains
         "    }",
         "}",
     ]
-    expanded = [f"{host}.{domain}:53" for domain in search_domains for host in hosts]
-    if expanded:
-        block += [f"{' '.join(expanded)} {{", "    template ANY ANY {", "        rcode NXDOMAIN", "    }", "}"]
+    if search_domains:
+        zones = " ".join(f"{domain}:53" for domain in search_domains)
+        block += [f"{zones} {{", "    template ANY ANY {", "        rcode NXDOMAIN", "    }", "}"]
     return "\n".join([*lines, BEGIN, *block, END]) + "\n"
 
 

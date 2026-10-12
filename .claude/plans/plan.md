@@ -6078,3 +6078,17 @@ redirects there; the admin console moved to keycloak-admin.local
 (keycloak.local/admin/ is 404); the admin REST API answers 401 anonymously
 on both hosts. No allowlist: no
 public access here. No memory cost.
+
+## KISS sync failed after a network change: musl and the host's search domain
+
+From 17:02 CEST the KISS Elasticsearch syncs (kiss-elastic-sync, Alpine)
+crashed with exit code 139 after `Name does not resolve
+(objecten.podiumd-minikube.svc.cluster.local:80)`, and podiumd-tests' KISS
+search tests failed. The laptop had moved to a network whose search domain
+is `home`; pods inherit it. With ndots:5, musl first tries
+objecten.podiumd-minikube.svc.cluster.local.home, and the home router answers
+every name with NOERROR and no data, so musl stops there. dns.py only covered
+`<ingress host>.<search domain>`; CoreDNS now answers each outside search
+domain as a whole with NXDOMAIN (never `local` or another parent of
+cluster.local, whose zone would capture the cluster's own names). Applied with
+dns.apply_hosts; a manual vac sync then finished.
