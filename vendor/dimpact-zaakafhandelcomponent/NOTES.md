@@ -10,16 +10,16 @@ changes is in `.claude/plans/plan.md`.
 ## Copied verbatim
 
 - `wiremocks/bag-wiremock/`
-  ← `scripts/docker-compose/imports/bag-wiremock/` (`mappings/`, `__files/`,
-  `README.md`). Read by `templates/wiremock/` through
+  ← `scripts/docker-compose/imports/bag-wiremock/` (`mappings/`, `__files/`).
+  Read by `templates/wiremock/` through
   `podiumd-minikube.wiremockSets`. ZAC's SmartDocuments mappings are not
   copied: SmartDocuments is off in ZAC, as in every reference environment.
-- `postgres/fixtures/openzaak/*.sql` (10 files)
-  ← `scripts/docker-compose/imports/openzaak-database/database/*.sql`.
-  Read by `templates/postgres/configmap-fixtures.yaml`, which loads only
-  `01` (Applicaties, catalogus), `05` (zaaktype-test-1) and `07` (sequence
-  resets only), leaving out the other zaaktypes, the demo documents and the
-  docker-compose services nothing here uses.
+- `postgres/fixtures/openzaak/{01,05,07}-*.sql`
+  ← `scripts/docker-compose/imports/openzaak-database/database/`: `01`
+  (Applicaties, catalogus), `05` (zaaktype-test-1), `07` (sequence resets
+  only). The other zaaktypes' files are not copied. Read by
+  `templates/postgres/configmap-fixtures.yaml`, which leaves out the demo
+  documents and the docker-compose services nothing here uses.
 - `postgres/fixtures/{openklant,openarchiefbeheer}/1-setup-applicatie.sql`
   ← `scripts/docker-compose/imports/{openklant,openarchiefbeheer}-database/database/`.
   Read by `templates/postgres/configmap-fixtures.yaml`.
