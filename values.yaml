@@ -3798,7 +3798,9 @@ monitoring-logging:
     ingester:
       replicas: 0
   tempo:
-    enabled: true # chart default is false - this project already has tracing active today (templates/metrics/tempo.yaml), keep it on when switching implementations
+    # Deviation: neither ExternalsPodiumD nor podiumd-infra runs Tempo; ZAC's
+    # docker-compose stack does, and ZAC exports its traces to it.
+    enabled: true
     persistence:
       storageClassName: standard
       size: 2Gi

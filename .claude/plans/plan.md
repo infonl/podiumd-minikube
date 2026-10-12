@@ -5828,3 +5828,11 @@ gateway workers, Grafana without plugin downloads, Tempo's
 deviation; the monitoringLogging run may use at most 1 GiB more than the
 metrics profile, guarded by test_memory.py. Starts after podiumd-tests'
 tier on 4.9.4.
+
+Tempo, checked 2026-10-12: ExternalsPodiumD has none (chart default; its
+otel-collector exports metrics to Prometheus only) and podiumd-infra's
+monitoring template turns Tempo and the otel-collector off (Loki-only
+Grafana). Tempo comes from ZAC's docker-compose stack, which this project
+reproduces: extra opt-in functionality (metrics and monitoringLogging
+profiles), not a different setting for something the estates run. No
+podiumd-tests test can depend on it.
