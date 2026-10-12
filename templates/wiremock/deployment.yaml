@@ -26,7 +26,14 @@ spec:
       containers:
         - name: wiremock
           image: wiremock/wiremock:3.13.2
-          args: ["--disable-gzip", "--verbose"]
+          # The journal keeps every request on the heap without a cap (OOMKilled
+          # after a few days); nothing reads it beyond the last requests.
+          args: ["--disable-gzip", "--verbose", "--max-request-journal-entries=1000"]
+          env:
+            # Explicit heap: this JVM does not see the container limit and sized
+            # its heap from the node (23 GiB).
+            - name: JAVA_OPTS
+              value: "-Xms16m -Xmx64m -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
           ports:
             - name: http
               containerPort: 8080

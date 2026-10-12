@@ -6110,3 +6110,18 @@ domains; CoreDNS (dnsPolicy Default) forwards to the same nameserver as
 before. dns.py's search-domain block and `outside_search_domains` are gone.
 Pods started before keep their search domains until they restart: applied
 live by restarting CoreDNS and every running pod in podiumd-minikube.
+
+## WireMock OOMKill (user: "here investigate wiremock")
+
+WireMock was OOMKilled at 18:52 CEST (anon RSS 254 MiB, limit 256Mi). Two
+causes. Its JVM (JDK 17.0.19) does not see the container limit:
+`-XX:+PrintFlagsFinal` in the pod shows MaxHeapSize 23968 MiB and G1, while
+Solr and Elasticsearch in the same node do see theirs; memory-tuning.md
+wrongly said the limit gives a 64 MiB heap. And WireMock's request journal
+keeps every request without a cap. A local copy of the image (256m, BAG
+mappings) under 8000 requests: with -Xmx64m alone the heap ran out after
+about 5900 requests; with `--max-request-journal-entries=1000` as well, RSS
+stays at 123 MiB and 8000 requests take 5 s. Nothing reads the journal
+(podiumd-tests and this repo checked). Now: explicit heap -Xmx64m, serial
+GC, C1 only, journal capped at 1000. Deviation from the docker-compose
+stack: capacity only.
