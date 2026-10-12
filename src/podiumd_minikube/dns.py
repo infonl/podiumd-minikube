@@ -10,7 +10,7 @@ untouched; CoreDNS' reload plugin picks the change up.
 Pods inherit the host's search domains (e.g. info.local, home). With ndots:5,
 musl (Alpine) tries objecten.podiumd-minikube.svc.cluster.local.home and
 keycloak.local.home before the name itself and stops at a "no data" answer
-from the host's DNS (a home router gives one for every name), so CoreDNS
+from the host's DNS (a VPN's DNS servers give one for every name), so CoreDNS
 answers each outside search domain with NXDOMAIN and musl moves on.
 """
 

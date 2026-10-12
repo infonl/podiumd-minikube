@@ -6085,9 +6085,13 @@ From 17:02 CEST the KISS Elasticsearch syncs (kiss-elastic-sync, Alpine)
 crashed with exit code 139 after `Name does not resolve
 (objecten.podiumd-minikube.svc.cluster.local:80)`, and podiumd-tests' KISS
 search tests failed. The laptop had moved to a network whose search domain
-is `home`; pods inherit it. With ndots:5, musl first tries
-objecten.podiumd-minikube.svc.cluster.local.home, and the home router answers
-every name with NOERROR and no data, so musl stops there. dns.py only covered
+is `home` (from the Wi-Fi's DHCP, since at least 09:32); pods inherit it.
+With ndots:5, musl first tries
+objecten.podiumd-minikube.svc.cluster.local.home. At 17:03 the VPN (tun0)
+connected and NetworkManager put its DNS servers 192.168.10.3 and
+192.168.10.10 first; they answer every such name with NOERROR and no data
+(the home router 192.168.0.1 and 193.47.158.254/255 answer NXDOMAIN), so musl
+stops there. The fix commit's message blames the home router; that is wrong. dns.py only covered
 `<ingress host>.<search domain>`; CoreDNS now answers each outside search
 domain as a whole with NXDOMAIN (never `local` or another parent of
 cluster.local, whose zone would capture the cluster's own names). Applied with
