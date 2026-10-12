@@ -19,8 +19,27 @@ podiumd-tests' versions and double the work.
   routes); one HTTP call into an app is fine when it is the only way to see
   that, never a functional scenario.
 - An application check (login flows, API behaviour, mail, forms, health of
-  an app) goes to podiumd-tests: hand it over through the handoff file.
+  an app) goes to podiumd-tests: send it to its session.
 - After a deploy, `podiumd-tests run --env minikube --tier smoke`
   (read-only, no lock) checks that the applications answer.
 
-Related: [[reuse-existing-logic]], [[remove-unused]].
+## Division of work with podiumd-tests
+
+Agreed 2026-10-12; podiumd-tests keeps its side in its
+`.claude/memory/coordination-podiumd-minikube.md`. Every object has one
+manager: two repositories that both create or prune it undo each other.
+
+- podiumd-minikube: the components and their wiring, the edge and its
+  routes, the Keycloak clients and client roles of helm-charts'
+  `charts/podiumd/templates/keycloak-podiumd-realm-config.yaml`, the Open
+  Notificaties kanalen in `values.yaml` `notifications_kanalen_config` (as
+  ExternalsPodiumD and podiumd-infra), and the opt-in Frank!Gateway with
+  OpenBao (profile `frankgateway`).
+- podiumd-tests' bootstrap creates and removes: test users, test clients and
+  tokens, realm roles, the DigiD/eHerkenning OIDC configuration, Open Inwoner
+  CMS pages and contact form, Open Formulieren test forms, and any further
+  kanalen. It deploys its own mock server (webhook callbacks, NotifyNL,
+  Worldline) from its `infra/`. podiumd-minikube creates none of these.
+- Neither: eSuite (external) and Alertmanager routes.
+
+Related: [[reuse-existing-logic]], [[remove-unused]], [[reference-environments]].
