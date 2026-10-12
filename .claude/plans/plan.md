@@ -5809,3 +5809,22 @@ activated venv; `test_cli.py` keeps the symlinks and `cli.COMMANDS` equal.
 `run_python_checks` upgrades `.venv` at most once a day and whenever
 `pyproject.toml` changes, and `.github/workflows/checks.yml` runs it on
 every push to main and every pull request, as podiumd-tests does.
+
+## monitoring-logging footprint: plan (user: "keep tempo, budget 1 GiB, start after the tier")
+
+monitoring-logging was never tuned or measured; its components run on the
+chart's defaults apart from Loki SingleBinary, no caches and Prometheus 1d
+retention. ExternalsPodiumD (`dimp/test/monitoring.yml`) runs less: no
+node-exporter, kube-state-metrics, kubeApiServer/kubeDns scrapes,
+pushgateway, Loki canary or Loki test, and no Tempo. Plan, in this order:
+measure `--full` with monitoringLogging against `--full` with the plain
+metrics profile (after a podiumd-tests full tier and 5 idle minutes); align
+with ExternalsPodiumD; then capacity only: GOMEMLIMIT for every Go
+container (the operator-built Prometheus StatefulSet is out of
+`limit_runtimes`' reach, like ECK's pods), explicit requests and limits
+from the measurements, Prometheus `retentionSize`, Loki's ingester and
+gateway workers, Grafana without plugin downloads, Tempo's
+`block_retention`. Decisions: Tempo stays on (ZAC's traces), a recorded
+deviation; the monitoringLogging run may use at most 1 GiB more than the
+metrics profile, guarded by test_memory.py. Starts after podiumd-tests'
+tier on 4.9.4.
