@@ -5880,3 +5880,15 @@ node-exporter 29, pushgateway 21, Loki gateway 16, Prometheus
 config-reloader 13. kube-apiserver +457 MiB (watches of the operator,
 kube-state-metrics, Alloy and the sidecars). Tier 11:00 instead of 9:22.
 Budget: at most 1 GiB above round 1, so about 1.2 GiB to save.
+
+monitoring-logging Phase 1, as ExternalsPodiumD: kube-state-metrics,
+node-exporter, prometheus-pushgateway, the kube-apiserver and kube-dns
+scrapes and the default PrometheusRules off; the operator's and
+config-reloader's resources and Prometheus' logLevel and monitor selectors
+copied; Loki SingleBinary gets podiumd-infra's requests and limits (its
+SingleBinary Loki; ExternalsPodiumD runs Distributed). The ~100-line copy of
+Alloy's River config differed from the chart's only in comments: replaced by
+the chart's `logCollectionNamespaces` (in 1.0.14 and 1.0.15). Prometheus
+keeps 1d retention (ExternalsPodiumD 7d), capacity only. The deploy pruned
+41 objects (29 PrometheusRules, the three components with their Services,
+ServiceMonitors and ServiceAccounts), with --force-prune.
