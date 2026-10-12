@@ -3576,6 +3576,11 @@ monitoring-logging:
         limits:
           cpu: "1"
           memory: 1Gi
+      # Capacity only: collect at 1.5x the live heap instead of 2x (it grew
+      # 202 -> 328 MiB over a day of tiers under its 1Gi GOMEMLIMIT).
+      extraEnv:
+        - name: GOGC
+          value: "50"
     minio:
       enabled: false # only needed by Distributed mode's S3-backed storage
     loki:
