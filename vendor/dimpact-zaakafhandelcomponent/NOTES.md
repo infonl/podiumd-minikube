@@ -31,7 +31,8 @@ changes is in `.claude/plans/plan.md`.
 - `metrics/{prometheus,grafana-datasources}.yaml`
   ← `scripts/docker-compose/imports/{prometheus,grafana}/`. Changes: no
   Tempo (neither reference environment runs it), so no `tempo` scrape job
-  and no Tempo datasource, Prometheus is the default; Prometheus scrapes
+  and no Tempo datasource (`deleteDatasources` removes it from Grafana's
+  database on clusters deployed before), Prometheus is the default; Prometheus scrapes
   ZAC's WildFly metrics at `zac-admin:9990`. Read by `templates/metrics/`
   (the `metrics` profile without `monitoringLogging`).
 

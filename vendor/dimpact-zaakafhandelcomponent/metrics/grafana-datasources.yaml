@@ -1,5 +1,10 @@
 apiVersion: 1
 
+# Clusters deployed before Tempo was removed keep it in Grafana's database.
+deleteDatasources:
+  - name: Tempo
+    orgId: 1
+
 datasources:
   - name: Prometheus
     type: prometheus
