@@ -42,7 +42,7 @@ def main() -> int:
     elif args.command == "take":
         lock.take(args.what, who=args.who)
         who = "" if args.who == lock.person() else f" --who {args.who}"
-        print(f"taken; release with: ./scripts/cluster-lock{who} release")
+        print(f"taken; release with: ./bin/cluster-lock{who} release")
     elif args.command == "release":
         found = lock.release_held_by(args.who)
         if found is not None and found.who == args.who:

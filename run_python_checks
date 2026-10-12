@@ -10,8 +10,8 @@ usage() {
 Usage: run_python_checks [-h|--help]
 
 Runs ruff check, shellcheck, ruff format --check, jscpd, pymarkdown,
-vulture, bandit, basedpyright, pylint and pytest (scripts/tests/ only;
-tests/ needs a live cluster) on scripts/ and tests/, fastest first. Stops at
+vulture, bandit, basedpyright, pylint and pytest (bin/tests/ only;
+tests/ needs a live cluster) on bin/ and tests/, fastest first. Stops at
 the first failure. Uses .venv/bin when present.
 HELP
 }
@@ -40,9 +40,9 @@ step() {
 # Arrays keep each file name one argument (SC2046). set -e misses failures
 # inside <(...), so `wait "$!"` checks each one (SC2312).
 # Extensionless Python scripts must be passed to every tool explicitly.
-mapfile -t python_scripts < <(find scripts -maxdepth 1 -type f -perm -u+x -exec grep -l '^#!.*python' {} +)
+mapfile -t python_scripts < <(find bin -maxdepth 1 -type f -perm -u+x -exec grep -l '^#!.*python' {} +)
 wait "$!"
-mapfile -t unit_test_files < <(find scripts/tests -name '*.py' -not -path '*/__pycache__/*' | sort)
+mapfile -t unit_test_files < <(find bin/tests -name '*.py' -not -path '*/__pycache__/*' | sort)
 wait "$!"
 mapfile -t live_test_files < <(find tests -name '*.py' -not -path '*/__pycache__/*' | sort)
 wait "$!"
@@ -55,7 +55,7 @@ mapfile -t shell_scripts < <(
 wait "$!"
 mapfile -t markdown_files < <(find . -maxdepth 2 \( -path ./.venv -o -path ./vendor -o -path ./.claude \) -prune -o -name '*.md' -print | sort)
 wait "$!"
-code=(scripts/lib "${python_scripts[@]}")
+code=(bin/lib "${python_scripts[@]}")
 
 tests_pylint_disable=$(python3 -c '
 import tomllib
@@ -72,12 +72,12 @@ step "pymarkdown (${#markdown_files[@]} file(s))" pymarkdown --config pyproject.
 step "vulture (dead code)" vulture "${code[@]}"
 # Test directories excluded: every assert would flag B101.
 step "bandit (security)" bandit -c pyproject.toml -r "${code[@]}" -q
-step "basedpyright (type checking)" basedpyright "${code[@]}" scripts/tests tests
+step "basedpyright (type checking)" basedpyright "${code[@]}" bin/tests tests
 step "pylint (lib + scripts)" pylint "${code[@]}"
 # Separate runs: each test directory imports its own conftest. PYTHONPATH
 # lets pylint resolve lib.* and conftest without analyzing them.
-step "pylint (scripts/tests)" env PYTHONPATH=scripts:scripts/tests pylint --disable="$tests_pylint_disable" "${unit_test_files[@]}"
+step "pylint (bin/tests)" env PYTHONPATH=bin:bin/tests pylint --disable="$tests_pylint_disable" "${unit_test_files[@]}"
 step "pylint (tests)" env PYTHONPATH=tests pylint --disable="$tests_pylint_disable" "${live_test_files[@]}"
-step "pytest (scripts/tests)" python3 -m pytest -q
+step "pytest (bin/tests)" python3 -m pytest -q
 
 echo "=== all checks passed ==="

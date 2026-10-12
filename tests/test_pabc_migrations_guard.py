@@ -1,5 +1,5 @@
 """
-Verifies scripts/apply-pabc-migrations actually prevents the destructive
+Verifies bin/apply-pabc-migrations actually prevents the destructive
 scenario it exists for: the pabc-migrations Job clears PABC's database
 before reloading its seed dataset every time it's created (confirmed live,
 not idempotent), so recreating it against an already-seeded database must
@@ -24,9 +24,9 @@ import pytest
 from conftest import NAMESPACE
 from conftest import kubectl
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-SCRIPT_PATH = str(SCRIPTS_DIR / "apply-pabc-migrations")
-sys.path.insert(0, str(SCRIPTS_DIR))
+BIN_DIR = Path(__file__).resolve().parent.parent / "bin"
+SCRIPT_PATH = str(BIN_DIR / "apply-pabc-migrations")
+sys.path.insert(0, str(BIN_DIR))
 from lib import lock  # noqa: E402 - needs the sys.path entry above
 from lib.process import UserError  # noqa: E402
 

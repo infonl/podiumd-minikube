@@ -1,7 +1,7 @@
 # Test scope: this project's code, not what runs inside minikube
 
-The tests here (`tests/` live, `scripts/tests/` unit) cover the code of this
-project: `scripts/`, `templates/`, the render fixups in `scripts/lib/`, and
+The tests here (`tests/` live, `bin/tests/` unit) cover the code of this
+project: `bin/`, `templates/`, the render fixups in `bin/lib/`, and
 the wiring `values.yaml` adds (a fixup that rewrites a URL, a realm sync, an
 init SQL, a resource the deploy must create). They do not test how PodiumD's
 applications behave; podiumd-tests does that, on minikube and on the real

@@ -195,9 +195,7 @@ def _pin_cluster_ip() -> None:
     live = kube.kubectl("get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}").strip()
     if live == EDGE_CLUSTER_IP:
         return
-    print(
-        f"  edge Service has ClusterIP {live}, not {EDGE_CLUSTER_IP}: recreating it (once; then ./scripts/update-hosts)"
-    )
+    print(f"  edge Service has ClusterIP {live}, not {EDGE_CLUSTER_IP}: recreating it (once; then ./bin/update-hosts)")
     kube.kubectl("delete", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE)
 
     def pinned() -> bool:
@@ -208,16 +206,16 @@ def _pin_cluster_ip() -> None:
         return result.stdout.strip() == EDGE_CLUSTER_IP
 
     if not polling.wait_until(pinned, timeout=120, interval=3):
-        msg = f"NGF did not recreate {EDGE_SERVICE} with ClusterIP {EDGE_CLUSTER_IP}: run scripts/provision-cluster"
+        msg = f"NGF did not recreate {EDGE_SERVICE} with ClusterIP {EDGE_CLUSTER_IP}: run bin/provision-cluster"
         raise process.UserError(msg)
 
 
 def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
     """Applies the certificate, Gateway and routes; deletes routes no longer rendered."""
     if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
-        msg = f"NGINX Gateway Fabric is not installed in namespace '{EDGE_NAMESPACE}': run scripts/provision-cluster"
+        msg = f"NGINX Gateway Fabric is not installed in namespace '{EDGE_NAMESPACE}': run bin/provision-cluster"
         raise process.UserError(msg)
-    print("\nApplying the NGINX Gateway Fabric Gateway and routes (see scripts/lib/gateway.py)...")
+    print("\nApplying the NGINX Gateway Fabric Gateway and routes (see bin/lib/gateway.py)...")
     objects = [
         tls.certificate(EDGE_NAMESPACE, hosts),
         gateway_manifest(),

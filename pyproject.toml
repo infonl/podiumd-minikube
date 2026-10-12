@@ -1,5 +1,5 @@
 # ruff, pylint, isort, vulture, bandit, basedpyright, pymarkdown and pytest
-# config for all Python code in this repository: scripts/ (extensionless
+# config for all Python code in this repository: bin/ (extensionless
 # scripts, lib/, tests/) and the live-cluster suite in tests/. vendor/ holds
 # verbatim upstream copies and is not checked.
 
@@ -87,7 +87,7 @@ force-single-line = true
 lines-between-types = 1
 # No target-version is set, so ruff doesn't know tomllib (3.11+) is stdlib.
 extra-standard-library = ["tomllib"]
-# scripts/ puts its own directory on sys.path, so lib.* is first-party.
+# bin/ puts its own directory on sys.path, so lib.* is first-party.
 known-first-party = ["lib"]
 
 [tool.ruff.lint.flake8-bandit]
@@ -96,9 +96,9 @@ check-typed-exception = true  # Enable additional checks for try-except-pass
 [tool.ruff.lint.per-file-ignores]
 # Extensionless scripts patch sys.path before importing lib.* (E402) and are
 # no package (INP001).
-"scripts/*" = ["E402", "INP001"]
+"bin/*" = ["E402", "INP001"]
 
-# tests/ and scripts/tests/: pytest asserts, fixture/mock params (ARG),
+# tests/ and bin/tests/: pytest asserts, fixture/mock params (ARG),
 # private-helper access (SLF001), no __init__.py (INP001), composite asserts
 # (PT018), unused unpacked vars (RUF059), fixed-argv kubectl/helm calls
 # (S603/S607), fake tokens and dev passwords (S105/S106). bandit does not
@@ -169,7 +169,7 @@ extra_standard_library = ["tomllib"]
 known_first_party = ["lib"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
-# vulture runs on scripts/lib/ + the scripts only (see run_python_checks):
+# vulture runs on bin/lib/ + the scripts only (see run_python_checks):
 # test fixtures and mock params look like dead code. False positives go here,
 # each with its reason.
 [tool.vulture]
@@ -193,10 +193,10 @@ typeCheckingMode = "strict"
 reportUnusedImport = false  # done by ruff F401
 reportUntypedBaseClass = false # done by ruff N801
 
-# Extensionless scripts import lib.* from scripts/.
+# Extensionless scripts import lib.* from bin/.
 [[tool.basedpyright.executionEnvironments]]
-root = "scripts/tests"
-extraPaths = ["scripts"]
+root = "bin/tests"
+extraPaths = ["bin"]
 reportMissingParameterType = false
 reportUnknownLambdaType = false
 reportUnknownArgumentType = false
@@ -204,10 +204,10 @@ reportUnknownParameterType = false
 reportUnknownMemberType = false
 reportUnknownVariableType = false
 
-# Live-cluster suite: test modules import helpers from tests/conftest.py, and lib.* (the lock) from scripts/.
+# Live-cluster suite: test modules import helpers from tests/conftest.py, and lib.* (the lock) from bin/.
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
-extraPaths = ["tests", "scripts"]
+extraPaths = ["tests", "bin"]
 reportMissingParameterType = false
 reportUnknownLambdaType = false
 reportUnknownArgumentType = false
@@ -216,7 +216,7 @@ reportUnknownMemberType = false
 reportUnknownVariableType = false
 
 [[tool.basedpyright.executionEnvironments]]
-root = "scripts"
+root = "bin"
 
 [tool.pymarkdown]
 # Long prose lines and headings in README/plan text are fine.
@@ -225,6 +225,6 @@ plugins.md013.enabled = false
 [tool.pytest.ini_options]
 # A plain `pytest` from the repo root runs the offline unit tests; the
 # live-cluster suite runs from tests/ (its own pytest.ini).
-testpaths = ["scripts/tests"]
-pythonpath = ["scripts", "scripts/tests"]
+testpaths = ["bin/tests"]
+pythonpath = ["bin", "bin/tests"]
 addopts = "-ra"

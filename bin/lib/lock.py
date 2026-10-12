@@ -70,7 +70,7 @@ def describe(hold: Hold, now: datetime | None = None) -> str:
     age = int(((now or datetime.now(UTC)) - hold.since).total_seconds())
     text += f" for {age // 3600}h{age % 3600 // 60:02d}m" if age >= 3600 else f" for {age // 60}m"
     if age > STALE_SECONDS:
-        text += "; if its holder is gone: ./scripts/cluster-lock break"
+        text += "; if its holder is gone: ./bin/cluster-lock break"
     return text
 
 

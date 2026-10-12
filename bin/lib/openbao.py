@@ -144,7 +144,7 @@ def bootstrap(render: manifests.Render) -> None:
     """Initialises OpenBao once, mints the config token once, re-runs the openbao-config Job, wires the outway."""
     if not kube.exists(f"statefulset/{RELEASE_NAME}-openbao"):
         return
-    print("Bootstrapping OpenBao (see scripts/lib/openbao.py)...")
+    print("Bootstrapping OpenBao (see bin/lib/openbao.py)...")
     status = polling.wait_until(_status, timeout=STARTUP_TIMEOUT, interval=5)
     if status is None:
         msg = f"OpenBao pod {POD} did not answer within {STARTUP_TIMEOUT}s: check `kubectl logs {POD}`"

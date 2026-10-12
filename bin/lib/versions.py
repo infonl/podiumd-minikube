@@ -16,7 +16,7 @@ def _require_monitoring_logging_entry(example: str, versions_file: Path) -> None
     if dependency.selection("monitoringLogging", versions_file) is None:
         msg = (
             "no monitoring-logging version recorded yet, and Helm still fetches it when disabled: "
-            f"run ./scripts/set-podiumd-version {example} <monitoring-logging-version> once first"
+            f"run ./bin/set-podiumd-version {example} <monitoring-logging-version> once first"
         )
         raise UserError(msg)
 
@@ -116,7 +116,7 @@ def show(charts_dir: Path = CHARTS_DIR, versions_file: Path = VERSIONS_FILE, val
         print(f"{chart}:")
         lines = describe(key, charts_dir, versions_file)
         if not lines:
-            lines = ["  Not configured - run ./scripts/set-podiumd-version."]
+            lines = ["  Not configured - run ./bin/set-podiumd-version."]
             missing.append(chart)
         print("\n".join(lines))
         print()

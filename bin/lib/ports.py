@@ -67,10 +67,10 @@ def show_port_mappings() -> None:
     if ip:
         print(
             f"Edge (NGINX Gateway Fabric) LoadBalancer IP: {ip} "
-            "(reachable while 'minikube tunnel' runs, see scripts/setup-tunnel)"
+            "(reachable while 'minikube tunnel' runs, see bin/setup-tunnel)"
         )
     else:
-        print("The edge has no external IP yet - 'minikube tunnel' isn't running (see scripts/setup-tunnel).")
+        print("The edge has no external IP yet - 'minikube tunnel' isn't running (see bin/setup-tunnel).")
     print("  port 80  (web)        - HTTP; every hostname below is routed by Host header")
     print("  port 443 (websecure)  - listener without TLS: no Ingress sets spec.tls\n")
     services = {item["metadata"]["name"]: item for item in kube.get_json("svc", "-n", NAMESPACE)["items"]}

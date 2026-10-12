@@ -1,1 +1,1 @@
-"""Shared code for the scripts in scripts/."""
+"""Shared code for the scripts in bin/."""

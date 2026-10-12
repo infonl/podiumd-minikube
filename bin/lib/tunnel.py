@@ -17,7 +17,7 @@ TUNNEL_PATTERN = "minikube tunnel"
 TIMEOUT_SECONDS = 30
 # minikube's default service network, which holds the LoadBalancer IPs the tunnel hands out.
 SERVICE_CIDR = "10.96.0.0/12"
-STOP_HINT = "Stop it with: ./scripts/setup-tunnel stop"
+STOP_HINT = "Stop it with: ./bin/setup-tunnel stop"
 ETC_HOSTS = Path("/etc/hosts")
 
 
@@ -71,7 +71,7 @@ def stop_tunnel() -> None:
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
     print(f"Removing the route {SERVICE_CIDR} via {node_ip} (sudo may ask for your password)...")
     process.run(route_args("del", node_ip), capture=False, check=False)
-    print("Tunnel stopped; the *.local hosts are unreachable from this machine until ./scripts/setup-tunnel.")
+    print("Tunnel stopped; the *.local hosts are unreachable from this machine until ./bin/setup-tunnel.")
 
 
 def replace_hosts_line(text: str, line: str) -> str:
@@ -90,7 +90,7 @@ def hosts_hint(ip: str) -> str:
     current = ETC_HOSTS.read_text(encoding="utf-8")
     if replace_hosts_line(current, wanted_hosts_line(ip)) == current:
         return "/etc/hosts already points the *.local hosts at it."
-    return "Run ./scripts/update-hosts to add/refresh the /etc/hosts entry for it."
+    return "Run ./bin/update-hosts to add/refresh the /etc/hosts entry for it."
 
 
 def update_hosts() -> None:
@@ -98,7 +98,7 @@ def update_hosts() -> None:
     kube.require_minikube_context()
     ip = kube.edge_ip()
     if not ip:
-        msg = "the edge has no external IP yet: run ./scripts/setup-tunnel first"
+        msg = "the edge has no external IP yet: run ./bin/setup-tunnel first"
         raise UserError(msg)
     current = ETC_HOSTS.read_text(encoding="utf-8")
     line = wanted_hosts_line(ip)

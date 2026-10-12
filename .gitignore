@@ -1,8 +1,8 @@
 # Helm dependency tarballs - fetched fresh via `helm dependency update`,
-# which scripts/provision-cluster already runs as part of setting up any
+# which bin/provision-cluster already runs as part of setting up any
 # cluster this chart deploys to. Originally committed deliberately (matching
 # podiumd-infra's own convention) for offline reproducibility without that
-# step - reversed once scripts/provision-cluster existed to run it automatically,
+# step - reversed once bin/provision-cluster existed to run it automatically,
 # and once this 3.87MB tarball turned out to be the direct root cause of a
 # real bug: Helm's release record embeds the entire resolved chart including
 # this dependency, exceeding Kubernetes' hardcoded 3MB API request-size
@@ -31,8 +31,8 @@ __pycache__/
 .kube/
 
 # This developer's own local podiumd/monitoring-logging version selection
-# - written by scripts/set-podiumd-version, read by
-# scripts/lib/dependency.py. Deliberately never committed:
+# - written by bin/set-podiumd-version, read by
+# bin/lib/dependency.py. Deliberately never committed:
 # Chart.yaml no longer holds a real version for either dependency at all
 # (see its own comment there), specifically so a personal "let me test a
 # different version" choice never shows up as a shared-file diff the way
@@ -47,7 +47,7 @@ tests-johnb00/.env.johnb00
 # Written into the working directory by the claude-token-reducer Claude Code plugin.
 session_memory.json
 
-# The local CA (scripts/lib/pki.py); one per checkout, its key never leaves it.
+# The local CA (bin/lib/pki.py); one per checkout, its key never leaves it.
 .pki/
-# OpenBao's seal key, root token and recovery key (scripts/lib/openbao.py).
+# OpenBao's seal key, root token and recovery key (bin/lib/openbao.py).
 .openbao/

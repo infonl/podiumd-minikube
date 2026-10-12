@@ -168,7 +168,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     kube.kubectl("apply", "-f", "-", stdin=namespace)
 
     if not pki.CA_CERT.is_file():
-        msg = f"no local CA in {pki.PKI_DIR}: run scripts/provision-cluster (it creates the CA and its issuer)"
+        msg = f"no local CA in {pki.PKI_DIR}: run bin/provision-cluster (it creates the CA and its issuer)"
         raise process.UserError(msg)
     # Before anything with pods: every pod, the storage Job included, mounts it.
     pki.apply_trust(NAMESPACE)
@@ -190,12 +190,12 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     print()
     keycloak.sync_realm(zac_pkce=selected.zac_pkce)
     openbao.bootstrap(render)
-    print("\nApplying pabc-migrations (guarded - see scripts/lib/pabc.py)...")
+    print("\nApplying pabc-migrations (guarded - see bin/lib/pabc.py)...")
     pabc.apply_migrations(force=False)
     print(f"\nPruning {', '.join(prune.PRUNABLE_KINDS)} not part of this render...")
     prune.prune([*render.docs, *render.large_configmaps], force=force_prune)
     _wait_ready(render)
-    print("\nDone. Next: ./scripts/setup-tunnel for external reachability, or run the suite in tests/ to verify.")
+    print("\nDone. Next: ./bin/setup-tunnel for external reachability, or run the suite in tests/ to verify.")
 
 
 def rolled_out(workload: dict[str, Any]) -> bool:

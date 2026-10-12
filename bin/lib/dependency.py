@@ -31,7 +31,7 @@ Mode = Literal["version", "path"]
 DEPENDENCIES = {"podiumd": "podiumd", "monitoringLogging": "monitoring-logging"}
 
 USAGE_HINT = (
-    "run ./scripts/set-podiumd-version <version> <monitoring-logging-version> "
+    "run ./bin/set-podiumd-version <version> <monitoring-logging-version> "
     "(or <version> --disable-monitoring-logging, or --path <dir> [--disable-monitoring-logging])"
 )
 

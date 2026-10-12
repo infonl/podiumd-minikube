@@ -11,9 +11,9 @@ See [`../README.md`](../README.md) for provisioning and deploying the cluster.
 ## Prerequisites
 
 - The chart is deployed to the `podiumd-minikube` namespace, e.g. via
-  `../scripts/deploy --full`.
+  `../bin/deploy --full`.
 - `kubectl` points at the cluster.
-- The edge has an external IP: run `../scripts/setup-tunnel` first if
+- The edge has an external IP: run `../bin/setup-tunnel` first if
   `kubectl get svc public-gateway-nginx -n ingress-basic` shows `<pending>`.
 
 No `/etc/hosts` edits are needed: `*.local` resolves to the edge inside the
@@ -46,7 +46,7 @@ the running pods. `test_metrics.py` runs for `templates/metrics/`,
 | `test_kiss_ita.py` | KISS's Elasticsearch is green with its heap and limit; the edge forwards ITA's chunked bodies |
 | `test_frankgateway.py` | OpenBao unsealed (`lib.openbao`), the outway's routes, ZAC pointed at the outway (`manifests.route_outbound`) |
 | `test_clamav.py` | ClamAV runs with the EICAR-only signatures (`templates/clamav`) |
-| `test_pabc_migrations_guard.py` | `scripts/apply-pabc-migrations` refuses to recreate the Job when PABC's database has data |
+| `test_pabc_migrations_guard.py` | `bin/apply-pabc-migrations` refuses to recreate the Job when PABC's database has data |
 | `test_memory.py` | The node within the laptop budget, no container more than 20% + 64 MiB above `memory-baseline.json`; `--update-memory-baseline` rewrites it |
 
 ## Caveats

@@ -70,7 +70,7 @@ def reset_namespace(*, yes: bool) -> int:
         "-l", f"app.kubernetes.io/instance={NAMESPACE}", "--ignore-not-found",
     )  # fmt: skip
     openbao.forget_vault()
-    print(f"\nDone. '{NAMESPACE}' is gone - run ./scripts/deploy to redeploy from scratch.")
+    print(f"\nDone. '{NAMESPACE}' is gone - run ./bin/deploy to redeploy from scratch.")
     return 0
 
 

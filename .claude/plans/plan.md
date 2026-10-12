@@ -5786,3 +5786,12 @@ removed with the vendored `smartdocuments-wiremock` directory, the profile
 flag, its `--set` in `--full` and `deploy-extended`. WireMock keeps serving
 BAG behind the api-proxy (checked: 200). podiumd-tests records its
 SmartDocuments draaiboek cases as out of scope.
+
+## scripts/ renamed to bin/ (user: "rename the subdir /scripts to /bin")
+
+The cluster lifecycle and deploy tooling lives in `bin/`, as helm-charts'
+`charts/podiumd/bin/`. Earlier entries in this log keep the old
+`scripts/...` paths; read them as `bin/...`. ZAC's own
+`scripts/docker-compose/imports` and the podiumd chart's `scripts/` are other
+repositories' paths and keep their name. podiumd-tests only names the
+directory in its docs (`docs/research/podiumd-minikube.md`).

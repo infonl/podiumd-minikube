@@ -11,12 +11,12 @@ dependencies:
     repository: "@dimpact"
     # Placeholder only - never used to actually fetch anything. The real
     # version lives in .podiumd-versions.yaml (gitignored) - run
-    # ./scripts/set-podiumd-version to set it; scripts/deploy and
-    # scripts/provision-cluster refuse to proceed with a clear message if
-    # you haven't yet. See scripts/lib/dependency.py's own header
+    # ./bin/set-podiumd-version to set it; bin/deploy and
+    # bin/provision-cluster refuse to proceed with a clear message if
+    # you haven't yet. See bin/lib/dependency.py's own header
     # for why this field is never populated with a real version at all
     # (a `helm dependency update` run without going through that script
-    # first - bypassing scripts/deploy and scripts/set-podiumd-version entirely - would
+    # first - bypassing bin/deploy and bin/set-podiumd-version entirely - would
     # fail against this placeholder rather than silently fetching some
     # unrelated default).
     version: "0.0.0-set-via-podiumd-versions-yaml"

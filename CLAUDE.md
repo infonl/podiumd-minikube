@@ -45,7 +45,7 @@ hardcode, plus a pointer to the full design/build history.
 
 This repo *is* the chart — no nested `charts/<name>` wrapper. `Chart.yaml`,
 `values.yaml`, `templates/`, `vendor/` live at the repo root, alongside
-`scripts/` (cluster lifecycle + deploy-time tooling) and `tests/` (a
+`bin/` (cluster lifecycle + deploy-time tooling) and `tests/` (a
 live-cluster pytest suite).
 
 `vendor/dimpact-zaakafhandelcomponent/` holds physical copies of file assets

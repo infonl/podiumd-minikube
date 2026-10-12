@@ -47,7 +47,7 @@ def test_describe_shows_the_age_and_hints_at_a_stale_lock():
     fresh = lock.parse(f"kees live cleanup {(now - timedelta(minutes=7)).isoformat()}")
     old = lock.parse(f"kees live cleanup {(now - timedelta(hours=3)).isoformat()}")
     assert lock.describe(fresh, now) == "kees (live cleanup) for 7m"
-    assert lock.describe(old, now).endswith("for 3h00m; if its holder is gone: ./scripts/cluster-lock break")
+    assert lock.describe(old, now).endswith("for 3h00m; if its holder is gone: ./bin/cluster-lock break")
 
 
 def test_run_marks_the_hold_for_its_child(private_lock: Path):

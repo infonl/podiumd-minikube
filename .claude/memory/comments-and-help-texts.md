@@ -8,7 +8,7 @@ metadata:
 # Comments and help texts
 
 Adapted (2026-10-07) from the user's rule for podiumd-tests. Applies to
-comments in `values.yaml`, `templates/`, `scripts/` and `tests/`, script
+comments in `values.yaml`, `templates/`, `bin/` and `tests/`, script
 usage texts, `echo`ed messages, test skip reasons and error messages.
 
 **Why:** the user wants text that is cheap to read and stays true; long or

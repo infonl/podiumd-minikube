@@ -1,6 +1,6 @@
 ---
 name: reuse-existing-logic
-description: "One concept, one place in podiumd-minikube; check the shared helpers in scripts/lib, values.yaml and tests/conftest.py before writing new code"
+description: "One concept, one place in podiumd-minikube; check the shared helpers in bin/lib, values.yaml and tests/conftest.py before writing new code"
 metadata:
   type: feedback
 ---
@@ -10,14 +10,14 @@ metadata:
 Adapted (2026-10-07) from the user's rule for podiumd-tests
 (`infonl/podiumd-tests/.claude/memory/reuse-existing-logic.md`), itself from
 helm-charts `charts/podiumd/bin/`. Applies to all of podiumd-minikube:
-`values.yaml`, `templates/`, `scripts/`, `scripts/lib/` and `tests/`. Code
+`values.yaml`, `templates/`, `bin/`, `bin/lib/` and `tests/`. Code
 gets better when it gets smaller while keeping the same or more
 functionality. A change that adds lines for behaviour that already exists
 elsewhere is a regression, even when the tests pass.
 
 **Why:** the user wants a small, consistent code base; copies drift (found
 live: the tunnel script's own host list went stale, which is why
-`scripts/lib/hosts.py` exists).
+`bin/lib/hosts.py` exists).
 
 **How to apply:**
 
@@ -34,12 +34,12 @@ live: the tunnel script's own host list went stale, which is why
    | Concept | Use |
    | --- | --- |
    | starting any external process (kubectl, helm, minikube, docker) | `lib.process` (`run`, `output`, `succeeds`, `spawn`; errors are `ProcessError`/`UserError`) |
-   | a script's entry point | `process.main(...)` in an extensionless `scripts/<name>`; logic in `scripts/lib/` |
+   | a script's entry point | `process.main(...)` in an extensionless `bin/<name>`; logic in `bin/lib/` |
    | refuse to run against a non-minikube kubectl context | `kube.require_minikube_context` |
    | kubectl calls, the edge IP, a pod | `lib.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `edge_ip`, `first_pod`) |
    | waiting for a condition | `polling.wait_until` (never a bare sleep) |
    | node/container memory and CPU, running profiles, problem pods | `lib.status` (also used by `tests/test_memory.py` and `tests/conftest.py`) |
-   | changing the shared cluster | `lock.holding`/`lock.held` (scripts), `./scripts/cluster-lock` (by hand) |
+   | changing the shared cluster | `lock.holding`/`lock.held` (scripts), `./bin/cluster-lock` (by hand) |
    | the rendered manifest, with all local fixups | `deploy.Options.render`; a new fixup is one more step in `manifests.fix_up` |
    | YAML sections that may be null, a resource's name | `manifests.section`, `manifests.name_of` |
    | the `*.local` hosts of all Ingresses | `lib.hosts` |
@@ -49,7 +49,7 @@ live: the tunnel script's own host list went stale, which is why
    | the ZAC PKCE live realm sync | `keycloak.sync_zac_pkce` |
    | (re)creating the pabc-migrations Job | `pabc.apply_migrations`; never an ad-hoc delete + apply |
    | the monitoring-logging CRDs | `crds.apply_monitoring_logging_crds` |
-   | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `scripts/tests/conftest.py` |
+   | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `bin/tests/conftest.py` |
    | PV/PVC pre-provisioning for an app | `templates/storage-hooks.yaml` |
    | a database and user for an app | the init SQL in `templates/postgres` |
    | Redis, Mailpit, Keycloak, Solr, RabbitMQ | the existing `templates/<name>` Deployment; never a subchart's bundled copy |
@@ -62,7 +62,7 @@ live: the tunnel script's own host list went stale, which is why
 
 ## While changing code
 
-- Logic lives in `scripts/lib/` with unit tests in `scripts/tests/`; the
+- Logic lives in `bin/lib/` with unit tests in `bin/tests/`; the
   extensionless scripts only parse arguments and call it.
 - A near-copy of existing code is merged in the same change, including copies
   that differ only in a detail.

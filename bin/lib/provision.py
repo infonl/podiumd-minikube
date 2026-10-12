@@ -51,7 +51,7 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
     """Starts the profile with the docker driver, or checks the running one's memory."""
     if process.succeeds(["minikube", "status", "-p", PROFILE]):
         print(f"minikube profile '{PROFILE}' is already running - leaving it as-is.")
-        print("(delete it first with scripts/teardown-cluster if you want a genuinely fresh start)")
+        print("(delete it first with bin/teardown-cluster if you want a genuinely fresh start)")
         memory.check(full=True)
         return
     print(f"Starting minikube (cpus={cpus}, memory={memory_mb}MB)...")
@@ -199,5 +199,5 @@ def provision() -> None:
     print("Checking which are already loaded in minikube...")
     load_images(images)
     print("\nCluster provisioned. Next steps:")
-    print("  1. ./scripts/deploy (or ./scripts/deploy --full for every optional profile).")
-    print("  2. ./scripts/setup-tunnel for external reachability.")
+    print("  1. ./bin/deploy (or ./bin/deploy --full for every optional profile).")
+    print("  2. ./bin/setup-tunnel for external reachability.")
