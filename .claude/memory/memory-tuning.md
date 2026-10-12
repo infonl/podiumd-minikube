@@ -55,6 +55,8 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
   for ZAC it grew the heap.
 - Every JVM: `kubectl exec <pod> -- sh -c 'tr "\0" " " < /proc/1/cmdline'` and
   its env; exactly one `-XX:+Use*GC` may be on, else the JVM does not start.
+  `java -Xlog:os+container=debug -version` in the container must not say
+  "disabled at kernel level": JDK 17.0.19 misses its limit on kernel 7.x.
   ZAC's heap and non-heap: WildFly management `http://<zac pod IP>:9990/metrics`
   (`base_memory_*`), e.g. from the openzaak pod with python's urllib.
 - Celery: `ps`/`/proc/*/cmdline` in the worker shows `-c 1`; uWSGI: count the

@@ -6125,3 +6125,16 @@ stays at 123 MiB and 8000 requests take 5 s. Nothing reads the journal
 (podiumd-tests and this repo checked). Now: explicit heap -Xmx64m, serial
 GC, C1 only, journal capped at 1000. Deviation from the docker-compose
 stack: capacity only.
+
+## Why WireMock's JVM missed its memory limit (user: "4 ... do")
+
+`java -Xlog:os+container=trace` in the pod: "controller memory is not
+enabled ... One or more required controllers disabled at kernel level". The
+laptop's kernel (7.2.6) lists only cgroup v1 controllers in /proc/cgroups,
+no longer memory and cpuset, and JDK 17.0.19 reads that file to decide
+whether container support works. Newer JDK builds no longer depend on it:
+Solr (17.0.20.1), Keycloak (21.0.12), ZAC (25.0.3) and both Elasticsearch
+JDKs (25, 26.0.1) detect their limits here. Only WireMock 3.13.2 (17.0.19,
+pinned as in dimpact-zaakafhandelcomponent's docker-compose) is affected; its
+explicit heap covers it. AKS nodes run older kernels, so this is
+laptop-only.
