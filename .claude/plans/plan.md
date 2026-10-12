@@ -5964,3 +5964,21 @@ behandelaar_domein_test_1 and beheerder_elk_domein, which the vendored
 realm's users carry and podiumd-tests' admin uses (realm role
 beheerder_elk_domein, group beheerders-elk-domein). Switching would drop
 those grants and needs a Keycloak side without the operator, so it stays.
+
+## Aligned plan for podiumd-minikube, kees00 and podiumd-tests (user: "yes, send each session its part", 2026-10-12)
+
+Goal: podiumd-tests runs on the same PABC data on minikube, kees00 and
+ExternalsPodiumD's ontw environments. Order: (1) podiumd-tests' admin also
+gets the chart dataset's realm role and group `beheerders` (mapped to every
+application role in all domains); (2) kees00 seeds PABC from podiumd's
+files/pabc-dataset.json and gets Open Formulieren <-> Open Klant (its
+session, in progress) and adds the otel-collector; (3) minikube seeds PABC
+from the same dataset through podiumd's seedJob (its Keycloak Job needs the
+operator: the six realm roles and groups go into our realm instead) and
+turns on create_required_catalogi_job with the e2e zaaktype, as
+ExternalsPodiumD; (4) podiumd-tests moves productaanvraag_zaaktype to
+zaaktype-voor-e2e-testen on both environments, sets its zaakafhandelparameters
+in its bootstrap and drops beheerder_elk_domein; (5) minikube removes the
+vendored PABC mapping and the pabc-migrations seeding (and probably the
+zaaktype-test-1 zaakafhandelparameters seed) once nothing uses them. Open:
+ExternalsPodiumD's dimp test curates PABC instead of seeding.
