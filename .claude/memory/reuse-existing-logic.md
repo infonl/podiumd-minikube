@@ -47,7 +47,6 @@ live: the tunnel script's own host list went stale, which is why
    | a flag in a top-level `values.yaml` block | `podiumd_minikube.values` (`flag`, `zac_experimental_pkce`) |
    | facts from the vendored tarballs (objecten shape, ZAC PKCE support) | `podiumd_minikube.chart` |
    | the ZAC PKCE live realm sync | `keycloak.sync_zac_pkce` |
-   | (re)creating the pabc-migrations Job | `pabc.apply_migrations`; never an ad-hoc delete + apply |
    | the monitoring-logging CRDs | `crds.apply_monitoring_logging_crds` |
    | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `unit_tests/conftest.py` |
    | PV/PVC pre-provisioning for an app | `templates/storage-hooks.yaml` |

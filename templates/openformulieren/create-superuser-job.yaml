@@ -4,8 +4,7 @@ against the same image/database/settings the openformulieren Deployment
 itself uses (same envFrom Secret/ConfigMap, named "openformulieren" by the
 openforms chart's own fullname template) - see that script's own header for
 why this Job exists at all (this chart's configuration.superuser field is
-otherwise wired to nothing) and why it's safe to leave in the general,
-unguarded manifest apply unlike pabc-migrations: it's idempotent
+otherwise wired to nothing) and why it's safe to rerun: it's idempotent
 (get_or_create + set_password), so re-applying its already-succeeded,
 unchanged spec is a safe no-op like any other Job here.
 */}}

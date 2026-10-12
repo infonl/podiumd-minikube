@@ -10,8 +10,8 @@
 # the user already exists, which would fail every deploy after the first.
 # get_or_create + set_password sidesteps that: this script succeeds
 # identically whether the user exists yet or not, so re-applying this Job's
-# already-succeeded, unchanged spec (a safe no-op, same as any other Job in
-# this project) never needs a guard script the way pabc-migrations does.
+# already-succeeded, unchanged spec is a safe no-op, same as any other Job in
+# this project.
 import os
 
 from django.contrib.auth import get_user_model

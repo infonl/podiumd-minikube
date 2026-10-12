@@ -5982,3 +5982,19 @@ in its bootstrap and drops beheerder_elk_domein; (5) minikube removes the
 vendored PABC mapping and the pabc-migrations seeding (and probably the
 zaaktype-test-1 zaakafhandelparameters seed) once nothing uses them. Open:
 ExternalsPodiumD's dimp test curates PABC instead of seeding.
+
+Step 3, PABC part (deployed 2026-10-12): PABC seeded by podiumd's
+pabc-seed-job from files/pabc-dataset.json (mappings per functional role:
+administrators 12, behandelaars 4, beheerders 9, coordinators 6, raadplegers
+2, recordmanagers 8); the vendored realm and `keycloak.sync_realm` add the six
+realm roles and groups (the chart's Keycloak Job needs the operator), and
+the sync now also adds realm roles to existing groups: beheerders-elk-domein
+carries `beheerders` too, so beheerder1newiam (ZAC's zaakafhandelparameters
+seed) and podiumd-tests' admin keep ZAC rights. The vendored ZAC mapping,
+its ConfigMap and the guarded pabc-migrations handling (pabc.py, the
+apply-pabc-migrations command, its live test) are gone: pabc-migrations is
+a normal rendered Job (schema only), rerun on every deploy as
+ExternalsPodiumD's pipeline does. The e2e zaaktype is not on yet:
+create_required_catalogi_job looks up catalogus ALG with ZAC's bron RSIN
+123443210, but the fixture catalogus has 002564440 (recorded deviation), so
+it would create a second ALG catalogus; waits for the user's decision.

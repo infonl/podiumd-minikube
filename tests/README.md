@@ -43,12 +43,8 @@ the running pods.
 | `test_kiss_ita.py` | KISS's Elasticsearch is green with its heap and limit; the edge forwards ITA's chunked bodies |
 | `test_frankgateway.py` | OpenBao unsealed (`podiumd_minikube.openbao`), the outway's routes, ZAC pointed at the outway (`manifests.route_outbound`) |
 | `test_clamav.py` | ClamAV runs with the EICAR-only signatures (`templates/clamav`) |
-| `test_pabc_migrations_guard.py` | `podiumd-minikube apply-pabc-migrations` refuses to recreate the Job when PABC's database has data |
 | `test_memory.py` | The node within the laptop budget, no container more than 20% + 64 MiB above `memory-baseline.json`; `--update-memory-baseline` rewrites it |
 
 ## Caveats
 
 - `test_database.py` runs `psql` through `kubectl exec` in the postgres pod.
-- `test_pabc_migrations_guard.py` changes the cluster: it deletes the
-  `pabc-migrations-1` Job and restores it in a `finally` block, holding the
-  cluster lock while it does.

@@ -29,7 +29,7 @@ def test_a_held_lock_refuses_with_its_holder(private_lock: Path):
 
 def test_a_nested_hold_of_the_same_process_does_not_block():
     with lock.held("deploy"):
-        assert not lock.take("apply-pabc-migrations")
+        assert not lock.take("flush-redis")
         assert lock.current() is not None
     assert lock.current() is None
 

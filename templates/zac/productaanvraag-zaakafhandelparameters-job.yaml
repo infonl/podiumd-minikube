@@ -3,8 +3,7 @@ Runs vendor/dimpact-zaakafhandelcomponent/zac/seed_productaanvraag_zaakafhandelp
 against ZAC's own REST API - see that script's own header for why this is a
 custom Job at all (ZAC has no setup_configuration-style declarative
 mechanism of its own, unlike every Django app elsewhere in this flow) and
-why it's safe to leave in the general, unguarded manifest apply unlike
-pabc-migrations: it's a plain GET-then-PUT update, not a destructive
+why it's safe to rerun: it's a plain GET-then-PUT update, not a destructive
 recreate - re-applying this Job's already-succeeded, unchanged spec is a
 safe no-op like any other Job here.
 

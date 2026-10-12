@@ -175,6 +175,60 @@
         "clientRole": false,
         "containerId": "zaakafhandelcomponent",
         "attributes": {}
+      },
+      {
+        "id": "dbd3409c-44ed-5131-84f3-0fd51a9e08f5",
+        "name": "administrators",
+        "description": "Functional role of podiumd's PABC dataset",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "zaakafhandelcomponent",
+        "attributes": {}
+      },
+      {
+        "id": "3b17de7d-5cbf-5ce6-b6a9-261890e9b28c",
+        "name": "behandelaars",
+        "description": "Functional role of podiumd's PABC dataset",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "zaakafhandelcomponent",
+        "attributes": {}
+      },
+      {
+        "id": "08ede8b3-79e6-55d5-ae69-ab958dfdd375",
+        "name": "beheerders",
+        "description": "Functional role of podiumd's PABC dataset",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "zaakafhandelcomponent",
+        "attributes": {}
+      },
+      {
+        "id": "13745012-e206-592c-a64f-f48a32291dbe",
+        "name": "coordinators",
+        "description": "Functional role of podiumd's PABC dataset",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "zaakafhandelcomponent",
+        "attributes": {}
+      },
+      {
+        "id": "d26fe636-5ee0-539e-9356-e57aaa9daf76",
+        "name": "raadplegers",
+        "description": "Functional role of podiumd's PABC dataset",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "zaakafhandelcomponent",
+        "attributes": {}
+      },
+      {
+        "id": "fd4485ff-601d-5dd6-a34a-b904d7db3c30",
+        "name": "recordmanagers",
+        "description": "Functional role of podiumd's PABC dataset",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "zaakafhandelcomponent",
+        "attributes": {}
       }
     ],
     "client": {
@@ -757,7 +811,8 @@
         ]
       },
       "realmRoles": [
-        "beheerder_elk_domein"
+        "beheerder_elk_domein",
+        "beheerders"
       ]
     },
     {
@@ -793,6 +848,48 @@
       "attributes": {},
       "realmRoles": [],
       "clientRoles": {"openbao": ["uploaders"]}
+    },
+    {
+      "name": "administrators",
+      "path": "/administrators",
+      "description": "Functional role administrators of podiumd's PABC dataset, as podiumd's pabc-keycloak-groups-job.",
+      "attributes": {},
+      "realmRoles": ["administrators"]
+    },
+    {
+      "name": "behandelaars",
+      "path": "/behandelaars",
+      "description": "Functional role behandelaars of podiumd's PABC dataset, as podiumd's pabc-keycloak-groups-job.",
+      "attributes": {},
+      "realmRoles": ["behandelaars"]
+    },
+    {
+      "name": "beheerders",
+      "path": "/beheerders",
+      "description": "Functional role beheerders of podiumd's PABC dataset, as podiumd's pabc-keycloak-groups-job.",
+      "attributes": {},
+      "realmRoles": ["beheerders"]
+    },
+    {
+      "name": "coordinators",
+      "path": "/coordinators",
+      "description": "Functional role coordinators of podiumd's PABC dataset, as podiumd's pabc-keycloak-groups-job.",
+      "attributes": {},
+      "realmRoles": ["coordinators"]
+    },
+    {
+      "name": "raadplegers",
+      "path": "/raadplegers",
+      "description": "Functional role raadplegers of podiumd's PABC dataset, as podiumd's pabc-keycloak-groups-job.",
+      "attributes": {},
+      "realmRoles": ["raadplegers"]
+    },
+    {
+      "name": "recordmanagers",
+      "path": "/recordmanagers",
+      "description": "Functional role recordmanagers of podiumd's PABC dataset, as podiumd's pabc-keycloak-groups-job.",
+      "attributes": {},
+      "realmRoles": ["recordmanagers"]
     }
   ],
   "defaultRole": {

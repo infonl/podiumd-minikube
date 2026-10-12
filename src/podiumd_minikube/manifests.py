@@ -24,7 +24,6 @@ from podiumd_minikube.paths import RELEASE_NAME
 
 Doc = dict[str, Any]
 
-PABC_MIGRATION_JOB = "pabc-migrations-1"
 # The apps' BRP/KvK/BAG base URL (values.yaml), and Frank!Gateway's outway, which
 # serves the same paths (podiumd.frankgateway.instances.outway.routes).
 API_PROXY_URL = "http://api-proxy/"
@@ -248,12 +247,6 @@ def _is_test_hook(doc: Doc) -> bool:
     return "test" in str(hook or "")
 
 
-def _excluded(doc: Doc) -> bool:
-    """The pabc-migrations Job (only pabc.py may create it) and Helm test hooks."""
-    is_pabc_job = doc.get("kind") == "Job" and name_of(doc) == PABC_MIGRATION_JOB
-    return is_pabc_job or _is_test_hook(doc)
-
-
 def _configuration_yaml(doc: Doc, configmap: str) -> Any | None:
     if not _is_configmap(doc, configmap):
         return None
@@ -340,7 +333,7 @@ class Render:
 def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
     loaded: list[Doc | None] = list(yaml.safe_load_all(strip_image_digests(text)))
-    docs = [doc for doc in loaded if doc and not _excluded(doc)]
+    docs = [doc for doc in loaded if doc and not _is_test_hook(doc)]
     disable_service_links(docs)
     route_outbound(docs)
     route_through_nginx(docs)

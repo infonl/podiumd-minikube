@@ -22,10 +22,6 @@ changes is in `.claude/plans/plan.md`.
 - `postgres/fixtures/{openklant,openarchiefbeheer}/1-setup-applicatie.sql`
   ← `scripts/docker-compose/imports/{openklant,openarchiefbeheer}-database/database/`.
   Read by `templates/postgres/configmap-fixtures.yaml`.
-- `pabc/pabc-mapping-data.json`
-  ← `scripts/docker-compose/imports/pabc-database/json-mapping/`.
-  Read by `templates/pabc/configmap-mapping-data.yaml` (the pabc-migrations Job).
-
 ## Copied and changed
 
 - `keycloak/zaakafhandelcomponent-realm.json`

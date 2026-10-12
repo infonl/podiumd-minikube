@@ -9,7 +9,6 @@ from pathlib import Path
 from podiumd_minikube import deploy as deployment
 from podiumd_minikube import kube
 from podiumd_minikube import lock
-from podiumd_minikube import pabc
 from podiumd_minikube import ports
 from podiumd_minikube import process
 from podiumd_minikube import provision
@@ -50,15 +49,6 @@ def _yes(command: Command, argv: list[str]) -> bool:
     parser = _parser(command)
     parser.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
     return parser.parse_args(argv).yes
-
-
-def apply_pabc_migrations(argv: list[str]) -> None:
-    """(Re)creates the pabc-migrations Job unless PABC already has data; --force wipes and reseeds."""
-    parser = _parser(apply_pabc_migrations)
-    parser.add_argument("--force", action="store_true", help="wipe PABC's database and reseed it")
-    force = parser.parse_args(argv).force
-    kube.require_minikube_context()
-    pabc.apply_migrations(force=force)
 
 
 def cluster_lock(argv: list[str]) -> int:
@@ -236,7 +226,6 @@ def update_hosts(argv: list[str]) -> None:
 COMMANDS: dict[str, Command] = {
     _name(command): command
     for command in (
-        apply_pabc_migrations,
         cluster_lock,
         deploy,
         deploy_extended,

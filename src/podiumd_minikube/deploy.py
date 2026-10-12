@@ -20,7 +20,6 @@ from podiumd_minikube import lock
 from podiumd_minikube import manifests
 from podiumd_minikube import memory
 from podiumd_minikube import openbao
-from podiumd_minikube import pabc
 from podiumd_minikube import pki
 from podiumd_minikube import polling
 from podiumd_minikube import postgres
@@ -79,7 +78,7 @@ def expected_storage_errors(storage: manifests.Render) -> int:
 
 
 def jobs(render: manifests.Render) -> list[str]:
-    """The Jobs in render (all idempotent; pabc-migrations is not in a render)."""
+    """The Jobs in render (all idempotent)."""
     return [manifests.name_of(doc) for doc in render.docs if doc.get("kind") == "Job"]
 
 
@@ -184,8 +183,6 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     print()
     keycloak.sync_realm(zac_pkce=selected.zac_pkce)
     openbao.bootstrap(render)
-    print("\nApplying pabc-migrations (guarded, pabc.py)...")
-    pabc.apply_migrations(force=False)
     print(f"\nPruning {', '.join(prune.PRUNABLE_KINDS)} not part of this render...")
     prune.prune([*render.docs, *render.large_configmaps], force=force_prune)
     _wait_ready(render)

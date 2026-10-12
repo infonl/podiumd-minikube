@@ -2,8 +2,7 @@
 Runs vendor/dimpact-zaakafhandelcomponent/openformulieren/create_productaanvraag_form.py
 against the same image/database this app's own Deployment uses - see that
 script's own header for why forms need a custom Job at all (setup_configuration
-has no concept of forms) and why it's safe to leave in the general,
-unguarded manifest apply unlike pabc-migrations: update_or_create by
+has no concept of forms) and why it's safe to rerun: update_or_create by
 slug/key, re-applying this Job's already-succeeded, unchanged spec is a
 safe no-op like any other Job here.
 
@@ -15,7 +14,7 @@ registration backend references - no explicit ordering between the two
 3 MB request limit), but
 this Job's own backoffLimit/restartPolicy-driven retries give the other Job
 time to succeed first, same as every other cross-app dependency in this
-chart (e.g. pabc-migrations depending on pabc itself being up).
+chart.
 */}}
 {{- if .Values.podiumd.openformulieren.enabled }}
 apiVersion: batch/v1

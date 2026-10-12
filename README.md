@@ -147,7 +147,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | Command | What it does |
 |---|---|
 | `podiumd-minikube provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
-| `podiumd-minikube deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), applies `pabc-migrations`, and seeds fixture data if `objecten` is enabled |
+| `podiumd-minikube deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune), and seeds fixture data if `objecten` is enabled |
 | `podiumd-minikube show-cluster-status` | Node and per-container memory and CPU (against the budget and `tests/memory-baseline.json`), profiles, recent restarts and failed Jobs, tunnel, lock and disk; reads only (`--top N`, `--all`) |
 | `podiumd-minikube start-cluster` | After a reboot: starts minikube, waits until every pod reports its state since the start and the apps are ready, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
 | `podiumd-minikube cluster-lock` | Shows, takes, releases or breaks the lock on the shared cluster; `run` holds it around a command (see "Shared cluster: the lock") |
@@ -161,7 +161,6 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | `podiumd-minikube flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
 | `podiumd-minikube update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
 | `podiumd-minikube deploy-extended` | `deploy --full` without metrics, with openzaak's and openklant's Celery workers |
-| `podiumd-minikube apply-pabc-migrations [--force]` | The only safe way to (re)create the `pabc-migrations` Job — refuses against an already-seeded database unless `--force` |
 
 `podiumd-minikube reset-namespace` vs `podiumd-minikube teardown-cluster`: use `podiumd-minikube reset-namespace` to
 wipe app data and redeploy clean (keeps the cluster, the edge and the images);
@@ -180,7 +179,7 @@ cluster, so whoever changes it holds the lock file first
 (`../.minikube-lock`, one line: who, what, start time; `MINIKUBE_LOCK_FILE`
 overrides the path). `deploy`, `deploy-extended`, `reset-namespace`,
 `teardown-cluster`, `start-cluster`, `provision-cluster`,
-`apply-pabc-migrations`, `flush-redis` and `setup-tunnel stop` take it
+`flush-redis` and `setup-tunnel stop` take it
 themselves and refuse while someone else holds it. Reading (kubectl get,
 logs, the test suite) needs no lock.
 

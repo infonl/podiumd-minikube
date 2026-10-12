@@ -67,3 +67,16 @@ def test_realm_changes_set_only_differing_realm_settings():
         "-s", "accessTokenLifespan=60", "-s", 'smtpServer={"host": "mailpit"}',
     ]  # fmt: skip
     assert keycloak.realm_changes(vendored, vendored) == []
+
+
+def test_group_role_changes_lists_realm_roles_a_live_group_lacks():
+    live = [{"name": "beheerders-elk-domein", "realmRoles": ["beheerder_elk_domein"]}, {"name": "other"}]
+    vendored = [
+        {"name": "beheerders-elk-domein", "realmRoles": ["beheerder_elk_domein", "beheerders"]},
+        {"name": "beheerders", "realmRoles": ["beheerders"]},
+        {"name": "other", "realmRoles": []},
+    ]
+    assert keycloak.group_role_changes(live, vendored) == {
+        "beheerders-elk-domein": ["beheerders"],
+        "beheerders": ["beheerders"],
+    }

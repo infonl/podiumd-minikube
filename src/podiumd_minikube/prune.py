@@ -4,8 +4,8 @@
 left the old Deployments, Services and Ingresses running (two Grafanas
 answering grafana.local).
 
-Not pruned: Jobs and CronJobs (pabc-migrations is excluded from the render on
-purpose; CronJob runs are never rendered), the objects the scripts create
+Not pruned: Jobs and CronJobs (deploy recreates the rendered Jobs; CronJob
+runs are never rendered), the objects the scripts create
 outside the render (SCRIPT_MADE), anything with an ownerReference
 (operator-created, like Prometheus' StatefulSet and prometheus-operated
 Service), and anything without this chart's labels (podiumd-tests' Secret was

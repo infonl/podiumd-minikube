@@ -3,8 +3,8 @@
 --import-realm skips a realm that already exists, and Keycloak persists to
 Postgres, so a changed vendored realm never reaches a provisioned cluster.
 The same fixes as podiumd_minikube.manifests.fix_realm are applied to the live clients;
-clients, redirect URIs, protocol mappers, client roles and top-level groups
-added to the vendored realm are added, never removed.
+clients, redirect URIs, protocol mappers, realm and client roles and top-level
+groups added to the vendored realm are added, never removed.
 """
 
 import json
@@ -158,9 +158,43 @@ def _sync_client_parts(pod: str, client: dict[str, Any], vendored: dict[str, Any
             print(f"  added role {role['name']} to client {client['clientId']}")
 
 
+def _sync_realm_roles(pod: str, vendored: list[dict[str, Any]]) -> None:
+    """Creates the vendored realm roles the live realm lacks."""
+    live = json.loads(process.output([*_kcadm(pod), "get", "roles", "-r", REALM, "--fields", "name"]))
+    for role in missing_by_name(live, vendored):
+        process.output([*_kcadm(pod), "create", "roles", "-r", REALM, "-s", f"name={role['name']}"])
+        print(f"  created realm role {role['name']}")
+
+
+def group_role_changes(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Per vendored group, the realm roles its live counterpart lacks (all of them for a group not live)."""
+    live_roles: dict[str, set[str]] = {group["name"]: set(group.get("realmRoles") or []) for group in live}
+    changes: dict[str, list[str]] = {}
+    for group in vendored:
+        wanted: list[str] = group.get("realmRoles") or []
+        missing = [role for role in wanted if role not in live_roles.get(group["name"], set())]
+        if missing:
+            changes[group["name"]] = missing
+    return changes
+
+
 def _sync_groups(pod: str, vendored: list[dict[str, Any]]) -> None:
-    """Creates the vendored top-level groups the live realm lacks, with their client roles."""
-    live = json.loads(process.output([*_kcadm(pod), "get", "groups", "-r", REALM, "--fields", "name"]))
+    """Creates the vendored top-level groups the live realm lacks, with their client roles; adds missing realm roles."""
+    live = json.loads(
+        process.output(
+            [
+                *_kcadm(pod),
+                "get",
+                "groups",
+                "-r",
+                REALM,
+                "-q",
+                "briefRepresentation=false",
+                "--fields",
+                "name,realmRoles",
+            ]
+        )
+    )
     for group in missing_by_name(live, vendored):
         process.output([*_kcadm(pod), "create", "groups", "-r", REALM, "-s", f"name={group['name']}"])
         client_roles: dict[str, list[str]] = group.get("clientRoles") or {}
@@ -170,6 +204,10 @@ def _sync_groups(pod: str, vendored: list[dict[str, Any]]) -> None:
                 [*_kcadm(pod), "add-roles", "-r", REALM, "--gname", group["name"], "--cclientid", client_id, *role_args]
             )
         print(f"  created group {group['name']}")
+    for name, roles in group_role_changes(live, vendored).items():
+        role_args = [arg for role in roles for arg in ("--rolename", role)]
+        process.output([*_kcadm(pod), "add-roles", "-r", REALM, "--gname", name, *role_args])
+        print(f"  gave group {name} realm role(s) {', '.join(roles)}")
 
 
 def sync_realm(*, zac_pkce: bool) -> None:
@@ -211,6 +249,7 @@ def sync_realm(*, zac_pkce: bool) -> None:
     if profile:
         process.output([*_kcadm(pod), "update", "users/profile", "-r", REALM, "-f", "-"], stdin=json.dumps(profile))
         print("  declared user attribute samaccountname")
+    _sync_realm_roles(pod, realm["roles"]["realm"])
     _sync_groups(pod, realm.get("groups", []))
     _sync_realm_settings(pod, REALM, realm)
     _sync_realm_settings(pod, "master", MASTER_REALM_SETTINGS)

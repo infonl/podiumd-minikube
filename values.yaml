@@ -1243,23 +1243,16 @@ podiumd:
     migrations:
       image:
         repository: ghcr.io/platform-autorisatie-beheer-component/pabc-migrations
-      # Matches docker-compose.yaml's pabc-migrations JSON_DATASET_PATH
-      # mount exactly. Found live: without this, PABC's own database has no
-      # application/role/group mapping data at all, so ZAC's own
-      # authorization check rejects every logged-in user with "Geen
-      # toestemming" (403) regardless of their Keycloak group membership -
-      # PABC, not Keycloak roles directly, is the actual source of truth
-      # ZAC's authorization now queries.
-      dataSetPath: /app/json/pabc-mapping-data.json
-      extraVolumes:
-        - name: pabc-mapping-data
-          configMap:
-            name: pabc-mapping-data
-      extraVolumeMounts:
-        - name: pabc-mapping-data
-          subPath: pabc-mapping-data.json
-          mountPath: /app/json/pabc-mapping-data.json
-          readOnly: true
+    # As ExternalsPodiumD's ontw environments (icat, dim1): PABC seeded once
+    # from podiumd's files/pabc-dataset.json. Its Keycloak Job needs the
+    # Keycloak operator; the dataset's realm roles and groups are in the
+    # vendored realm instead (podiumd_minikube.keycloak syncs them).
+    datasetConfigMap:
+      enabled: true
+    seedJob:
+      enabled: true
+      keycloak:
+        enabled: false
     initContainers:
       waitFor:
         # Same reasoning as pabc's own image override above - repository
