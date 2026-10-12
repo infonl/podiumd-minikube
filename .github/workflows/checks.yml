@@ -1,0 +1,22 @@
+# run_python_checks: lint, types, dead code, unit tests; no cluster needed.
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - run: ./run_python_checks
