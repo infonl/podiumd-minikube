@@ -5949,3 +5949,18 @@ podiumd-infra's kees00 4.9.4 values lack it (told its session). Verified:
 the Job's log "Customer interactions API group 'open-klant' created
 (service 'openklant-api')", and the group in Open Formulieren's database.
 podiumd-tests configures no such group (no overlap).
+
+PABC seeding compared (user: "compare 2"), not changed: ExternalsPodiumD
+seeds PABC from podiumd's files/pabc-dataset.json on icat ontw (main) and
+dim1 ontw (4.9.4 branch), "test environments only"; its test environment
+dimp test and podiumd-infra do not. That dataset has one domain (e2e-test,
+zaaktype-voor-e2e-testen) and the functional roles administrators,
+behandelaars, beheerders, coordinators, raadplegers, recordmanagers, most
+mapped across all domains; its second Job creates matching realm roles and
+groups through the Keycloak operator's service account in realm podiumd.
+Ours (ZAC's docker-compose mapping, pabc-migrations Job): three domains on
+ZAC's fixture zaaktypes and ten functional roles such as
+behandelaar_domein_test_1 and beheerder_elk_domein, which the vendored
+realm's users carry and podiumd-tests' admin uses (realm role
+beheerder_elk_domein, group beheerders-elk-domein). Switching would drop
+those grants and needs a Keycloak side without the operator, so it stays.
