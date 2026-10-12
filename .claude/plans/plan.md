@@ -6138,3 +6138,11 @@ JDKs (25, 26.0.1) detect their limits here. Only WireMock 3.13.2 (17.0.19,
 pinned as in dimpact-zaakafhandelcomponent's docker-compose) is affected; its
 explicit heap covers it. AKS nodes run older kernels, so this is
 laptop-only.
+
+## OMC in --full (user: "5 ... do")
+
+OMC was left out of --full because 1.17.19 rejects every notification with
+`source`. podiumd-tests now has a test for exactly that (bc683b6, strict
+xfail), so OMC runs in --full as in ExternalsPodiumD and podiumd-infra, and
+the test runs here too. Host omc.local; Notify goes to podiumd-tests' mock
+server; podiumd-tests' bootstrap creates the abonnement.
