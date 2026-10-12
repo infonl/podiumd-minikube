@@ -6018,3 +6018,18 @@ zaaktype-test-1 keeps productaanvraag-test-zaaktype-1): "valide".
 Found along the way: `cluster-lock run` dropped every `--` from the command,
 including those the command itself needs (kubectl exec); now only the
 separator.
+
+Step 5, zaaktype-test-1 (user: "yes, do both"): nothing uses it since
+podiumd-tests moved to zaaktype-voor-e2e-testen, and ZAC's inrichtingscheck
+failed on it (no besluittype, no informatieobjecttype "e-mail" after the
+rename). Open Zaak's fixtures are now only 01 (Applicaties, catalogus):
+05 (zaaktype-test-1) and 07 (sequence resets, already done by the seed
+script) are removed, and with them the statement filter, the volgnummer
+fix and the document type renames in configmap-fixtures.yaml. On this
+cluster ZAC's zaakafhandelparameters for it were deleted by hand
+(zaaktype_configuration 1 and its child rows) and ZAC restarted; the
+zaaktype and its zaken stay in Open Zaak as data. Also found: ZAC's person
+lookup needs PABC application role brp_zoeken, which podiumd's dataset
+lacks (ZAC brp-rechten.rego); reported to helm-charts, podiumd-tests marks
+the lookup's 403 as an expected failure; minikube does not patch the
+dataset.

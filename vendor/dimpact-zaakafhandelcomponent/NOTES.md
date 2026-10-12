@@ -13,12 +13,12 @@ changes is in `.claude/plans/plan.md`.
   ← `scripts/docker-compose/imports/bag-wiremock/` (`mappings/`, `__files/`).
   Read by `templates/wiremock/`. ZAC's SmartDocuments mappings are not
   copied: SmartDocuments is off in ZAC, as in every reference environment.
-- `postgres/fixtures/openzaak/{01,05,07}-*.sql`
-  ← `scripts/docker-compose/imports/openzaak-database/database/`: `01`
-  (Applicaties, catalogus), `05` (zaaktype-test-1), `07` (sequence resets
-  only). The other zaaktypes' files are not copied. Read by
-  `templates/postgres/configmap-fixtures.yaml`, which leaves out the demo
-  documents and the docker-compose services nothing here uses.
+- `postgres/fixtures/openzaak/01-setup-zac-config.sql`
+  ← `scripts/docker-compose/imports/openzaak-database/database/`: the
+  Applicaties and the catalogus; no zaaktypen (podiumd's
+  create_required_catalogi_job adds the e2e zaaktype). Read by
+  `templates/postgres/configmap-fixtures.yaml`, which gives the catalogus
+  ZAC's bron RSIN.
 - `postgres/fixtures/{openklant,openarchiefbeheer}/1-setup-applicatie.sql`
   ← `scripts/docker-compose/imports/{openklant,openarchiefbeheer}-database/database/`.
   Read by `templates/postgres/configmap-fixtures.yaml`.
@@ -68,5 +68,5 @@ changes is in `.claude/plans/plan.md`.
   form with its Objects API registration. Read by
   `templates/openformulieren/productaanvraag-form-job.yaml`.
 - `zac/seed_productaanvraag_zaakafhandelparameters.py`: ZAC's
-  zaakafhandelparameters for zaaktype-test-1. Read by
+  zaakafhandelparameters for podiumd's e2e zaaktype. Read by
   `templates/zac/productaanvraag-zaakafhandelparameters-job.yaml`.

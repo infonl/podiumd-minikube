@@ -344,7 +344,7 @@ podiumd:
     # productaanvraag-flow entry.
     # The e2e zaaktype podiumd's create_required_catalogi_job creates, as
     # ExternalsPodiumD's environments use; group behandelaars of podiumd's PABC
-    # dataset. Its own productaanvraagtype: zaaktype-test-1 keeps the old one.
+    # dataset.
     productaanvraag:
       zaaktypeIdentificatie: zaaktype-voor-e2e-testen
       caseDefinitionKey: generiek-zaakafhandelmodel
