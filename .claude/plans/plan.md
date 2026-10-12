@@ -5892,3 +5892,15 @@ the chart's `logCollectionNamespaces` (in 1.0.14 and 1.0.15). Prometheus
 keeps 1d retention (ExternalsPodiumD 7d), capacity only. The deploy pruned
 41 objects (29 PrometheusRules, the three components with their Services,
 ServiceMonitors and ServiceAccounts), with --force-prune.
+
+Round 3 (Phase 1 deployed, same procedure): node 14838 MiB (round 2: 14889),
+monitoring-logging's containers 1343 MiB (1598): Prometheus 345, Loki 217
+(310 before its 1Gi limit gave it GOMEMLIMIT), Grafana 174, otel-collector
+173, Alloy 84 + 33, loki-sc-rules 82, Grafana's two sidecars 71 each,
+operator 64, Loki gateway 17, config-reloader 12. kube-apiserver stayed at
+1146 MiB (round 1: 682): turning off kube-state-metrics did not lower it.
+The 16 CRDs monitoring-logging adds (created at the round 2 deploy; 2.4 MB of
+monitoring.coreos.com schemas) are the likely cause; ExternalsPodiumD applies
+the same kube-prometheus-stack CRDs. Containers outside monitoring-logging
+and the API server: 10801 MiB vs 10398 in round 1 (warm-up variation).
+Tier 9:46.
