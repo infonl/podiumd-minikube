@@ -28,8 +28,7 @@ pytest
 ```
 
 Tests for a profile that is not deployed skip; the profiles are read from
-the running pods. `test_metrics.py` runs for `templates/metrics/`,
-`test_monitoring_logging.py` only when `monitoringLogging.enabled=true`.
+the running pods.
 
 ## What's covered
 
@@ -40,8 +39,7 @@ the running pods. `test_metrics.py` runs for `templates/metrics/`,
 | `test_keycloak_realm.py` | The live realm matches the realm sync's target, PKCE included (`podiumd_minikube.keycloak`, `manifests.fix_realm`) |
 | `test_database.py` | Databases, PostGIS, ZAC's Open Zaak credentials and Open Notificaties' kanaal/abonnement (`templates/postgres`, `values.yaml`) |
 | `test_zgw_service_reachability.py` | The apps' zgw_consumers api_roots answer from inside their pods (`podiumd_minikube.dns`, `manifests.trust_ca`) |
-| `test_metrics.py` | Grafana's datasources and Prometheus's scrape targets (`templates/metrics`) |
-| `test_monitoring_logging.py` | The scrape jobs `values.yaml` adds to monitoring-logging's Prometheus |
+| `test_monitoring_logging.py` | The scrape job `values.yaml` adds to monitoring-logging's Prometheus (`zac-admin`) |
 | `test_kiss_ita.py` | KISS's Elasticsearch is green with its heap and limit; the edge forwards ITA's chunked bodies |
 | `test_frankgateway.py` | OpenBao unsealed (`podiumd_minikube.openbao`), the outway's routes, ZAC pointed at the outway (`manifests.route_outbound`) |
 | `test_clamav.py` | ClamAV runs with the EICAR-only signatures (`templates/clamav`) |

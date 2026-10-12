@@ -27,6 +27,11 @@ def crd_documents(tgz_path: str) -> str:
     return "".join(found)
 
 
+def needed(docs: list[dict[str, object]]) -> bool:
+    """Whether docs hold objects of the Prometheus operator's kinds (the metrics profile)."""
+    return any(str(doc.get("apiVersion", "")).startswith("monitoring.coreos.com/") for doc in docs)
+
+
 def apply_monitoring_logging_crds() -> None:
     """Applies the CRDs server-side (some exceed client-side apply's annotation limit)."""
     tgz = chart.tarball("monitoring-logging")

@@ -48,7 +48,7 @@ def test_stub_runs_its_command():
 
 @pytest.mark.parametrize(
     "args",
-    [[], ["4.9.3"], ["4.9.3", "1.0.14", "--disable-monitoring-logging"], ["--path", "/x", "4.9.3"]],
+    [[], ["4.9.3"], ["--path", "/x", "4.9.3"]],
 )
 def test_set_podiumd_version_rejects_ambiguous_arguments(args: list[str]):
     result = _run("set-podiumd-version", *args)

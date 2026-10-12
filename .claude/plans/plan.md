@@ -5917,3 +5917,17 @@ user set that as the budget ("use the measured budget"). Guarded by the
 refreshed memory baseline (each container at most 20% + 64 MiB above it)
 and the --full node budget of 20 GiB. monitoringLogging is on by default
 from here; templates/metrics/ goes next.
+
+## monitoring-logging is the metrics profile (user: "yes go ahead", after the tuning)
+
+As both reference environments: `templates/metrics/` (the docker-compose
+Grafana and Prometheus) and its vendored config are gone, and so is the
+`monitoringLogging.enabled` switch: Chart.yaml's monitoring-logging
+dependency now has `condition: metrics.enabled`, the profile `--full` sets.
+`deploy` applies monitoring-logging's CRDs when the render holds
+monitoring.coreos.com objects, instead of reading the switch;
+`set-podiumd-version` always takes both versions (no
+`--disable-monitoring-logging`; Helm fetches the dependency even when the
+profile is off); `values.set_flag` had no other caller and is removed.
+`zac-admin` moved to `templates/zac/`. The raw Grafana's PVC `grafana` is
+not pruned (no PVC is) and was deleted by hand on this cluster.

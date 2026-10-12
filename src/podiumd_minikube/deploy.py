@@ -26,7 +26,6 @@ from podiumd_minikube import polling
 from podiumd_minikube import postgres
 from podiumd_minikube import process
 from podiumd_minikube import prune
-from podiumd_minikube import values
 from podiumd_minikube.paths import NAMESPACE
 
 STORAGE_HOOKS = "templates/storage-hooks.yaml"
@@ -168,11 +167,11 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     # Before anything with pods: every pod, the storage Job included, mounts it.
     pki.apply_trust(NAMESPACE)
     storage = _apply_storage_hooks(selected)
-    if values.monitoring_logging_enabled():
-        print("\nApplying monitoring-logging's own CRDs first...")
-        crds.apply_monitoring_logging_crds()
     postgres.create_missing_databases()
     render = selected.render()
+    if crds.needed(render.docs):
+        print("\nApplying monitoring-logging's own CRDs first...")
+        crds.apply_monitoring_logging_crds()
     _rerun_jobs(render)
     _apply_crds(render)
     _apply_full_manifest(render, expected_storage_errors(storage))

@@ -27,7 +27,7 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
 ## Quick start
 
 ```bash
-podiumd-minikube set-podiumd-version <version> --disable-monitoring-logging  # required — see below
+podiumd-minikube set-podiumd-version <version> <monitoring-logging-version>  # required — see below
                                      # (or --path <dir> for a local podiumd chart checkout)
 podiumd-minikube provision-cluster      # starts minikube, installs NGINX Gateway Fabric, pre-loads every image
 podiumd-minikube deploy --full          # renders and applies the chart (every optional profile on)
@@ -107,20 +107,7 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | `openbeheer` | Open Beheer on `https://openbeheer.local` (needs `objecten`) |
 | `frankgateway` | Frank!Gateway's outway (with etcd) and OpenBao on `https://openbao.local`; apps then call BRP/KvK/BAG at `http://frankgateway-outway:9080/...` instead of the api-proxy. OpenBao's seal key, root token and recovery key live in `.openbao/` (gitignored) |
 | `clamav` | ClamAV's clamd on `clamav:3310` with only the EICAR test signature (no freshclam, no internet); Open Inwoner's virus scan setting is test wiring (podiumd-tests) |
-| `metrics` | Prometheus (scrapes ZAC) and Grafana (or the `monitoringLogging` alternative below) |
-
-`metrics` has two implementations, picked by `values.yaml`'s
-`monitoringLogging.enabled` (not a `podiumd-minikube deploy` flag):
-
-- **Default** (`false`): the four raw components above.
-- **`true`**: swaps them for the `monitoring-logging` Helm dependency —
-  the same chart used in production, re-tuned for a single-node box. Adds
-  Loki + Alloy + kube-prometheus-stack + Pushgateway on top — meaningfully
-  heavier (~a dozen extra pods). Still needs `metrics.enabled=true` too.
-  Set it with `podiumd-minikube set-podiumd-version <version>
-  <monitoring-logging-version>`; `podiumd-minikube deploy` handles the rest (CRDs, ZAC's
-  OTLP endpoint) automatically. Never runs alongside the default
-  implementation.
+| `metrics` | monitoring-logging, as both reference environments: Grafana on `https://grafana.local`, Prometheus (scrapes ZAC), Loki with Alloy, the otel-collector |
 
 Ingress hostnames (all `*.local`, once the tunnel + `/etc/hosts` entry are
 set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`, `solr`,
@@ -155,16 +142,6 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 `GOMEMLIMIT`, the control plane's `GOGC`) and how to check each setting:
 [`.claude/memory/memory-tuning.md`](.claude/memory/memory-tuning.md).
 
-`monitoringLogging.enabled` replaces the `metrics` profile's Grafana and
-Prometheus with a dozen heavier pods. Disable it with:
-
-```bash
-podiumd-minikube set-podiumd-version <version> --disable-monitoring-logging
-```
-
-`podiumd-minikube deploy` cleans up the other implementation's leftover resources
-automatically either direction.
-
 ## Commands
 
 | Command | What it does |
@@ -177,7 +154,7 @@ automatically either direction.
 | `podiumd-minikube setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
 | `podiumd-minikube teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
 | `podiumd-minikube reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
-| `podiumd-minikube set-podiumd-version <version> <monitoring-logging-version\|--disable-monitoring-logging>` | Sets both Helm dependency versions in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. `--path <dir>` points `podiumd` at a local checkout instead, auto-detecting a sibling `monitoring-logging/` directory |
+| `podiumd-minikube set-podiumd-version <version> <monitoring-logging-version>` | Sets both Helm dependency versions in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. `--path <dir>` points `podiumd` at a local checkout instead, auto-detecting a sibling `monitoring-logging/` directory |
 | `podiumd-minikube show-podiumd-version` | Prints the current version selection and fetch status per dependency |
 | `podiumd-minikube show-port-mappings` | Prints how host traffic reaches each deployed app (Ingress hostname → backend Service:port) |
 | `podiumd-minikube expose-postgres [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |

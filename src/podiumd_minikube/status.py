@@ -34,8 +34,7 @@ RECENT_RESTART_SECONDS = 3600
 # Seconds between the two CPU samples (crictl reports cumulative CPU time).
 CPU_SAMPLE_SECONDS = 1.0
 _UNITS = {"B": 1, "KiB": 1024, "MiB": MIB, "GiB": 1024 * MIB}
-# Optional profile -> the pod-name prefix that shows it runs. monitoringLogging's
-# subcharts carry the release name; templates/metrics' Grafana does not.
+# Optional profile -> the pod-name prefix that shows it runs.
 PROFILE_PODS = {
     "objecten": "objecten",
     "objecttypen": "objecttypen",
@@ -50,8 +49,7 @@ PROFILE_PODS = {
     "openbeheer": "openbeheer",
     "frankgateway": "frankgateway-outway",
     "clamav": "clamav",
-    "metrics": "grafana",
-    "monitoringLogging": "podiumd-minikube-grafana",
+    "metrics": "podiumd-minikube-grafana",
 }
 
 

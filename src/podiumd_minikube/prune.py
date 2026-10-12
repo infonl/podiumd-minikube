@@ -1,8 +1,8 @@
 """Deletes resources that an earlier deploy created but the current render no longer contains.
 
 `kubectl apply` never deletes what drops out of a render; toggling a profile
-or monitoringLogging.enabled left the old Deployments, Services and Ingresses
-running (two Grafanas answering grafana.local).
+left the old Deployments, Services and Ingresses running (two Grafanas
+answering grafana.local).
 
 Not pruned: Jobs and CronJobs (pabc-migrations is excluded from the render on
 purpose; CronJob runs are never rendered), the objects the scripts create

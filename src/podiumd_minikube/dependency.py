@@ -30,10 +30,7 @@ Mode = Literal["version", "path"]
 # Key in .podiumd-versions.yaml -> dependency name in Chart.yaml and charts/<name>-<version>.tgz.
 DEPENDENCIES = {"podiumd": "podiumd", "monitoringLogging": "monitoring-logging"}
 
-USAGE_HINT = (
-    "run podiumd-minikube set-podiumd-version <version> <monitoring-logging-version> "
-    "(or <version> --disable-monitoring-logging, or --path <dir> [--disable-monitoring-logging])"
-)
+USAGE_HINT = "run podiumd-minikube set-podiumd-version <version> <monitoring-logging-version> (or --path <dir>)"
 
 
 @dataclass(frozen=True)

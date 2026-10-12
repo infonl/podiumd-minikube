@@ -79,7 +79,7 @@ def show_port_mappings() -> None:
     for route in found:
         backend = f"{route.service}:{route.port} -> {port_number(route, services)}"
         print(f"{route.host:<30} {backend:<32} {TRAFFIC_TYPE.get(route.host, '(no description on file)')}")
-    # Two Ingresses for one host (left over after toggling monitoringLogging): two routes claim it.
+    # Two Ingresses for one host (a leftover of an earlier render): two routes claim it.
     duplicates = sorted(host for host, count in Counter(route.host for route in found).items() if count > 1)
     if duplicates:
         print(

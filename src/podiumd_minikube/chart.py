@@ -96,13 +96,8 @@ class ZacPkce:
 
 
 def everything_args(charts_dir: Path = CHARTS_DIR) -> list[str]:
-    """helm args that render every profile plus monitoring-logging: all images and hosts the chart can have."""
-    return [
-        *FULL_PROFILE_SETS,
-        *objecten_shape(charts_dir).sets,
-        "--set", "monitoringLogging.enabled=true",
-        *zac_pkce(charts_dir).sets,
-    ]  # fmt: skip
+    """helm args that render every profile: all images and hosts the chart can have."""
+    return [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets, *zac_pkce(charts_dir).sets]
 
 
 def zac_pkce(charts_dir: Path = CHARTS_DIR) -> ZacPkce:

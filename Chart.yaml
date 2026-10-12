@@ -23,10 +23,7 @@ dependencies:
     condition: podiumd.enabled
   - name: monitoring-logging
     repository: "@dimpact"
-    # Optional (see values.yaml's own monitoringLogging.enabled comment),
-    # but still needs a real version recorded in .podiumd-versions.yaml
-    # either way - Helm always fetches every declared dependency
-    # regardless of its condition: value, only *rendering* is gated. Same
-    # placeholder-only note as podiumd's own version field above.
+    # The metrics profile. Helm fetches it even when the profile is off, so
+    # .podiumd-versions.yaml always records a version; placeholder as above.
     version: "0.0.0-set-via-podiumd-versions-yaml"
-    condition: monitoringLogging.enabled
+    condition: metrics.enabled

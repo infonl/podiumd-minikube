@@ -44,7 +44,7 @@ live: the tunnel script's own host list went stale, which is why
    | YAML sections that may be null, a resource's name | `manifests.section`, `manifests.name_of` |
    | the `*.local` hosts of all Ingresses | `podiumd_minikube.hosts` |
    | podiumd chart version and `charts/*.tgz` sync | `podiumd_minikube.dependency` (`selection`, `write`, `sync`) |
-   | a flag in a top-level `values.yaml` block | `podiumd_minikube.values` (`flag`, `set_flag`, `monitoring_logging_enabled`, `zac_experimental_pkce`) |
+   | a flag in a top-level `values.yaml` block | `podiumd_minikube.values` (`flag`, `zac_experimental_pkce`) |
    | facts from the vendored tarballs (objecten shape, ZAC PKCE support) | `podiumd_minikube.chart` |
    | the ZAC PKCE live realm sync | `keycloak.sync_zac_pkce` |
    | (re)creating the pabc-migrations Job | `pabc.apply_migrations`; never an ad-hoc delete + apply |

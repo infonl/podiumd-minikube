@@ -21,7 +21,6 @@ from podiumd_minikube import tunnel
 from podiumd_minikube import versions
 
 PROG = "podiumd-minikube"
-DISABLE = "--disable-monitoring-logging"
 EXTENDED = [
     "--full",
     "--set", "metrics.enabled=false",
@@ -167,17 +166,16 @@ def set_podiumd_version(argv: list[str]) -> None:
         "--path", type=Path, help="local podiumd chart checkout; monitoring-logging follows its sibling"
     )
     parser.add_argument("version", nargs="?", help="published podiumd version")
-    parser.add_argument("monitoring_logging", nargs="?", help=f"monitoring-logging version (enables it), or {DISABLE}")
-    parser.add_argument(DISABLE, dest="disable", action="store_true", help="disable monitoring-logging")
+    parser.add_argument("monitoring_logging", nargs="?", help="published monitoring-logging version")
     args = parser.parse_args(argv)
     if args.path:
         if args.version:
             parser.error("--path takes no version")
-        versions.set_path(args.path, disable_monitoring_logging=args.disable)
+        versions.set_path(args.path)
         return
-    if not args.version or (args.monitoring_logging is None) == (not args.disable):
-        parser.error(f"give <version> and either <monitoring-logging-version> or {DISABLE}")
-    versions.set_version(args.version, None if args.disable else args.monitoring_logging)
+    if not args.version or not args.monitoring_logging:
+        parser.error("give <version> <monitoring-logging-version>, or --path <dir>")
+    versions.set_version(args.version, args.monitoring_logging)
 
 
 def setup_tunnel(argv: list[str]) -> None:
@@ -207,7 +205,7 @@ def show_cluster_status(argv: list[str]) -> None:
 
 
 def show_podiumd_version(argv: list[str]) -> None:
-    """Shows the selected podiumd and monitoring-logging versions, whether fetched, and monitoringLogging.enabled."""
+    """Shows the selected podiumd and monitoring-logging versions and whether they are fetched."""
     _parser(show_podiumd_version).parse_args(argv)
     versions.show()
 

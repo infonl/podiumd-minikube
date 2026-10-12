@@ -8,9 +8,10 @@ from podiumd_minikube import status
 
 
 def test_enabled_profiles_match_pod_name_prefixes():
-    profiles = status.enabled_profiles(["contact-web-6f6d-r2q96", "clamav-0", "grafana-68fb-m7sm2", "zac-cc96-m52qj"])
+    pods = ["contact-web-6f6d-r2q96", "clamav-0", "podiumd-minikube-grafana-68fb-m7sm2", "zac-cc96-m52qj"]
+    profiles = status.enabled_profiles(pods)
     assert profiles["kiss"] and profiles["clamav"] and profiles["metrics"]
-    assert not profiles["openinwoner"] and not profiles["monitoringLogging"]
+    assert not profiles["openinwoner"]
 
 
 def test_workloads_name_a_deployments_pod_after_the_deployment():

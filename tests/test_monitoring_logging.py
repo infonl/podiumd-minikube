@@ -1,4 +1,4 @@
-"""monitoringLogging: the scrape jobs values.yaml adds to its Prometheus (additionalScrapeConfigs)."""
+"""The metrics profile (monitoring-logging): the scrape job values.yaml adds to its Prometheus."""
 
 import pytest
 import requests
@@ -7,11 +7,9 @@ from conftest import host_url
 
 
 @pytest.fixture(autouse=True)
-def _skip_if_monitoring_logging_disabled(enabled_profiles):
-    if not enabled_profiles.get("monitoringLogging"):
-        pytest.skip(
-            "monitoringLogging.enabled is off: templates/metrics/ backs the 'metrics' profile (test_metrics.py)"
-        )
+def _skip_if_metrics_disabled(enabled_profiles):
+    if not enabled_profiles.get("metrics"):
+        pytest.skip("'metrics' profile is not deployed")
 
 
 def test_added_scrape_jobs_are_up(edge_ip):
