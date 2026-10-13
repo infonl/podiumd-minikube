@@ -6514,3 +6514,19 @@ node here); `SOLR_URL` is the chart's `http://zac-solr-solrcloud-common`.
   CPU count are set explicitly). Solr restarted once while ZooKeeper was down.
 - The old Solr PVC (5Gi) was deleted by hand; ZAC's index starts empty and
   indexes new zaken from notifications, as on kees00.
+
+### Memory after the operator switch
+
+After six deploys in a day, kube-apiserver held 1554 MiB (live heap 764 MiB).
+The operators added 12 CRDs, 2.3 MiB of schema (Redis 0.91, Solr 0.88,
+Keycloak 0.32, ZooKeeper 0.20; monitoring-logging's 2.4 MiB had cost +460 MiB),
+so a restart (crictl stop, at Kees's request) separated the two: fresh, it held
+740-775 MiB RSS for 10 minutes, live heap 410-470 MiB. The growth was deploy
+churn, not the CRDs; a restart resets it (`start-cluster` does).
+
+Baseline refreshed then, after podiumd-tests' smoke and core on the switched
+cluster: containers 12133 -> 12366 MiB (+233 MiB for three operators' worth of
+components, the plain Redis/Solr/Keycloak gone), kube-apiserver 875 -> 683 MiB,
+node 14592 MiB. New: keycloak-operator 182, Solr 350 (plain Solr 245),
+ZooKeeper 69, solr-operator 35, zookeeper-operator 33, redis-operator 25,
+Redis 9 MiB.
