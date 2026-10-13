@@ -6182,9 +6182,6 @@ ExternalsPodiumD:
 
 Still different, on purpose or open:
 
-- cert-manager stays in namespace `cert-manager`; ExternalsPodiumD uses
-  `ingress-basic`. A move needs a reinstall, and the CA Secret has to move
-  with it.
 - That health check also requires a ClientSettingsPolicy
   `default-client-settings`. Neither policy is in ExternalsPodiumD's git, so
   their live values are unknown; until someone reads them, there is no
@@ -6192,3 +6189,23 @@ Still different, on purpose or open:
 - Route and alias names stay `hr-<host>` and the app's Service name;
   ExternalsPodiumD's are `hr-<app>-nginx` and `<app>-nginx`. The difference
   is cosmetic.
+
+## cert-manager in ingress-basic (user: "move cert-manager to ingress-basic too")
+
+cert-manager now runs in `ingress-basic`, as in ExternalsPodiumD, so the CA
+Secret `podiumd-local-ca` lives there too. podiumd-infra's kees00 keeps
+namespace `cert-manager`.
+`pki.install_cert_manager` moves an existing release from the old namespace
+`cert-manager`. It first annotates the cert-manager CRDs with
+`helm.sh/resource-policy: keep` and the new release namespace; without that,
+helm would refuse to adopt them. Then it uninstalls the old release and
+deletes the namespace. The Certificates and their Secrets survive the move,
+because the CRDs stay.
+
+Found live: the new cainjector waited 75 s for the leader lease
+`kube-system/cert-manager-cainjector-leader-election` of the uninstalled pod.
+Until then the webhook had no CA, and `kubectl apply` of a Certificate failed
+with "x509: certificate signed by unknown authority". So `pki.install_issuer`
+now retries its apply for up to 180 s. Verified: a test Certificate became
+Ready, podiumd-tls stayed Ready, and the live suite passes (28). The memory
+baseline keys moved to `ingress-basic/cert-manager*`.

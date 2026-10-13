@@ -16,8 +16,10 @@ import certifi
 import yaml
 
 from podiumd_minikube import kube
+from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube.paths import CHART_DIR
+from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
 
 PKI_DIR = CHART_DIR / ".pki"
@@ -25,7 +27,9 @@ CA_CERT = PKI_DIR / "ca.crt"
 CA_KEY = PKI_DIR / "ca.key"
 CA_DAYS = 3650
 
-CERT_MANAGER_NAMESPACE = "cert-manager"
+# As ExternalsPodiumD; OLD_CERT_MANAGER_NAMESPACE is where clusters provisioned before 2026-10-13 have it.
+CERT_MANAGER_NAMESPACE = EDGE_NAMESPACE
+OLD_CERT_MANAGER_NAMESPACE = "cert-manager"
 # As ExternalsPodiumD (pipelines/includes/haven/cert-manager.yml): this chart, with the images it pins.
 CERT_MANAGER_VERSION = "v1.20.3"
 CERT_MANAGER_IMAGE_TAG = "v1.19.3"
@@ -73,8 +77,25 @@ def cert_manager_values() -> dict[str, Any]:
     }
 
 
+def _move_from_old_namespace() -> None:
+    """Uninstalls a cert-manager release in OLD_CERT_MANAGER_NAMESPACE, keeping its CRDs and so every Certificate.
+
+    The CRDs get the new release's ownership, else helm refuses to adopt them.
+    """
+    if not process.output(["helm", "list", "-n", OLD_CERT_MANAGER_NAMESPACE, "-q", "-f", "^cert-manager$"]).strip():
+        return
+    print(f"Moving cert-manager from namespace '{OLD_CERT_MANAGER_NAMESPACE}' to '{CERT_MANAGER_NAMESPACE}'...")
+    kube.kubectl(
+        "annotate", "crd", "-l", "app.kubernetes.io/instance=cert-manager", "--overwrite",
+        "helm.sh/resource-policy=keep", f"meta.helm.sh/release-namespace={CERT_MANAGER_NAMESPACE}",
+    )  # fmt: skip
+    process.run(["helm", "uninstall", "cert-manager", "-n", OLD_CERT_MANAGER_NAMESPACE, "--wait"], capture=False)
+    kube.kubectl("delete", "namespace", OLD_CERT_MANAGER_NAMESPACE, "--wait=true")
+
+
 def install_cert_manager() -> None:
     """Installs or upgrades cert-manager to CERT_MANAGER_VERSION; skips it when that version runs."""
+    _move_from_old_namespace()
     releases = json.loads(process.output(["helm", "list", "-n", CERT_MANAGER_NAMESPACE, "-o", "json"]))
     if any(release["chart"] == f"cert-manager-{CERT_MANAGER_VERSION}" for release in releases):
         print(f"cert-manager {CERT_MANAGER_VERSION} already installed in '{CERT_MANAGER_NAMESPACE}' - skipping.")
@@ -113,10 +134,20 @@ def issuer_manifests() -> str:
 
 
 def install_issuer() -> None:
-    """Applies the CA Secret and ClusterIssuer; idempotent."""
+    """Applies the CA Secret and ClusterIssuer; idempotent.
+
+    Retried: after cert-manager's pods are replaced, its webhook has no CA until
+    the new cainjector takes over the old leader lease (75 s after a move).
+    """
     if ensure_ca():
         print(f"Created the local CA in {PKI_DIR} (trust {CA_CERT} in browsers and test clients).")
-    kube.kubectl_shown("apply", "-f", "-", stdin=issuer_manifests())
+    manifests = issuer_manifests()
+
+    def applied() -> bool:
+        return process.run(["kubectl", "apply", "-f", "-"], stdin=manifests, check=False).returncode == 0
+
+    if not polling.wait_until(applied, timeout=180, interval=5):
+        kube.kubectl_shown("apply", "-f", "-", stdin=manifests)
     kube.kubectl_shown("wait", "--for=condition=Ready", f"clusterissuer/{ISSUER}", "--timeout=120s")
 
 

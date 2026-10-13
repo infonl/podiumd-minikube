@@ -3,9 +3,9 @@
   "node_mib": 14705,
   "containers_mib": 12441,
   "containers": {
-    "cert-manager/cert-manager-cainjector/cert-manager-cainjector": 63,
-    "cert-manager/cert-manager-webhook/cert-manager-webhook": 15,
-    "cert-manager/cert-manager/cert-manager-controller": 33,
+    "ingress-basic/cert-manager-cainjector/cert-manager-cainjector": 63,
+    "ingress-basic/cert-manager-webhook/cert-manager-webhook": 15,
+    "ingress-basic/cert-manager/cert-manager-controller": 33,
     "ingress-basic/nginx-gateway-fabric/nginx-gateway": 55,
     "ingress-basic/public-gateway-nginx/nginx": 83,
     "kube-system/coredns/coredns": 24,
