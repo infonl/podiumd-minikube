@@ -183,6 +183,17 @@ def test_limit_runtimes_gives_containers_with_a_memory_limit_gomemlimit():
     assert [item for item in own["env"] if item["name"] == "GOMEMLIMIT"] == [{"name": "GOMEMLIMIT", "value": "900MiB"}]
 
 
+def test_tune_solr_sets_the_solr_and_zookeeper_jvm_env():
+    provided: manifests.Doc = {"replicas": 1}
+    spec: manifests.Doc = {"zookeeperRef": {"provided": provided}}
+    manifests.tune_solr([{"kind": "SolrCloud", "spec": spec}])
+    pod_options = manifests.section(manifests.section(spec, "customSolrKubeOptions"), "podOptions")
+    assert {"name": "GC_TUNE", "value": "-XX:+UseSerialGC"} in pod_options["envVars"]
+    zookeeper_env = manifests.section(provided, "zookeeperPodPolicy")["env"]
+    assert {"name": "ZK_SERVER_HEAP", "value": "128"} in zookeeper_env
+    assert {"name": "MALLOC_ARENA_MAX", "value": "2"} in zookeeper_env
+
+
 def test_keep_finished_jobs_drops_only_the_jobs_ttl():
     job: manifests.Doc = {"kind": "Job", "spec": {"ttlSecondsAfterFinished": 60, "backoffLimit": 6}}
     cron: manifests.Doc = {"kind": "CronJob", "spec": {"jobTemplate": {"spec": {"ttlSecondsAfterFinished": 60}}}}

@@ -6485,3 +6485,32 @@ same DB numbers. `flush-redis` finds the master by `app=redis-ha,redis-role=mast
   ("status.masterNode not set") and the second succeeds. The Celery workers
   retried "Connection refused" for about 2 minutes, then connected; as on the
   real environments after a Redis restart.
+
+### Solr: ZAC's SolrCloud through the chart's solr-operator
+
+Replaces `templates/solr` (plain `solr:9.10.1-slim` with `solr-precreate zac`).
+podiumd's default for ZAC, as ExternalsPodiumD: the solr-operator and its
+zookeeper-operator run SolrCloud `zac-solr`; ZAC's `init-solr-zac-core`
+container creates collection `zac` (2 shards, replication factor 2, all on one
+node here); `SOLR_URL` is the chart's `http://zac-solr-solrcloud-common`.
+`templates/solr/ingress.yaml` keeps `solr.local` on that Service.
+
+- Sizes: Solr 1 node (chart 3), `-Xms64m -Xmx512m`, 512Mi/768Mi (chart
+  `-Xms512m -Xmx768m`, 1Gi/2Gi); ZooKeeper 1 replica as ExternalsPodiumD,
+  96Mi/256Mi (chart 256Mi/512Mi). `manifests.tune_solr` adds the serial GC for
+  Solr and `ZK_SERVER_HEAP=128` with the serial GC and C1 for ZooKeeper
+  (zkEnv.sh's default heap is 1000 MB), plus CAPACITY_ENV, through the
+  SolrCloud's podOptions.envVars and zookeeperPodPolicy.env.
+- Settled after the deploy: Solr 333 MiB (plain Solr 252; four cores now),
+  ZooKeeper 69 MiB, solr-operator 35 MiB, zookeeper-operator 32 MiB.
+- The ZookeeperCluster CRD: the chart's zookeeper-operator has `crd.create:
+  false` and the solr-operator's `crds/` lacks it; podiumd-infra applies
+  solr-operator's `all-with-dependencies.yaml`. Vendored that one CRD from
+  v0.9.1 (the operator's version; the chart's three Solr CRDs equal v0.9.1) as
+  `vendor/solr-operator/`, rendered by `templates/solr/crd-zookeeperclusters.yaml`.
+- Found live: ZooKeeper crashlooped, its image's JDK 11.0.16 throwing a
+  NullPointerException in `Container.metrics` from the JMX agent on this
+  kernel's cgroup v2. `-XX:-UseContainerSupport` in `SERVER_JVMFLAGS` (heap and
+  CPU count are set explicitly). Solr restarted once while ZooKeeper was down.
+- The old Solr PVC (5Gi) was deleted by hand; ZAC's index starts empty and
+  indexes new zaken from notifications, as on kees00.

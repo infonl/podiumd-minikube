@@ -46,6 +46,17 @@ GO_MEMORY_LIMIT = "GOMEMLIMIT"
 # serial GC; TieredStopAtLevel=1: only the C1 compiler. Its operator runs plain `java -jar`.
 KEYCLOAK_JAVA_OPTS = "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2 -XX:-UseG1GC -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 KEYCLOAK_OPERATOR = "keycloak-operator"
+# Solr's default G1 settings replaced: the serial GC lets the heap follow what is in use.
+SOLR_ENV = {"GC_TUNE": "-XX:+UseSerialGC"}
+# zkEnv.sh's ZK_SERVER_HEAP (MB) defaults to 1000. -XX:-UseContainerSupport: the
+# image's JDK 11.0.16 throws a NullPointerException reading cgroup v2 metrics on
+# kernel 7.x (its JMX agent then exits); heap and CPU count are set explicitly.
+ZOOKEEPER_ENV = {
+    "ZK_SERVER_HEAP": "128",
+    "SERVER_JVMFLAGS": (
+        "-Xms16m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:ActiveProcessorCount=1 -XX:-UseContainerSupport"
+    ),
+}
 KEYCLOAK_OPERATOR_JAVA_OPTS = "-Xms32m -Xmx192m -XX:ActiveProcessorCount=1 -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000
@@ -79,6 +90,15 @@ def section(node: Doc, key: str) -> Doc:
     """node[key] when it is a mapping, else {} (rendered sections are often null)."""
     value = node.get(key)
     return cast("Doc", value) if isinstance(value, dict) else {}
+
+
+def _mapping(node: Doc, *keys: str) -> Doc:
+    """node[keys[0]][keys[1]]..., creating each missing or null mapping on the way."""
+    for key in keys:
+        if not isinstance(node.get(key), dict):
+            node[key] = {}
+        node = node[key]
+    return node
 
 
 def name_of(doc: Doc) -> str:
@@ -240,6 +260,16 @@ def tune_keycloak(docs: list[Doc]) -> None:
                 add_env(container, {"JDK_JAVA_OPTIONS": KEYCLOAK_OPERATOR_JAVA_OPTS})
 
 
+def tune_solr(docs: list[Doc]) -> None:
+    """Sets the JVM settings and CAPACITY_ENV of the pods the solr-operator builds from ZAC's SolrCloud."""
+    for doc in docs:
+        if doc.get("kind") != "SolrCloud":
+            continue
+        body = section(doc, "spec")
+        add_env(_mapping(body, "customSolrKubeOptions", "podOptions"), SOLR_ENV | CAPACITY_ENV, "envVars")
+        add_env(_mapping(body, "zookeeperRef", "provided", "zookeeperPodPolicy"), ZOOKEEPER_ENV | CAPACITY_ENV)
+
+
 def limit_runtimes(docs: list[Doc]) -> None:
     """Adds CAPACITY_ENV to every container of every workload, Job and operator pod template; GOMEMLIMIT where limited.
 
@@ -259,9 +289,9 @@ def _containers(spec: Doc) -> list[Doc]:
     return [*(spec.get("initContainers") or []), *(spec.get("containers") or [])]
 
 
-def add_env(container: Doc, values: dict[str, str]) -> None:
-    """Appends values to container's env; a variable the container already sets wins."""
-    _merge_env(container, [{"name": name, "value": value} for name, value in values.items()])
+def add_env(container: Doc, values: dict[str, str], key: str = "env") -> None:
+    """Appends values to container's env (or another list under key); a variable already set wins."""
+    _merge_env(container, [{"name": name, "value": value} for name, value in values.items()], key)
 
 
 def _add_env_from(container: Doc, sources: dict[str, Doc]) -> None:
@@ -269,9 +299,9 @@ def _add_env_from(container: Doc, sources: dict[str, Doc]) -> None:
     _merge_env(container, [{"name": name, "valueFrom": source} for name, source in sources.items()])
 
 
-def _merge_env(container: Doc, items: list[Doc]) -> None:
-    env: list[Doc] = container.get("env") or []
-    container["env"] = env
+def _merge_env(container: Doc, items: list[Doc], key: str = "env") -> None:
+    env: list[Doc] = container.get(key) or []
+    container[key] = env
     present = {item.get("name") for item in env}
     env.extend(item for item in items if item["name"] not in present)
 
@@ -362,6 +392,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     route_through_nginx(docs)
     keep_finished_jobs(docs)
     tune_keycloak(docs)
+    tune_solr(docs)
     limit_runtimes(docs)
     if ca_trust:
         trust_ca(docs)

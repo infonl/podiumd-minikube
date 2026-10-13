@@ -1,0 +1,4 @@
+{{- /* solr-operator v0.9.1's crds/all-with-dependencies.yaml, which podiumd-infra applies from archive.apache.org: the chart's zookeeper-operator has crd.create false and its crds/ lacks it. */}}
+{{- if (index .Values.podiumd.zac "solr-operator").enabled }}
+{{ .Files.Get "vendor/solr-operator/zookeeperclusters.zookeeper.pravega.io.yaml" }}
+{{- end }}

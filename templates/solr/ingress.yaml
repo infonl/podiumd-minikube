@@ -13,6 +13,6 @@ spec:
             pathType: ImplementationSpecific
             backend:
               service:
-                name: solr
+                name: zac-solr-solrcloud-common # the solr-operator's
                 port:
-                  name: solr
+                  number: 80

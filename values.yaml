@@ -437,17 +437,35 @@ podiumd:
       enabled: false
     signaleringen:
       deleteOlderThanDays: "14"
-    solr:
-      url: http://solr:8983
-      # Verified live: createZacCore's initContainer uses the SolrCloud-only
-      # Collections API (/solr/admin/collections), which fails against our
-      # plain standalone Solr (no SolrCloud/Zookeeper). Our own Solr
-      # Deployment runs "solr-precreate zac" at startup instead, matching
-      # compose exactly - the core already exists by the time anything
-      # needs it, without needing this initContainer at all.
-      createZacCore: false
+    # ZAC's SolrCloud through the chart's solr-operator, as ExternalsPodiumD; ZAC's
+    # init-solr-zac-core container creates the zac collection.
     solr-operator:
-      enabled: false # podiumd's own override defaults this to true (unlike charts/zac's own quiet false default) - we use a plain Solr Deployment instead, see templates/solr.yaml
+      watchNamespaces: podiumd-minikube
+      solr:
+        replicas: 1 # chart 3
+        # Laptop budget: chart -Xms512m -Xmx768m, 1Gi/2Gi. The GC is in manifests.tune_solr.
+        javaMem: "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            memory: 768Mi
+        storage:
+          storageClassName: standard
+      zookeeper-operator:
+        watchNamespace: podiumd-minikube
+        zookeeper:
+          replicas: 1 # as ExternalsPodiumD
+          # Laptop budget: chart 256Mi/512Mi. The heap is in manifests.tune_solr.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          storage:
+            storageClassName: standard
     # Off, as ExternalsPodiumD gets by default: ZAC's OTel SDK stays off and its
     # bundled collector is not deployed. One chart level deeper than podiumd,
     # Helm renders that collector unless this is set (checked with helm 4.3.0).
