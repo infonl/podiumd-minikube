@@ -6356,3 +6356,18 @@ Objecttypes answer on objecttypen.local, on objecten.local and in-cluster on
 `objecttypen.podiumd-minikube`. The live suite passes (28).
 `objecttypen.podiumd-minikube.svc.cluster.local` answers 400; nothing uses
 it, and classic objecttypen did not allow it either.
+
+Memory on 4.10.0, settled, after podiumd-tests' smoke and core tiers:
+- The objecttypen container (152 MiB in the baseline) is gone.
+- Open Object's `objecten` is unchanged: 205 MiB, worker 167 MiB.
+- Containers total 308 MiB less than the previous baseline. The node uses
+  13.4 GiB.
+
+The baseline was refreshed afterwards.
+
+podiumd-tests found that the admin login on `objecttypen.local` fails.
+Keycloak answers 400: podiumd 4.10.0 drops the `objecttypen` client, and the
+`objecten` client registers only objecten's oidcUrl. Real 4.10 environments
+behave the same way, so minikube keeps the chart's client. podiumd-tests now
+logs in to the admin on the objecten host. The chart issue is kept locally
+in `objecttypen-host-admin-login-issue.md`.
