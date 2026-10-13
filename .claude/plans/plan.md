@@ -6248,3 +6248,10 @@ Reaching the clusters needed the INFO VPN plus a host route per API server
 (`sudo ip route add <ip>/32 via 10.101.33.1 dev tun1`): the split tunnel does
 not route the AKS API servers. kubelogin's devicecode login was swapped for
 azurecli in a temporary copy of each kubeconfig.
+
+## Loki levels off at GOGC 50
+
+Measured on 2026-10-13, 2 h after the node started, after podiumd-tests' smoke
+and core tiers: Loki uses 247 MiB. On 2026-10-12 it used 290 MiB after 1.3 h and
+260 MiB after 2.3 h. It no longer grows as it did at GOGC 100 (202 -> 328 MiB
+over a day), so the in-memory chunk settings stay as they are.
