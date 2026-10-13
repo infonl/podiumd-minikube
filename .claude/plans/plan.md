@@ -6371,3 +6371,18 @@ Keycloak answers 400: podiumd 4.10.0 drops the `objecttypen` client, and the
 behave the same way, so minikube keeps the chart's client. podiumd-tests now
 logs in to the admin on the objecten host. The chart issue is kept locally
 in `objecttypen-host-admin-login-issue.md`.
+
+## The chart's operators instead of plain Deployments (2026-10-13)
+
+podiumd-infra asked for this after kees00 hit four faults in the chart's
+Keycloak wiring that minikube's plain Keycloak with ZAC's compose realm
+cannot see. Kees decided: RabbitMQ goes completely, the external APIs stay as
+they are, then Keycloak, Redis and Solr move to the chart's operators, in
+that order. One replica each (laptop rule), capacity tuned like the rest.
+
+### RabbitMQ removed
+
+Open Notificaties 1.16.0 replaced RabbitMQ with Celery Beat; podiumd 4.8 and
+later bundle 1.16.0 or newer. `templates/rabbitmq` and the
+`opennotificaties.rabbitmqEnabled` flag only served podiumd 4.7.x, which is
+no longer supported. Nothing ran it (the flag was false).

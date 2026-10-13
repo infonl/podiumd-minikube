@@ -41,11 +41,6 @@ objecten:
   merged: false
 opennotificaties:
   enabled: false
-  # Only relevant for podiumd versions old enough to bundle a pre-1.16.0
-  # opennotificaties (see podiumd.opennotificaties.image.tag's own
-  # comment, and templates/rabbitmq/deployment.yaml's own header) - leave
-  # false for the current default (podiumd 4.8.4).
-  rabbitmqEnabled: false
 openarchiefbeheer:
   enabled: false
 openformulieren:
@@ -1897,39 +1892,12 @@ podiumd:
   opennotificaties:
     enabled: false
     replicaCount: 1
-    # No image.tag pin - use whatever the currently-selected podiumd
-    # version's bundled chart defaults to (currently 1.16.0, via podiumd
-    # 4.8.4). Unlike openzaak/objecten/openformulieren, this isn't a
-    # compatibility pin, it's deliberately tracking upstream: 1.16.0
-    # dropped RabbitMQ as a dependency in favor of Celery Beat + database-
-    # persisted schedules (see open-notificaties' own CHANGELOG.rst entry
-    # for 1.16.0 and its linked ADR).
-    #
-    # This project also needs to keep working against podiumd 4.7.x (see
-    # podiumd-minikube set-podiumd-version), whose bundled opennotificaties predates
-    # 1.16.0 and still needs RabbitMQ - re-check this whole block when
-    # selecting a version that old, and flip these back together:
-    #   - top-level opennotificaties.rabbitmqEnabled: true (deploys
-    #     templates/rabbitmq/deployment.yaml)
-    #   - worker.replicaCount: 1, beat.replicaCount: 0 (no Beat container
-    #     pre-1.16.0 - it never sent anything, RabbitMQ did)
-    #   - settings.celery.brokerUrl/publishBrokerUrl:
-    #     amqp://guest:guest@rabbitmq:5672// (and .../%2F for the latter)
-    #   - settings.celery.resultBackend/settings.messageBroker.celeryResultBackend:
-    #     back to whichever unused redis:6379/N index is free (see
-    #     openzaak/openklant's own worker.replicaCount comments for why
-    #     that matters - competing Celery consumers on a shared broker db
-    #     silently steal each other's tasks)
-    #   - extraEnvVars: RABBITMQ_HOST=rabbitmq, RABBITMQ_PORT="5672" -
-    #     the worker's own /wait_for_rabbitmq.sh entrypoint script reads
-    #     these separately from CELERY_BROKER_URL and defaults to
-    #     localhost without them, stuck retrying forever (only visible as
-    #     a recurring liveness-probe kill/restart cycle, not an obvious
-    #     crash) - confirmed live.
+    # No image.tag pin: tracks the podiumd chart's version. Since 1.16.0
+    # Celery Beat sends the scheduled notifications.
     worker:
-      replicaCount: 1 # still needed either way - notifications are sent via a Celery worker
+      replicaCount: 1
     beat:
-      replicaCount: 1 # required as of 1.16.0 - it's what actually sends scheduled/retried notifications now, not RabbitMQ (see this block's own top comment for pre-1.16.0)
+      replicaCount: 1
     flower:
       enabled: false # already the chart default; explicit for clarity
     tags:
@@ -2175,10 +2143,6 @@ podiumd:
         # leaving that leak in place.
         oidc: redis:6379/3
       celery:
-        # 1.16.0 dropped RabbitMQ (see image.tag's own comment above) -
-        # CELERY_BROKER_URL/PUBLISH_BROKER_URL point at the shared Redis
-        # instead now, same as every other app here.
-        #
         # DB 5, not the more obvious 1 - objecten's own worker already
         # brokers on db1 (openzaak/openklant's own worker db collision
         # with objecten/openformulieren, and the resulting move to db3/

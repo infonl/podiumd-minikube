@@ -97,7 +97,7 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 |---|---|
 | `objecten` | Objecten API + celery worker. Objecttypen has no flag of its own: on podiumd 4.9.* `--full` enables it alongside `objecten`; from 4.10 Open Object serves both APIs, and `objecttypen.local` is an alias of it (detected from the chart) |
 | `openarchiefbeheer` | Open Archiefbeheer (web + nginx + worker + beat) |
-| `opennotificaties` | Open Notificaties + RabbitMQ |
+| `opennotificaties` | Open Notificaties |
 | `openformulieren` | Open Formulieren (transitively needs `objecten`, `objecttypen`, `opennotificaties`) |
 | `openinwoner` | Open Inwoner, with Elasticsearch through the ECK operator (as ExternalsPodiumD and podiumd-infra) |
 | `ita` | Interne Taakafhandeling on `https://ita.local` (needs `objecten` and the KISS objecttypes) |

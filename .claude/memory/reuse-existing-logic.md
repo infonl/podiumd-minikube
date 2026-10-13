@@ -51,7 +51,7 @@ live: the tunnel script's own host list went stale, which is why
    | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `unit_tests/conftest.py` |
    | PV/PVC pre-provisioning for an app | `templates/storage-hooks.yaml` |
    | a database and user for an app | the init SQL in `templates/postgres` |
-   | Redis, Mailpit, Keycloak, Solr, RabbitMQ | the existing `templates/<name>` Deployment; never a subchart's bundled copy |
+   | Redis, Mailpit, Keycloak, Solr | the existing `templates/<name>` Deployment; never a subchart's bundled copy |
    | common labels | `podiumd-minikube.labels` in `templates/_helpers.tpl` |
    | an optional profile switch | `<name>.enabled` + `podiumd.<name>.enabled` in `values.yaml`, set by `--full` in `podiumd_minikube.deploy.options` |
    | kubectl from tests | `kubectl` in `tests/conftest.py` |
