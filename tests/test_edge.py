@@ -4,7 +4,7 @@ import requests
 
 from conftest import host_url
 
-# ExternalsPodiumD sets no ClientSettingsPolicy, so nginx's default 1 MB applies.
+# No ClientSettingsPolicy, as in ExternalsPodiumD's git, so nginx's default 1 MB applies.
 BODY = b"x" * (2 * 1024 * 1024)
 
 

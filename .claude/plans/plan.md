@@ -6209,3 +6209,14 @@ with "x509: certificate signed by unknown authority". So `pki.install_issuer`
 now retries its apply for up to 180 s. Verified: a test Certificate became
 Ready, podiumd-tls stayed Ready, and the live suite passes (28). The memory
 baseline keys moved to `ingress-basic/cert-manager*`.
+
+## ExternalsPodiumD's edge policies: git, not live (user: "yes, do 1 and 2")
+
+The claims that ExternalsPodiumD sets no proxy buffers and no body limit hold
+only for its git repo. Its `gateway_health_check.sh` requires
+`default-proxy-settings` and `default-client-settings` live, so they most
+likely exist there, with unknown values. `gateway.py`, `tests/test_edge.py`
+and the untracked `ngf-response-header-buffer-issue.md` now say "in git",
+and the write-up has the command to read the policies on dimp test. Until
+someone reads them, nothing changes here: the 16k buffers and the 1 MB body
+limit stay.

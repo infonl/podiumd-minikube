@@ -6,8 +6,9 @@ services-gateway.yml): Gateway API CRDs v1.5.1 standard, NGF 2.6.7 and its
 CRDs in ingress-basic, Gateway public-gateway with http and https listeners, and per
 host an HTTPRoute to an ExternalName Service in ingress-basic that names the
 app's Service. No ClientSettingsPolicy, so nginx's 1 MB request-body limit
-applies, as in ExternalsPodiumD; one deviation, larger response-header buffers
-(proxy_settings_manifest). The routes come from the rendered Ingresses, so a
+applies; ExternalsPodiumD's git has none, though its gateway_health_check.sh
+requires one live, with unknown values. One deviation, larger response-header
+buffers (proxy_settings_manifest). The routes come from the rendered Ingresses, so a
 host is defined once.
 """
 
@@ -121,8 +122,8 @@ def proxy_settings_manifest() -> dict[str, Any]:
 
     KISS's /signin-oidc answer carries a 3.4 KB session cookie (about 5 KB of
     headers in all), which nginx rejects with "upstream sent too big header"
-    and a 502. ExternalsPodiumD sets no buffer and most likely has the same 502
-    (plan.md). busyBuffersSize must lie between bufferSize and the total of
+    and a 502. ExternalsPodiumD's git sets no buffer; its live policy's values
+    are unknown (plan.md). busyBuffersSize must lie between bufferSize and the total of
     buffers minus one buffer.
     """
     return {
