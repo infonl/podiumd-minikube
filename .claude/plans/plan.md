@@ -6578,3 +6578,13 @@ names). Measured over one deploy each: 800MiB peaked at 853 MiB RSS, a working
 set of 894 MiB, just above the memory test's 884; 700MiB peaked at 757 MiB RSS
 and the test passes. CPU about 0.15 core on average over the deploy. A soft
 limit: the runtime exceeds it rather than fail, with its GC CPU capped at 50%.
+
+### Elasticsearch: ML off
+
+Kees's go on the parked footprint idea #7. Neither nodeSet had the `ml` role,
+but Elasticsearch 8.19 still started the ML module's native `controller`.
+`xpack.ml.enabled: false` on both (KISS, Open Inwoner): after ECK's restart and
+podiumd-tests' core tier, KISS 704 -> 669 MiB, Open Inwoner 681 -> 647 MiB.
+KISS and Open Inwoner search tests pass (podiumd-tests). A configuration
+difference from the reference environments with no behaviour behind it here:
+nothing uses ML.

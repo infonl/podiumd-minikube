@@ -180,6 +180,8 @@ podiumd:
             node.store.allow_mmap: false
             # Laptop budget: thread pools sized for 1 CPU instead of the node's 6.
             node.processors: 1
+            # Laptop budget: no ML module (its native controller); nothing here uses ML.
+            xpack.ml.enabled: false
           # Laptop budget: an explicit heap (ECK's default 2Gi sizes it at 1 GiB);
           # 1Gi OOMKilled it with a 512m heap.
           podTemplate:
@@ -1271,6 +1273,8 @@ podiumd:
             node.store.allow_mmap: false
             # Laptop budget: thread pools sized for 1 CPU instead of the node's 6.
             node.processors: 1
+            # Laptop budget: no ML module (its native controller); nothing here uses ML.
+            xpack.ml.enabled: false
             xpack.security.authc:
               anonymous:
                 username: anonymous
