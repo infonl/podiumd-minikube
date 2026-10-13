@@ -6,9 +6,11 @@ outside the cluster (browsers, podiumd-tests) trust .pki/ca.crt.
 """
 
 import base64
+import json
 import tempfile
 
 from pathlib import Path
+from typing import Any
 
 import certifi
 import yaml
@@ -24,8 +26,9 @@ CA_KEY = PKI_DIR / "ca.key"
 CA_DAYS = 3650
 
 CERT_MANAGER_NAMESPACE = "cert-manager"
-# As ExternalsPodiumD (podiumd-infra: v1.13.2).
-CERT_MANAGER_VERSION = "v1.12.2"
+# As ExternalsPodiumD (pipelines/includes/haven/cert-manager.yml): this chart, with the images it pins.
+CERT_MANAGER_VERSION = "v1.20.3"
+CERT_MANAGER_IMAGE_TAG = "v1.19.3"
 ISSUER = "podiumd-local-ca"
 
 
@@ -45,17 +48,45 @@ def ensure_ca() -> bool:
     return True
 
 
+def cert_manager_values() -> dict[str, Any]:
+    """ExternalsPodiumD's pipelines/values/cert-manager.yml without its AKS parts (ACR images, nodeSelector)."""
+
+    def component(memory: str, limit: str) -> dict[str, Any]:
+        return {
+            "image": {"tag": CERT_MANAGER_IMAGE_TAG},
+            "replicaCount": 1,
+            "resources": {"requests": {"cpu": "10m", "memory": memory}, "limits": {"cpu": "20m", "memory": limit}},
+        }
+
+    return {
+        "crds": {"enabled": True},
+        **component("48Mi", "128Mi"),
+        "config": {
+            "apiVersion": "controller.config.cert-manager.io/v1alpha1",
+            "kind": "ControllerConfiguration",
+            "enableGatewayAPI": True,
+        },
+        "webhook": component("32Mi", "64Mi"),
+        "cainjector": component("96Mi", "256Mi"),
+        "acmesolver": {"image": {"tag": CERT_MANAGER_IMAGE_TAG}},
+        "startupapicheck": {"enabled": False},
+    }
+
+
 def install_cert_manager() -> None:
-    """Installs the pinned cert-manager chart with its CRDs unless it is there."""
-    if kube.exists("deployment/cert-manager", CERT_MANAGER_NAMESPACE):
-        print(f"cert-manager already installed in namespace '{CERT_MANAGER_NAMESPACE}' - skipping.")
+    """Installs or upgrades cert-manager to CERT_MANAGER_VERSION; skips it when that version runs."""
+    releases = json.loads(process.output(["helm", "list", "-n", CERT_MANAGER_NAMESPACE, "-o", "json"]))
+    if any(release["chart"] == f"cert-manager-{CERT_MANAGER_VERSION}" for release in releases):
+        print(f"cert-manager {CERT_MANAGER_VERSION} already installed in '{CERT_MANAGER_NAMESPACE}' - skipping.")
         return
     print(f"Installing cert-manager {CERT_MANAGER_VERSION}...")
     process.run(["helm", "repo", "add", "jetstack", "https://charts.jetstack.io"], check=False)
     process.output(["helm", "repo", "update", "jetstack"])
     process.run(
         ["helm", "upgrade", "--install", "cert-manager", "jetstack/cert-manager", "--version", CERT_MANAGER_VERSION,
-         "-n", CERT_MANAGER_NAMESPACE, "--create-namespace", "--set", "installCRDs=true", "--wait", "--timeout=300s"],
+         "-n", CERT_MANAGER_NAMESPACE, "--create-namespace", "--reset-values", "--rollback-on-failure",
+         "--server-side=false", "--wait", "--timeout=10m", "-f", "-"],
+        stdin=yaml.safe_dump(cert_manager_values()),
         capture=False,
     )  # fmt: skip
 

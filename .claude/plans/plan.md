@@ -4333,8 +4333,9 @@ serves HTTP and HTTPS without redirect, podiumd-infra HTTPS only.
 
 Step (a): `scripts/lib/pki.py` creates a local CA once per checkout in
 `.pki/` (gitignored; `ca.key` 0600, 10 years) and, from
-`provision-cluster`, installs cert-manager v1.12.2 (ExternalsPodiumD's
-version; podiumd-infra v1.13.2) and a CA ClusterIssuer `podiumd-local-ca`
+`provision-cluster`, installs cert-manager v1.12.2 (podiumd-infra v1.13.2;
+ExternalsPodiumD has run chart v1.20.3 since 2026-09-14, see "NGF edge
+aligned with ExternalsPodiumD" below) and a CA ClusterIssuer `podiumd-local-ca`
 from that CA. Deviation: a local CA instead of Let's Encrypt, because
 minikube has no public DNS. Verified live on Kubernetes 1.37: cert-manager
 pods Running, ClusterIssuer Ready.
@@ -6146,3 +6147,48 @@ OMC was left out of --full because 1.17.19 rejects every notification with
 xfail), so OMC runs in --full as in ExternalsPodiumD and podiumd-infra, and
 the test runs here too. Host omc.local; Notify goes to podiumd-tests' mock
 server; podiumd-tests' bootstrap creates the abonnement.
+
+## NGF edge aligned with ExternalsPodiumD (user: "yes, fix 2 and 3")
+
+A comparison with ExternalsPodiumD main (made for kees00's NGF switch) found
+these differences in this repo's edge. Each one is now fixed to match
+ExternalsPodiumD:
+
+- Keycloak's public host. dimp test's `hr-keycloak-nginx` (and dim1's and
+  dimp/ontw's) rewrites Host and X-Forwarded-Host to the admin host for
+  every path. Here keycloak.local forwarded its own host, so
+  keycloak.local/admin gave 404. Now the Keycloak Ingress carries the
+  annotation `podiumd-minikube/forwarded-host: keycloak-admin.local`, and
+  `gateway.route_manifests` sends that host upstream for both of its hosts.
+  Verified live: both hosts give issuer and login form on keycloak.local
+  (KC_HOSTNAME is fixed). The admin console answers 200 on both hosts. An
+  anonymous call to the admin API gets 401 on both hosts.
+- NGF's CRDs. ExternalsPodiumD server-side applies the chart's `crds/`
+  before every upgrade, because helm installs `crds/` only on the first
+  install. `gateway.install` now does the same with `helm show crds`.
+- NGF resources. ngf.yml's 50m/128Mi requests and 200m/256Mi limits now
+  apply to the controller and to nginx.
+- cert-manager. Here it was v1.12.2, wrongly recorded above as
+  ExternalsPodiumD's version. ExternalsPodiumD runs chart v1.20.3 with the
+  images pinned to v1.19.3 (PR 1647, 2026-09-14). `pki.install_cert_manager`
+  now installs that, with ExternalsPodiumD's values minus the ACR images and
+  the nodeSelector: crds.enabled, one replica each, its resources,
+  `enableGatewayAPI`, and startupapicheck off. It upgrades when a different
+  chart version runs; before, it skipped any installed cert-manager. The
+  upgrade from v1.12.2 kept podiumd-tls Ready.
+- ProxySettingsPolicy name. It was `public-gateway`; now it is
+  `default-proxy-settings`, the name ExternalsPodiumD's
+  `gateway_health_check.sh` requires. `gateway.apply` prunes the old one.
+
+Still different, on purpose or open:
+
+- cert-manager stays in namespace `cert-manager`; ExternalsPodiumD uses
+  `ingress-basic`. A move needs a reinstall, and the CA Secret has to move
+  with it.
+- That health check also requires a ClientSettingsPolicy
+  `default-client-settings`. Neither policy is in ExternalsPodiumD's git, so
+  their live values are unknown; until someone reads them, there is no
+  ClientSettingsPolicy here (1 MB body limit).
+- Route and alias names stay `hr-<host>` and the app's Service name;
+  ExternalsPodiumD's are `hr-<app>-nginx` and `<app>-nginx`. The difference
+  is cosmetic.

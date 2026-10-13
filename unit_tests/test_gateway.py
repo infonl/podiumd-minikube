@@ -4,11 +4,13 @@ from podiumd_minikube import gateway
 from podiumd_minikube import manifests
 
 
-def _ingress(host: str, service: str, port: dict[str, object]) -> manifests.Doc:
+def _ingress(
+    host: str, service: str, port: dict[str, object], annotations: dict[str, str] | None = None
+) -> manifests.Doc:
     backend = {"service": {"name": service, "port": port}}
     return {
         "kind": "Ingress",
-        "metadata": {"name": host},
+        "metadata": {"name": host, "annotations": annotations},
         "spec": {"rules": [{"host": host, "http": {"paths": [{"backend": backend}]}}]},
     }
 
@@ -34,3 +36,13 @@ def test_routes_follow_externalspodiumd_and_resolve_named_ports():
     rule = routes["hr-keycloak"]["spec"]["rules"][0]
     assert rule["backendRefs"] == [{"name": "keycloak", "port": 8080}]
     assert rule["filters"][0] == {"type": "URLRewrite", "urlRewrite": {"hostname": "keycloak.local"}}
+
+
+def test_forwarded_host_annotation_replaces_the_host_sent_upstream():
+    annotations = {gateway.FORWARDED_HOST_ANNOTATION: "keycloak-admin.local"}
+    docs = [_ingress("keycloak.local", "keycloak", {"number": 8080}, annotations)]
+    route = next(o for o in gateway.route_manifests(docs) if o["kind"] == "HTTPRoute")
+    assert route["spec"]["hostnames"] == ["keycloak.local"]
+    rewrite, headers = route["spec"]["rules"][0]["filters"]
+    assert rewrite["urlRewrite"]["hostname"] == "keycloak-admin.local"
+    assert {"name": "X-Forwarded-Host", "value": "keycloak-admin.local"} in headers["requestHeaderModifier"]["set"]

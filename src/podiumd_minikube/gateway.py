@@ -2,8 +2,8 @@
 
 As ExternalsPodiumD (pipelines/includes/haven/gateway-api-*.yml, pipelines/
 values/ngf.yml, gateway-api/gateway.yml, dim1 ssl-gateway.yml and
-services-gateway.yml): Gateway API CRDs v1.5.1 standard, NGF 2.6.7 in
-ingress-basic, Gateway public-gateway with http and https listeners, and per
+services-gateway.yml): Gateway API CRDs v1.5.1 standard, NGF 2.6.7 and its
+CRDs in ingress-basic, Gateway public-gateway with http and https listeners, and per
 host an HTTPRoute to an ExternalName Service in ingress-basic that names the
 app's Service. No ClientSettingsPolicy, so nginx's 1 MB request-body limit
 applies, as in ExternalsPodiumD; one deviation, larger response-header buffers
@@ -36,6 +36,10 @@ _SELECTOR = ",".join(f"{key}={value}" for key, value in LABELS.items())
 # at random per Service; fixed, the /etc/hosts line survives a rebuild. In the static band
 # (the first 256 addresses of 10.96.0.0/12) that the allocator leaves to fixed ClusterIPs.
 EDGE_CLUSTER_IP = "10.96.0.200"
+# On an Ingress: the host its routes send to the backend instead of their own.
+FORWARDED_HOST_ANNOTATION = "podiumd-minikube/forwarded-host"
+# ExternalsPodiumD's ngf.yml, for the controller and nginx alike.
+NGF_RESOURCES = {"requests": {"cpu": "50m", "memory": "128Mi"}, "limits": {"cpu": "200m", "memory": "256Mi"}}
 
 
 def ngf_values(dns_ip: str) -> dict[str, Any]:
@@ -45,10 +49,12 @@ def ngf_values(dns_ip: str) -> dict[str, Any]:
             "gatewayClassName": GATEWAY_CLASS,
             "gatewayControllerName": "gateway.nginx.org/nginx-gateway-controller",
             "replicas": 1,
+            "resources": NGF_RESOURCES,
             "snippets": {"enable": False},
         },
         "nginx": {
             "replicas": 1,
+            "container": {"resources": NGF_RESOURCES},
             # Needed for ExternalName backends.
             "config": {
                 "dnsResolver": {
@@ -68,12 +74,17 @@ def ngf_values(dns_ip: str) -> dict[str, Any]:
 
 
 def install() -> None:
-    """Installs or upgrades the Gateway API CRDs and NGF (an upgrade keeps its values current)."""
+    """Installs or upgrades the Gateway API CRDs, NGF's CRDs and NGF (an upgrade keeps its values current).
+
+    Helm installs a chart's crds/ only once, so NGF's CRDs are applied first, as ExternalsPodiumD does.
+    """
     print(f"Installing the Gateway API CRDs {GATEWAY_API_VERSION} and NGINX Gateway Fabric {NGF_VERSION}...")
     crds = (
         f"https://github.com/kubernetes-sigs/gateway-api/releases/download/{GATEWAY_API_VERSION}/standard-install.yaml"
     )
     kube.kubectl_shown("apply", "-f", crds)
+    ngf_crds = process.output(["helm", "show", "crds", NGF_CHART, "--version", NGF_VERSION])
+    kube.kubectl("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=ngf_crds)
     dns_ip = kube.kubectl("get", "svc", "kube-dns", "-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")
     process.run(
         ["helm", "upgrade", "--install", NGF_RELEASE, NGF_CHART, "--version", NGF_VERSION,
@@ -117,7 +128,8 @@ def proxy_settings_manifest() -> dict[str, Any]:
     return {
         "apiVersion": "gateway.nginx.org/v1alpha1",
         "kind": "ProxySettingsPolicy",
-        "metadata": {"name": GATEWAY, "namespace": EDGE_NAMESPACE, "labels": LABELS},
+        # The name ExternalsPodiumD's gateway_health_check.sh requires.
+        "metadata": {"name": "default-proxy-settings", "namespace": EDGE_NAMESPACE, "labels": LABELS},
         "spec": {
             "targetRefs": [{"group": "gateway.networking.k8s.io", "kind": "Gateway", "name": GATEWAY}],
             "buffering": {"bufferSize": "16k", "buffers": {"number": 4, "size": "16k"}, "busyBuffersSize": "32k"},
@@ -140,15 +152,20 @@ def _service_port(docs: list[manifests.Doc], service: str, port: Any) -> int:
 
 
 def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
-    """Per Ingress host an HTTPRoute in ExternalsPodiumD's shape, plus the ExternalName Services they target."""
+    """Per Ingress host an HTTPRoute in ExternalsPodiumD's shape, plus the ExternalName Services they target.
+
+    An Ingress with FORWARDED_HOST_ANNOTATION sends that host upstream for each of its hosts.
+    """
     services: dict[str, dict[str, Any]] = {}
     routes: list[dict[str, Any]] = []
     for doc in docs:
         if doc.get("kind") != "Ingress":
             continue
         rules: list[manifests.Doc] = manifests.section(doc, "spec").get("rules") or []
+        annotations: manifests.Doc = manifests.section(manifests.section(doc, "metadata"), "annotations")
         for rule in rules:
             host = str(rule["host"])
+            forwarded = str(annotations.get(FORWARDED_HOST_ANNOTATION, host))
             paths: list[manifests.Doc] = manifests.section(rule, "http").get("paths") or []
             backend: manifests.Doc = manifests.section(manifests.section(paths[0], "backend"), "service")
             ports = manifests.section(backend, "port")
@@ -164,7 +181,7 @@ def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
                 },
             }
             headers = [
-                {"name": "X-Forwarded-Host", "value": host},
+                {"name": "X-Forwarded-Host", "value": forwarded},
                 {"name": "X-Forwarded-Proto", "value": "https"},
                 {"name": "X-Forwarded-Port", "value": "443"},
             ]
@@ -180,7 +197,7 @@ def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
                     "rules": [{
                         "matches": [{"path": {"type": "PathPrefix", "value": "/"}}],
                         "filters": [
-                            {"type": "URLRewrite", "urlRewrite": {"hostname": host}},
+                            {"type": "URLRewrite", "urlRewrite": {"hostname": forwarded}},
                             {"type": "RequestHeaderModifier", "requestHeaderModifier": {"set": headers}},
                         ],
                         "backendRefs": [{"name": backend["name"], "port": port}],
@@ -228,7 +245,7 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         raise process.UserError(msg)
     _pin_cluster_ip()
     wanted = {(doc["kind"], manifests.name_of(doc)) for doc in objects}
-    for kind in ("HTTPRoute", "Service"):
+    for kind in ("HTTPRoute", "Service", "ProxySettingsPolicy"):
         live = kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]
         for item in live:
             if (kind, item["metadata"]["name"]) not in wanted:

@@ -1,9 +1,14 @@
+{{- $adminHost := "keycloak-admin.local" }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: keycloak
   labels:
     {{- include "podiumd-minikube.labels" . | nindent 4 }}
+  annotations:
+    # As ExternalsPodiumD's hr-keycloak-nginx: Keycloak sees the admin host on both
+    # hosts, so the admin console also answers on keycloak.local/admin.
+    podiumd-minikube/forwarded-host: {{ $adminHost }}
 spec:
   rules:
     - host: keycloak.local
@@ -17,7 +22,7 @@ spec:
                 port:
                   name: http
     # Keycloak's admin host (KC_HOSTNAME_ADMIN), as ExternalsPodiumD's keycloak-admin.
-    - host: keycloak-admin.local
+    - host: {{ $adminHost }}
       http:
         paths:
           - path: /
