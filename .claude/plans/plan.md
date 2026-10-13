@@ -6277,3 +6277,19 @@ Live after `deploy --full`, which matches kees00:
 - The login form posts to keycloak.local.
 - The admin console answers 200 on both hosts.
 - The live suite passes (28).
+
+Found by podiumd-tests after this deploy: nobody could log in to the admins of
+Open Zaak, Open Formulieren and Open Inwoner. Keycloak answered "Restart login
+cookie not found". Their setup-configuration Jobs ran after Keycloak restarted
+with the admin `KC_HOSTNAME` but before `sync_realm` set the realm's
+`frontendUrl`. So discovery gave them `keycloak-admin.local` endpoints, which
+they stored. Open Klant's Job ran later and stored `keycloak.local`. The login
+then started on keycloak-admin.local, while the form posted to keycloak.local
+without the login cookie.
+
+Fix: `templates/keycloak/configmap-realm.yaml` imports the vendored realm with
+`frontendUrl` added, so a new cluster has it from Keycloak's first start. The
+rendered realm equals the vendored file plus that attribute. `sync_realm` still
+sets it on realms that were imported earlier. A cluster from before de4f534
+can still hit the same window once on its first deploy after it. A second
+deploy repairs it, because every deploy reruns the Jobs.

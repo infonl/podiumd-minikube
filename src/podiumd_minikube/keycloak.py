@@ -27,8 +27,8 @@ ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"  # nosec B105  # noqa: S105 - dev-only default from the template
 STARTUP_TIMEOUT = 90
 REALM_FILE = VENDOR_DIR / "keycloak" / "zaakafhandelcomponent-realm.json"
-# podiumd's realmFrontendUrl and adminFrontendUrl: the app realm's issuer is the public host,
-# master's the admin host (templates/keycloak/deployment.yaml's KC_HOSTNAME).
+# podiumd's realmFrontendUrl and adminFrontendUrl: the app realm's issuer is the public host
+# (also set in templates/keycloak/configmap-realm.yaml's import), master's the admin host (KC_HOSTNAME).
 PUBLIC_URL = "https://keycloak.local"
 ADMIN_URL = "https://keycloak-admin.local"
 # The podiumd chart's realm config declares it: ita/kiss map it into a claim,
