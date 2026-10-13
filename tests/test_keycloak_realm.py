@@ -75,4 +75,4 @@ def test_pkce_requirements(live_clients):
 def test_jvm_flags_reach_the_operator_built_pod(edge_ip):
     assert _env("statefulset", "keycloak").get("JAVA_OPTS_APPEND") == manifests.KEYCLOAK_JAVA_OPTS
     operator = _env("deployment", manifests.KEYCLOAK_OPERATOR)
-    assert operator.get("JDK_JAVA_OPTIONS") == manifests.KEYCLOAK_OPERATOR_JAVA_OPTS
+    assert {key: operator.get(key) for key in manifests.KEYCLOAK_OPERATOR_ENV} == manifests.KEYCLOAK_OPERATOR_ENV

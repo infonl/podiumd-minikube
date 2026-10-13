@@ -222,7 +222,9 @@ def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
     assert {"name": "JAVA_OPTS_APPEND", "value": manifests.KEYCLOAK_JAVA_OPTS} in server["env"]
     assert server["resources"] == resources
     assert "resources" not in builder
-    assert container["env"] == [{"name": "JDK_JAVA_OPTIONS", "value": manifests.KEYCLOAK_OPERATOR_JAVA_OPTS}]
+    assert container["env"] == [
+        {"name": name, "value": value} for name, value in manifests.KEYCLOAK_OPERATOR_ENV.items()
+    ]
 
 
 def test_fix_up_separates_crds_for_server_side_apply():

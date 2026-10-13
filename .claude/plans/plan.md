@@ -6530,3 +6530,13 @@ components, the plain Redis/Solr/Keycloak gone), kube-apiserver 875 -> 683 MiB,
 node 14592 MiB. New: keycloak-operator 182, Solr 350 (plain Solr 245),
 ZooKeeper 69, solr-operator 35, zookeeper-operator 33, redis-operator 25,
 Redis 9 MiB.
+
+### Keycloak operator: threads and heap
+
+Measured with jcmd in the operator pod (JDK 25): heap 65 MiB committed, 55 MiB
+used; metaspace 54 MiB; code cache 14 MiB; 127 threads, 100 of them the
+operator SDK's two pools of 50 (reconciliation, workflow). One Keycloak
+resource needs no 50-way concurrency: `QUARKUS_OPERATOR_SDK_CONCURRENT_
+RECONCILIATION_THREADS` and `..._WORKFLOW_THREADS` 2, heap cap 192m -> 128m
+(`manifests.KEYCLOAK_OPERATOR_ENV`). Threads 127 -> 54, PSS 207 -> 173 MiB
+just after the restart; the Keycloak resource reconciled Ready, no errors.

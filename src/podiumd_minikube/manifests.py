@@ -46,6 +46,13 @@ GO_MEMORY_LIMIT = "GOMEMLIMIT"
 # serial GC; TieredStopAtLevel=1: only the C1 compiler. Its operator runs plain `java -jar`.
 KEYCLOAK_JAVA_OPTS = "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2 -XX:-UseG1GC -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 KEYCLOAK_OPERATOR = "keycloak-operator"
+# Heap in use about 55 MiB. The operator SDK starts 50 reconciliation and 50 workflow
+# threads; one Keycloak resource needs 2 of each.
+KEYCLOAK_OPERATOR_ENV = {
+    "JDK_JAVA_OPTIONS": "-Xms32m -Xmx128m -XX:ActiveProcessorCount=1 -XX:+UseSerialGC -XX:TieredStopAtLevel=1",
+    "QUARKUS_OPERATOR_SDK_CONCURRENT_RECONCILIATION_THREADS": "2",
+    "QUARKUS_OPERATOR_SDK_CONCURRENT_WORKFLOW_THREADS": "2",
+}
 # Solr's default G1 settings replaced: the serial GC lets the heap follow what is in use.
 SOLR_ENV = {"GC_TUNE": "-XX:+UseSerialGC"}
 # zkEnv.sh's ZK_SERVER_HEAP (MB) defaults to 1000. -XX:-UseContainerSupport: the
@@ -57,7 +64,6 @@ ZOOKEEPER_ENV = {
         "-Xms16m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:ActiveProcessorCount=1 -XX:-UseContainerSupport"
     ),
 }
-KEYCLOAK_OPERATOR_JAVA_OPTS = "-Xms32m -Xmx192m -XX:ActiveProcessorCount=1 -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000
 
@@ -257,7 +263,7 @@ def tune_keycloak(docs: list[Doc]) -> None:
                         container["resources"] = body["resources"]
         elif doc.get("kind") == "Deployment" and name_of(doc) == KEYCLOAK_OPERATOR:
             for container in _containers(_pod_spec(doc) or {}):
-                add_env(container, {"JDK_JAVA_OPTIONS": KEYCLOAK_OPERATOR_JAVA_OPTS})
+                add_env(container, KEYCLOAK_OPERATOR_ENV)
 
 
 def tune_solr(docs: list[Doc]) -> None:
