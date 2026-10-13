@@ -36,10 +36,9 @@ CREATE DATABASE openarchiefbeheer OWNER openarchiefbeheer;
 CREATE ROLE openformulieren WITH LOGIN PASSWORD 'openformulieren';
 CREATE DATABASE openformulieren OWNER openformulieren;
 
--- Note: pabc's compose database name is "Pabc" (capital P) while its user
--- is lowercase "pabc" - copied as-is.
+-- pabc, as the podiumd chart and the reference environments (compose: "Pabc").
 CREATE ROLE pabc WITH LOGIN PASSWORD 'pabc';
-CREATE DATABASE "Pabc" OWNER pabc;
+CREATE DATABASE pabc OWNER pabc;
 
 CREATE ROLE zac WITH LOGIN PASSWORD 'password';
 CREATE DATABASE zac OWNER zac;

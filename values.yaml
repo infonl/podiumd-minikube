@@ -143,7 +143,7 @@ podiumd:
   apisix:
     enabled: false # already false by default upstream, set explicitly for clarity
   zgw-office-addin:
-    enabled: false
+    enabled: false # as podiumd-infra; ExternalsPodiumD's needs Entra ID (MSAL), which has no local stand-in
   # ita and kiss: own blocks before the monitoring-logging dependency.
   # One node, as podiumd-infra (ExternalsPodiumD runs three).
   kiss-eck:
@@ -722,6 +722,9 @@ podiumd:
         notifications_config_enable: true
         notifications_config:
           notifications_api_service_identifier: notificaties-api
+          notification_delivery_max_retries: 5
+          notification_delivery_retry_backoff: 3
+          notification_delivery_retry_backoff_max: 48
 
         oidc_db_config_enable: true
         oidc_db_config_admin_auth:
@@ -1342,7 +1345,7 @@ podiumd:
         port: 5432
         username: pabc
         password: pabc
-        name: Pabc
+        name: pabc
       apiKeys:
         - zac-test-api-key
       oidc:

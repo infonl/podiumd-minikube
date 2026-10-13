@@ -19,7 +19,7 @@ EXPECTED_DATABASES = {
     "opennotificaties",
     "openarchiefbeheer",
     "openformulieren",
-    "Pabc",  # yes, capital P - matches podiumd.pabc.settings.database.name exactly
+    "pabc",
 }
 
 # Matches 00-create-databases.sql's own PostGIS CREATE EXTENSION statements.

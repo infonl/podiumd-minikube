@@ -6540,3 +6540,28 @@ resource needs no 50-way concurrency: `QUARKUS_OPERATOR_SDK_CONCURRENT_
 RECONCILIATION_THREADS` and `..._WORKFLOW_THREADS` 2, heap cap 192m -> 128m
 (`manifests.KEYCLOAK_OPERATOR_ENV`). Threads 127 -> 54, PSS 207 -> 173 MiB
 just after the restart; the Keycloak resource reconciled Ready, no errors.
+
+## kees00 4.10.0 comparison (2026-10-13)
+
+podiumd-infra's `values/kees00/4.10.0/podiumd.yaml` against ours (767 flattened
+keys, triaged against ExternalsPodiumD dimp test, the chart defaults and this
+plan). Adopted:
+
+- Open Zaak's `notifications_config` retries 5 / backoff 3 / max 48, as kees00
+  and ExternalsPodiumD; Open Klant, Objecten and Open Notificaties had them since
+  alignment round 2.
+- PABC's database `pabc` instead of compose's `Pabc`, as the chart and both
+  reference environments: the init SQL, `podiumd.pabc.settings.database.name`.
+  PABC's migrations and seed Jobs fill the new database on deploy; the old one
+  was dropped by hand.
+- The ZGW Office Add-in stays off, as podiumd-infra: ExternalsPodiumD's needs
+  Entra ID (MSAL), which has no local stand-in (now in values.yaml).
+
+Everything else is recorded above (compose client ids and RSINs, no e-Suite or
+DigiD metadata, the objecttypen alias, edge routes from Ingresses) or kees00
+differing from ExternalsPodiumD, which went to podiumd-infra: PABC's admin
+client id, KISS's database name, ITA's Open Zaak URL, Open Formulieren's first
+Objects API group, and keys no 4.10.0 template reads. OMC's JWT
+issuer/audience (`OMC` on kees00, chart `omc`): nothing on kees00 signs a token
+for OMC (no OMC abonnement), so the chart default stays; an OMC caller added
+later must sign with the same values (podiumd-infra, 2026-10-13).
