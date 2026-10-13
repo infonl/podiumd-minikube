@@ -18,7 +18,7 @@ TRAFFIC_TYPE = {
     "pabc.local": "REST API (authorization/role-mapping data ZAC queries)",
     "solr.local": "Search engine - redirects / to its own /solr/ admin UI",
     "objecten.local": "Objects API (REST) + Django admin",
-    "objecttypen.local": "Objecttypes API (REST) + Django admin - classic objecten shape only",
+    "objecttypen.local": "Objecttypes API (REST) + Django admin; Open Object's on podiumd >= 4.10",
     "opennotificaties.local": "Notifications API (REST) + Django admin",
     "openarchiefbeheer-web.local": "SPA (served by the shared nginx sidecar backend)",
     "openarchiefbeheer-ui.local": "Same nginx sidecar as -web.local, second hostname for compose parity",

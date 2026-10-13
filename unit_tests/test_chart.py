@@ -26,7 +26,7 @@ def test_objecten_shape_is_merged_with_openobject(tmp_path: Path):
     make_tgz(tmp_path / "podiumd-5.0.0.tgz", {"podiumd/charts/openobject/Chart.yaml": ""})
     shape = chart.objecten_shape(tmp_path)
     assert shape.merged
-    assert f"podiumd.objecten.settings.allowedHosts={chart.MERGED_ALLOWED_HOSTS}" in shape.sets
+    assert "objecten.merged=true" in shape.sets
 
 
 def test_zac_pkce_off_needs_no_sets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

@@ -30,8 +30,6 @@ FULL_PROFILE_SETS = [
 ]  # fmt: skip
 
 ZAC_PKCE_IMAGE_TAG = "5.4.2"
-# The merged app also answers the dropped objecttypen hostnames (Django ALLOWED_HOSTS).
-MERGED_ALLOWED_HOSTS = r"objecten.local\,objecttypen\,objecttypen.podiumd-minikube"
 
 
 def tarball(chart: str, charts_dir: Path = CHARTS_DIR) -> Path | None:
@@ -61,8 +59,7 @@ class ObjectenShape:
 
     classic: separate objecten and objecttypen subcharts. merged: one
     openobject subchart serving both APIs (aliased to the values key
-    "objecten"); objecttypen then needs a DNS alias and extra ALLOWED_HOSTS,
-    and values.yaml's objects-api image tag does not exist for open-object.
+    "objecten"); objecttypen then needs a DNS and an Ingress alias.
     """
 
     merged: bool
@@ -76,13 +73,8 @@ def objecten_shape(charts_dir: Path = CHARTS_DIR) -> ObjectenShape:
     if any(name.startswith("podiumd/charts/openobject/") for name in names):
         return ObjectenShape(
             merged=True,
-            sets=[
-                "--set", "podiumd.objecten.image.tag=null",
-                "--set", "podiumd.objecten.create_required_objecttypen_job.enabled=false",
-                "--set", "objecten.merged=true",
-                "--set", f"podiumd.objecten.settings.allowedHosts={MERGED_ALLOWED_HOSTS}",
-            ],
-        )  # fmt: skip
+            sets=["--set", "objecten.merged=true"],
+        )
     return ObjectenShape(
         merged=False, sets=["--set", "podiumd.objecttypen.enabled=true", "--set", "objecten.merged=false"]
     )

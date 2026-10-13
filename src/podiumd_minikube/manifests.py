@@ -254,18 +254,33 @@ def _configuration_yaml(doc: Doc, configmap: str) -> Any | None:
     return yaml.safe_load(raw) if raw else None
 
 
+# podiumd's values.yaml example item; the env var is from podiumd.objecten.configuration.secrets.
+REQUIRED_OBJECTTYPEN_TOKEN: Doc = {
+    "identifier": "create-required-objecttypen",
+    "token": {"value_from": {"env": "create_required_objecttypen_token"}},
+    "is_superuser": True,
+    "contact_person": "podiumd",
+    "email": "podiumd@example.com",
+    "organization": "podiumd",
+    "application": "create-required-objecttypen",
+    "administration": "podiumd",
+}
+
+
 def fixup_merged_objecten(docs: list[Doc]) -> None:
     """Merged objecten shape only: removes what only the classic shape accepts.
 
     objecten's setup_configuration rejects objecttypes service_identifier
     (Pydantic extra_forbidden), and openformulieren's objecttypes-api token
-    only exists in classic objecttypen's token table.
+    only exists in classic objecttypen's token table. podiumd's
+    create-required-objecttypen Job needs a superuser token on objecten.
     """
     for doc in docs:
         objecten = _configuration_yaml(doc, "objecten-configuration")
         if objecten is not None:
             for item in objecten.get("objecttypes", {}).get("items", []):
                 item.pop("service_identifier", None)
+            objecten["tokenauth"]["items"].append(REQUIRED_OBJECTTYPEN_TOKEN)
             doc["data"]["configuration.yaml"] = yaml.safe_dump(objecten, sort_keys=False)
         openformulieren = _configuration_yaml(doc, "openformulieren-configuration")
         if openformulieren is not None:

@@ -6293,3 +6293,66 @@ rendered realm equals the vendored file plus that attribute. `sync_realm` still
 sets it on realms that were imported earlier. A cluster from before de4f534
 can still hit the same window once on its first deploy after it. A second
 deploy repairs it, because every deploy reruns the Jobs.
+
+## podiumd 4.10.0: Open Object (user: "yes, go with (a)")
+
+4.10.0 is not published yet. helm-charts `main` is still on 4.9.4, so minikube
+deploys `feature/podiumd-4.10.0` pinned at `d4d1b831`. It runs from a detached
+worktree, `dimpact-samenwerking/helm-charts-podiumd-4.10.0`
+(`helm dependency build` there once), through
+`set-podiumd-version --path .../charts/podiumd`. monitoring-logging stays on
+the published 1.0.15. `--path` also points monitoring-logging at the
+checkout's 1.0.18, which drops the whole metrics stack from the render, so
+`.podiumd-versions.yaml` gets `monitoringLogging: {version: 1.0.15}` back.
+
+The chart's only dependency change from 4.9.4 is that `objecten` 2.12.1 and
+`objecttypen` 1.6.1 become `openobject` 1.1.1, aliased `objecten` (Open
+Object 4.1.0, which serves both APIs). `chart.objecten_shape` already
+detected that from the tarball. The user's rule (2026-10-13) is that the
+shape is always detected, so 4.9.* stays deployable. Everything below works on
+both shapes; a render of 4.9.4 changed only SITE_DOMAIN, ALLOWED_HOSTS and one
+config secret.
+
+Changes:
+
+- `values.yaml` `podiumd.objecten.image.tag: "3.6.2"` is removed. The chart
+  already pins 3.6.2 (with a digest) on 4.9.4. On 4.10.0, the merged sets
+  replaced it with `tag=null`, and that rendered `open-object:` in
+  `create-required-catalogi`, which in 4.10.0 also uses the objecten image.
+  That was a YAML parse error.
+- KISS adapter: 4.10.0 reads `kiss.adapter.objecten.*` instead of
+  `kiss.adapter.objecttypen.*`. Without our UUIDs,
+  INTERNE_TAAK/SMOELENBOEK_OBJECT_TYPE_URL ended in `/objecttypes/`. Both keys
+  now hold the same values through a YAML anchor.
+- Objecten `allowedHosts` also lists `objecttypen`,
+  `objecttypen.podiumd-minikube` and `objecttypen.local`, so the merged shape
+  needs no `--set` for it. The KISS adapter's in-cluster
+  `objecten.podiumd-minikube.svc.cluster.local` stayed allowed this way; the
+  old merged `--set` had dropped it. `siteDomain: objecten.local`: the
+  openobject chart requires it.
+- `objecttypen.local`: `templates/objecten/ingress-objecttypen-alias.yaml`
+  (merged only) routes it to `objecten`, as the upgrade guide describes. ITA,
+  KISS and Open Formulieren keep their objecttypen.local URLs.
+- podiumd's `create-required-objecttypen` Job now runs on the merged shape
+  too. It was turned off there before. Open Object's `objecttypes_config` step
+  creates the types without versions, and this Job adds the schema versions.
+  It needs `objecten.configuration.oidcUrl`, and a superuser token in
+  `configuration.secrets.create_required_objecttypen_token`, which
+  `manifests.fixup_merged_objecten` adds as a `tokenauth` item (podiumd's own
+  values.yaml example).
+
+Live upgrade: before the deploy, `import_objecttypes objecttypes-api` ran on
+Objecten 3.6.2 and imported 8 objecttypes and their versions. Without it, the
+4.x container refuses to start (seen in an earlier merged test). After
+`deploy --full`:
+- the cluster runs `open-object:4.1.0`;
+- the objecttypen Deployment is pruned;
+- `check_for_external_objecttypes` prints OK;
+- the 8 objecttypes each have 1 version;
+- `objecten-config`, `create-required-objecttypen-job` and
+  `create-required-catalogi-job` completed.
+
+Objecttypes answer on objecttypen.local, on objecten.local and in-cluster on
+`objecttypen.podiumd-minikube`. The live suite passes (28).
+`objecttypen.podiumd-minikube.svc.cluster.local` answers 400; nothing uses
+it, and classic objecttypen did not allow it either.

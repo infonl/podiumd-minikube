@@ -68,7 +68,11 @@ def _configmap(name: str, configuration: object) -> manifests.Doc:
 def test_fixup_merged_objecten_removes_classic_only_settings():
     docs = [
         _configmap(
-            "objecten-configuration", {"objecttypes": {"items": [{"identifier": "x", "service_identifier": "y"}]}}
+            "objecten-configuration",
+            {
+                "objecttypes": {"items": [{"identifier": "x", "service_identifier": "y"}]},
+                "tokenauth": {"items": [{"identifier": "zac"}]},
+            },
         ),
         _configmap(
             "openformulieren-configuration",
@@ -79,6 +83,7 @@ def test_fixup_merged_objecten_removes_classic_only_settings():
     objecten = yaml.safe_load(docs[0]["data"]["configuration.yaml"])
     openformulieren = yaml.safe_load(docs[1]["data"]["configuration.yaml"])
     assert objecten["objecttypes"]["items"] == [{"identifier": "x"}]
+    assert objecten["tokenauth"]["items"] == [{"identifier": "zac"}, manifests.REQUIRED_OBJECTTYPEN_TOKEN]
     assert openformulieren["zgw_consumers"]["services"][0]["header_value"] == "Token fakeOpenFormulierenObjectsToken"
 
 

@@ -1345,25 +1345,6 @@ podiumd:
   objecten:
     enabled: false
     replicaCount: 1
-    # Found live: chart default (3.6.0) differs from the version this
-    # project pins - matches the fixture/API shape our vendored SQL
-    # expects. No digest suffix (unlike some other apps here) so no
-    # separate digest-stripping fix is needed for this one.
-    # Bumped to 3.6.2 per PodiumD 4.9's own release notes (Dimpact
-    # Confluence) - deliberately the latest *3.x* patch, not that release's
-    # own 4.1.1: 4.x merges Objecttypen API into Objecten API entirely (a
-    # real classic->merged "Open Object" migration - see
-    # src/podiumd_minikube/chart.py for the shape this project would need to switch
-    # to first), not
-    # something to fold into a routine version bump. docker-compose.yaml
-    # itself has already fully moved to the merged open-object:4.0.2 image
-    # (no classic objecten/objecttypen image pins left there at all) - this
-    # project's own objecten.image.tag comparison is against PodiumD's
-    # release notes now, not compose, until that migration happens here too.
-    # Chart version itself unchanged (2.12.1, still the latest for the 3.x
-    # app series) - only the app image has a newer 3.6.2 patch tag.
-    image:
-      tag: "3.6.2"
     worker:
       # Compose runs objecten-api-celery as a real worker - unlike
       # openzaak/openklant's workers (which compose never runs at all), this
@@ -1375,6 +1356,11 @@ podiumd:
       redis: false
     configuration:
       enabled: true
+      # Open Object only (podiumd >= 4.10): podiumd's create-required-objecttypen
+      # Job calls oidcUrl's API with this superuser token (manifests.fixup_merged_objecten).
+      oidcUrl: https://objecten.local
+      secrets:
+        create_required_objecttypen_token: objectenRequiredObjecttypenToken
       job:
         # Declaratively wires the Objects API side of the productaanvraag
         # flow (openformulieren -> objects API -> opennotificaties -> ZAC):
@@ -1660,8 +1646,11 @@ podiumd:
         processes: 1
         threads: 2
       secretKey: objectenApiSecretKey
-      # As ExternalsPodiumD: also its internal Service, which KISS calls.
-      allowedHosts: objecten.local,objecten.podiumd-minikube.svc.cluster.local
+      # As ExternalsPodiumD: also its internal Service, which KISS calls. The
+      # objecttypen names reach Open Object (podiumd >= 4.10), which serves both APIs.
+      allowedHosts: objecten.local,objecten.podiumd-minikube.svc.cluster.local,objecttypen,objecttypen.podiumd-minikube,objecttypen.local
+      # Open Object only (podiumd >= 4.10); its chart requires it.
+      siteDomain: objecten.local
       # See openzaak's isHttps comment.
       isHttps: true
       djangoSettingsModule: objects.conf.docker_no_solo_cache
@@ -3320,10 +3309,7 @@ podiumd:
       clientId: contact_intern
       # Same as syncJobs.medewerkers.clientSecret; HS256 signing needs over 32 bytes.
       secret: contactAdapterSecret-hs256-needs-over-32-bytes
-      objecten:
-        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
-        token: objectenContactToken
-      objecttypen:
+      objecttypen: &adapterObjecttypen
         baseUrlIntern: https://objecttypen.local
         baseUrlExtern: https://objecttypen.local
         medewerkerUUID: 90984726-2692-49d8-8f9d-742075cb761d
@@ -3332,6 +3318,11 @@ podiumd:
         interneTaakUUID: 72240cd6-29bb-4a66-b1c3-ab6589a39a22
         kennisartikelUUID: e4d2e353-80ea-4962-8276-920d59a3e8de
         vacUUID: 6a0d8f9d-f7e2-4e57-a91b-01656968a62d
+      # podiumd >= 4.10 reads the objecttypen keys under objecten.
+      objecten:
+        <<: *adapterObjecttypen
+        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
+        token: objectenContactToken
       # No e-Suite here: unreachable, so contactverzoeken through the adapter fail.
       esuite:
         baseUrl: http://esuite.invalid

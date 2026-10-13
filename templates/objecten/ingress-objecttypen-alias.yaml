@@ -1,0 +1,22 @@
+{{- if and .Values.podiumd.objecten.enabled .Values.objecten.merged }}
+# Open Object serves the Objecttypen API too, so the objecttypen.local URLs
+# in other apps' config keep working (podiumd's 4.10.0 upgrade guide).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: objecttypen
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  rules:
+    - host: objecttypen.local
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: objecten
+                port:
+                  number: 80
+{{- end }}
