@@ -6220,3 +6220,31 @@ and the untracked `ngf-response-header-buffer-issue.md` now say "in git",
 and the write-up has the command to read the policies on dimp test. Until
 someone reads them, nothing changes here: the 16k buffers and the 1 MB body
 limit stay.
+
+## ExternalsPodiumD's live edge policies, copied (user: "dimp test has kubeconfig t-dimp")
+
+Read-only on dimp test (`t-dimp`) and dimp ontw (`o-dimp`), 2026-10-13. Both
+environments are identical, the policies were created by hand (2026-04-07 and
+04-09), are not in git, and are Accepted:
+
+- ProxySettingsPolicy `default-proxy-settings`: bufferSize 128k, buffers
+  8 x 128k, busyBuffersSize 256k.
+- ClientSettingsPolicy `default-client-settings`: `body.maxSize: "0"`, so
+  no request-body limit at the edge.
+
+That corrects two assumptions from git above: ExternalsPodiumD has no KISS
+/signin-oidc 502, and its edge does not reject uploads above 1 MB. minikube
+now copies both policies (`gateway.proxy_settings_manifest`,
+`gateway.client_settings_manifest`; the 16k buffers deviation is gone).
+`tests/test_edge.py` now checks that a 2 MB POST passes the edge instead of
+expecting 413. Verified live: both policies Accepted; `nginx -T` shows
+`client_max_body_size 0`, `proxy_buffer_size 128k`, `proxy_buffers 8 128k`,
+`proxy_busy_buffers_size 256k`; suite 28 passed. Memory: the buffers are
+allocated per proxied response only, so idle usage does not change.
+The untracked `ngf-response-header-buffer-issue.md` now only asks to put
+both policies in git.
+
+Reaching the clusters needed the INFO VPN plus a host route per API server
+(`sudo ip route add <ip>/32 via 10.101.33.1 dev tun1`): the split tunnel does
+not route the AKS API servers. kubelogin's devicecode login was swapped for
+azurecli in a temporary copy of each kubeconfig.

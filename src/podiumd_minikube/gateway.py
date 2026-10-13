@@ -5,10 +5,8 @@ values/ngf.yml, gateway-api/gateway.yml, dim1 ssl-gateway.yml and
 services-gateway.yml): Gateway API CRDs v1.5.1 standard, NGF 2.6.7 and its
 CRDs in ingress-basic, Gateway public-gateway with http and https listeners, and per
 host an HTTPRoute to an ExternalName Service in ingress-basic that names the
-app's Service. No ClientSettingsPolicy, so nginx's 1 MB request-body limit
-applies; ExternalsPodiumD's git has none, though its gateway_health_check.sh
-requires one live, with unknown values. One deviation, larger response-header
-buffers (proxy_settings_manifest). The routes come from the rendered Ingresses, so a
+app's Service. Its ProxySettingsPolicy and ClientSettingsPolicy exist only
+live (dimp test and ontw, read 2026-10-13), not in its git. The routes come from the rendered Ingresses, so a
 host is defined once.
 """
 
@@ -31,6 +29,7 @@ NGF_VERSION = "2.6.7"
 NGF_RELEASE = "nginx-gateway-fabric"
 GATEWAY = "public-gateway"
 GATEWAY_CLASS = "nginx"
+GATEWAY_REF = {"group": "gateway.networking.k8s.io", "kind": "Gateway", "name": GATEWAY}
 LABELS = {"app.kubernetes.io/part-of": "podiumd-minikube", "app.kubernetes.io/component": "gateway"}
 _SELECTOR = ",".join(f"{key}={value}" for key, value in LABELS.items())
 # minikube tunnel exposes a LoadBalancer Service at its ClusterIP, which Kubernetes picks
@@ -117,25 +116,33 @@ def gateway_manifest() -> dict[str, Any]:
     }
 
 
-def proxy_settings_manifest() -> dict[str, Any]:
-    """Larger response-header buffers than nginx's default 4 KB: a deviation from ExternalsPodiumD.
-
-    KISS's /signin-oidc answer carries a 3.4 KB session cookie (about 5 KB of
-    headers in all), which nginx rejects with "upstream sent too big header"
-    and a 502. ExternalsPodiumD's git sets no buffer; its live policy's values
-    are unknown (plan.md). busyBuffersSize must lie between bufferSize and the total of
-    buffers minus one buffer.
-    """
+def _gateway_policy(kind: str, name: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """An NGF policy on public-gateway."""
     return {
         "apiVersion": "gateway.nginx.org/v1alpha1",
-        "kind": "ProxySettingsPolicy",
-        # The name ExternalsPodiumD's gateway_health_check.sh requires.
-        "metadata": {"name": "default-proxy-settings", "namespace": EDGE_NAMESPACE, "labels": LABELS},
-        "spec": {
-            "targetRefs": [{"group": "gateway.networking.k8s.io", "kind": "Gateway", "name": GATEWAY}],
-            "buffering": {"bufferSize": "16k", "buffers": {"number": 4, "size": "16k"}, "busyBuffersSize": "32k"},
-        },
+        "kind": kind,
+        "metadata": {"name": name, "namespace": EDGE_NAMESPACE, "labels": LABELS},
+        "spec": spec,
     }
+
+
+def proxy_settings_manifest() -> dict[str, Any]:
+    """ExternalsPodiumD's live default-proxy-settings: response buffers far above nginx's 4 KB default.
+
+    KISS's /signin-oidc answer carries about 5 KB of headers; with 4 KB nginx
+    answers 502 "upstream sent too big header".
+    """
+    buffering = {"bufferSize": "128k", "buffers": {"number": 8, "size": "128k"}, "busyBuffersSize": "256k"}
+    return _gateway_policy(
+        "ProxySettingsPolicy", "default-proxy-settings", {"targetRefs": [GATEWAY_REF], "buffering": buffering}
+    )
+
+
+def client_settings_manifest() -> dict[str, Any]:
+    """ExternalsPodiumD's live default-client-settings: no request-body limit (maxSize 0)."""
+    return _gateway_policy(
+        "ClientSettingsPolicy", "default-client-settings", {"targetRef": GATEWAY_REF, "body": {"maxSize": "0"}}
+    )
 
 
 def _service_port(docs: list[manifests.Doc], service: str, port: Any) -> int:
@@ -238,6 +245,7 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         tls.certificate(EDGE_NAMESPACE, hosts),
         gateway_manifest(),
         proxy_settings_manifest(),
+        client_settings_manifest(),
         *route_manifests(docs),
     ]
     kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
@@ -246,7 +254,7 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         raise process.UserError(msg)
     _pin_cluster_ip()
     wanted = {(doc["kind"], manifests.name_of(doc)) for doc in objects}
-    for kind in ("HTTPRoute", "Service", "ProxySettingsPolicy"):
+    for kind in ("HTTPRoute", "Service", "ProxySettingsPolicy", "ClientSettingsPolicy"):
         live = kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]
         for item in live:
             if (kind, item["metadata"]["name"]) not in wanted:

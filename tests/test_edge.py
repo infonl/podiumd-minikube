@@ -4,16 +4,16 @@ import requests
 
 from conftest import host_url
 
-# No ClientSettingsPolicy, as in ExternalsPodiumD's git, so nginx's default 1 MB applies.
+# Above nginx's default 1 MB, which ExternalsPodiumD's live default-client-settings (maxSize 0) lifts.
 BODY = b"x" * (2 * 1024 * 1024)
 
 
-def test_two_megabyte_request_is_rejected_at_the_gateway(edge_ip):
-    """nginx answers 413 before the request reaches Open Zaak or its authentication."""
+def test_two_megabyte_request_passes_the_gateway(edge_ip):
+    """nginx passes the request to Open Zaak, which answers it, instead of rejecting it with 413."""
     response = requests.post(
         host_url("openzaak.local", "/documenten/api/v1/enkelvoudiginformatieobjecten"),
         data=BODY,
         headers={"Content-Type": "application/json"},
         timeout=30,
     )
-    assert response.status_code == 413
+    assert response.status_code != 413
