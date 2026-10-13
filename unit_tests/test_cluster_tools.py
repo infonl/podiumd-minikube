@@ -120,10 +120,16 @@ spec:
 """
 
 
-def test_with_control_plane_env_adds_gogc_once():
+def test_with_control_plane_env_sets_each_pods_values_once():
     tuned = provision.with_control_plane_env(STATIC_POD)
-    assert tuned is not None and "GOGC" in tuned and "- etcd" in tuned
+    assert tuned is not None and "GOGC" in tuned and "GOMEMLIMIT" not in tuned and "- etcd" in tuned
     assert provision.with_control_plane_env(tuned) is None
+    # kube-apiserver already tuned with GOGC only: GOMEMLIMIT is added, GOGC kept once.
+    apiserver = STATIC_POD.replace("name: etcd", "name: kube-apiserver").replace(
+        "    name: kube-apiserver\n", "    name: kube-apiserver\n    env:\n    - name: GOGC\n      value: '50'\n"
+    )
+    tuned = provision.with_control_plane_env(apiserver)
+    assert tuned is not None and "GOMEMLIMIT" in tuned and tuned.count("GOGC") == 1
 
 
 def test_tune_control_plane_leaves_tuned_static_pods_alone(fake_run: FakeRun):

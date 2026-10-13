@@ -35,10 +35,14 @@ BATCH_SIZE = 6
 # Images are amd64-only; on Apple Silicon only the workload images are forced to it,
 # never the node (minikube copies host-arch binaries into it).
 PLATFORM = "linux/amd64"
-# Laptop budget: the control plane's Go runtimes have no memory limit, so GOMEMLIMIT
-# does not apply; GOGC=50 collects at 1.5x the live heap instead of 2x.
-CONTROL_PLANE_ENV = {"GOGC": "50"}
-CONTROL_PLANE_PODS = ("kube-apiserver", "etcd")
+# Laptop budget per static pod. GOGC=50 collects at 1.5x the live heap instead of 2x.
+# kube-apiserver has no container limit for limit_runtimes' GOMEMLIMIT: its live heap
+# grows from about 450 to 760 MiB over a day of deploys, and without a limit the Go
+# runtime keeps the freed heap (RSS up to 1.5 GiB).
+CONTROL_PLANE_ENV = {
+    "kube-apiserver": {"GOGC": "50", "GOMEMLIMIT": "700MiB"},
+    "etcd": {"GOGC": "50"},
+}
 STATIC_PODS = "/etc/kubernetes/manifests"
 CONTROL_PLANE_TIMEOUT = 300
 KUBELET_CONFIG = "/var/lib/kubelet/config.yaml"
@@ -85,12 +89,15 @@ def start_node() -> None:
 
 
 def with_control_plane_env(manifest: str) -> str | None:
-    """The static pod manifest with CONTROL_PLANE_ENV on its container; None when it has it already."""
+    """The static pod manifest with its CONTROL_PLANE_ENV values on its container; None when it has them already."""
     pod = yaml.safe_load(manifest)
+    wanted = CONTROL_PLANE_ENV[pod["metadata"]["name"]]
     container = pod["spec"]["containers"][0]
-    before = list(container.get("env") or [])
-    manifests.add_env(container, CONTROL_PLANE_ENV)
-    return None if container["env"] == before else yaml.safe_dump(pod, sort_keys=False)
+    before: list[dict[str, Any]] = list(container.get("env") or [])
+    kept = [item for item in before if item.get("name") not in wanted]
+    container["env"] = [*kept, *({"name": name, "value": value} for name, value in wanted.items())]
+    unchanged = {item["name"]: item.get("value") for item in before if item.get("name") in wanted} == wanted
+    return None if unchanged else yaml.safe_dump(pod, sort_keys=False)
 
 
 def _tuned_and_ready(name: str) -> bool:
@@ -99,9 +106,10 @@ def _tuned_and_ready(name: str) -> bool:
     except process.ProcessError:
         return False
     env_items: list[dict[str, Any]] = pod["spec"]["containers"][0].get("env") or []
-    env = {item["name"] for item in env_items}
+    env = {item["name"]: item.get("value") for item in env_items}
     statuses: list[dict[str, Any]] = pod["status"].get("containerStatuses") or []
-    return set(CONTROL_PLANE_ENV) <= env and bool(statuses) and all(c.get("ready") for c in statuses)
+    tuned = all(env.get(name) == value for name, value in CONTROL_PLANE_ENV[name].items())
+    return tuned and bool(statuses) and all(c.get("ready") for c in statuses)
 
 
 def _write_node_file(path: str, content: str, mode: str) -> None:
@@ -149,7 +157,7 @@ def isolate_pod_dns() -> None:
 def tune_control_plane() -> None:
     """Adds CONTROL_PLANE_ENV to the static pods; minikube start rewrites their files, so every start does this."""
     changed: list[str] = []
-    for name in CONTROL_PLANE_PODS:
+    for name in CONTROL_PLANE_ENV:
         path = f"{STATIC_PODS}/{name}.yaml"
         tuned = with_control_plane_env(kube.node(f"sudo cat {path}"))
         if tuned is None:
@@ -158,10 +166,10 @@ def tune_control_plane() -> None:
         changed.append(name)
     if not changed:
         return
-    print(f"Restarting {', '.join(changed)} with {CONTROL_PLANE_ENV}...")
+    print(f"Restarting {', '.join(changed)} with {[CONTROL_PLANE_ENV[name] for name in changed]}...")
     for name in changed:
         if not polling.wait_until(functools.partial(_tuned_and_ready, name), timeout=CONTROL_PLANE_TIMEOUT, interval=5):
-            msg = f"{name} not ready {CONTROL_PLANE_TIMEOUT}s after adding GOGC: see `minikube logs -p {PROFILE}`"
+            msg = f"{name} not ready {CONTROL_PLANE_TIMEOUT}s after its env change: see `minikube logs -p {PROFILE}`"
             raise process.UserError(msg)
 
 

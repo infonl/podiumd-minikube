@@ -6565,3 +6565,16 @@ Objects API group, and keys no 4.10.0 template reads. OMC's JWT
 issuer/audience (`OMC` on kees00, chart `omc`): nothing on kees00 signs a token
 for OMC (no OMC abonnement), so the chart default stays; an OMC caller added
 later must sign with the same values (podiumd-infra, 2026-10-13).
+
+### kube-apiserver: GOMEMLIMIT
+
+After deploys kube-apiserver's RSS reached 1097-1554 MiB (memory test failing
+after nearly every deploy) while its live heap stayed 450-560 MiB (760 after a
+day): the Go runtime kept the freed heap, having no limit (static pod, so no
+`limits.memory` for limit_runtimes' GOMEMLIMIT). `provision.CONTROL_PLANE_ENV`
+is now per pod: kube-apiserver `GOGC=50` + `GOMEMLIMIT`, etcd `GOGC=50` as
+before; `with_control_plane_env` sets the values (it used to only add missing
+names). Measured over one deploy each: 800MiB peaked at 853 MiB RSS, a working
+set of 894 MiB, just above the memory test's 884; 700MiB peaked at 757 MiB RSS
+and the test passes. CPU about 0.15 core on average over the deploy. A soft
+limit: the runtime exceeds it rather than fail, with its GC CPU capped at 50%.
