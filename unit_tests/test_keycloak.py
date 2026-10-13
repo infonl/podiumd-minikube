@@ -1,96 +1,17 @@
-"""podiumd_minikube.keycloak: syncing the live realm clients."""
-
-from typing import Any
+"""podiumd_minikube.keycloak: the realm repair after the chart's import."""
 
 from podiumd_minikube import keycloak
 
+OIDC = {"id": "s-oidc", "protocol": "openid-connect"}
+SAML = {"id": "s-saml", "protocol": "saml"}
 
-def test_client_changes_add_https_and_set_pkce_once():
-    zac: dict[str, Any] = {
-        "clientId": "zaakafhandelcomponent",
-        "redirectUris": ["http://zac.local/*"],
-        "webOrigins": [],
-        "attributes": {},
-    }
-    assert keycloak.client_changes(zac, {}, zac_pkce=False) == [
-        "-s",
-        'redirectUris=["http://zac.local/*", "https://zac.local/*"]',
+
+def test_missing_default_scopes_only_for_chart_clients_without_any():
+    clients = [
+        {"id": "1", "clientId": "zac", "protocol": "openid-connect", "defaultClientScopes": []},
+        {"id": "2", "clientId": "kiss", "protocol": "openid-connect", "defaultClientScopes": ["profile"]},
+        {"id": "3", "clientId": "admin-cli", "protocol": "openid-connect"},
+        {"id": "4", "clientId": "saml-app", "protocol": "saml"},
+        {"id": "5", "clientId": "no-protocol"},
     ]
-    done = {
-        **zac,
-        "redirectUris": ["http://zac.local/*", "https://zac.local/*"],
-        "attributes": {"pkce.code.challenge.method": ""},
-    }
-    assert keycloak.client_changes(done, {}, zac_pkce=False) == []
-    assert keycloak.client_changes(done, {}, zac_pkce=True) == ["-s", 'attributes."pkce.code.challenge.method"=S256']
-
-
-def test_missing_clients_are_the_vendored_ones_not_live_with_https_twins():
-    live = [{"clientId": "zac"}]
-    vendored = [{"clientId": "zac"}, {"clientId": "openinwoner", "redirectUris": ["http://openinwoner.local/*"]}]
-    assert keycloak.missing_clients(live, vendored) == [
-        {
-            "clientId": "openinwoner",
-            "redirectUris": ["http://openinwoner.local/*", "https://openinwoner.local/*"],
-            "webOrigins": [],
-        }
-    ]
-
-
-def test_client_changes_add_vendored_uris_and_keep_live_ones():
-    live = {"clientId": "kiss", "redirectUris": ["http://kiss.local/*"], "webOrigins": []}
-    vendored = {"redirectUris": ["https://contact.local/*"]}
-    assert keycloak.client_changes(live, vendored, zac_pkce=False) == [
-        "-s",
-        'redirectUris=["http://kiss.local/*", "https://contact.local/*", "https://kiss.local/*"]',
-    ]
-
-
-def test_missing_by_name_drops_ids():
-    live = [{"name": "samaccountname"}]
-    vendored = [{"id": "1", "name": "samaccountname"}, {"id": "2", "containerId": "c", "name": "kiss-roles"}]
-    assert keycloak.missing_by_name(live, vendored) == [{"name": "kiss-roles"}]
-
-
-def test_profile_with_samaccountname_once():
-    profile = {"unmanagedAttributePolicy": "ENABLED", "attributes": [{"name": "username"}]}
-    added = keycloak.profile_with_samaccountname(profile)
-    assert added is not None
-    assert [a["name"] for a in added["attributes"]] == ["username", "samaccountname"]
-    assert keycloak.profile_with_samaccountname(added) is None
-
-
-def test_realm_changes_set_only_differing_realm_settings():
-    vendored = {"accessTokenLifespan": 60, "bruteForceProtected": True, "smtpServer": {"host": "mailpit"}, "realm": "x"}
-    live = {"accessTokenLifespan": 300, "bruteForceProtected": True, "smtpServer": {}}
-    assert keycloak.realm_changes(live, vendored) == [
-        "-s", "accessTokenLifespan=60", "-s", 'smtpServer={"host": "mailpit"}',
-    ]  # fmt: skip
-    assert keycloak.realm_changes(vendored, vendored) == []
-
-
-def test_realm_changes_set_listed_realm_attributes():
-    vendored = {"attributes": {"adminEventsExpiration": "2592000", "frontendUrl": "x", "cibaInterval": "5"}}
-    live = {"attributes": {"frontendUrl": "y"}}
-    assert keycloak.realm_changes(live, vendored) == [
-        "-s", "attributes.adminEventsExpiration=2592000", "-s", "attributes.frontendUrl=x",
-    ]  # fmt: skip
-
-
-def test_group_role_changes_lists_realm_roles_a_live_group_lacks():
-    live = [{"name": "beheerders-elk-domein", "realmRoles": ["beheerder_elk_domein"]}, {"name": "other"}]
-    vendored = [
-        {"name": "beheerders-elk-domein", "realmRoles": ["beheerder_elk_domein", "beheerders"]},
-        {"name": "beheerders", "realmRoles": ["beheerders"]},
-        {"name": "other", "realmRoles": []},
-    ]
-    assert keycloak.group_role_changes(live, vendored) == {
-        "beheerders-elk-domein": ["beheerders"],
-        "beheerders": ["beheerders"],
-    }
-
-
-def test_required_action_changes_lists_differing_default_actions():
-    live = [{"alias": "CONFIGURE_TOTP", "defaultAction": False}, {"alias": "VERIFY_EMAIL"}]
-    vendored = [{"alias": "CONFIGURE_TOTP", "defaultAction": True}, {"alias": "VERIFY_EMAIL", "defaultAction": False}]
-    assert keycloak.required_action_changes(live, vendored) == {"CONFIGURE_TOTP": True}
+    assert keycloak.missing_default_scopes(clients, [OIDC, SAML]) == {"1": ["s-oidc"], "4": ["s-saml"], "5": ["s-oidc"]}

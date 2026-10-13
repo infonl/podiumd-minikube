@@ -22,28 +22,6 @@ changes is in `.claude/plans/plan.md`.
 - `postgres/fixtures/{openklant,openarchiefbeheer}/1-setup-applicatie.sql`
   ← `scripts/docker-compose/imports/{openklant,openarchiefbeheer}-database/database/`.
   Read by `templates/postgres/configmap-fixtures.yaml`.
-## Copied and changed
-
-- `keycloak/zaakafhandelcomponent-realm.json`
-  ← `scripts/docker-compose/imports/keycloak/realms/zaakafhandelcomponent-realm.json`.
-  Changes: `*.local` redirect URIs and web origins for `zaakafhandelcomponent`
-  and `pabc` (the render adds https twins, `manifests.with_https`);
-  `pabc` requires PKCE (`S256`; its middleware always sends it); clients
-  for the Django apps (`openzaak`, `openklant`, `objecten`, `objecttypen`,
-  `opennotificaties`, `openformulieren`, `openarchiefbeheer`, PKCE off:
-  their mozilla-django-oidc-db has no PKCE support) and for `ita`, `kiss`,
-  `openinwoner`, `referentielijsten`, `openbeheer` and `openbao`, with the
-  podiumd chart's redirect URIs, client roles and mappers; the seven
-  Django apps' clients also get the `username` and `client roles` (claim
-  `groups`) mappers and the `administrators` role. Realm settings as
-  podiumd's realm template: access token 60 s, brute-force protection
-  (failure factor 5), refresh token revocation, events and admin events,
-  SMTP to mailpit.
-  `zaakafhandelcomponent` keeps `S256`; `manifests.fix_realm` clears it in
-  the render while `zac.experimentalPkce` is off. Read by
-  `templates/keycloak/`; Keycloak imports it once, so `podiumd_minikube.keycloak`
-  reconciles the live realm on every deploy.
-
 ## Written for this project
 
 - `postgres/00-create-databases.sql`: the databases, roles and PostGIS

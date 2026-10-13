@@ -13,11 +13,9 @@ images (unrelated to ZAC's REST API, would be a confusing image choice for
 what this Job actually does) - stdlib-only script, no extra packages to
 install.
 
-BEHEERDER_USERNAME/PASSWORD: this project's own vendored Keycloak realm's
-"beheerder1newiam" test user - every zaakafhandelparameters endpoint requires a real
-user with the beheerder PABC role, not just a valid token, so a
-client_credentials service-account grant doesn't work here even though one
-would be simpler to wire.
+The script logs in as its own Keycloak user in group beheerders (see its
+header): every zaakafhandelparameters endpoint requires a user with the
+beheerder PABC role, not a service account.
 */}}
 {{- if .Values.podiumd.zac.enabled }}
 apiVersion: batch/v1
@@ -71,16 +69,20 @@ spec:
             - python
             - /app/seed_productaanvraag_zaakafhandelparameters.py
           env:
-            - name: KEYCLOAK_TOKEN_URL
-              value: "{{ .Values.podiumd.zac.auth.server }}/realms/{{ .Values.podiumd.zac.auth.realm }}/protocol/openid-connect/token"
-            - name: KEYCLOAK_CLIENT_ID
-              value: {{ .Values.podiumd.zac.auth.clientId | quote }}
-            - name: KEYCLOAK_CLIENT_SECRET
-              value: {{ .Values.podiumd.zac.auth.secret | quote }}
-            - name: BEHEERDER_USERNAME
-              value: beheerder1newiam
-            - name: BEHEERDER_PASSWORD
-              value: beheerder1newiam
+            - name: KEYCLOAK_URL
+              value: {{ .Values.podiumd.zac.auth.server | quote }}
+            - name: KEYCLOAK_REALM
+              value: {{ .Values.podiumd.keycloak.config.realm | quote }}
+            - name: KEYCLOAK_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-podiumd-admin
+                  key: username
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-podiumd-admin
+                  key: password
             # ZAC requires https (AUTH_SSL_REQUIRED "all", as ExternalsPodiumD).
             - name: ZAC_BASE_URL
               value: https://zac.local/rest

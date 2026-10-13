@@ -31,7 +31,7 @@ def test_objecten_shape_is_merged_with_openobject(tmp_path: Path):
 
 def test_zac_pkce_off_needs_no_sets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(values, "zac_experimental_pkce", lambda: False)
-    assert chart.zac_pkce(tmp_path) == chart.ZacPkce(enabled=False)
+    assert chart.zac_pkce_sets(tmp_path) == []
 
 
 def test_zac_pkce_on_requires_pkce_support_in_the_zac_chart(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -39,8 +39,9 @@ def test_zac_pkce_on_requires_pkce_support_in_the_zac_chart(tmp_path: Path, monk
     config = "podiumd/charts/zaakafhandelcomponent/templates/config.yaml"
     make_tgz(tmp_path / "podiumd-4.9.3.tgz", {config: "OTHER: 1\n"})
     with pytest.raises(UserError, match="AUTH_ENABLE_PKCE"):
-        chart.zac_pkce(tmp_path)
+        chart.zac_pkce_sets(tmp_path)
     make_tgz(tmp_path / "podiumd-4.9.3.tgz", {config: "AUTH_ENABLE_PKCE: true\n"})
-    assert chart.zac_pkce(tmp_path).sets == [
+    assert chart.zac_pkce_sets(tmp_path) == [
         "--set", f"podiumd.zac.image.tag={chart.ZAC_PKCE_IMAGE_TAG}", "--set", "podiumd.zac.auth.enablePkce=true",
+        "--set", "podiumd.zac.auth.pkceEnabled=true",
     ]  # fmt: skip

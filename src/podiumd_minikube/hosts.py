@@ -8,7 +8,7 @@ MARKER = "# podiumd-minikube"
 
 def chart_hosts() -> list[str]:
     """Ingress hosts of a render with every profile on (for /etc/hosts and the TLS certificate)."""
-    render = manifests.fix_up(manifests.helm_template(*chart.everything_args()), objecten_merged=False, zac_pkce=False)
+    render = manifests.fix_up(manifests.helm_template(*chart.everything_args()), objecten_merged=False)
     return manifests.ingress_hosts(render.docs)
 
 

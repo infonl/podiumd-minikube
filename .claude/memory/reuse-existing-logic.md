@@ -46,12 +46,11 @@ live: the tunnel script's own host list went stale, which is why
    | podiumd chart version and `charts/*.tgz` sync | `podiumd_minikube.dependency` (`selection`, `write`, `sync`) |
    | a flag in a top-level `values.yaml` block | `podiumd_minikube.values` (`flag`, `zac_experimental_pkce`) |
    | facts from the vendored tarballs (objecten shape, ZAC PKCE support) | `podiumd_minikube.chart` |
-   | the ZAC PKCE live realm sync | `keycloak.sync_zac_pkce` |
    | the monitoring-logging CRDs | `crds.apply_monitoring_logging_crds` |
    | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `unit_tests/conftest.py` |
    | PV/PVC pre-provisioning for an app | `templates/storage-hooks.yaml` |
    | a database and user for an app | the init SQL in `templates/postgres` |
-   | Redis, Mailpit, Keycloak, Solr | the existing `templates/<name>` Deployment; never a subchart's bundled copy |
+   | Redis, Mailpit, Solr | the existing `templates/<name>` Deployment; never a subchart's bundled copy |
    | common labels | `podiumd-minikube.labels` in `templates/_helpers.tpl` |
    | an optional profile switch | `<name>.enabled` + `podiumd.<name>.enabled` in `values.yaml`, set by `--full` in `podiumd_minikube.deploy.options` |
    | kubectl from tests | `kubectl` in `tests/conftest.py` |

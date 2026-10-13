@@ -80,27 +80,19 @@ def objecten_shape(charts_dir: Path = CHARTS_DIR) -> ObjectenShape:
     )
 
 
-@dataclass(frozen=True)
-class ZacPkce:
-    """zac.experimentalPkce and the --set flags it needs."""
-
-    enabled: bool
-    sets: list[str] = field(default_factory=list[str])
-
-
 def everything_args(charts_dir: Path = CHARTS_DIR) -> list[str]:
     """helm args that render every profile: all images and hosts the chart can have."""
-    return [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets, *zac_pkce(charts_dir).sets]
+    return [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets, *zac_pkce_sets(charts_dir)]
 
 
-def zac_pkce(charts_dir: Path = CHARTS_DIR) -> ZacPkce:
-    """zac.experimentalPkce, refused when the selected zac chart cannot send PKCE.
+def zac_pkce_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
+    """The --set flags of zac.experimentalPkce, refused when the selected zac chart cannot send PKCE.
 
     Requiring PKCE in the realm while zac never sends it rejects every login
     (this happened once, see plan.md).
     """
     if not values.zac_experimental_pkce():
-        return ZacPkce(enabled=False)
+        return []
     tgz = tarball("podiumd", charts_dir)
     config = member_text(tgz, "podiumd/charts/zaakafhandelcomponent/templates/config.yaml") if tgz else None
     if "AUTH_ENABLE_PKCE" not in (config or ""):
@@ -111,5 +103,11 @@ def zac_pkce(charts_dir: Path = CHARTS_DIR) -> ZacPkce:
             "podiumd.zac.image.tag comment), or set zac.experimentalPkce to false."
         )
         raise UserError(msg)
-    sets = ["--set", f"podiumd.zac.image.tag={ZAC_PKCE_IMAGE_TAG}", "--set", "podiumd.zac.auth.enablePkce=true"]
-    return ZacPkce(enabled=True, sets=sets)
+    return [
+        "--set",
+        f"podiumd.zac.image.tag={ZAC_PKCE_IMAGE_TAG}",
+        "--set",
+        "podiumd.zac.auth.enablePkce=true",
+        "--set",
+        "podiumd.zac.auth.pkceEnabled=true",
+    ]

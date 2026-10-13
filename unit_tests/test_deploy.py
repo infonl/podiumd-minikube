@@ -33,7 +33,7 @@ SEAL = ["--set-file", "seal=key"]
 
 @pytest.fixture
 def no_pkce(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chart, "zac_pkce", lambda: chart.ZacPkce(enabled=False))
+    monkeypatch.setattr(chart, "zac_pkce_sets", list)
     monkeypatch.setattr(openbao, "seal_key_args", lambda: SEAL)
 
 
@@ -77,16 +77,8 @@ def test_unfinished_jobs_splits_running_and_failed():
         return {"metadata": {"name": name}, "status": {"conditions": conditions}}
 
     jobs = [job("done", "Complete"), job("broken", "Failed"), job("busy", None)]
-    outcomes: dict[str, str] = {}
     names = ["done", "broken", "busy", "missing"]
-    assert deploy.unfinished_jobs(jobs, names, outcomes) == (["busy", "missing"], ["broken"])
-
-
-def test_unfinished_jobs_remembers_jobs_their_ttl_deleted():
-    outcomes: dict[str, str] = {}
-    finished = [{"metadata": {"name": "config"}, "status": {"conditions": [{"type": "Complete", "status": "True"}]}}]
-    assert deploy.unfinished_jobs(finished, ["config"], outcomes) == ([], [])
-    assert deploy.unfinished_jobs([], ["config"], outcomes) == ([], [])
+    assert deploy.unfinished_jobs(jobs, names) == (["busy", "missing"], ["broken"])
 
 
 def test_rolled_out_needs_current_generation_and_ready_replicas():

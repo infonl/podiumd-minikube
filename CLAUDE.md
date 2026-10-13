@@ -50,7 +50,7 @@ and deploy-time tooling; `bin/` holds stubs with the old command names),
 `unit_tests/` and `tests/` (a live-cluster pytest suite).
 
 `vendor/dimpact-zaakafhandelcomponent/` holds physical copies of file assets
-this chart needs from that repo (Keycloak realm JSON, WireMock mappings, DB
+this chart needs from that repo (WireMock mappings, DB
 init/seed SQL, metrics configs, PABC's role/domain mapping
 dataset) — never live cross-repo references. See `vendor/dimpact-zaakafhandelcomponent/NOTES.md`
 for provenance per file.

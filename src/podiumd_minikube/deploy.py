@@ -44,18 +44,16 @@ class Options:
 
     helm_args: list[str] = field(default_factory=list[str])
     objecten_merged: bool = False
-    zac_pkce: bool = False
 
     def render(self, *args: str) -> manifests.Render:
         """`helm template` with these options and args, fixed up."""
         text = manifests.helm_template(*self.helm_args, *args)
-        return manifests.fix_up(text, objecten_merged=self.objecten_merged, zac_pkce=self.zac_pkce, ca_trust=True)
+        return manifests.fix_up(text, objecten_merged=self.objecten_merged, ca_trust=True)
 
 
 def options(*, full: bool, extra: list[str]) -> Options:
     """Options for a deploy with or without --full, plus extra helm args."""
-    pkce = chart.zac_pkce()
-    selected = Options(helm_args=[*pkce.sets], zac_pkce=pkce.enabled)
+    selected = Options(helm_args=chart.zac_pkce_sets())
     if full:
         shape = chart.objecten_shape()
         selected.helm_args += [*chart.FULL_PROFILE_SETS, *shape.sets]
@@ -181,7 +179,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     dns.apply_hosts(chart_hosts)
 
     print()
-    keycloak.sync_realm(zac_pkce=selected.zac_pkce)
+    keycloak.repair_default_client_scopes(render)
     openbao.bootstrap(render)
     print(f"\nPruning {', '.join(prune.PRUNABLE_KINDS)} not part of this render...")
     prune.prune([*render.docs, *render.large_configmaps], force=force_prune)
@@ -208,14 +206,9 @@ def rolled_out(workload: dict[str, Any]) -> bool:
     return current and updated >= wanted and old_gone and status.get("readyReplicas", 0) >= wanted
 
 
-def unfinished_jobs(
-    live: list[dict[str, Any]], names: list[str], outcomes: dict[str, str]
-) -> tuple[list[str], list[str]]:
-    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live.
-
-    outcomes keeps each Job's Complete or Failed once seen: a Job's ttlSecondsAfterFinished
-    deletes it after it finished, which a slow rollout outlasts.
-    """
+def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
+    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live."""
+    outcomes: dict[str, str] = {}
     for job in live:
         conditions: list[dict[str, Any]] = job.get("status", {}).get("conditions") or []
         done = {c["type"] for c in conditions if c.get("status") == "True"} & {"Complete", "Failed"}
@@ -235,17 +228,15 @@ def _wait_ready(render: manifests.Render) -> None:
         if doc.get("kind") in ("Deployment", "StatefulSet", *manifests.ECK_KINDS)
     ]
     names = jobs(render)
-    outcomes: dict[str, str] = {}
 
     def job_state() -> tuple[list[str], list[str]]:
-        return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names, outcomes)
+        return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
 
     def stuck() -> list[str]:
         return [w for w in workloads if not rolled_out(kube.get_json(w, "-n", NAMESPACE))]
 
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
-    # Jobs are polled meanwhile, so their outcome is seen before their TTL deletes them.
     def settled() -> tuple[list[str]] | None:
         running, failed = job_state()
         return None if running or stuck() else (failed,)

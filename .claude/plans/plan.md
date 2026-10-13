@@ -6386,3 +6386,82 @@ Open Notificaties 1.16.0 replaced RabbitMQ with Celery Beat; podiumd 4.8 and
 later bundle 1.16.0 or newer. `templates/rabbitmq` and the
 `opennotificaties.rabbitmqEnabled` flag only served podiumd 4.7.x, which is
 no longer supported. Nothing ran it (the flag was false).
+
+### Keycloak: podiumd's operator and realm `podiumd`
+
+Replaces `templates/keycloak` (plain Keycloak 26.7.1 importing ZAC's compose
+realm `zaakafhandelcomponent`), `podiumd_minikube.keycloak` (the live realm
+sync) and `manifests.fix_realm`. podiumd's keycloak-operator (adfinis chart
+1.13.0, operator and server 26.7.3) runs the server; the chart's Jobs
+(`ensure-podiumd-admin-user`, `ensure-keycloak-operator-sa`, the
+keycloak-config-cli imports of the master and `podiumd` realms, PABC's groups
+Job) create the realms and clients on every deploy, as on kees00 and
+ExternalsPodiumD. The Jobs carry no Helm hooks and wait for Keycloak in their
+init containers, so `kubectl apply` suits them.
+
+- CRDs: `helm template --include-crds` (in `manifests.helm_template`) renders
+  the subchart's `crds/`; they equal keycloak-k8s-resources 26.7.3, including
+  KeycloakOIDCClient and KeycloakSAMLClient, without which operator 26.7
+  crashloops. `deploy._apply_crds` applies them first.
+- Values as the reference environments: `instances: 1` (chart 2);
+  `adminFrontendUrl` keycloak-admin.local, `realmFrontendUrl` keycloak.local;
+  `skipRoles`/`skipGroups` false as podiumd-infra and ExternalsPodiumD's ontw
+  environments icat, dim1 and mayk (ExternalsPodiumD's test environment keeps
+  true): podiumd-tests' bootstrap assigns those roles and groups; the monitoring
+  client on grafana.local (Grafana keeps anonymous access); no Datamigratie or
+  Zaakbrug client (no such apps here); SMTP to mailpit; PABC's groups Job on
+  (as icat).
+- Apps: discovery on `/realms/podiumd/`; ZAC client `zac` and admin client
+  `zac-admin-client` (chart defaults); Open Archiefbeheer's client `abc`. Each
+  Django app's client secret moved to `configuration.secrets.keycloak_client_secret`:
+  the chart's realm secrets read it, and without it `randAlphaNum` makes a new
+  secret on every `helm template` (no `lookup`). `configuration.oidcUrl` added
+  for Open Klant, Open Notificaties, Open Archiefbeheer (`-ui`), Open
+  Formulieren (`-nginx`) and `pabc.settings.oidc.oidcUrl`: the chart builds each
+  client's only redirect URI from it, so admin logins on the second host of Open
+  Archiefbeheer and Open Formulieren stop working, as on the real environments.
+- ZAC PKCE: `zac.experimentalPkce` now also sets `zac.auth.pkceEnabled`, which
+  the chart's realm config turns into the client's S256.
+- Laptop budget: Keycloak 512Mi/768Mi (chart 1700Mi/2Gi) with the old JVM
+  flags, set by `manifests.tune_keycloak` in the Keycloak resource's
+  podTemplate (server and its `keycloak-builder` init container); the
+  podTemplate's container resources win over `spec.resources`, so the fixup
+  copies them. The operator runs plain `java -jar quarkus-run.jar`, so its flags
+  go in `JDK_JAVA_OPTIONS` (heap 192m, serial GC, C1), limit 384Mi (chart
+  768Mi; IN-2233 OOMKilled at 256Mi with the default heap).
+
+Found live on the first deploy, in this order:
+
+- The operator could not write Keycloak's ServiceMonitor (403): the chart
+  renders that Role only with `keycloak-operator.enableServiceMonitor` or when
+  `.Capabilities` lists the ServiceMonitor CRD, which `helm template` never
+  does. Set `enableServiceMonitor: true`, as ExternalsPodiumD.
+- Then the ServiceMonitor patch failed with "spec.scrapeProtocols: field not
+  declared in schema": `crds.crd_documents` applied two copies of each
+  Prometheus operator CRD from monitoring-logging, and Loki's bundled
+  grafana-agent-operator copy (no version annotation, years older) sorted after
+  kube-prometheus-stack's 0.90.1 and replaced it. It now keeps the copy with the
+  highest `operator.prometheus.io/version` per name, and parses only CRD files
+  with a loader that reads a bare `=` enum value as a string.
+- ZAC's productaanvraag seed Job logged in as the compose realm's
+  `beheerder1newiam`. As podiumd-infra's seed-zac-zaakafhandelparameters.sh
+  (podiumd-tests confirmed its bootstrap does not set these): its own user
+  `podiumd-minikube-zac-seed` in group and realm role `beheerders`, required
+  actions cleared, a new random password on every run, through the browser
+  login (the chart's `zac` client has no direct access grants).
+- Every chart client had no default client scopes, so ZAC saw no roles (403)
+  and KISS would get invalid_scope: the chart lists only
+  `optionalClientScopes`, and keycloak-config-cli then creates clients without
+  the realm defaults. kees00 hit the same; podiumd-infra repairs it after the
+  deploy (scripts/ensure-keycloak-default-client-scopes.sh). `deploy` does the
+  same in `keycloak.repair_default_client_scopes`, once the realm import Job
+  has completed: only clients without any default scope, Keycloak's own
+  clients excluded.
+- The old realm `zaakafhandelcomponent` stayed in Keycloak's database; deleted
+  once by hand (kcadm).
+- deploy's final wait reported the kube-prom admission Jobs as running for 900 s:
+  their `ttlSecondsAfterFinished: 60` deleted them while the slower post-apply
+  steps (the realm import wait, the first scope repair: about 100 kcadm runs)
+  ran, so the wait never saw them finish. `manifests.keep_finished_jobs` drops
+  the TTL from rendered Jobs (deploy deletes and re-runs them every time), and
+  `deploy.unfinished_jobs` no longer remembers outcomes.

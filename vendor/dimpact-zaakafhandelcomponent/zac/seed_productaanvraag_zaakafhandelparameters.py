@@ -15,8 +15,11 @@
 # Authenticates as a real user (not a service-account client_credentials
 # grant) because every zaakafhandelparameters endpoint asserts
 # policyService.readOverigeRechten().beheren, which needs an actual PABC
-# role mapping, not just a valid token - BEHEERDER_USERNAME is one of this
-# project's own vendored test users for exactly this role.
+# role mapping, not just a valid token, through a browser login (the zac
+# client has no direct access grants). As podiumd-infra's
+# seed-zac-zaakafhandelparameters.sh: its own Keycloak user SEED_USERNAME in
+# group beheerders (podiumd's pabc-dataset maps it to every ZAC role), with a
+# new random password on every run that is never stored.
 #
 # GET-then-PUT, not a hand-built payload: ZAC's own
 # RestZaakafhandelParameters has several fields the frontend requires
@@ -30,17 +33,24 @@
 # Idempotent: PUT-ing the same zaakafhandelparameters twice is a plain
 # update, not a create - safe to re-run this Job's already-succeeded,
 # unchanged spec like any other Job in this project.
+import html
 import json
 import os
+import re
+import secrets
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
-KEYCLOAK_TOKEN_URL = os.environ["KEYCLOAK_TOKEN_URL"]
-KEYCLOAK_CLIENT_ID = os.environ["KEYCLOAK_CLIENT_ID"]
-KEYCLOAK_CLIENT_SECRET = os.environ["KEYCLOAK_CLIENT_SECRET"]
-BEHEERDER_USERNAME = os.environ["BEHEERDER_USERNAME"]
-BEHEERDER_PASSWORD = os.environ["BEHEERDER_PASSWORD"]
+from http.cookiejar import CookieJar
+
+KEYCLOAK_URL = os.environ["KEYCLOAK_URL"].rstrip("/")
+KEYCLOAK_REALM = os.environ["KEYCLOAK_REALM"]
+KEYCLOAK_ADMIN_USERNAME = os.environ["KEYCLOAK_ADMIN_USERNAME"]
+KEYCLOAK_ADMIN_PASSWORD = os.environ["KEYCLOAK_ADMIN_PASSWORD"]
+SEED_USERNAME = "podiumd-minikube-zac-seed"
+SEED_GROUP = "beheerders"
 
 ZAC_BASE_URL = os.environ["ZAC_BASE_URL"].rstrip("/")
 OPENZAAK_BASE_URL = os.environ["OPENZAAK_BASE_URL"].rstrip("/")
@@ -56,7 +66,7 @@ NIET_ONTVANKELIJK_RESULTAAT_NAAM = os.environ["NIET_ONTVANKELIJK_RESULTAAT_NAAM"
 PRODUCTAANVRAAGTYPE = os.environ["PRODUCTAANVRAAGTYPE"]
 
 
-def http(method, url, *, headers=None, data=None):
+def http(method, url, *, headers=None, data=None, opener=None):
     body = json.dumps(data).encode() if data is not None else None
     req = urllib.request.Request(url, data=body, method=method)
     req.add_header("Accept", "application/json")
@@ -65,7 +75,7 @@ def http(method, url, *, headers=None, data=None):
     for key, value in (headers or {}).items():
         req.add_header(key, value)
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with (opener.open if opener else urllib.request.urlopen)(req, timeout=30) as resp:
             raw = resp.read()
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as exc:
@@ -94,21 +104,84 @@ def zgw_jwt(client_id, secret):
     return (signing_input + b"." + b64url(signature)).decode()
 
 
-def get_beheerder_token():
-    form = "&".join(
-        f"{k}={v}" for k, v in {
-            "grant_type": "password",
-            "client_id": KEYCLOAK_CLIENT_ID,
-            "client_secret": KEYCLOAK_CLIENT_SECRET,
-            "username": BEHEERDER_USERNAME,
-            "password": BEHEERDER_PASSWORD,
-            "scope": "openid",
-        }.items()
+def admin_token():
+    form = {"grant_type": "password", "client_id": "admin-cli"}
+    form |= {"username": KEYCLOAK_ADMIN_USERNAME, "password": KEYCLOAK_ADMIN_PASSWORD}
+    req = urllib.request.Request(
+        f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token",
+        data=urllib.parse.urlencode(form).encode(),
+        method="POST",
     )
-    req = urllib.request.Request(KEYCLOAK_TOKEN_URL, data=form.encode(), method="POST")
-    req.add_header("Content-Type", "application/x-www-form-urlencoded")
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read())["access_token"]
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def zac_session(password):
+    """An opener with ZAC's session cookie, from the browser login: the zac client has no direct access grants."""
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()), NoRedirect())
+
+    def location(method, url, data=None):
+        try:
+            resp = opener.open(urllib.request.Request(url, data=data, method=method), timeout=30)
+            return resp.getcode(), resp.headers.get("Location"), resp.read().decode(errors="replace")
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.headers.get("Location"), exc.read().decode(errors="replace")
+
+    zac = ZAC_BASE_URL.removesuffix("/rest")
+    _, auth_url, _ = location("GET", f"{zac}/")
+    _, _, page = location("GET", auth_url)
+    action = re.search(r'action="([^"]*)"', page)
+    if not action:
+        sys.exit(f"no login form at {auth_url}")
+    form = urllib.parse.urlencode({"username": SEED_USERNAME, "password": password, "credentialId": ""})
+    status, callback, _ = location("POST", html.unescape(action.group(1)), form.encode())
+    if status != 302 or not callback.startswith(zac):
+        sys.exit(f"Keycloak login of {SEED_USERNAME} did not return to ZAC: {status} {callback}")
+    location("GET", callback)
+    return opener
+
+
+def seed_user_password():
+    """Ensures SEED_USERNAME in SEED_GROUP without required actions; returns its new password."""
+    admin = {"Authorization": f"Bearer {admin_token()}"}
+    api = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}"
+    query = urllib.parse.urlencode({"username": SEED_USERNAME, "exact": "true"})
+    users = http("GET", f"{api}/users?{query}", headers=admin)
+    if not users:
+        # Email and names filled in, so the user profile asks for no update at login.
+        user = {
+            "username": SEED_USERNAME,
+            "enabled": True,
+            "email": f"{SEED_USERNAME}@example.com",
+            "emailVerified": True,
+            "firstName": "podiumd-minikube",
+            "lastName": "zac-seed",
+        }
+        http("POST", f"{api}/users", headers=admin, data=user)
+        users = http("GET", f"{api}/users?{query}", headers=admin)
+    user = users[0]
+    user_id = user["id"]
+    # The realm's default required action CONFIGURE_TOTP would stop the password grant.
+    http("PUT", f"{api}/users/{user_id}", headers=admin, data={**user, "requiredActions": []})
+    groups = http("GET", f"{api}/groups?{urllib.parse.urlencode({'search': SEED_GROUP, 'exact': 'true'})}", headers=admin)
+    group = next((g for g in groups if g["name"] == SEED_GROUP), None)
+    if group is None:
+        sys.exit(f"realm {KEYCLOAK_REALM} has no group {SEED_GROUP}")
+    http("PUT", f"{api}/users/{user_id}/groups/{group['id']}", headers=admin, data={})
+    # As podiumd-infra: the realm role of the same name too, where the realm has it.
+    roles = http("GET", f"{api}/roles?{urllib.parse.urlencode({'search': SEED_GROUP})}", headers=admin)
+    role = [r for r in roles if r["name"] == SEED_GROUP]
+    if role:
+        http("POST", f"{api}/users/{user_id}/role-mappings/realm", headers=admin, data=role)
+    password = secrets.token_urlsafe(33)
+    credential = {"type": "password", "value": password, "temporary": False}
+    http("PUT", f"{api}/users/{user_id}/reset-password", headers=admin, data=credential)
+    return password
 
 
 def main():
@@ -133,7 +206,7 @@ def main():
     zaaktype = zaaktypen["results"][0]
     zaaktype_uuid = zaaktype["url"].rstrip("/").rsplit("/", 1)[-1]
 
-    bearer = {"Authorization": f"Bearer {get_beheerder_token()}"}
+    session = zac_session(seed_user_password())
 
     # Via ZAC's own endpoint, not openzaak's raw Catalogi API directly: it
     # already returns RestResultaattype-shaped objects (id/naam/...) that
@@ -146,7 +219,7 @@ def main():
     resultaattypen = http(
         "GET",
         f"{ZAC_BASE_URL}/zaakafhandelparameters/resultaattypes/{zaaktype_uuid}",
-        headers=bearer,
+        opener=session,
     )
     resultaattype = next(
         (r for r in resultaattypen if r["naam"] == NIET_ONTVANKELIJK_RESULTAAT_NAAM),
@@ -157,13 +230,13 @@ def main():
             f"No resultaattype named {NIET_ONTVANKELIJK_RESULTAAT_NAAM!r} found for zaaktype {ZAAKTYPE_IDENTIFICATIE!r}"
         )
 
-    config = http("GET", f"{ZAC_BASE_URL}/zaakafhandelparameters/{zaaktype_uuid}", headers=bearer)
+    config = http("GET", f"{ZAC_BASE_URL}/zaakafhandelparameters/{zaaktype_uuid}", opener=session)
     config["caseDefinition"] = {"key": CASE_DEFINITION_KEY}
     config["defaultGroepId"] = DEFAULT_GROEP_ID
     config["zaakNietOntvankelijkResultaattype"] = resultaattype
     config["productaanvraagtype"] = PRODUCTAANVRAAGTYPE
 
-    updated = http("PUT", f"{ZAC_BASE_URL}/zaakafhandelparameters", headers=bearer, data=config)
+    updated = http("PUT", f"{ZAC_BASE_URL}/zaakafhandelparameters", opener=session, data=config)
     if not updated.get("valide"):
         sys.exit(f"zaakafhandelparameters for {ZAAKTYPE_IDENTIFICATIE!r} still not valide after PUT: {updated}")
 

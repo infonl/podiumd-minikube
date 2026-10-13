@@ -6,7 +6,6 @@ API request limit. Without a release, Helm hooks never run and the render has
 to be corrected here.
 """
 
-import json
 import re
 
 from dataclasses import dataclass
@@ -43,6 +42,11 @@ CAPACITY_ENV = {
     "MALLOC_ARENA_MAX": "2",
 }
 GO_MEMORY_LIMIT = "GOMEMLIMIT"
+# Laptop budget, Keycloak: kc.sh sets -XX:+UseG1GC, which -XX:-UseG1GC switches off for the
+# serial GC; TieredStopAtLevel=1: only the C1 compiler. Its operator runs plain `java -jar`.
+KEYCLOAK_JAVA_OPTS = "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2 -XX:-UseG1GC -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+KEYCLOAK_OPERATOR = "keycloak-operator"
+KEYCLOAK_OPERATOR_JAVA_OPTS = "-Xms32m -Xmx192m -XX:ActiveProcessorCount=1 -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000
 
@@ -164,13 +168,15 @@ def _pod_spec(doc: Doc) -> Doc | None:
 def _runtime_pod_specs(doc: Doc) -> list[Doc]:
     """doc's pod specs: a workload's or Job's, and those an operator expands into its own StatefulSets.
 
-    ECK: the podTemplate specs. Prometheus: its `containers` override, given the
+    ECK and Keycloak: the podTemplate specs. Prometheus: its `containers` override, given the
     prometheus container's resources, which the operator merges into its pod.
     """
     spec = _pod_spec(doc)
     if spec is not None:
         return [spec]
     kind, body = doc.get("kind"), section(doc, "spec")
+    if kind == "Keycloak":
+        return [section(section(section(body, "unsupported"), "podTemplate"), "spec")]
     if kind == "Prometheus":
         containers: list[Doc] = body.setdefault("containers", [])
         if not any(c.get("name") == "prometheus" for c in containers):
@@ -206,8 +212,36 @@ def trust_ca(docs: list[Doc]) -> None:
             add_env(container, pki.TRUST_ENV)
 
 
+def keep_finished_jobs(docs: list[Doc]) -> None:
+    """Drops ttlSecondsAfterFinished from Jobs, so deploy sees their outcome after its slower steps.
+
+    deploy deletes and re-runs every rendered Job (deploy._rerun_jobs), so none piles up.
+    """
+    for doc in docs:
+        if doc.get("kind") == "Job":
+            section(doc, "spec").pop("ttlSecondsAfterFinished", None)
+
+
+def tune_keycloak(docs: list[Doc]) -> None:
+    """Sets the JVM flags of Keycloak and its operator, and the Keycloak resource's resources on its container.
+
+    The operator takes the container's resources from the podTemplate over spec.resources.
+    """
+    for doc in docs:
+        if doc.get("kind") == "Keycloak":
+            body = section(doc, "spec")
+            for spec in _runtime_pod_specs(doc):
+                for container in _containers(spec):
+                    add_env(container, {"JAVA_OPTS_APPEND": KEYCLOAK_JAVA_OPTS})
+                    if container.get("name") == "keycloak" and body.get("resources"):
+                        container["resources"] = body["resources"]
+        elif doc.get("kind") == "Deployment" and name_of(doc) == KEYCLOAK_OPERATOR:
+            for container in _containers(_pod_spec(doc) or {}):
+                add_env(container, {"JDK_JAVA_OPTIONS": KEYCLOAK_OPERATOR_JAVA_OPTS})
+
+
 def limit_runtimes(docs: list[Doc]) -> None:
-    """Adds CAPACITY_ENV to every container of every workload, Job and ECK podTemplate, and GOMEMLIMIT where limited.
+    """Adds CAPACITY_ENV to every container of every workload, Job and operator pod template; GOMEMLIMIT where limited.
 
     Without GOMEMLIMIT the Go runtime only collects when its heap has doubled
     and runs into the OOM killer under a peak (Tempo, at 256Mi); the value
@@ -290,33 +324,6 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
             doc["data"]["configuration.yaml"] = yaml.safe_dump(openformulieren, sort_keys=False)
 
 
-_LOCAL_HTTP = re.compile(r"http://[^/:]+\.local(/|$)")
-
-
-def with_https(urls: list[str]) -> list[str]:
-    """urls plus an https:// twin of every http://<host>.local one (HTTPS next to HTTP, as ExternalsPodiumD)."""
-    twins = [f"https://{url.removeprefix('http://')}" for url in urls if _LOCAL_HTTP.match(url)]
-    return [*urls, *(twin for twin in twins if twin not in urls)]
-
-
-def fix_realm(docs: list[Doc], *, zac_pkce: bool) -> None:
-    """Fixes the vendored realm: https redirect URIs and web origins, zaakafhandelcomponent's PKCE (S256 or "")."""
-    for doc in docs:
-        if not _is_configmap(doc, "keycloak-realm"):
-            continue
-        data = section(doc, "data")
-        for key, raw in data.items():
-            if not key.endswith("zaakafhandelcomponent-realm.json") or not raw:
-                continue
-            realm = json.loads(raw)
-            for client in realm.get("clients", []):
-                client["redirectUris"] = with_https(client.get("redirectUris", []))
-                client["webOrigins"] = with_https(client.get("webOrigins", []))
-                if client.get("clientId") == "zaakafhandelcomponent":
-                    client["attributes"]["pkce.code.challenge.method"] = "S256" if zac_pkce else ""
-            data[key] = json.dumps(realm, indent=2)
-
-
 def _is_large_configmap(doc: Doc) -> bool:
     return doc.get("kind") == "ConfigMap" and len(yaml.safe_dump(doc)) > LARGE_CONFIGMAP_BYTES
 
@@ -345,19 +352,20 @@ class Render:
         return dump(self.docs)
 
 
-def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool = False) -> Render:
+def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
     loaded: list[Doc | None] = list(yaml.safe_load_all(strip_image_digests(text)))
     docs = [doc for doc in loaded if doc and not _is_test_hook(doc)]
     disable_service_links(docs)
     route_outbound(docs)
     route_through_nginx(docs)
+    keep_finished_jobs(docs)
+    tune_keycloak(docs)
     limit_runtimes(docs)
     if ca_trust:
         trust_ca(docs)
     if objecten_merged:
         fixup_merged_objecten(docs)
-    fix_realm(docs, zac_pkce=zac_pkce)
     return Render(
         docs=[doc for doc in docs if not _is_large_configmap(doc) and doc.get("kind") != "CustomResourceDefinition"],
         large_configmaps=[doc for doc in docs if _is_large_configmap(doc)],
@@ -366,5 +374,5 @@ def fix_up(text: str, *, objecten_merged: bool, zac_pkce: bool, ca_trust: bool =
 
 
 def helm_template(*args: str) -> str:
-    """Raw `helm template` of this chart."""
-    return process.output(["helm", "template", RELEASE_NAME, str(CHART_DIR), "-n", NAMESPACE, *args])
+    """Raw `helm template` of this chart, with the subcharts' crds/ (the Keycloak operator's)."""
+    return process.output(["helm", "template", RELEASE_NAME, str(CHART_DIR), "-n", NAMESPACE, "--include-crds", *args])

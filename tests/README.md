@@ -36,7 +36,7 @@ the running pods.
 |---|---|
 | `test_reachability.py` | Every Ingress host has an HTTPRoute at the edge, accepted with resolved backends (`podiumd_minikube.gateway`) |
 | `test_edge.py` | The edge rejects a 2 MB request body, as ExternalsPodiumD's limit (`podiumd_minikube.gateway`) |
-| `test_keycloak_realm.py` | The live realm matches the realm sync's target, PKCE included (`podiumd_minikube.keycloak`, `manifests.fix_realm`) |
+| `test_keycloak_realm.py` | The issuers follow the frontend URLs, PKCE per client, and `manifests.tune_keycloak`'s JVM flags reach the operator-built pod |
 | `test_database.py` | Databases, PostGIS, ZAC's Open Zaak credentials and Open Notificaties' kanaal/abonnement (`templates/postgres`, `values.yaml`) |
 | `test_zgw_service_reachability.py` | The apps' zgw_consumers api_roots answer from inside their pods (`podiumd_minikube.dns`, `manifests.trust_ca`) |
 | `test_monitoring_logging.py` | The scrape job `values.yaml` adds to monitoring-logging's Prometheus (`zac-admin`) |

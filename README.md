@@ -79,7 +79,8 @@ matching `values.yaml`'s own default.
 ## What's running
 
 **Core (always on):** zac, openzaak, openklant, pabc, brp-personen-mock,
-postgres, redis, solr, keycloak, mailpit (SMTP test server — every app's
+postgres, redis, solr, Keycloak (podiumd's keycloak-operator and realm
+`podiumd`, as both reference environments), mailpit (SMTP test server — every app's
 email settings point at it), and the api-proxy with WireMock: apps call
 BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 `https://api-proxy.local` serves the same paths to tests:

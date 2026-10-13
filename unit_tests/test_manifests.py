@@ -1,7 +1,5 @@
 """podiumd_minikube.manifests: the fixups applied to helm template output."""
 
-import json
-
 import yaml
 
 from podiumd_minikube import manifests
@@ -53,7 +51,7 @@ metadata: {name: grafana-test, annotations: {helm.sh/hook: test}}
 kind: Service
 metadata: {name: zac}
 """
-    render = manifests.fix_up(text, objecten_merged=False, zac_pkce=False)
+    render = manifests.fix_up(text, objecten_merged=False)
     assert [manifests.name_of(doc) for doc in render.docs] == ["zac"]
 
 
@@ -89,26 +87,8 @@ def test_fixup_merged_objecten_removes_classic_only_settings():
 
 def test_fix_up_leaves_objecten_alone_on_the_classic_shape():
     doc = _configmap("objecten-configuration", {"objecttypes": {"items": [{"service_identifier": "y"}]}})
-    render = manifests.fix_up(yaml.safe_dump(doc), objecten_merged=False, zac_pkce=False)
+    render = manifests.fix_up(yaml.safe_dump(doc), objecten_merged=False)
     assert render.docs == [doc]
-
-
-def test_fix_realm_switches_pkce_only_for_the_zac_client():
-    realm = {
-        "clients": [{"clientId": "zaakafhandelcomponent", "attributes": {}}, {"clientId": "other", "attributes": {}}]
-    }
-    doc: manifests.Doc = {
-        "kind": "ConfigMap",
-        "metadata": {"name": "keycloak-realm"},
-        "data": {"zaakafhandelcomponent-realm.json": json.dumps(realm)},
-    }
-    manifests.fix_realm([doc], zac_pkce=True)
-    clients = json.loads(doc["data"]["zaakafhandelcomponent-realm.json"])["clients"]
-    assert clients[0]["attributes"]["pkce.code.challenge.method"] == "S256"
-    assert clients[1]["attributes"] == {}
-    manifests.fix_realm([doc], zac_pkce=False)
-    clients = json.loads(doc["data"]["zaakafhandelcomponent-realm.json"])["clients"]
-    assert clients[0]["attributes"]["pkce.code.challenge.method"] == ""
 
 
 def test_fix_up_splits_off_large_configmaps():
@@ -118,7 +98,7 @@ def test_fix_up_splits_off_large_configmaps():
         "data": {"x": "y" * manifests.LARGE_CONFIGMAP_BYTES},
     }
     small = {"kind": "ConfigMap", "metadata": {"name": "small"}, "data": {"x": "y"}}
-    render = manifests.fix_up(yaml.safe_dump_all([large, small]), objecten_merged=False, zac_pkce=False)
+    render = manifests.fix_up(yaml.safe_dump_all([large, small]), objecten_merged=False)
     assert render.docs == [small]
     assert render.large_configmaps == [large]
     assert _docs(render.manifest) == [small]
@@ -197,16 +177,41 @@ def test_limit_runtimes_gives_containers_with_a_memory_limit_gomemlimit():
     assert [item for item in own["env"] if item["name"] == "GOMEMLIMIT"] == [{"name": "GOMEMLIMIT", "value": "900MiB"}]
 
 
-def test_with_https_adds_twins_only_for_local_hosts():
-    urls = ["http://zac.local/*", "http://zac.local", "http://localhost:8080/*", "https://kiss.local"]
-    assert manifests.with_https(urls) == [*urls, "https://zac.local/*", "https://zac.local"]
-    assert manifests.with_https(manifests.with_https(urls)) == manifests.with_https(urls)
+def test_keep_finished_jobs_drops_only_the_jobs_ttl():
+    job: manifests.Doc = {"kind": "Job", "spec": {"ttlSecondsAfterFinished": 60, "backoffLimit": 6}}
+    cron: manifests.Doc = {"kind": "CronJob", "spec": {"jobTemplate": {"spec": {"ttlSecondsAfterFinished": 60}}}}
+    manifests.keep_finished_jobs([job, cron])
+    assert job["spec"] == {"backoffLimit": 6}
+    assert cron["spec"]["jobTemplate"]["spec"] == {"ttlSecondsAfterFinished": 60}
+
+
+def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
+    resources: manifests.Doc = {"limits": {"memory": "768Mi"}}
+    builder: manifests.Doc = {"name": "keycloak-builder"}
+    server: manifests.Doc = {"name": "keycloak"}
+    container: manifests.Doc = {"name": "operator"}
+    template: manifests.Doc = {"spec": {"initContainers": [builder], "containers": [server]}}
+    keycloak: manifests.Doc = {
+        "kind": "Keycloak",
+        "spec": {"resources": resources, "unsupported": {"podTemplate": template}},
+    }
+    operator: manifests.Doc = {
+        "kind": "Deployment",
+        "metadata": {"name": manifests.KEYCLOAK_OPERATOR},
+        "spec": {"template": {"spec": {"containers": [container]}}},
+    }
+    manifests.tune_keycloak([keycloak, operator])
+    assert {"name": "JAVA_OPTS_APPEND", "value": manifests.KEYCLOAK_JAVA_OPTS} in builder["env"]
+    assert {"name": "JAVA_OPTS_APPEND", "value": manifests.KEYCLOAK_JAVA_OPTS} in server["env"]
+    assert server["resources"] == resources
+    assert "resources" not in builder
+    assert container["env"] == [{"name": "JDK_JAVA_OPTIONS", "value": manifests.KEYCLOAK_OPERATOR_JAVA_OPTS}]
 
 
 def test_fix_up_separates_crds_for_server_side_apply():
     crd = {"kind": "CustomResourceDefinition", "metadata": {"name": "elasticsearches.elasticsearch.k8s.elastic.co"}}
     other = {"kind": "Service", "metadata": {"name": "zac"}}
-    render = manifests.fix_up(yaml.safe_dump_all([crd, other]), objecten_merged=False, zac_pkce=False)
+    render = manifests.fix_up(yaml.safe_dump_all([crd, other]), objecten_merged=False)
     assert render.crds == [crd]
     assert render.docs == [other]
 

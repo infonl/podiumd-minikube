@@ -18,10 +18,10 @@ spec:
             pathType: ImplementationSpecific
             backend:
               service:
-                name: keycloak
+                name: keycloak-service # the operator's
                 port:
-                  name: http
-    # Keycloak's admin host (KC_HOSTNAME_ADMIN), as ExternalsPodiumD's keycloak-admin.
+                  number: 8080
+    # Keycloak's admin host (the Keycloak resource's hostname.admin), as ExternalsPodiumD's keycloak-admin.
     - host: {{ $adminHost }}
       http:
         paths:
@@ -29,6 +29,6 @@ spec:
             pathType: ImplementationSpecific
             backend:
               service:
-                name: keycloak
+                name: keycloak-service # the operator's
                 port:
-                  name: http
+                  number: 8080

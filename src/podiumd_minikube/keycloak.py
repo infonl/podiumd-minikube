@@ -1,14 +1,13 @@
-"""Changes to the live Keycloak realm that a realm re-import cannot make.
+"""The repair podiumd's realm import needs, as podiumd-infra's scripts/ensure-keycloak-default-client-scopes.sh.
 
---import-realm skips a realm that already exists, and Keycloak persists to
-Postgres, so a changed vendored realm never reaches a provisioned cluster.
-The same fixes as podiumd_minikube.manifests.fix_realm are applied to the live clients;
-clients, redirect URIs, protocol mappers, realm and client roles and top-level
-groups added to the vendored realm are added, never removed.
+The chart's realm config lists only `optionalClientScopes` per client, and
+keycloak-config-cli then creates every client without default client scopes:
+logins get no profile, email or roles (KISS: invalid_scope, ZAC: no roles).
 """
 
+import base64
 import json
-import sys
+import shlex
 
 from typing import Any
 
@@ -17,291 +16,64 @@ from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube.paths import NAMESPACE
-from podiumd_minikube.paths import VENDOR_DIR
 
-REALM = "zaakafhandelcomponent"
-ZAC_CLIENT_ID = "zaakafhandelcomponent"
-PKCE_ATTRIBUTE = "pkce.code.challenge.method"
-# templates/keycloak/deployment.yaml's KC_BOOTSTRAP_ADMIN_USERNAME/PASSWORD.
-ADMIN_USER = "admin"
-ADMIN_PASSWORD = "admin"  # nosec B105  # noqa: S105 - dev-only default from the template
-STARTUP_TIMEOUT = 90
-REALM_FILE = VENDOR_DIR / "keycloak" / "zaakafhandelcomponent-realm.json"
-# podiumd's realmFrontendUrl and adminFrontendUrl: the app realm's issuer is the public host
-# (also set in templates/keycloak/configmap-realm.yaml's import), master's the admin host (KC_HOSTNAME).
-PUBLIC_URL = "https://keycloak.local"
-ADMIN_URL = "https://keycloak-admin.local"
-# The podiumd chart's realm config declares it: ita/kiss map it into a claim,
-# and users may see but not edit it.
-SAMACCOUNTNAME = {
-    "name": "samaccountname",
-    "displayName": "${samaccountname}",
-    "permissions": {"view": ["admin", "user"], "edit": ["admin"]},
-    "multivalued": False,
-}
+REALM = "podiumd"
+POD = "keycloak-0"
+ADMIN_SECRET = "keycloak-podiumd-admin"  # nosec B105  # noqa: S105 - a Secret name
+IMPORT_JOB_PREFIX = "import-podiumd-realm-job"
+IMPORT_TIMEOUT = 900
+# Keycloak's own clients keep their scopes.
+BUILTIN_CLIENTS = {"account", "account-console", "admin-cli", "broker", "realm-management", "security-admin-console"}
+_CONFIG = "/tmp/kcadm-podiumd-minikube.cfg"  # nosec B108  # noqa: S108 - inside the Keycloak container
 
 
-def _kcadm(pod: str) -> list[str]:
-    """kcadm.sh in pod; one pod for login and updates, kcadm keeps its session in a file there."""
-    return ["kubectl", "exec", "-i", "-n", NAMESPACE, pod, "--", "/opt/keycloak/bin/kcadm.sh"]
+def kcadm(*commands: list[str]) -> str:
+    """Output of kcadm.sh commands in the Keycloak pod, logged in as the chart's bootstrap admin (read from stdin)."""
+    secret = kube.get_json("secret", ADMIN_SECRET, "-n", NAMESPACE)["data"]
+    credentials = "".join(f"{base64.b64decode(secret[key]).decode()}\n" for key in ("username", "password"))
+    kc = "/opt/keycloak/bin/kcadm.sh"
+    login = f"{kc} config credentials --config {_CONFIG} --server http://localhost:8080 --realm master"
+    script = "\n".join([
+        "set -e", "read -r u", "read -r p", f"trap 'rm -f {_CONFIG}' EXIT",
+        f'{login} --user "$u" --password "$p" >/dev/null',
+        *(f"{kc} {shlex.join(command)} --config {_CONFIG}" for command in commands),
+    ])  # fmt: skip
+    return kube.kubectl(
+        "exec", "-i", "-n", NAMESPACE, POD, "-c", "keycloak", "--", "bash", "-c", script, stdin=credentials
+    )
 
 
-def _clients(pod: str) -> list[Any] | None:
-    """The realm's clients after a fresh kcadm login in pod; None while Keycloak is still starting."""
-    login = [
-        *_kcadm(pod), "config", "credentials", "--server", "http://localhost:8080",
-        "--realm", "master", "--user", ADMIN_USER, "--password", ADMIN_PASSWORD,
-    ]  # fmt: skip
-    if not process.succeeds(login):
-        return None
-    fields = "id,clientId,redirectUris,webOrigins,attributes,optionalClientScopes,protocolMappers(name)"
-    result = process.run([*_kcadm(pod), "get", "clients", "-r", REALM, "--fields", fields], check=False)
-    if result.returncode != 0:
-        return None
-    return json.loads(result.stdout) or None
-
-
-def client_changes(client: dict[str, Any], vendored: dict[str, Any], *, zac_pkce: bool) -> list[str]:
-    """kcadm `-s` settings that bring client in line with vendored and manifests.fix_realm; [] when it is."""
-    changes: list[str] = []
-    for field in ("redirectUris", "webOrigins"):
-        current: list[str] = client.get(field) or []
-        wanted = manifests.with_https(current + [uri for uri in vendored.get(field, []) if uri not in current])
-        if wanted != current:
-            changes += ["-s", f"{field}={json.dumps(wanted)}"]
-    if client.get("clientId") == ZAC_CLIENT_ID:
-        target = "S256" if zac_pkce else ""
-        attributes: dict[str, str] = client.get("attributes") or {}
-        if attributes.get(PKCE_ATTRIBUTE, "") != target:
-            changes += ["-s", f'attributes."{PKCE_ATTRIBUTE}"={target}']
-    return changes
-
-
-# Realm settings the vendored file sets as podiumd's realm template; Keycloak
-# imports the file only once, so sync_realm brings an existing realm in line.
-REALM_SETTINGS = (
-    "accessTokenLifespan", "bruteForceProtected", "failureFactor", "revokeRefreshToken", "eventsEnabled",
-    "eventsExpiration", "adminEventsEnabled", "adminEventsDetailsEnabled", "smtpServer", "sslRequired",
-    "passwordPolicy", "offlineSessionMaxLifespanEnabled", "offlineSessionMaxLifespan",
-)  # fmt: skip
-REALM_ATTRIBUTES = ("adminEventsExpiration", "frontendUrl")
-# podiumd's realm template removes it from the realm's and every client's optional scopes.
-DROPPED_SCOPE = "offline_access"
-# podiumd's keycloak-master-realm-config.yaml; there is no vendored file for master.
-MASTER_REALM_SETTINGS: dict[str, Any] = {
-    "bruteForceProtected": True,
-    "failureFactor": 5,
-    "revokeRefreshToken": True,
-    "eventsEnabled": True,
-    "adminEventsEnabled": True,
-    "adminEventsDetailsEnabled": True,
-    "eventsExpiration": 2592000,
-    "passwordPolicy": "length(14) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5)",
-    "attributes": {"frontendUrl": ADMIN_URL},
-}
-
-
-def realm_changes(live: dict[str, Any], wanted: dict[str, Any]) -> list[str]:
-    """kcadm `-s` settings that bring the live realm's REALM_SETTINGS in line with wanted; [] when they are."""
-    changes = [
-        arg
-        for key in REALM_SETTINGS
-        if key in wanted and live.get(key) != wanted[key]
-        for arg in ("-s", f"{key}={json.dumps(wanted[key])}")
-    ]
-    live_attributes: dict[str, Any] = live.get("attributes") or {}
-    wanted_attributes: dict[str, Any] = wanted.get("attributes") or {}
-    for key in REALM_ATTRIBUTES:
-        if key in wanted_attributes and live_attributes.get(key) != wanted_attributes[key]:
-            changes += ["-s", f"attributes.{key}={wanted_attributes[key]}"]
-    return changes
-
-
-def _sync_realm_settings(pod: str, name: str, wanted: dict[str, Any]) -> None:
-    settings = realm_changes(json.loads(process.output([*_kcadm(pod), "get", f"realms/{name}"])), wanted)
-    if settings:
-        process.output([*_kcadm(pod), "update", f"realms/{name}", *settings])
-        print(f"  updated realm {name} settings {', '.join(arg.split('=')[0] for arg in settings[1::2])}")
-
-
-def required_action_changes(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> dict[str, bool]:
-    """Per live required action whose defaultAction differs from the vendored realm's, the vendored value."""
-    wanted = {action["alias"]: action.get("defaultAction", False) for action in vendored}
+def missing_default_scopes(clients: list[dict[str, Any]], defaults: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Client id -> ids of the realm default scopes of its protocol, for each non-builtin client without any."""
     return {
-        action["alias"]: wanted[action["alias"]]
-        for action in live
-        if action["alias"] in wanted and action.get("defaultAction", False) != wanted[action["alias"]]
+        client["id"]: [s["id"] for s in defaults if s.get("protocol") == client.get("protocol", "openid-connect")]
+        for client in clients
+        if client["clientId"] not in BUILTIN_CLIENTS and not client.get("defaultClientScopes")
     }
 
 
-def _sync_required_actions(pod: str, vendored: list[dict[str, Any]]) -> None:
-    live = json.loads(process.output([*_kcadm(pod), "get", "authentication/required-actions", "-r", REALM]))
-    for alias, default in required_action_changes(live, vendored).items():
-        path = f"authentication/required-actions/{alias}"
-        process.output([*_kcadm(pod), "update", path, "-r", REALM, "-s", f"defaultAction={json.dumps(default)}"])
-        print(f"  set required action {alias} defaultAction={json.dumps(default)}")
+def _import_done(render: manifests.Render) -> bool:
+    jobs = [manifests.name_of(d) for d in render.docs if d.get("kind") == "Job"]
+    imports = [name for name in jobs if name.startswith(IMPORT_JOB_PREFIX)]
+    return all(kube.get_json("job", name, "-n", NAMESPACE).get("status", {}).get("succeeded") for name in imports)
 
 
-def _drop_optional_scope(pod: str, clients: list[dict[str, Any]]) -> None:
-    """Removes DROPPED_SCOPE from the realm's default optional scopes and from every client's optional scopes."""
-    scopes = json.loads(process.output([*_kcadm(pod), "get", "client-scopes", "-r", REALM, "--fields", "id,name"]))
-    scope_id = next((scope["id"] for scope in scopes if scope["name"] == DROPPED_SCOPE), None)
-    if scope_id is None:
+def repair_default_client_scopes(render: manifests.Render) -> None:
+    """Gives every chart client without default client scopes the realm's, once the realm import has run."""
+    if not kube.exists(f"pod/{POD}"):
         return
-    defaults = json.loads(process.output([*_kcadm(pod), "get", "default-optional-client-scopes", "-r", REALM]))
-    if any(scope["id"] == scope_id for scope in defaults):
-        process.output([*_kcadm(pod), "delete", f"default-optional-client-scopes/{scope_id}", "-r", REALM])
-        print(f"  removed {DROPPED_SCOPE} from the realm's default optional scopes")
-    for client in clients:
-        if DROPPED_SCOPE in (client.get("optionalClientScopes") or []):
-            path = f"clients/{client['id']}/optional-client-scopes/{scope_id}"
-            process.output([*_kcadm(pod), "delete", path, "-r", REALM])
-            print(f"  removed {DROPPED_SCOPE} from client {client['clientId']}")
-
-
-def missing_clients(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Vendored clients the live realm lacks, with the https URI twins of podiumd_minikube.manifests.fix_realm."""
-    present = {client.get("clientId") for client in live}
-    return [
-        {
-            **client,
-            "redirectUris": manifests.with_https(client.get("redirectUris", [])),
-            "webOrigins": manifests.with_https(client.get("webOrigins", [])),
-        }
-        for client in vendored
-        if client.get("clientId") not in present
+    print("Repairing the podiumd realm's client scopes (keycloak.py)...")
+    if not polling.wait_until(lambda: _import_done(render), timeout=IMPORT_TIMEOUT, interval=10):
+        msg = f"the {IMPORT_JOB_PREFIX} Job did not complete within {IMPORT_TIMEOUT}s: check its logs"
+        raise process.UserError(msg)
+    defaults = json.loads(kcadm(["get", f"realms/{REALM}/default-default-client-scopes", "--fields", "id,protocol"]))
+    clients = json.loads(kcadm(["get", "clients", "-r", REALM, "--fields", "id,clientId,protocol,defaultClientScopes"]))
+    missing = missing_default_scopes(clients, defaults)
+    updates = [
+        ["update", f"clients/{client_id}/default-client-scopes/{scope_id}", "-r", REALM]
+        for client_id, scope_ids in missing.items()
+        for scope_id in scope_ids
     ]
-
-
-def missing_by_name(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The vendored protocol mappers or roles whose name is not live, without their ids."""
-    present = {item.get("name") for item in live}
-    return [
-        {key: value for key, value in item.items() if key not in ("id", "containerId")}
-        for item in vendored
-        if item.get("name") not in present
-    ]
-
-
-def profile_with_samaccountname(profile: dict[str, Any]) -> dict[str, Any] | None:
-    """profile with SAMACCOUNTNAME appended; None when it already has it."""
-    attributes: list[dict[str, Any]] = profile.get("attributes", [])
-    if any(attribute.get("name") == SAMACCOUNTNAME["name"] for attribute in attributes):
-        return None
-    return {**profile, "attributes": [*attributes, SAMACCOUNTNAME]}
-
-
-def _sync_client_parts(pod: str, client: dict[str, Any], vendored: dict[str, Any], roles: list[dict[str, Any]]) -> None:
-    """Adds the vendored protocol mappers and client roles that client lacks."""
-    path = f"clients/{client['id']}"
-    for mapper in missing_by_name(client.get("protocolMappers") or [], vendored.get("protocolMappers", [])):
-        process.output(
-            [*_kcadm(pod), "create", f"{path}/protocol-mappers/models", "-r", REALM, "-f", "-"],
-            stdin=json.dumps(mapper),
-        )
-        print(f"  added mapper {mapper['name']} to client {client['clientId']}")
-    if roles:
-        live = json.loads(process.output([*_kcadm(pod), "get", f"{path}/roles", "-r", REALM, "--fields", "name"]))
-        for role in missing_by_name(live, roles):
-            process.output([*_kcadm(pod), "create", f"{path}/roles", "-r", REALM, "-f", "-"], stdin=json.dumps(role))
-            print(f"  added role {role['name']} to client {client['clientId']}")
-
-
-def _sync_realm_roles(pod: str, vendored: list[dict[str, Any]]) -> None:
-    """Creates the vendored realm roles the live realm lacks."""
-    live = json.loads(process.output([*_kcadm(pod), "get", "roles", "-r", REALM, "--fields", "name"]))
-    for role in missing_by_name(live, vendored):
-        process.output([*_kcadm(pod), "create", "roles", "-r", REALM, "-s", f"name={role['name']}"])
-        print(f"  created realm role {role['name']}")
-
-
-def group_role_changes(live: list[dict[str, Any]], vendored: list[dict[str, Any]]) -> dict[str, list[str]]:
-    """Per vendored group, the realm roles its live counterpart lacks (all of them for a group not live)."""
-    live_roles: dict[str, set[str]] = {group["name"]: set(group.get("realmRoles") or []) for group in live}
-    changes: dict[str, list[str]] = {}
-    for group in vendored:
-        wanted: list[str] = group.get("realmRoles") or []
-        missing = [role for role in wanted if role not in live_roles.get(group["name"], set())]
-        if missing:
-            changes[group["name"]] = missing
-    return changes
-
-
-def _sync_groups(pod: str, vendored: list[dict[str, Any]]) -> None:
-    """Creates the vendored top-level groups the live realm lacks, with their client roles; adds missing realm roles."""
-    live = json.loads(
-        process.output(
-            [
-                *_kcadm(pod),
-                "get",
-                "groups",
-                "-r",
-                REALM,
-                "-q",
-                "briefRepresentation=false",
-                "--fields",
-                "name,realmRoles",
-            ]
-        )
-    )
-    for group in missing_by_name(live, vendored):
-        process.output([*_kcadm(pod), "create", "groups", "-r", REALM, "-s", f"name={group['name']}"])
-        client_roles: dict[str, list[str]] = group.get("clientRoles") or {}
-        for client_id, roles in client_roles.items():
-            role_args = [arg for role in roles for arg in ("--rolename", role)]
-            process.output(
-                [*_kcadm(pod), "add-roles", "-r", REALM, "--gname", group["name"], "--cclientid", client_id, *role_args]
-            )
-        print(f"  created group {group['name']}")
-    for name, roles in group_role_changes(live, vendored).items():
-        role_args = [arg for role in roles for arg in ("--rolename", role)]
-        process.output([*_kcadm(pod), "add-roles", "-r", REALM, "--gname", name, *role_args])
-        print(f"  gave group {name} realm role(s) {', '.join(roles)}")
-
-
-def sync_realm(*, zac_pkce: bool) -> None:
-    """Applies the realm fixes to the live clients."""
-    if not kube.exists("deployment/keycloak"):
-        print("'keycloak' not found - skipping the realm sync.")
-        return
-    print(f"Reconciling Keycloak's live '{REALM}' realm clients...")
-    # A changed Keycloak spec rolls out a new pod; exec into the new one only.
-    kube.kubectl_shown("rollout", "status", "deployment/keycloak", "-n", NAMESPACE, "--timeout=300s")
-    pod = kube.first_pod("app=keycloak")
-    clients = polling.wait_until(lambda: _clients(pod), timeout=STARTUP_TIMEOUT, interval=3)
-    if not clients:
-        print(
-            f"WARNING: Keycloak realm '{REALM}' not reachable after {STARTUP_TIMEOUT}s; "
-            "realm not synced - re-run deploy once Keycloak is up.",
-            file=sys.stderr,
-        )
-        return
-    realm = json.loads(REALM_FILE.read_text(encoding="utf-8"))
-    vendored = {client["clientId"]: client for client in realm["clients"]}
-    created = missing_clients(clients, list(vendored.values()))
-    for client in created:
-        process.output([*_kcadm(pod), "create", "clients", "-r", REALM, "-f", "-"], stdin=json.dumps(client))
-        print(f"  created client {client['clientId']}")
-    if created:
-        clients = _clients(pod) or clients
-    client_roles: dict[str, list[dict[str, Any]]] = realm["roles"]["client"]
-    for client in clients:
-        wanted = vendored.get(client["clientId"], {})
-        changes = client_changes(client, wanted, zac_pkce=zac_pkce)
-        if changes:
-            process.output([*_kcadm(pod), "update", f"clients/{client['id']}", "-r", REALM, *changes])
-            print(f"  updated client {client['clientId']}")
-        _sync_client_parts(pod, client, wanted, client_roles.get(client["clientId"], []))
-    profile = profile_with_samaccountname(
-        json.loads(process.output([*_kcadm(pod), "get", "users/profile", "-r", REALM]))
-    )
-    if profile:
-        process.output([*_kcadm(pod), "update", "users/profile", "-r", REALM, "-f", "-"], stdin=json.dumps(profile))
-        print("  declared user attribute samaccountname")
-    _sync_realm_roles(pod, realm["roles"]["realm"])
-    _sync_groups(pod, realm.get("groups", []))
-    _sync_realm_settings(pod, REALM, {**realm, "attributes": {**realm["attributes"], "frontendUrl": PUBLIC_URL}})
-    _drop_optional_scope(pod, clients)
-    _sync_required_actions(pod, realm.get("requiredActions", []))
-    _sync_realm_settings(pod, "master", MASTER_REALM_SETTINGS)
-    print(f"Keycloak's live '{REALM}' realm is in sync.")
+    if updates:
+        kcadm(*updates)
+    print(f"Clients given the realm's default client scopes: {len(missing)}")
