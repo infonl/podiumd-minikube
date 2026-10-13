@@ -43,16 +43,22 @@ spec: {template: {spec: {}}}
     assert "enableServiceLinks" not in docs[2]["spec"]["template"]["spec"]
 
 
-def test_fix_up_drops_test_hooks():
+def test_fix_up_drops_test_and_delete_hooks():
     text = """
 kind: Pod
 metadata: {name: grafana-test, annotations: {helm.sh/hook: test}}
+---
+kind: Job
+metadata: {name: redis-ha-pre-delete, annotations: {helm.sh/hook: pre-delete}}
+---
+kind: Job
+metadata: {name: migrate, annotations: {helm.sh/hook: "pre-install,pre-upgrade"}}
 ---
 kind: Service
 metadata: {name: zac}
 """
     render = manifests.fix_up(text, objecten_merged=False)
-    assert [manifests.name_of(doc) for doc in render.docs] == ["zac"]
+    assert [manifests.name_of(doc) for doc in render.docs] == ["migrate", "zac"]
 
 
 def _configmap(name: str, configuration: object) -> manifests.Doc:

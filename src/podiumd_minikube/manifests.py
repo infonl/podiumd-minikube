@@ -276,9 +276,10 @@ def _merge_env(container: Doc, items: list[Doc]) -> None:
     env.extend(item for item in items if item["name"] not in present)
 
 
-def _is_test_hook(doc: Doc) -> bool:
-    hook = section(section(doc, "metadata"), "annotations").get("helm.sh/hook")
-    return "test" in str(hook or "")
+def _is_test_or_delete_hook(doc: Doc) -> bool:
+    """Helm test and delete hooks: `kubectl apply` would run them at once (redis-ha-pre-delete deletes Redis)."""
+    hooks = str(section(section(doc, "metadata"), "annotations").get("helm.sh/hook") or "").split(",")
+    return any(hook.strip().startswith("test") or hook.strip().endswith("-delete") for hook in hooks)
 
 
 def _configuration_yaml(doc: Doc, configmap: str) -> Any | None:
@@ -355,7 +356,7 @@ class Render:
 def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
     loaded: list[Doc | None] = list(yaml.safe_load_all(strip_image_digests(text)))
-    docs = [doc for doc in loaded if doc and not _is_test_hook(doc)]
+    docs = [doc for doc in loaded if doc and not _is_test_or_delete_hook(doc)]
     disable_service_links(docs)
     route_outbound(docs)
     route_through_nginx(docs)

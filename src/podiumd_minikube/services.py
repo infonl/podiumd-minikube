@@ -13,6 +13,8 @@ POSTGRES_PORT = 5432
 FORWARD_LOG = Path("/tmp/podiumd-minikube-postgres-port-forward.log")  # noqa: S108 - user-visible log
 # Redis DBs the apps use (see values.yaml's settings.cache/settings.celery per app).
 REDIS_DBS = range(15)
+# The redis-operator's master pod, labelled by podiumd's redis-ha-label-master CronJob.
+REDIS_MASTER = "app=redis-ha,redis-role=master"
 
 
 def expose_postgres(local_port: int) -> None:
@@ -45,7 +47,7 @@ def expose_postgres(local_port: int) -> None:
 
 
 def _redis(*args: str) -> str:
-    return kube.kubectl("exec", "-n", NAMESPACE, kube.first_pod("app=redis"), "--", "redis-cli", *args).strip()
+    return kube.kubectl("exec", "-n", NAMESPACE, kube.first_pod(REDIS_MASTER), "--", "redis-cli", *args).strip()
 
 
 @lock.holding("flush-redis")
