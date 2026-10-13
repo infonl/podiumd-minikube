@@ -6255,3 +6255,25 @@ Measured on 2026-10-13, 2 h after the node started, after podiumd-tests' smoke
 and core tiers: Loki uses 247 MiB. On 2026-10-12 it used 290 MiB after 1.3 h and
 260 MiB after 2.3 h. It no longer grows as it did at GOGC 100 (202 -> 328 MiB
 over a day), so the in-memory chunk settings stay as they are.
+
+## Keycloak hostname as ExternalsPodiumD (user: "yes, align the Keycloak hostname")
+
+Found while checking kees00's edge on 2026-10-13. ExternalsPodiumD (dimp test
+`podiumd.yml`) and kees00 set `adminFrontendUrl` to the admin host and
+`realmFrontendUrl` to the public host. podiumd's chart turns these into the
+Keycloak CR's `hostname` and `admin` (both the admin host), the master realm's
+`frontendUrl` (the admin host) and the app realm's `frontendUrl` (the public
+host). minikube had `KC_HOSTNAME` on the public host and no realm
+`frontendUrl`, so only the master realm's issuer differed.
+
+minikube now does the same: `KC_HOSTNAME` is `https://keycloak-admin.local`,
+and `keycloak.sync_realm` sets `frontendUrl` on both realms (`frontendUrl` is
+added to `REALM_ATTRIBUTES`). The vendored realm file stays as copied.
+
+Live after `deploy --full`, which matches kees00:
+
+- zaakafhandelcomponent: the issuer is `https://keycloak.local/realms/zaakafhandelcomponent` on both hosts.
+- master: the issuer is `https://keycloak-admin.local/realms/master` on both hosts.
+- The login form posts to keycloak.local.
+- The admin console answers 200 on both hosts.
+- The live suite passes (28).

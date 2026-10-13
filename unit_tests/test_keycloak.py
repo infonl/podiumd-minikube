@@ -70,9 +70,11 @@ def test_realm_changes_set_only_differing_realm_settings():
 
 
 def test_realm_changes_set_listed_realm_attributes():
-    vendored = {"attributes": {"adminEventsExpiration": "2592000", "frontendUrl": "x"}}
+    vendored = {"attributes": {"adminEventsExpiration": "2592000", "frontendUrl": "x", "cibaInterval": "5"}}
     live = {"attributes": {"frontendUrl": "y"}}
-    assert keycloak.realm_changes(live, vendored) == ["-s", "attributes.adminEventsExpiration=2592000"]
+    assert keycloak.realm_changes(live, vendored) == [
+        "-s", "attributes.adminEventsExpiration=2592000", "-s", "attributes.frontendUrl=x",
+    ]  # fmt: skip
 
 
 def test_group_role_changes_lists_realm_roles_a_live_group_lacks():

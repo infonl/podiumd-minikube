@@ -27,6 +27,10 @@ ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"  # nosec B105  # noqa: S105 - dev-only default from the template
 STARTUP_TIMEOUT = 90
 REALM_FILE = VENDOR_DIR / "keycloak" / "zaakafhandelcomponent-realm.json"
+# podiumd's realmFrontendUrl and adminFrontendUrl: the app realm's issuer is the public host,
+# master's the admin host (templates/keycloak/deployment.yaml's KC_HOSTNAME).
+PUBLIC_URL = "https://keycloak.local"
+ADMIN_URL = "https://keycloak-admin.local"
 # The podiumd chart's realm config declares it: ita/kiss map it into a claim,
 # and users may see but not edit it.
 SAMACCOUNTNAME = {
@@ -80,7 +84,7 @@ REALM_SETTINGS = (
     "eventsExpiration", "adminEventsEnabled", "adminEventsDetailsEnabled", "smtpServer", "sslRequired",
     "passwordPolicy", "offlineSessionMaxLifespanEnabled", "offlineSessionMaxLifespan",
 )  # fmt: skip
-REALM_ATTRIBUTES = ("adminEventsExpiration",)
+REALM_ATTRIBUTES = ("adminEventsExpiration", "frontendUrl")
 # podiumd's realm template removes it from the realm's and every client's optional scopes.
 DROPPED_SCOPE = "offline_access"
 # podiumd's keycloak-master-realm-config.yaml; there is no vendored file for master.
@@ -93,6 +97,7 @@ MASTER_REALM_SETTINGS: dict[str, Any] = {
     "adminEventsDetailsEnabled": True,
     "eventsExpiration": 2592000,
     "passwordPolicy": "length(14) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5)",
+    "attributes": {"frontendUrl": ADMIN_URL},
 }
 
 
@@ -295,7 +300,7 @@ def sync_realm(*, zac_pkce: bool) -> None:
         print("  declared user attribute samaccountname")
     _sync_realm_roles(pod, realm["roles"]["realm"])
     _sync_groups(pod, realm.get("groups", []))
-    _sync_realm_settings(pod, REALM, realm)
+    _sync_realm_settings(pod, REALM, {**realm, "attributes": {**realm["attributes"], "frontendUrl": PUBLIC_URL}})
     _drop_optional_scope(pod, clients)
     _sync_required_actions(pod, realm.get("requiredActions", []))
     _sync_realm_settings(pod, "master", MASTER_REALM_SETTINGS)

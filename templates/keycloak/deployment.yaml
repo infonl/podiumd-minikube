@@ -34,11 +34,11 @@ spec:
               value: admin
             - name: KC_HEALTH_ENABLED
               value: "true"
-            # The public https host, for browsers and backends alike, as in
-            # ExternalsPodiumD; the edge terminates TLS.
+            # Both ExternalsPodiumD's adminFrontendUrl, as podiumd's Keycloak CR;
+            # the app realm's frontendUrl keeps its issuer on keycloak.local
+            # (keycloak.sync_realm). The edge terminates TLS.
             - name: KC_HOSTNAME
-              value: https://keycloak.local
-            # ExternalsPodiumD's adminFrontendUrl; ITA logs in through it there.
+              value: https://keycloak-admin.local
             - name: KC_HOSTNAME_ADMIN
               value: https://keycloak-admin.local
             - name: KC_HTTP_ENABLED
