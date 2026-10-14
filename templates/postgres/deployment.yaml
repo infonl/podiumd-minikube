@@ -37,15 +37,6 @@ spec:
               value: postgres
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
-            - name: SEED_OPENARCHIEFBEHEER
-              # Reads podiumd.openarchiefbeheer.enabled specifically, not
-              # the top-level openarchiefbeheer.enabled flag next to it -
-              # that top-level flag is this chart's own compose-profile
-              # equivalent (documented at the top of values.yaml), but
-              # podiumd.openarchiefbeheer.enabled is what actually controls
-              # whether the app renders at all. Matches storage-hooks.yaml's
-              # own gating for the same reason.
-              value: {{ .Values.podiumd.openarchiefbeheer.enabled | quote }}
           ports:
             - name: postgres
               containerPort: 5432
@@ -69,8 +60,6 @@ spec:
               mountPath: /docker-entrypoint-initdb.d/fixtures/openzaak
             - name: fixtures-openklant
               mountPath: /docker-entrypoint-initdb.d/fixtures/openklant
-            - name: fixtures-openarchiefbeheer
-              mountPath: /docker-entrypoint-initdb.d/fixtures/openarchiefbeheer
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -85,6 +74,3 @@ spec:
         - name: fixtures-openklant
           configMap:
             name: postgres-fixtures-openklant
-        - name: fixtures-openarchiefbeheer
-          configMap:
-            name: postgres-fixtures-openarchiefbeheer

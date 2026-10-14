@@ -6668,3 +6668,14 @@ Default profile measured (user: "go, measure the default profile"): settled
 after podiumd-tests' full tier 20261014-094412 (186 passed, 317 skipped for
 absent components): node 7.0 GiB, containers 4.9 GiB (39 containers). The
 default budget drops from 16 to 9 GiB, about 2 GiB of headroom as `--full`.
+
+Postgres restarted on every switch between `--full` and the default profile,
+and Objecten, connecting meanwhile, crashed once. The only difference in its
+pod template was `SEED_OPENARCHIEFBEHEER`, which `01-seed-fixtures.sh` reads
+only on an empty data directory, so the restart did nothing. Open
+Archiefbeheer's fixture held only the admin user, which its create-superuser
+Job already creates on every deploy (admin/admin), and a profile enabled
+after the first start never got the fixture anyway. Removed: the fixture, its
+seed block, the env var and its ConfigMap volume. Among the workloads of the
+default profile, only ZAC's pod template now differs between the profiles
+(its `podiumd-minikube/outbound` annotation, by design).

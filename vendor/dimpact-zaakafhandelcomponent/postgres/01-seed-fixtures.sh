@@ -1,16 +1,11 @@
 #!/bin/bash
-# Merged replacement for the three per-service init.sh/fill-data-on-startup.sh
-# pairs in docker-compose.yaml's openzaak-database/openklant-database/
-# openarchiefbeheer-database, consolidated onto this one shared Postgres
-# instance. Each block below is unchanged in *behavior* from its source
-# script - same readiness query, same fixture SQL files - only parameterized
-# by database/user instead of assuming the container's single default
-# database, and merged into one file since this instance only runs
-# docker-entrypoint-initdb.d once for the whole cluster.
-#
-# Each block backgrounds its own wait loop (matching the original scripts'
-# own `&`) so all three seed independently and in parallel once their
-# respective app has finished migrating.
+# Merged replacement for the per-service init.sh/fill-data-on-startup.sh
+# pairs in docker-compose.yaml's openzaak-database and openklant-database,
+# consolidated onto this one shared Postgres instance. Each block keeps its
+# source script's behaviour (readiness query, fixture SQL), parameterized by
+# database/user. Each block backgrounds its own wait loop, as the originals
+# do, so both seed in parallel once their app has migrated. Open
+# Archiefbeheer's admin user comes from its create-superuser Job instead.
 
 FIXTURES_DIR="$(dirname "$0")/fixtures"
 
@@ -92,39 +87,5 @@ seed_openklant() {
   echo ">>>> [openklant] Database was initialized successfully <<<<"
 }
 
-seed_openarchiefbeheer() {
-  # Same caveat as openklant's expected_migrations above.
-  local expected_migrations=154
-  echo ">>>> [openarchiefbeheer] Waiting until Open Archiefbeheer has initialized the database <<<<"
-  while true; do
-    verifier=$(psql -U openarchiefbeheer -d openarchiefbeheer -t -A -c "select count(*) from django_migrations")
-    echo "[openarchiefbeheer] Migrations found: $verifier"
-    if [ "$expected_migrations" != "$verifier" ]; then
-      echo "[openarchiefbeheer] Open Archiefbeheer not running yet. Sleeping 2 seconds ..."
-      sleep 2
-    else
-      echo "[openarchiefbeheer] Open Archiefbeheer is running!"
-      break
-    fi
-  done
-  echo "[openarchiefbeheer] Running database setup scripts ..."
-  for file in "$FIXTURES_DIR"/openarchiefbeheer/*.sql; do
-    echo "[openarchiefbeheer] Running $file ..."
-    psql -U openarchiefbeheer openarchiefbeheer -f "$file"
-  done
-  reset_sequences openarchiefbeheer openarchiefbeheer
-  echo ">>>> [openarchiefbeheer] Database was initialized successfully <<<<"
-}
-
 seed_openzaak &
 seed_openklant &
-
-# openarchiefbeheer is profile-gated (unlike openzaak/openklant, which are
-# always deployed) - only background its wait loop when that profile is
-# actually enabled, otherwise it would poll forever for migrations that will
-# never happen, since no openarchiefbeheer app would ever connect to seed
-# them. Set via the Postgres Deployment's env vars, driven by this chart's
-# own top-level openarchiefbeheer.enabled flag.
-if [ "${SEED_OPENARCHIEFBEHEER:-false}" = "true" ]; then
-  seed_openarchiefbeheer &
-fi

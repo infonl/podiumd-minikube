@@ -10,7 +10,7 @@ create_required_catalogi_job adds the e2e zaaktype to that catalogus.
      create_required_catalogi_job finds it, as in ExternalsPodiumD. */}}
 {{- $fixtureRsin := "'002564440'" }}
 {{- $zacRsin := printf "'%s'" .Values.podiumd.zac.organizations.bron.rsin }}
-{{- range $app := list "openzaak" "openklant" "openarchiefbeheer" }}
+{{- range $app := list "openzaak" "openklant" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

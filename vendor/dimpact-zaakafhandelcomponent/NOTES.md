@@ -19,8 +19,10 @@ changes is in `.claude/plans/plan.md`.
   create_required_catalogi_job adds the e2e zaaktype). Read by
   `templates/postgres/configmap-fixtures.yaml`, which gives the catalogus
   ZAC's bron RSIN.
-- `postgres/fixtures/{openklant,openarchiefbeheer}/1-setup-applicatie.sql`
-  ← `scripts/docker-compose/imports/{openklant,openarchiefbeheer}-database/database/`.
+- `postgres/fixtures/openklant/1-setup-applicatie.sql`
+  ← `scripts/docker-compose/imports/openklant-database/database/`. Open
+  Archiefbeheer's fixture held only the admin user, which
+  `templates/openarchiefbeheer/create-superuser-job.yaml` creates.
   Read by `templates/postgres/configmap-fixtures.yaml`.
 ## Written for this project
 
