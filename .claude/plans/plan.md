@@ -6822,3 +6822,12 @@ names (dimp test podiumd.yml):
 An existing database keeps its old fixture rows and services; setup_configuration
 does not delete. podiumd-tests' Open Zaak client `open-formulieren` becomes
 `formulier`.
+
+The first deploy of step 4 failed on the existing cluster: Open Formulieren's
+setup_configuration added `openzaak-zaken-api` beside the old `openzaak-zaken`
+row, and `zgw_consumers_service.api_root` is unique (a fresh install has no
+old rows). `postgres.rename_services`, run by deploy before the apply, renames
+the old slugs in openformulieren, openarchiefbeheer and objects
+(`RENAMED_SERVICES`); the rows keep their primary keys, so registration
+backends that point at them keep working. Applied live once by hand before
+the redeploy.
