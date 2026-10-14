@@ -6754,3 +6754,12 @@ and lists every `podiumd<X.Y` marker with X.Y at or below it; raising it to
 manifests.fixup_merged_objecten, three in values.yaml). It also fails on any
 `image.tag` under `podiumd:` in values.yaml. Documented in README
 ("Code for older podiumd releases") and `.claude/memory/remove-unused.md`.
+
+First live migration (17 -> 16) failed: the new data directory's init ran
+01-seed-fixtures.sh, whose Open Klant loop saw the restored django_migrations
+rows and inserted its fixtures while the restore ran; the restore's own rows
+then broke Open Klant's unique indexes. The seed script now exits while
+`/var/lib/postgresql/data/restoring` exists (outside PGDATA, on the same
+volume); migrate_major creates it before switching, the cleanup after the
+restore removes it. The restore step is `postgres.restore`, which also
+restarts the Keycloak StatefulSet (the operator's, not in the render).

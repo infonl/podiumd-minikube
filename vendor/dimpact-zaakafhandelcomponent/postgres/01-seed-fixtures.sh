@@ -9,6 +9,13 @@
 
 FIXTURES_DIR="$(dirname "$0")/fixtures"
 
+# A major migration restores a dump that already holds the fixtures
+# (podiumd_minikube.postgres.RESTORING, outside PGDATA on the same volume).
+if [ -e /var/lib/postgresql/data/restoring ]; then
+  echo "Restoring a dump: fixtures skipped"
+  exit 0
+fi
+
 # The fixture SQL inserts explicit ids without advancing the sequences, so the
 # app's next insert collides ("duplicate key ... Key (id)=(1)"). Sets every
 # column-owned sequence (serial and identity) in database $2 to at least the

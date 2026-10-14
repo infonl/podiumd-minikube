@@ -9,6 +9,7 @@ import re
 
 from datetime import UTC
 from datetime import datetime
+from pathlib import Path
 
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
@@ -22,6 +23,8 @@ INIT_SQL = VENDOR_DIR / "postgres" / "00-create-databases.sql"
 # pg_dumpall output of each migration, kept as a backup.
 DUMP_DIR = CHART_DIR / ".postgres-dumps"
 DATA_ROOT = "/var/lib/postgresql/data"
+# While it exists, 01-seed-fixtures.sh skips the fixtures: the dump holds them.
+RESTORING = f"{DATA_ROOT}/restoring"
 _ROLE = re.compile(r"CREATE ROLE (\w+) ")
 _DATABASE = re.compile(r'CREATE DATABASE "?(\w+)"? OWNER (\w+);')
 
@@ -92,28 +95,37 @@ def migrate_major(render: manifests.Render) -> None:
     pod = kube.first_pod("app=postgres")
     dump.write_text(kube.kubectl("exec", "-n", NAMESPACE, pod, "--", "pg_dumpall", "-U", "postgres"), encoding="utf-8")
     print(f"Dumped to {dump}.")
+    kube.kubectl("exec", "-n", NAMESPACE, pod, "--", "touch", RESTORING)
     provision.load_images([image])
     kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(rendered))
     kube.kubectl_shown("rollout", "status", "deployment/postgres", "-n", NAMESPACE, "--timeout=600s")
+    restore(dump, wanted, render)
+
+
+def restore(dump: Path, major: int, render: manifests.Render) -> None:
+    """Restores dump into the running Postgres of major, removes other data directories, restarts the clients."""
     pod = kube.first_pod("app=postgres")
     result = process.run(
         ["kubectl", "exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-q", "-f", "-"],
         stdin=dump.read_text(encoding="utf-8"),
     )
     if errors := restore_errors(result.stderr):
-        msg = f"restore into Postgres {wanted} had errors (dump kept in {dump}): " + "; ".join(errors[:10])
+        msg = f"restore into Postgres {major} had errors (dump kept in {dump}): " + "; ".join(errors[:10])
         raise process.UserError(msg)
+    # Also removes RESTORING.
     kube.kubectl(
         "exec", "-n", NAMESPACE, pod, "--", "find", DATA_ROOT, "-mindepth", "1", "-maxdepth", "1",
-        "!", "-name", f"pg{wanted}", "-exec", "rm", "-rf", "{}", "+",
+        "!", "-name", f"pg{major}", "-exec", "rm", "-rf", "{}", "+",
     )  # fmt: skip
+    # The Keycloak operator runs each Keycloak as a StatefulSet of the same name.
+    kinds = {"Deployment": "deployment", "StatefulSet": "statefulset", "Keycloak": "statefulset"}
     clients = [
-        f"{doc['kind'].lower()}/{manifests.name_of(doc)}"
+        f"{kinds[doc['kind']]}/{manifests.name_of(doc)}"
         for doc in render.docs
-        if doc.get("kind") in ("Deployment", "StatefulSet") and manifests.name_of(doc) != "postgres"
+        if doc.get("kind") in kinds and manifests.name_of(doc) != "postgres"
     ]
     kube.kubectl_shown("rollout", "restart", "-n", NAMESPACE, *[c for c in clients if kube.exists(c)])
-    print(f"Postgres {wanted} restored; old data directories removed, dump kept in {dump}.")
+    print(f"Postgres {major} restored; old data directories removed, dump kept in {dump}.")
 
 
 def create_missing_databases() -> None:
