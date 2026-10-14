@@ -164,8 +164,9 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     # Before anything with pods: every pod, the storage Job included, mounts it.
     pki.apply_trust(NAMESPACE)
     storage = _apply_storage_hooks(selected)
-    postgres.create_missing_databases()
     render = selected.render()
+    postgres.migrate_major(render)
+    postgres.create_missing_databases()
     if crds.needed(render.docs):
         print("\nApplying monitoring-logging's own CRDs first...")
         crds.apply_monitoring_logging_crds()

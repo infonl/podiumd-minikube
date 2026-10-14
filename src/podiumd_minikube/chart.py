@@ -59,7 +59,10 @@ def member_text(tgz: Path, name: str) -> str | None:
 
 
 def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
-    """--set images.<key>=<repository>:<tag> for BUNDLED_IMAGES; none before a fetch (the templates then fail)."""
+    """--set images.<key>=<repository>:<tag> for BUNDLED_IMAGES and images.postgresMajor; none before a fetch.
+
+    Without them the templates fail on `required`.
+    """
     tgz = tarball("podiumd", charts_dir)
     text = member_text(tgz, "podiumd/values.yaml") if tgz else None
     if text is None:
@@ -71,7 +74,8 @@ def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
         for step in path:
             image = image[step]
         sets += ["--set", f"images.{key}={image['repository']}:{image['tag']}"]
-    return sets
+    postgres_tag = str(podiumd_values["global"]["images"]["postgres"]["tag"])
+    return [*sets, "--set", f"images.postgresMajor={postgres_tag.split('.', maxsplit=1)[0]}"]
 
 
 @dataclass(frozen=True)

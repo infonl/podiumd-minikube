@@ -6727,3 +6727,19 @@ them from the podiumd tarball's values.yaml and deploy passes
 `--set images.<key>`; the templates `required` them. Not reusable: podiumd's
 postgres (16, no PostGIS; ours is postgis 17); Mailpit and WireMock are not
 in podiumd.
+
+## Postgres follows the release's major (user: "the same major version as the postgres used in the release")
+
+podiumd pins `global.images.postgres` 16.15-alpine (ExternalsPodiumD's image
+list has postgres 16 too); ours ran `postgis/postgis:17-3.4`. The template
+now uses `postgis/postgis:<major>-3.5` with the major from podiumd's values
+(`chart.bundled_image_sets` sets `images.postgresMajor`), and PGDATA is
+`/var/lib/postgresql/data/pg<major>`, so a new major starts in an empty
+directory. On a major change `deploy` runs `postgres.migrate_major` (user:
+"migrate automatically"): pg_dumpall of the running server into
+`.postgres-dumps/` (kept as a backup), the new Deployment, a restore with
+psql, removal of the old data directories, and a restart of every workload
+of the render. The restore runs after the init SQL, so "already exists"
+errors (roles, databases, extensions) are expected and filtered, as is
+pg 17's `transaction_timeout`; any other error stops the deploy with the
+dump kept. Writes between dump and restore are lost.

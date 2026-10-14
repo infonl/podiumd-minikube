@@ -46,4 +46,6 @@ session_memory.json
 .pki/
 # OpenBao's seal key, root token and recovery key (src/podiumd_minikube/openbao.py).
 .openbao/
+# pg_dumpall backups of Postgres major migrations (src/podiumd_minikube/postgres.py).
+.postgres-dumps/
 *.egg-info/

@@ -24,7 +24,8 @@ spec:
       enableServiceLinks: false
       containers:
         - name: postgres
-          image: postgis/postgis:17-3.4
+          # The release's Postgres major (podiumd's global.images.postgres); PostGIS 3.5.
+          image: postgis/postgis:{{ required "images.postgresMajor: set by podiumd-minikube deploy from podiumd's values.yaml" .Values.images.postgresMajor }}-3.5
           # As podiumd-infra's Azure Postgres; the default 100 ran out with
           # every profile on (each app's workers keep their connections).
           args: ["postgres", "-c", "max_connections=500"]
@@ -35,8 +36,9 @@ spec:
               value: postgres
             - name: POSTGRES_DB
               value: postgres
+            # One directory per major: postgres.migrate_major restores into a fresh one.
             - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
+              value: /var/lib/postgresql/data/pg{{ .Values.images.postgresMajor }}
           ports:
             - name: postgres
               containerPort: 5432
