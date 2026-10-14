@@ -38,9 +38,10 @@ PLATFORM = "linux/amd64"
 # Laptop budget per static pod. GOGC=50 collects at 1.5x the live heap instead of 2x.
 # kube-apiserver has no container limit for limit_runtimes' GOMEMLIMIT: its live heap
 # grows from about 450 to 760 MiB over a day of deploys, and without a limit the Go
-# runtime keeps the freed heap (RSS up to 1.5 GiB).
+# runtime keeps the freed heap (RSS up to 1.5 GiB). The limit must stay above
+# 1.5x that heap: at 700MiB it collected six times a second (3 cores).
 CONTROL_PLANE_ENV = {
-    "kube-apiserver": {"GOGC": "50", "GOMEMLIMIT": "700MiB", **manifests.GO_NO_HUGE_PAGES},
+    "kube-apiserver": {"GOGC": "50", "GOMEMLIMIT": "1200MiB", **manifests.GO_NO_HUGE_PAGES},
     "etcd": {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES},
     "kube-controller-manager": manifests.GO_NO_HUGE_PAGES,
 }

@@ -6889,3 +6889,13 @@ closed first; Postgres renames no database with sessions) and sets the
 password to the new name; Objecten and Objecttypen reconnect once the deploy
 rolls them with the new settings. The init SQL creates the new names on a
 fresh install; `postgres.RENAMES` uses `objecten`.
+
+## kube-apiserver GOMEMLIMIT 700MiB -> 1200MiB (user: "the tests are hogging 5 cpus")
+
+The node used 5.4 of 6 cores; kube-apiserver alone about 3, and not because
+of requests (a few per second). Its /metrics over 10 s: 59 GC cycles, GC 48 of
+61 CPU seconds, live heap 503 MB against next_gc 502 MB. With GOGC=50 the
+heap target is 1.5x the live heap, so with 700MiB the soft limit was hit
+permanently: 86,000 CPU seconds in 7 h 50 min since the morning's restart.
+The live heap reaches 760 MiB over a day, so the limit is 1200MiB (above
+1.5x of that); it still caps the freed heap the limit was introduced for.
