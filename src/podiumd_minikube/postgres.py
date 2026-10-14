@@ -20,24 +20,36 @@ from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import VENDOR_DIR
 
 INIT_SQL = VENDOR_DIR / "postgres" / "00-create-databases.sql"
-# Old zgw_consumers service slug -> ExternalsPodiumD's, per database. setup_configuration
-# would add the new slug beside the old one, and api_root is unique.
-RENAMED_SERVICES = {
+# Values setup_configuration and podiumd's Jobs look rows up by, renamed to
+# ExternalsPodiumD's: database -> (table, column) -> {old: new}. Without the
+# rename they add a new row beside the old one (zgw_consumers_service.api_root
+# is unique; catalogus ALG is found by its RSIN).
+RENAMES: dict[str, dict[tuple[str, str], dict[str, str]]] = {
     "openformulieren": {
-        "objects-api": "objecten-api",
-        "objecttypes-api": "objecttypen-api",
-        "openzaak-zaken": "openzaak-zaken-api",
-        "openzaak-documenten": "openzaak-documenten-api",
-        "openzaak-catalogi": "openzaak-catalogi-api",
+        ("zgw_consumers_service", "slug"): {
+            "objects-api": "objecten-api",
+            "objecttypes-api": "objecttypen-api",
+            "openzaak-zaken": "openzaak-zaken-api",
+            "openzaak-documenten": "openzaak-documenten-api",
+            "openzaak-catalogi": "openzaak-catalogi-api",
+        },
     },
     "openarchiefbeheer": {
-        "zaken-test": "openzaak-zaken-api",
-        "documenten-test": "openzaak-documenten-api",
-        "catalogi-test": "openzaak-catalogi-api",
-        "besluiten-test": "openzaak-besluiten-api",
-        "selectielijst": "vng-selectielijst",
+        ("zgw_consumers_service", "slug"): {
+            "zaken-test": "openzaak-zaken-api",
+            "documenten-test": "openzaak-documenten-api",
+            "catalogi-test": "openzaak-catalogi-api",
+            "besluiten-test": "openzaak-besluiten-api",
+            "selectielijst": "vng-selectielijst",
+        },
     },
-    "objects": {"objecttypes-api": "objecttypen-api", "open-notificaties": "notificaties-api"},
+    "objects": {
+        ("zgw_consumers_service", "slug"): {
+            "objecttypes-api": "objecttypen-api",
+            "open-notificaties": "notificaties-api",
+        },
+    },
+    "openzaak": {("catalogi_catalogus", "rsin"): {"123443210": "856683164"}},
 }
 # pg_dumpall output of each migration, kept as a backup.
 DUMP_DIR = CHART_DIR / ".postgres-dumps"
@@ -160,24 +172,26 @@ def create_missing_databases() -> None:
     print(f"Created database(s) {', '.join(missing)} from {INIT_SQL.name}.")
 
 
-def rename_services() -> None:
-    """Renames RENAMED_SERVICES' old slugs in the databases that have them."""
+def rename_rows() -> None:
+    """Applies RENAMES in the databases and tables that exist; an old value whose new one exists stays."""
     if not kube.exists("deployment/postgres"):
         return
     databases = _names("select datname from pg_database;")
     pod = kube.first_pod("app=postgres")
-    for database, renames in RENAMED_SERVICES.items():
+    for database, tables in RENAMES.items():
         if database not in databases:
             continue
         psql = ["exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-d", database, "-tA"]
-        # A database created this deploy has no tables until its app migrates.
-        if not kube.kubectl(*psql, "-c", "select to_regclass('zgw_consumers_service');").strip():
-            continue
-        old = kube.kubectl(*psql, "-c", "select slug from zgw_consumers_service;").split()
-        for slug, new in renames.items():
-            if slug in old and new not in old:
-                kube.kubectl(
-                    *psql, "-v", "ON_ERROR_STOP=1", "-v", f"old={slug}", "-v", f"new={new}", "-f", "-",
-                    stdin="UPDATE zgw_consumers_service SET slug = :'new' WHERE slug = :'old';\n",
-                )  # fmt: skip
-                print(f"Renamed zgw_consumers service {slug} to {new} in {database}.")
+        for (table, column), renames in tables.items():
+            # A database created this deploy has no tables until its app migrates.
+            if not kube.kubectl(*psql, "-c", f"select to_regclass('{table}');").strip():
+                continue
+            names = ["-v", f"table={table}", "-v", f"column={column}"]
+            values = kube.kubectl(*psql, *names, "-f", "-", stdin='select :"column" from :"table";\n').split()
+            for old, new in renames.items():
+                if old in values and new not in values:
+                    kube.kubectl(
+                        *psql, *names, "-v", "ON_ERROR_STOP=1", "-v", f"old={old}", "-v", f"new={new}", "-f", "-",
+                        stdin='UPDATE :"table" SET :"column" = :\'new\' WHERE :"column" = :\'old\';\n',
+                    )  # fmt: skip
+                    print(f"Renamed {table}.{column} {old} to {new} in {database}.")

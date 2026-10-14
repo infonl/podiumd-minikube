@@ -6864,3 +6864,18 @@ pool (682 MiB; tests/test_memory.py caught it). Restored once with
 `kubectl set env ... CELERY_WORKER_CONCURRENCY=1`; recorded and live env now
 agree, so later applies keep it. Any other cluster deployed before 8007086
 loses it the same way on its next deploy and needs the same command once.
+
+## Gemeente and RSINs as ExternalsPodiumD; comments inside the config strings
+
+ZAC's gemeente was compose's (9999, FakeZacGemeente) and its RSINs
+316245124/123443210; now ExternalsPodiumD's dimp values: 3467,
+"Gemeente Dimpact", noreply@dimpact.nl, verantwoordelijke and bron RSIN
+856683164, and the same RSIN in Open Formulieren's registration groups.
+podiumd's catalogi Job finds catalogus ALG by the bron RSIN and would create
+a second one, so `postgres.rename_rows` (was rename_services, now any
+table/column) updates the existing catalogus' RSIN first; existing zaken keep
+their old bronorganisatie. podiumd-tests uses none of these values.
+
+The two long comments inside configuration strings (Open Zaak's
+notifications, the objecten classic shape) are trimmed too; that changes
+only comment text in two ConfigMaps.

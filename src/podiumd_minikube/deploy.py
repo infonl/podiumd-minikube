@@ -167,7 +167,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     render = selected.render()
     postgres.migrate_major(render)
     postgres.create_missing_databases()
-    postgres.rename_services()
+    postgres.rename_rows()
     if crds.needed(render.docs):
         print("\nApplying monitoring-logging's own CRDs first...")
         crds.apply_monitoring_logging_crds()
