@@ -40,8 +40,9 @@ PLATFORM = "linux/amd64"
 # grows from about 450 to 760 MiB over a day of deploys, and without a limit the Go
 # runtime keeps the freed heap (RSS up to 1.5 GiB).
 CONTROL_PLANE_ENV = {
-    "kube-apiserver": {"GOGC": "50", "GOMEMLIMIT": "700MiB"},
-    "etcd": {"GOGC": "50"},
+    "kube-apiserver": {"GOGC": "50", "GOMEMLIMIT": "700MiB", **manifests.GO_NO_HUGE_PAGES},
+    "etcd": {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES},
+    "kube-controller-manager": manifests.GO_NO_HUGE_PAGES,
 }
 STATIC_PODS = "/etc/kubernetes/manifests"
 CONTROL_PLANE_TIMEOUT = 300

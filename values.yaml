@@ -3640,6 +3640,13 @@ monitoring-logging:
           value: "50"
     minio:
       enabled: false # only needed by Distributed mode's S3-backed storage
+    # Single node: the chart's required anti-affinity leaves a rolling update's
+    # new gateway pod Pending next to the old one. An empty list, as Helm does
+    # not delete a null at this nesting depth.
+    gateway:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution: []
     loki:
       commonConfig:
         # Chart default (3) assumes Distributed mode's normal multi-replica

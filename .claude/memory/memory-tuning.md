@@ -29,6 +29,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 | .NET (brp-personen-mock, contact-web, ita-web, pabc, adapter) | workstation GC, no background GC, `GCConserveMemory` 7 | `manifests.CAPACITY_ENV`, added to every container by `manifests.limit_runtimes` | -0.9 GiB (workstation GC), then -0.11 GiB |
 | Go runtimes with a memory limit (Grafana, Prometheus, OpenBao, etcd, Mailpit, ECK operator) | `GOMEMLIMIT` = the container's memory limit (downward API `resourceFieldRef: limits.memory`) | `manifests.limit_runtimes`, for every container with a memory limit (other runtimes ignore it) | Tempo (since removed) under a full tier: OOMKilled twice at 256Mi without it, peak 156 MiB and no restarts with it |
 | glibc malloc (Python, JVM, .NET; musl images ignore it) | `MALLOC_ARENA_MAX=2` | `manifests.CAPACITY_ENV` | after a full tier: containers 12884 -> 12466 MiB; Open Formulieren worker -98, Open Zaak worker -83, the 23 Maykin containers -294 MiB |
+| Go: transparent huge pages (host THP `always`) | `GODEBUG=disablethp=1` | `manifests.GO_NO_HUGE_PAGES`, in `CAPACITY_ENV` and `provision.CONTROL_PLANE_ENV` (kube-apiserver, etcd, kube-controller-manager) | released heap stayed charged in partly freed 2 MiB pages: 514 MiB over all containers plus 230 on kube-apiserver; 82 MiB after |
 | Control plane (kube-apiserver, etcd; static pods, no memory limit) | `GOGC=50`; kube-apiserver also `GOMEMLIMIT=700MiB` | `provision.CONTROL_PLANE_ENV` per pod, applied by `provision.tune_control_plane`, run by `start_node` (provision-cluster and start-cluster): minikube start rewrites `/etc/kubernetes/manifests` | after a full tier: kube-apiserver 913 -> 400 MiB, etcd 159 -> 90 MiB (GOGC); kube-apiserver after deploys 1097-1554 -> at most 757 MiB RSS (GOMEMLIMIT; live heap 450-540 MiB) |
 | APISIX (Frank!Gateway outway) | 2 nginx workers | `CAPACITY_ENV` `APISIX_WORKER_PROCESSES` (`auto` started 25) | -0.45 GiB |
 | ZAC (WildFly bootable jar) | `-Xms64m -Xmx768m`, G1 with `-XX:G1PeriodicGCInterval=60000 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30`, `-XX:TieredStopAtLevel=1` | `values.yaml` `zac.javaOptions` (`_JAVA_OPTIONS`) | 1056 -> 882 MiB (heap 555 -> 390 committed). Not the serial GC: it kept the heap near -Xmx (+133 MiB). C1 only: 821 -> 737 MiB (code cache 31 -> 11), ZAC tests a few hundred ms slower per tier |
@@ -63,10 +64,11 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 - Celery: `ps`/`/proc/*/cmdline` in the worker shows `-c 1`; uWSGI: count the
   `uwsgi` processes in the web pod (master + http + 1 worker = 3; Open
   Archiefbeheer has no http router: 2).
-- Control plane: `kubectl -n kube-system get pod kube-apiserver-minikube etcd-minikube -o jsonpath='{..env}'` shows `GOGC=50` (and `GOMEMLIMIT=700MiB` on kube-apiserver); kube-apiserver's `/metrics` `go_gc_gogc_percent` is 50.
+- Control plane: `kubectl -n kube-system get pod kube-apiserver-minikube etcd-minikube -o jsonpath='{..env}'` shows `GOGC=50`, `GODEBUG=disablethp=1` (and `GOMEMLIMIT=700MiB` on kube-apiserver); kube-apiserver's `/metrics` `go_gc_gogc_percent` is 50.
 - Elasticsearch: `_nodes/os` shows `allocated_processors` 1; the java process' environ has `MALLOC_ARENA_MAX=2` (ECK builds the pods, so a fixup that misses its pod templates misses them).
 - .NET: the env of the five apps has `DOTNET_gcServer=0`,
   `DOTNET_gcConcurrent=0`, `DOTNET_GCConserveMemory=7`.
+- Go huge pages: `AnonHugePages` in `/proc/<pid>/smaps_rollup` of a Go process is a few MiB at most; a container's `memory.current` minus `anon`+`file`+`kernel` of its `memory.stat` is the charge nothing maps.
 - Per-process cost: PSS from `/proc/<pid>/smaps_rollup` (a Celery child
   100-195 MiB, a uWSGI process 160-240 MiB); per container: the working set
   from `crictl stats` (what `test_memory.py` records).

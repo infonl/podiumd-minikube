@@ -6588,3 +6588,33 @@ podiumd-tests' core tier, KISS 704 -> 669 MiB, Open Inwoner 681 -> 647 MiB.
 KISS and Open Inwoner search tests pass (podiumd-tests). A configuration
 difference from the reference environments with no behaviour behind it here:
 nothing uses ML.
+
+### Go: transparent huge pages off (GODEBUG=disablethp=1)
+
+kube-apiserver showed a working set of 887 MiB (memory test tolerance 884)
+under GOMEMLIMIT=700MiB, with a live heap of 512 MiB and an RSS of 774 MiB.
+The difference was memory the process no longer mapped: the laptop kernel's
+transparent huge pages are `always` (minikube's docker driver shares the host
+kernel), the Go runtime releases freed heap in 4 KiB pieces, and the partly
+released 2 MiB pages stay charged to the cgroup until the kernel splits them
+under memory pressure. Proof: `memory.reclaim` on its cgroup took
+`memory.current` from 937 to 706 MB with `anon` unchanged. All containers
+together carried 514 MiB of such charge (Loki 183, etcd 54, Prometheus 54,
+kube-controller-manager 38, ...), counted in the working set, the node figure
+and the memory baseline. No OOM risk, but the numbers were wrong.
+
+`GODEBUG=disablethp=1` (Go 1.21.6+, still in 1.26) marks the Go heap
+MADV_NOHUGEPAGE: in `manifests.CAPACITY_ENV` (every container; other runtimes
+ignore it) and `provision.CONTROL_PLANE_ENV` (kube-apiserver, etcd,
+kube-controller-manager). After the restart the Go processes hold 0-6 MiB of
+huge pages and the containers' total charge is 82 MiB. Capacity only; whether
+the AKS nodes use `always` is unverified.
+
+The deploy that rolled every pod hit a single-node problem: Loki's gateway
+Deployment has a required pod anti-affinity on the hostname, so a rolling
+update's new pod stayed Pending next to the old one (deploy timed out after
+900 s). `loki.gateway.affinity.podAntiAffinity.requiredDuringScheduling...: []`
+in values.yaml (Helm did not delete a null at that depth). The pods with the
+old rule were deleted by hand once. The other required anti-affinities
+(Loki, OpenBao) are StatefulSets, which replace their pod in place.
+Smoke 143 passed, live suite 32 passed.
