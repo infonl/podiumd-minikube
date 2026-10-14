@@ -100,6 +100,7 @@ def objecten_shape(charts_dir: Path = CHARTS_DIR) -> ObjectenShape:
             merged=True,
             sets=["--set", "objecten.merged=true"],
         )
+    # podiumd<4.10: separate objecten and objecttypen subcharts.
     return ObjectenShape(
         merged=False, sets=["--set", "podiumd.objecttypen.enabled=true", "--set", "objecten.merged=false"]
     )

@@ -25,5 +25,11 @@ go stale (the PKCE-only ita/kiss placeholders here did).
   the rendered manifest.
 - Copying a reference file is no reason to keep a part of it that has no
   effect here.
+- Code needed only for an older podiumd release gets a `podiumd<X.Y:`
+  comment (X.Y the first release without the need). When a release stops
+  being deployed, raise `OLDEST_PODIUMD` in
+  `unit_tests/test_release_leftovers.py` and remove what it lists. Never
+  pin a podiumd image tag in `values.yaml` (the same test fails on one);
+  our own components take podiumd's images (`chart.bundled_image_sets`).
 
 Related: [[reuse-existing-logic]], [[comments-and-help-texts]].

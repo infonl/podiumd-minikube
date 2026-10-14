@@ -1407,7 +1407,7 @@ podiumd:
           notification_delivery_retry_backoff_max: 48
 
         objecttypes_config_enable: true
-        # service_identifier here is classic-shape syntax (objects-api
+        # podiumd<4.10: service_identifier is classic-shape syntax (objects-api
         # <4.0.0's ObjectTypesConfigurationStep requires it - a real,
         # separate Objecttypes API to reference by service). Merged shape
         # (open-object >=4.0.0, "OBJECTEN_MERGED" in
@@ -1662,6 +1662,7 @@ podiumd:
       storageClassName: ""
       size: 10Gi
 
+  # podiumd<4.10: the separate objecttypen subchart.
   objecttypen:
     enabled: false
     replicaCount: 1
@@ -3230,6 +3231,7 @@ podiumd:
       clientId: contact_intern
       # Same as syncJobs.medewerkers.clientSecret; HS256 signing needs over 32 bytes.
       secret: contactAdapterSecret-hs256-needs-over-32-bytes
+      # podiumd<4.10: the adapter reads these keys here.
       objecttypen: &adapterObjecttypen
         baseUrlIntern: https://objecttypen.local
         baseUrlExtern: https://objecttypen.local

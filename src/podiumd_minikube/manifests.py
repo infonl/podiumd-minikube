@@ -379,6 +379,7 @@ REQUIRED_OBJECTTYPEN_TOKEN: Doc = {
 }
 
 
+# podiumd<4.10: values.yaml configures the classic shape; this adapts it to Open Object.
 def fixup_merged_objecten(docs: list[Doc]) -> None:
     """Merged objecten shape only: removes what only the classic shape accepts.
 

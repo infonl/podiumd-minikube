@@ -216,6 +216,17 @@ vulture, bandit, basedpyright, pylint, and those unit tests); it upgrades
 ./run_python_checks
 ```
 
+### Code for older podiumd releases
+
+Code, values and templates needed only for releases before podiumd X.Y carry
+a `podiumd<X.Y:` comment with the reason (for example `podiumd<4.10:` for
+the separate objecttypen subchart). `unit_tests/test_release_leftovers.py`
+holds `OLDEST_PODIUMD`, the oldest release deployed here (now 4.9.4); raise it
+when a release is dropped, and the test lists every marker that has become
+dead. The same test fails on an `image.tag` under `podiumd:` in
+`values.yaml`: podiumd pins its images itself, and a pin of ours goes stale
+with the next release.
+
 ## Why not `helm install`?
 
 Helm's own release record embeds the entire resolved chart — including

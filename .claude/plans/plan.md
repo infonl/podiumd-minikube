@@ -6743,3 +6743,14 @@ of the render. The restore runs after the init SQL, so "already exists"
 errors (roles, databases, extensions) are expected and filtered, as is
 pg 17's `transaction_timeout`; any other error stops the deploy with the
 dump kept. Writes between dump and restore are lost.
+
+## Checks for leftovers of older podiumd releases (user: "build the dead-code checks and document it")
+
+Today's leftovers (two stale image pins, the PKCE experiment, PABC's
+repository overrides, Open Archiefbeheer's seed) were found by hand.
+`unit_tests/test_release_leftovers.py` now holds `OLDEST_PODIUMD` (4.9.4)
+and lists every `podiumd<X.Y` marker with X.Y at or below it; raising it to
+4.10 lists the five classic objecten/objecttypen places (chart.objecten_shape,
+manifests.fixup_merged_objecten, three in values.yaml). It also fails on any
+`image.tag` under `podiumd:` in values.yaml. Documented in README
+("Code for older podiumd releases") and `.claude/memory/remove-unused.md`.
