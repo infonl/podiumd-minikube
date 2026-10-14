@@ -20,6 +20,7 @@ def test_orphans_skip_desired_owned_and_unknown_kinds(fake_run: FakeRun):
     fake_run.on("kubectl", "get", stdout=_items())
     fake_run.on("kubectl", "get", "Deployment", stdout=_items("zac", "old-grafana"))
     fake_run.on("kubectl", "get", "StatefulSet", stdout=_items("prometheus-x", owned=True))
+    fake_run.on("kubectl", "get", "Job", stdout=_items("openinwoner-config"))
     fake_run.on(
         "kubectl",
         "get",
@@ -28,7 +29,7 @@ def test_orphans_skip_desired_owned_and_unknown_kinds(fake_run: FakeRun):
         stderr='error: the server doesn\'t have a resource type "Prometheus"',
     )
     desired = [{"kind": "Deployment", "metadata": {"name": "zac"}}]
-    assert prune.orphans(desired) == [("Deployment", "old-grafana")]
+    assert prune.orphans(desired) == [("Deployment", "old-grafana"), ("Job", "openinwoner-config")]
 
 
 def test_prune_refuses_a_large_prune_without_force(fake_run: FakeRun):

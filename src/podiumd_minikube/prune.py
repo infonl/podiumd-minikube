@@ -4,12 +4,11 @@
 left the old Deployments, Services and Ingresses running (two Grafanas
 answering grafana.local).
 
-Not pruned: Jobs and CronJobs (deploy recreates the rendered Jobs; CronJob
-runs are never rendered), the objects the scripts create
-outside the render (SCRIPT_MADE), anything with an ownerReference
-(operator-created, like Prometheus' StatefulSet and prometheus-operated
-Service), and anything without this chart's labels (podiumd-tests' Secret was
-deleted twice).
+Not pruned: the objects the scripts create outside the render (SCRIPT_MADE),
+anything with an ownerReference (operator-created, like Prometheus'
+StatefulSet and prometheus-operated Service, and a CronJob's runs), and
+anything without this chart's labels (podiumd-tests' Secret was deleted
+twice).
 """
 
 import json
@@ -25,7 +24,7 @@ from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
 
 PRUNABLE_KINDS = (
-    "Deployment", "StatefulSet", "DaemonSet",
+    "Deployment", "StatefulSet", "DaemonSet", "CronJob", "Job",
     "Prometheus", "PrometheusRule", "ServiceMonitor", "PodMonitor",
     *ECK_KINDS,
     "Service", "Secret", "Ingress", "ConfigMap", "ServiceAccount", "HorizontalPodAutoscaler",

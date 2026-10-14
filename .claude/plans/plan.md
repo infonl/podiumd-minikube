@@ -6644,3 +6644,13 @@ The rerun then failed in the prune: it listed ECK's Secret
 `kiss-es-elastic-user`, and ECK deleted it once its Elasticsearch was pruned,
 before the prune reached it (`NotFound`). Prune deletes use
 `--ignore-not-found`.
+
+After the switch the default profile still ran KISS's three sync CronJobs and
+ITA's notify CronJob (every 15 minutes), and the finished Jobs of every
+disabled profile stayed; `show-cluster-status` and the live suite's
+`enabled_profiles` read those Job pods as eight enabled profiles. Prune
+skipped Jobs and CronJobs. It now prunes both: the rendered Jobs are in the
+desired set (deploy deletes and recreates them before the apply), and a
+CronJob's runs carry an ownerReference, so they are skipped and go with their
+CronJob. Dry run against the default render: exactly the 16 Jobs and 4
+CronJobs of the disabled profiles.
