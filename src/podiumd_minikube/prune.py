@@ -85,5 +85,6 @@ def prune(desired_docs: list[Doc], *, force: bool) -> None:
         )
         raise process.UserError(msg)
     for kind, name in to_delete:
-        kube.kubectl_shown("delete", kind, name, "-n", NAMESPACE)
+        # An operator may delete what it owns first (ECK's Secrets once its Elasticsearch is pruned).
+        kube.kubectl_shown("delete", kind, name, "-n", NAMESPACE, "--ignore-not-found")
     print("Pruned objects not part of the current render: " + ", ".join(f"{k}/{n}" for k, n in to_delete))

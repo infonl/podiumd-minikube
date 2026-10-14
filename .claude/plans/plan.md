@@ -6639,3 +6639,8 @@ step: `openbao.bootstrap` looked for the OpenBao StatefulSet in the cluster,
 found the one the prune had just deleted (still terminating), and applied an
 empty list of Jobs ("error: no objects passed to apply"). It now decides from
 the render: no `openbao-config` Job rendered, no bootstrap.
+
+The rerun then failed in the prune: it listed ECK's Secret
+`kiss-es-elastic-user`, and ECK deleted it once its Elasticsearch was pruned,
+before the prune reached it (`NotFound`). Prune deletes use
+`--ignore-not-found`.

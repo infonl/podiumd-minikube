@@ -39,7 +39,9 @@ def test_prune_refuses_a_large_prune_without_force(fake_run: FakeRun):
         prune.prune([], force=False)
     assert fake_run.ran("kubectl", "delete") == []
     prune.prune([], force=True)
-    assert len(fake_run.ran("kubectl", "delete")) == len(names)
+    deletes = fake_run.ran("kubectl", "delete")
+    assert len(deletes) == len(names)
+    assert all("--ignore-not-found" in call for call in deletes)
 
 
 def test_orphans_never_include_objects_without_this_charts_labels(fake_run: FakeRun):
