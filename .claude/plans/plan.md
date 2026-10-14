@@ -6855,3 +6855,12 @@ added. The rendered manifest is unchanged (default profile byte for byte;
   the superuser Job's counter-override are gone; `extraEnvVars` sets
   DISABLE_2FA=True. Open Zaak, Open Notificaties, Objecttypen and Open
   Archiefbeheer keep their shims (their production settings do not read it).
+
+The first deploy with `drop_duplicate_env` removed CELERY_WORKER_CONCURRENCY
+from the live low-latency worker entirely: kubectl apply's merge keys env by
+name, the previous apply had recorded it twice, and the new render had it
+once, so the patch deleted the key. The worker then ran Celery's default
+pool (682 MiB; tests/test_memory.py caught it). Restored once with
+`kubectl set env ... CELERY_WORKER_CONCURRENCY=1`; recorded and live env now
+agree, so later applies keep it. Any other cluster deployed before 8007086
+loses it the same way on its next deploy and needs the same command once.
