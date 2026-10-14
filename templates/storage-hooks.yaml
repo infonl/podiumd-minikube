@@ -106,7 +106,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: chmod
-          image: busybox:1.38.0
+          image: {{ required "images.busybox: set by podiumd-minikube deploy from podiumd's values.yaml" .Values.images.busybox }}
           command: ["sh", "-c", "chmod -R 0777 /mnt/*"]
           volumeMounts:
             {{- range $app := $apps }}

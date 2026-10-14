@@ -7,11 +7,8 @@ why it's safe to rerun: it's a plain GET-then-PUT update, not a destructive
 recreate - re-applying this Job's already-succeeded, unchanged spec is a
 safe no-op like any other Job here.
 
-Uses a plain python:3-alpine image, not ZAC's own (a WildFly/Kotlin image
-with no Python or shell scripting story) or any of the Django apps' own
-images (unrelated to ZAC's REST API, would be a confusing image choice for
-what this Job actually does) - stdlib-only script, no extra packages to
-install.
+The script is stdlib-only; it runs on podiumd's own python image
+(chart.BUNDLED_IMAGES).
 
 The script logs in as its own Keycloak user in group beheerders (see its
 header): every zaakafhandelparameters endpoint requires a user with the
@@ -41,7 +38,7 @@ spec:
       # does not resolve in the cluster).
       initContainers:
         - name: wait-for-zac
-          image: python:3.13-alpine
+          image: {{ required "images.python: set by podiumd-minikube deploy from podiumd's values.yaml" .Values.images.python }}
           command:
             - python
             - -c
@@ -64,7 +61,7 @@ spec:
                   time.sleep(5)
       containers:
         - name: seed-zaakafhandelparameters
-          image: python:3.13-alpine
+          image: {{ required "images.python: set by podiumd-minikube deploy from podiumd's values.yaml" .Values.images.python }}
           command:
             - python
             - /app/seed_productaanvraag_zaakafhandelparameters.py

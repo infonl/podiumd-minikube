@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 
+import yaml
+
 from podiumd_minikube.paths import CHARTS_DIR
 
 # Profiles `deploy --full` turns on; provision-cluster pre-pulls their images too.
@@ -33,10 +35,43 @@ def tarball(chart: str, charts_dir: Path = CHARTS_DIR) -> Path | None:
     return next(iter(sorted(charts_dir.glob(f"{chart}-*.tgz"))), None)
 
 
+# Our own Jobs' images, from podiumd's values.yaml: values key -> path there.
+BUNDLED_IMAGES = {
+    "busybox": ("global", "images", "busybox"),
+    "python": ("keycloak-operator", "jobs", "ensurePodiumdAdminUser", "initImage"),
+}
+
+
 def member_names(tgz: Path) -> list[str]:
     """Paths of all members of tgz."""
     with tarfile.open(tgz) as archive:
         return archive.getnames()
+
+
+def member_text(tgz: Path, name: str) -> str | None:
+    """Content of member name in tgz, or None when absent."""
+    with tarfile.open(tgz) as archive:
+        try:
+            member = archive.extractfile(name)
+        except KeyError:
+            return None
+        return member.read().decode() if member else None
+
+
+def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
+    """--set images.<key>=<repository>:<tag> for BUNDLED_IMAGES; none before a fetch (the templates then fail)."""
+    tgz = tarball("podiumd", charts_dir)
+    text = member_text(tgz, "podiumd/values.yaml") if tgz else None
+    if text is None:
+        return []
+    podiumd_values = yaml.safe_load(text)
+    sets: list[str] = []
+    for key, path in BUNDLED_IMAGES.items():
+        image = podiumd_values
+        for step in path:
+            image = image[step]
+        sets += ["--set", f"images.{key}={image['repository']}:{image['tag']}"]
+    return sets
 
 
 @dataclass(frozen=True)
@@ -68,4 +103,4 @@ def objecten_shape(charts_dir: Path = CHARTS_DIR) -> ObjectenShape:
 
 def everything_args(charts_dir: Path = CHARTS_DIR) -> list[str]:
     """helm args that render every profile: all images and hosts the chart can have."""
-    return [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets]
+    return [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets, *bundled_image_sets(charts_dir)]

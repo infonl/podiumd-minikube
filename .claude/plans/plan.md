@@ -6716,3 +6716,14 @@ Upstream restored `--lazy-apps` on 2026-09-02 (Python 3.13 workers segfault
 when forked from a loaded master), so the next image stalls about 6 s again.
 The user chose `UWSGI_MAX_REQUESTS=1000` with 1 process: a stall about every
 1000 requests, web container 438 -> 317 MiB after a full tier.
+
+Our own Jobs use podiumd's images (user: "can we always re-use the versions
+bundled in the release?"): the storage chmod Job podiumd's
+`global.images.busybox` (1.38.0-glibc, was busybox:1.38.0), ZAC's
+productaanvraag Job the python image of keycloak-operator's
+ensurePodiumdAdminUser Job (3.14.7-slim, was python:3.13-alpine). A parent
+chart cannot read a subchart's defaults, so `chart.bundled_image_sets` reads
+them from the podiumd tarball's values.yaml and deploy passes
+`--set images.<key>`; the templates `required` them. Not reusable: podiumd's
+postgres (16, no PostGIS; ours is postgis 17); Mailpit and WireMock are not
+in podiumd.
