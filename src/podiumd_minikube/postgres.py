@@ -23,8 +23,6 @@ INIT_SQL = VENDOR_DIR / "postgres" / "00-create-databases.sql"
 # pg_dumpall output of each migration, kept as a backup.
 DUMP_DIR = CHART_DIR / ".postgres-dumps"
 DATA_ROOT = "/var/lib/postgresql/data"
-# While it exists, 01-seed-fixtures.sh skips the fixtures: the dump holds them.
-RESTORING = f"{DATA_ROOT}/restoring"
 _ROLE = re.compile(r"CREATE ROLE (\w+) ")
 _DATABASE = re.compile(r'CREATE DATABASE "?(\w+)"? OWNER (\w+);')
 
@@ -95,7 +93,6 @@ def migrate_major(render: manifests.Render) -> None:
     pod = kube.first_pod("app=postgres")
     dump.write_text(kube.kubectl("exec", "-n", NAMESPACE, pod, "--", "pg_dumpall", "-U", "postgres"), encoding="utf-8")
     print(f"Dumped to {dump}.")
-    kube.kubectl("exec", "-n", NAMESPACE, pod, "--", "touch", RESTORING)
     provision.load_images([image])
     kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(rendered))
     kube.kubectl_shown("rollout", "status", "deployment/postgres", "-n", NAMESPACE, "--timeout=600s")
@@ -112,7 +109,6 @@ def restore(dump: Path, major: int, render: manifests.Render) -> None:
     if errors := restore_errors(result.stderr):
         msg = f"restore into Postgres {major} had errors (dump kept in {dump}): " + "; ".join(errors[:10])
         raise process.UserError(msg)
-    # Also removes RESTORING.
     kube.kubectl(
         "exec", "-n", NAMESPACE, pod, "--", "find", DATA_ROOT, "-mindepth", "1", "-maxdepth", "1",
         "!", "-name", f"pg{major}", "-exec", "rm", "-rf", "{}", "+",

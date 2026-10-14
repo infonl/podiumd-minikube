@@ -1,13 +1,12 @@
-"""
-Postgres schema/fixture checks, run via `kubectl exec` into the postgres
-pod (there's no port-forward assumed to be running, so this avoids needing
-one just to run the test suite).
-"""
+"""The shared Postgres: databases, extensions and what setup_configuration registers, via `kubectl exec`."""
 
 import pytest
+import yaml
 
 from conftest import NAMESPACE
 from conftest import kubectl
+
+from podiumd_minikube.paths import VALUES_YAML
 
 EXPECTED_DATABASES = {
     "zac",
@@ -78,23 +77,18 @@ def test_postgis_extension_installed(pods, database, existing_databases):
     assert result == "postgis", f"postgis extension missing from '{database}'"
 
 
-def test_openzaak_zac_client_credentials_seeded(pods, existing_databases):
-    """
-    The specific fixture data ZAC itself depends on to authenticate against
-    Open Zaak's ZGW APIs - found missing live in step 4 (the fixture-seeding
-    script waited forever for an admin user that was never created), fixed,
-    and this is the regression check for that fix staying in place.
-    """
+def test_openzaak_knows_zacs_client(pods, existing_databases):
+    """Open Zaak's setup_configuration registers ZAC's zgwApis client and secret."""
     if "openzaak" not in existing_databases:
         pytest.skip("openzaak database does not exist")
+    zgw = yaml.safe_load(VALUES_YAML.read_text(encoding="utf-8"))["podiumd"]["zac"]["zgwApis"]
     client_ids = psql("openzaak", "SELECT client_ids FROM authorizations_applicatie;")
-    assert "zac_client" in client_ids
-
-    secret = psql(
-        "openzaak",
-        "SELECT secret FROM vng_api_common_jwtsecret WHERE identifier = 'zac_client';",
+    assert zgw["clientId"] in client_ids
+    secrets = dict(
+        line.split("|", 1)
+        for line in psql("openzaak", "SELECT identifier, secret FROM vng_api_common_jwtsecret;").splitlines()
     )
-    assert secret == "openzaakZaakafhandelcomponentClientSecret"
+    assert secrets.get(zgw["clientId"]) == zgw["secret"]
 
 
 def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement(enabled_profiles):

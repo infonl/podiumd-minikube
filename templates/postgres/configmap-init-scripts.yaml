@@ -6,4 +6,3 @@ metadata:
     {{- include "podiumd-minikube.labels" . | nindent 4 }}
 data:
   {{- (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/postgres/*.sql").AsConfig | nindent 2 }}
-  {{- (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/postgres/*.sh").AsConfig | nindent 2 }}

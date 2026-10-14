@@ -384,7 +384,7 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
     """Merged objecten shape only: removes what only the classic shape accepts.
 
     objecten's setup_configuration rejects objecttypes service_identifier
-    (Pydantic extra_forbidden), and openformulieren's objecttypes-api token
+    (Pydantic extra_forbidden), and openformulieren's objecttypen-api token
     only exists in classic objecttypen's token table. podiumd's
     create-required-objecttypen Job needs a superuser token on objecten.
     """
@@ -398,8 +398,8 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
         openformulieren = _configuration_yaml(doc, "openformulieren-configuration")
         if openformulieren is not None:
             for service in openformulieren.get("zgw_consumers", {}).get("services", []):
-                if service.get("identifier") == "objecttypes-api":
-                    service["header_value"] = "Token fakeOpenFormulierenObjectsToken"
+                if service.get("identifier") == "objecttypen-api":
+                    service["header_value"] = "Token objectenFormulierToken"
             doc["data"]["configuration.yaml"] = yaml.safe_dump(openformulieren, sort_keys=False)
 
 

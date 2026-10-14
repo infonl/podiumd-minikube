@@ -6793,3 +6793,32 @@ byte with `application/hal+json`, anything else 404, about 3 MiB. Dropped
 with it: WireMock's mappings, its heap and journal tuning, and the Accept
 header matching nothing here needs. api-proxy's BAG location and the
 Frank!Gateway route point at `bag-mock:8080`.
+
+## Compose leftovers, step 4: no fixture seeding, names as ExternalsPodiumD
+
+ZAC's compose fixtures (Open Zaak Applicaties, JWT secrets and catalogus,
+Open Klant's ZAC integration-test data and token `fakeToken`) and
+`01-seed-fixtures.sh`, with its wait on an exact migration count, are gone;
+so is the migration's `restoring` flag, which only existed for that script.
+What they held now comes from setup_configuration, with ExternalsPodiumD's
+names (dimp test podiumd.yml):
+
+- Open Zaak: credentials and Applicaties `zac`, `formulier`,
+  `openarchiefbeheer` (EPD's UUIDs); ZAC `zgwApis.clientId: zac`. The
+  catalogus comes from podiumd's create_required_catalogi_job (ALG, bron RSIN).
+- Open Klant: tokenauth `zac` for ZAC's klantinteracties token.
+- Objecten: tokenauth `zaak` (ZAC) and `formulier` (Open Formulieren, Open
+  Zaak); services `objecttypen-api` and `notificaties-api` with client
+  `notificaties`. Open Notificaties drops credential `objectsapi`, adds
+  `objecten`.
+- Objecttypen: tokenauth `objecten` and `formulier`.
+- Open Formulieren: services `openzaak-{zaken,documenten,catalogi}-api`,
+  `objecten-api`, `objecttypen-api`, client `formulier`.
+- Open Archiefbeheer: services `openzaak-{zaken,documenten,catalogi,besluiten}-api`
+  and `vng-selectielijst`, client `openarchiefbeheer` (was ZAC's).
+- ZAC: BRP key header `x-api-key` (value unused by brp-personen-mock),
+  `openForms.url` Open Formulieren's public host (was `localhost:9999`).
+
+An existing database keeps its old fixture rows and services; setup_configuration
+does not delete. podiumd-tests' Open Zaak client `open-formulieren` becomes
+`formulier`.

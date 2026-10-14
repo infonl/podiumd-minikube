@@ -254,8 +254,8 @@ podiumd:
     # (a podiumd/zac chart default) - this is what it's there for.
     zgwApis:
       url: https://openzaak.local/
-      clientId: zac_client
-      secret: openzaakZaakafhandelcomponentClientSecret
+      clientId: zac # as ExternalsPodiumD
+      secret: zacSecret
     notificationsSecretKey: openNotificatiesApiSecretKey
     # Not a podiumd/zac chart value at all - this project's own grouping for
     # templates/zac/productaanvraag-zaakafhandelparameters-job.yaml's env
@@ -281,20 +281,18 @@ podiumd:
       productaanvraagtype: productaanvraag-zaaktype-voor-e2e-testen
     klantinteractiesApi:
       url: https://openklant.local
-      token: fakeToken
+      token: openklantZacToken
     objectenApi:
       url: https://objecten.local
-      token: fakeZacObjectsToken
+      token: objectenZaakToken
     # BRP/KvK/BAG through the api-proxy, as ExternalsPodiumD.
     brpApi:
       url: http://api-proxy/haalcentraal/api/brp/
+      # As ExternalsPodiumD; brp-personen-mock ignores the key. ZAC rejects a
+      # header without a value.
       apiKey:
-        # Compose defaults both BRP_API_KEY and BRP_API_KEY_HEADER to empty
-        # (docker-compose.yaml lines 797-798) - ZAC's own BrpConfiguration
-        # validation rejects a header set without a matching key, so these
-        # must stay in lockstep, empty together.
-        value: ""
-        header: ""
+        value: unused-key
+        header: x-api-key
     kvkApi:
       url: http://api-proxy/
       apiKey: fakeKvkApiKey
@@ -302,7 +300,7 @@ podiumd:
       url: http://api-proxy/lvbag/individuelebevragingen/v2/
       apiKey: fakeBagApiKey
     openForms:
-      url: http://localhost:9999 # not used at the moment, matches compose's own placeholder
+      url: https://openformulieren-nginx.local # as ExternalsPodiumD: Open Formulieren's public host
     pabcApi:
       url: http://pabc
       # Left empty, this is read by PabcClientHeadersFactory's companion
@@ -375,8 +373,9 @@ podiumd:
       replicaCount: 1 # as ExternalsPodiumD and podiumd-infra: runs daily-remove-imports
     tags:
       redis: false # point at the shared Redis instead of the chart's bundled one
-    # As podiumd-infra (ExternalsPodiumD sets e2eTestZaaktype.create false; tests use it): finds catalogus ALG with ZAC's bron RSIN (the fixture
-    # catalogus) and adds its document and besluit types and zaaktype-voor-e2e-testen.
+    # Creates catalogus ALG with ZAC's bron RSIN, its document and besluit types
+    # and, as podiumd-infra, zaaktype-voor-e2e-testen (ExternalsPodiumD: false;
+    # the tests use it).
     create_required_catalogi_job:
       enabled: true
       client_id: integratieteam
@@ -443,15 +442,14 @@ podiumd:
               secret: zaakSecret
             # As ExternalsPodiumD; Open Zaak validates zaakobject URLs with
             # it. Token: Open Formulieren's Objecten token, as podiumd-infra
-            # (its "formulier"). The fixtures' own service row
-            # (http://objecten-api.local:8000) only works in docker-compose.
+            # (its "formulier").
             - identifier: objecten-api
               label: Objecten API
               api_root: https://objecten.local/api/v2/
               api_type: orc
               auth_type: api_key
               header_key: Authorization
-              header_value: Token fakeOpenFormulierenObjectsToken
+              header_value: Token objectenFormulierToken
             # As ExternalsPodiumD.
             - identifier: autorisaties-api
               label: Open Zaak - Autorisaties
@@ -483,6 +481,12 @@ podiumd:
               secret: integratieteamSecret
             - identifier: objecten
               secret: objectenSecret
+            - identifier: zac
+              secret: zacSecret
+            - identifier: formulier
+              secret: formulierSecret
+            - identifier: openarchiefbeheer
+              secret: openarchiefbeheerSecret
 
         vng_api_common_applicaties_config_enable: true
         vng_api_common_applicaties:
@@ -492,6 +496,21 @@ podiumd:
                 - zaak
               heeft_alle_autorisaties: true
               label: Zaak
+            - uuid: 4b305285-64c4-484a-8db4-2f66996d4760
+              client_ids:
+                - zac
+              heeft_alle_autorisaties: true
+              label: Zaakafhandelcomponent
+            - uuid: f00acb0b-bc09-4562-8d7e-7dc18d12972d
+              client_ids:
+                - formulier
+              heeft_alle_autorisaties: true
+              label: Formulier
+            - uuid: 9d6586fc-3d45-48cc-a04b-7853ebf0fe2a
+              client_ids:
+                - openarchiefbeheer
+              heeft_alle_autorisaties: true
+              label: Openarchiefbeheer
             - uuid: c5989254-922d-43f9-a32a-3fa2a44f6230
               client_ids:
                 - notificaties
@@ -591,14 +610,7 @@ podiumd:
       # No PKCE, see the data comment above.
       pkceEnabled: false
       oidcUrl: https://openzaak.local
-      # Matches docker-compose.yaml's DJANGO_SUPERUSER_PASSWORD/
-      # OPENZAAK_SUPERUSER_USERNAME/OPENZAAK_SUPERUSER_EMAIL exactly. Found
-      # live: left unset, the container never creates the 'admin' user our
-      # vendored fixture-seeding script polls for
-      # (`select count(id) from accounts_user where username = 'admin'`),
-      # so the seed script waited forever and the ZGW API fixtures (zac's
-      # own client credentials) never got applied - causing ZAC's boot-time
-      # calls to Open Zaak to fail with a 403 invalid-client-identifier.
+      # Local admin login; podiumd-tests uses admin/admin.
       superuser:
         username: admin
         password: admin
@@ -722,6 +734,11 @@ podiumd:
               token: openklantContactToken
               contact_person: Contact
               email: contact@example.com
+            # As ExternalsPodiumD.
+            - identifier: zac
+              token: openklantZacToken
+              contact_person: ZAC
+              email: zac@example.com
             - identifier: ita
               token: openklantItaToken
               contact_person: ITA
@@ -1223,29 +1240,21 @@ podiumd:
         username: admin
         password: admin
         email: admin@example.com
-      # objecttypes-api: dotted Service DNS form, not bare "objecttypen" -
+      # objecttypen-api: dotted Service DNS form, not bare "objecttypen" -
       # same URLValidator gotcha as ZAC's own zgwApis.url above (Django
       # rejects single-label hostnames on any field that round-trips a URL
       # this API hands back) - confirmed live the same way.
       #
-      # open-notificaties + notifications_config: lets this Objects API
-      # instance publish an "object created" notification whenever a
-      # productaanvraag object is written - the trigger the whole flow
-      # starts from. Credentials (client_id=objectsapi) match the
-      # vng_api_common_credentials entry registered on opennotificaties's
-      # own configuration.data above.
+      # notificaties-api + notifications_config: "object created"
+      # notifications, client "notificaties" as ExternalsPodiumD.
       #
       # objecttypes_config: registers this Objects API's reference to each
       # objecttype by UUID; podiumd.objecttypen.create_required_objecttypen_job
       # creates the objecttypes themselves (Objecttypen's setup_configuration
       # only has a step for tokens).
       #
-      # tokenauth: fakeZacObjectsToken matches podiumd.zac.objectenApi.token
-      # above (zac.local's own existing config, never previously valid since
-      # no token row existed until this) - fakeOpenFormulierenObjectsToken
-      # is what podiumd.openformulieren's own objects_api service below
-      # authenticates with (Open Zaak too). Both only on Productaanvraag-Dimpact,
-      # as podiumd-infra's "zaak" and "formulier" tokens.
+      # tokenauth "zaak" (ZAC) and "formulier" (Open Formulieren, Open Zaak):
+      # only on Productaanvraag-Dimpact, as podiumd-infra.
       data: |-
         sites_config_enable: true
         sites_config:
@@ -1256,7 +1265,7 @@ podiumd:
         zgw_consumers_config_enable: True
         zgw_consumers:
           services:
-            - identifier: objecttypes-api
+            - identifier: objecttypen-api
               label: Objecttypen API
               api_root: https://objecttypen.local/api/v2/
               api_type: orc
@@ -1264,13 +1273,13 @@ podiumd:
               header_key: Authorization
               header_value: Token objectenToObjecttypenToken
 
-            - identifier: open-notificaties
+            - identifier: notificaties-api
               label: Open Notificaties
               api_root: https://opennotificaties.local/api/v1/
               api_type: nrc
               auth_type: zgw
-              client_id: objectsapi
-              secret: opennotificatiesObjectsSecret
+              client_id: notificaties
+              secret: notificatiesSecret
 
             # As ExternalsPodiumD.
             - identifier: autorisaties-api
@@ -1283,7 +1292,7 @@ podiumd:
 
         notifications_config_enable: true
         notifications_config:
-          notifications_api_service_identifier: open-notificaties
+          notifications_api_service_identifier: notificaties-api
           notification_delivery_max_retries: 5
           notification_delivery_retry_backoff: 3
           notification_delivery_retry_backoff_max: 48
@@ -1307,46 +1316,46 @@ podiumd:
           items:
             # podiumd-infra's only Productaanvraag-Dimpact, created by
             # podiumd.objecttypen.create_required_objecttypen_job.
-            - service_identifier: objecttypes-api
+            - service_identifier: objecttypen-api
               uuid: 11a5f7fd-013e-4e29-9cd1-738249fc3479
               name: Productaanvraag-Dimpact
             # KISS/ITA, as ExternalsPodiumD; UUIDs fixed by
             # podiumd.objecttypen.create_required_objecttypen_job.
-            - service_identifier: objecttypes-api
+            - service_identifier: objecttypen-api
               uuid: 90984726-2692-49d8-8f9d-742075cb761d
               name: Medewerker
-            - service_identifier: objecttypes-api
+            - service_identifier: objecttypen-api
               uuid: c8d301f9-80b8-4575-8b29-3e9431f92994
               name: Afdeling
-            - service_identifier: objecttypes-api
+            - service_identifier: objecttypen-api
               uuid: cbec27ac-157b-490b-b586-9e8a8f5bbb85
               name: Groep
-            - service_identifier: objecttypes-api
+            - service_identifier: objecttypen-api
               uuid: 72240cd6-29bb-4a66-b1c3-ab6589a39a22
               name: InterneTaak
-            - service_identifier: objecttypes-api
+            - service_identifier: objecttypen-api
               uuid: e4d2e353-80ea-4962-8276-920d59a3e8de
               name: Kennisartikel
-            - service_identifier: objecttypes-api
+            - service_identifier: objecttypen-api
               uuid: 6a0d8f9d-f7e2-4e57-a91b-01656968a62d
               name: VAC
-            - service_identifier: objecttypes-api
+            - service_identifier: objecttypen-api
               uuid: 2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
               name: Activiteitenlog
 
         tokenauth_config_enable: true
         tokenauth:
           items:
-            - identifier: zaakafhandelcomponent
-              token: fakeZacObjectsToken
+            - identifier: zaak
+              token: objectenZaakToken
               contact_person: ZAC
               email: zac@example.com
               application: ZAC
               permissions:
                 - object_type: 11a5f7fd-013e-4e29-9cd1-738249fc3479
                   mode: read_and_write
-            - identifier: openformulieren
-              token: fakeOpenFormulierenObjectsToken
+            - identifier: formulier
+              token: objectenFormulierToken
               contact_person: Open Formulieren
               email: openformulieren@example.com
               application: Open Formulieren
@@ -1587,12 +1596,12 @@ podiumd:
         tokenauth_config_enable: true
         tokenauth:
           items:
-            - identifier: objects-api
+            - identifier: objecten
               token: objectenToObjecttypenToken
               contact_person: podiumd-minikube
               email: objecten@example.com
               application: Objects API
-            - identifier: open-formulieren
+            - identifier: formulier
               token: openFormulierenToObjecttypenToken
               contact_person: Open Formulieren
               email: openformulieren@example.com
@@ -1665,8 +1674,7 @@ podiumd:
       oidcUrl: https://objecttypen.local
       token: objecttypenIntegratieteamToken
     # The KISS/ITA objecttypes, as podiumd; downloads each schema from
-    # GitHub only when it creates that objecttype. src/podiumd_minikube/deploy.py
-    # runs it after the fixtures, whose primary keys it would otherwise take.
+    # GitHub only when it creates that objecttype.
     create_required_objecttypen_job:
       enabled: true
     # See settings.djangoSettingsModule below for why this mount exists -
@@ -1776,13 +1784,6 @@ podiumd:
       # Client "notificaties", as ExternalsPodiumD: its credential and
       # Applicatie are registered in podiumd.openzaak.configuration.data.
       #
-      # objectsapi credential: lets the Objects API (podiumd.objecten's own
-      # notifications_config below) authenticate its outgoing
-      # "object created" notification into this Notificaties API - matched
-      # by identifier/secret on both sides, no Autorisaties API round trip
-      # needed for this one (vng_api_common_credentials is opennotificaties'
-      # own self-contained JWT secret store, confirmed live sufficient for
-      # this direction).
       data: |-
         sites_config_enable: true
         sites_config:
@@ -1867,14 +1868,13 @@ podiumd:
         vng_api_common_credentials_config_enable: True
         vng_api_common_credentials:
           items:
-            # Credentials for the Objects API (podiumd.objecten) to send notifications
-            - identifier: objectsapi
-              secret: opennotificatiesObjectsSecret
             # Open Zaak's notifications (client "zaak", as ExternalsPodiumD).
             - identifier: zaak
               secret: zaakSecret
             - identifier: notificaties
               secret: notificatiesSecret
+            - identifier: objecten
+              secret: objectenSecret
 
         notifications_kanalen_config_enable: true
         # Kanalen and filters as ExternalsPodiumD; internetaken,
@@ -2048,42 +2048,41 @@ podiumd:
       secrets:
         keycloak_client_secret: keycloakOpenarchiefbeheerClientSecret
       job:
-        enabled: true # compose's openarchiefbeheer-web-init runs the equivalent setup-configuration step for real, unlike the other apps' fixture-import containers - replicated here via configuration.data below
-      # ZGW consumer services with ZAC's Open Zaak client credentials, as
-      # ZAC's docker-compose setup.
+        enabled: true
+      # Services as ExternalsPodiumD, with client "openarchiefbeheer".
       data: |-
         zgw_consumers_config_enable: true
         zgw_consumers:
           services:
-          - identifier: zaken-test
+          - identifier: openzaak-zaken-api
             label: Open Zaak - Zaken API
             api_root: https://openzaak.local/zaken/api/v1/
             api_type: zrc
             auth_type: zgw
-            client_id: zac_client
-            secret: openzaakZaakafhandelcomponentClientSecret
-          - identifier: documenten-test
+            client_id: openarchiefbeheer
+            secret: openarchiefbeheerSecret
+          - identifier: openzaak-documenten-api
             label: Open Zaak - Documenten API
             api_root: https://openzaak.local/documenten/api/v1/
             api_type: drc
             auth_type: zgw
-            client_id: zac_client
-            secret: openzaakZaakafhandelcomponentClientSecret
-          - identifier: catalogi-test
+            client_id: openarchiefbeheer
+            secret: openarchiefbeheerSecret
+          - identifier: openzaak-catalogi-api
             label: Open Zaak - Catalogi API
             api_root: https://openzaak.local/catalogi/api/v1/
             api_type: ztc
             auth_type: zgw
-            client_id: zac_client
-            secret: openzaakZaakafhandelcomponentClientSecret
-          - identifier: besluiten-test
+            client_id: openarchiefbeheer
+            secret: openarchiefbeheerSecret
+          - identifier: openzaak-besluiten-api
             label: Open Zaak - Besluiten API
             api_root: https://openzaak.local/besluiten/api/v1/
             api_type: brc
             auth_type: zgw
-            client_id: zac_client
-            secret: openzaakZaakafhandelcomponentClientSecret
-          - identifier: selectielijst
+            client_id: openarchiefbeheer
+            secret: openarchiefbeheerSecret
+          - identifier: vng-selectielijst
             label: Open Zaak (public) - Selectielijst API
             api_root: https://selectielijst.openzaak.nl/api/v1/
             api_type: orc
@@ -2105,7 +2104,7 @@ podiumd:
             header_value: Token openklantOpenarchiefbeheerToken
         api_configuration_enabled: true
         api_configuration:
-          selectielijst_service_identifier: selectielijst
+          selectielijst_service_identifier: vng-selectielijst
         external_registers_enabled: true
         external_registers:
           openklant:
@@ -2303,14 +2302,10 @@ podiumd:
       # URLValidator gotcha as ZAC's own zgwApis.url above, confirmed live
       # the same way (a self-referencing catalogus/zaaktype/
       # informatieobjecttype URL round-tripped through a validated field
-      # elsewhere fails on a single-label hostname). client_id/secret match
-      # openzaak's own vendored Applicatie/JWT-secret rows for
-      # "open-formulieren" (see
-      # vendor/dimpact-zaakafhandelcomponent/postgres/fixtures/openzaak/
-      # 01-setup-zac-config.sql) - already fully authorized there, no
-      # openzaak-side change needed.
+      # elsewhere fails on a single-label hostname). Client "formulier", as
+      # ExternalsPodiumD (podiumd.openzaak.configuration.data).
       #
-      # objects-api/objecttypes-api: this chart's own read/write access to
+      # objecten-api/objecttypen-api: this chart's own read/write access to
       # the productaanvraag objecttype schema and to Objects API itself -
       # tokens match podiumd.objecten's own tokenauth entries and
       # podiumd.objecttypen's own tokenauth entries above.
@@ -2337,39 +2332,39 @@ podiumd:
               api_root: http://api-proxy/lvbag/individuelebevragingen/v2/
               api_type: orc
               auth_type: no_auth
-            - identifier: openzaak-zaken
+            - identifier: openzaak-zaken-api
               label: Open Zaak - Zaken API
               api_root: https://openzaak.local/zaken/api/v1/
               api_type: zrc
               auth_type: zgw
-              client_id: open-formulieren
-              secret: openFormulierenOpenzaakClientSecret
+              client_id: formulier
+              secret: formulierSecret
 
-            - identifier: openzaak-documenten
+            - identifier: openzaak-documenten-api
               label: Open Zaak - Documenten API
               api_root: https://openzaak.local/documenten/api/v1/
               api_type: drc
               auth_type: zgw
-              client_id: open-formulieren
-              secret: openFormulierenOpenzaakClientSecret
+              client_id: formulier
+              secret: formulierSecret
 
-            - identifier: openzaak-catalogi
+            - identifier: openzaak-catalogi-api
               label: Open Zaak - Catalogi API
               api_root: https://openzaak.local/catalogi/api/v1/
               api_type: ztc
               auth_type: zgw
-              client_id: open-formulieren
-              secret: openFormulierenOpenzaakClientSecret
+              client_id: formulier
+              secret: formulierSecret
 
-            - identifier: objects-api
+            - identifier: objecten-api
               label: Objects API
               api_root: https://objecten.local/api/v2/
               api_type: orc
               auth_type: api_key
               header_key: Authorization
-              header_value: Token fakeOpenFormulierenObjectsToken
+              header_value: Token objectenFormulierToken
 
-            - identifier: objecttypes-api
+            - identifier: objecttypen-api
               label: Objecttypen API
               api_root: https://objecttypen.local/api/v2/
               api_type: orc
@@ -2401,10 +2396,10 @@ podiumd:
           groups:
             - identifier: local-objects-api
               name: Local Objects API
-              objects_service_identifier: objects-api
-              objecttypes_service_identifier: objecttypes-api
-              documenten_service_identifier: openzaak-documenten
-              catalogi_service_identifier: openzaak-catalogi
+              objects_service_identifier: objecten-api
+              objecttypes_service_identifier: objecttypen-api
+              documenten_service_identifier: openzaak-documenten-api
+              catalogi_service_identifier: openzaak-catalogi-api
               document_type_submission_report: bijlage
               document_type_submission_csv: bijlage
               document_type_attachment: bijlage
@@ -2413,15 +2408,15 @@ podiumd:
               organisatie_rsin: "123443210"
 
         # As ExternalsPodiumD's "Open Zaak" ZGW registration backend; the RSINs
-        # are ZAC's bron RSIN, which the fixture catalogus carries.
+        # are ZAC's bron RSIN, which catalogus ALG carries.
         zgw_api_config_enable: True
         zgw_api:
           groups:
             - identifier: openzaak
               name: Open Zaak
-              zaken_service_identifier: openzaak-zaken
-              documenten_service_identifier: openzaak-documenten
-              catalogi_service_identifier: openzaak-catalogi
+              zaken_service_identifier: openzaak-zaken-api
+              documenten_service_identifier: openzaak-documenten-api
+              catalogi_service_identifier: openzaak-catalogi-api
               catalogue_domain: ALG
               catalogue_rsin: "123443210" # podiumd.zac.organizations.bron.rsin
               organisatie_rsin: "123443210"

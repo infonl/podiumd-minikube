@@ -58,10 +58,6 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
-            - name: fixtures-openzaak
-              mountPath: /docker-entrypoint-initdb.d/fixtures/openzaak
-            - name: fixtures-openklant
-              mountPath: /docker-entrypoint-initdb.d/fixtures/openklant
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -69,10 +65,3 @@ spec:
         - name: init-scripts
           configMap:
             name: postgres-init-scripts
-            defaultMode: 0755 # 01-seed-fixtures.sh must stay executable so Postgres runs it as a subprocess, not sources it
-        - name: fixtures-openzaak
-          configMap:
-            name: postgres-fixtures-openzaak
-        - name: fixtures-openklant
-          configMap:
-            name: postgres-fixtures-openklant

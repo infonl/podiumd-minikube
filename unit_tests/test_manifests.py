@@ -107,7 +107,7 @@ def test_fixup_merged_objecten_removes_classic_only_settings():
         ),
         _configmap(
             "openformulieren-configuration",
-            {"zgw_consumers": {"services": [{"identifier": "objecttypes-api", "header_value": "Token old"}]}},
+            {"zgw_consumers": {"services": [{"identifier": "objecttypen-api", "header_value": "Token old"}]}},
         ),
     ]
     manifests.fixup_merged_objecten(docs)
@@ -115,7 +115,7 @@ def test_fixup_merged_objecten_removes_classic_only_settings():
     openformulieren = yaml.safe_load(docs[1]["data"]["configuration.yaml"])
     assert objecten["objecttypes"]["items"] == [{"identifier": "x"}]
     assert objecten["tokenauth"]["items"] == [{"identifier": "zac"}, manifests.REQUIRED_OBJECTTYPEN_TOKEN]
-    assert openformulieren["zgw_consumers"]["services"][0]["header_value"] == "Token fakeOpenFormulierenObjectsToken"
+    assert openformulieren["zgw_consumers"]["services"][0]["header_value"] == "Token objectenFormulierToken"
 
 
 def test_fix_up_leaves_objecten_alone_on_the_classic_shape():

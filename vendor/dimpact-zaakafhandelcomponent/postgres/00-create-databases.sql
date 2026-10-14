@@ -1,7 +1,4 @@
--- Creates every database/role docker-compose.yaml runs as a separate Postgres
--- container, consolidated onto this one shared postgis/postgis instance.
--- Credentials copied verbatim from docker-compose.yaml's per-service
--- POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB values.
+-- Every app's database and role on the one shared postgis/postgis instance.
 --
 -- Runs once, on first init of an empty data directory (standard Postgres
 -- docker-entrypoint-initdb.d behavior) - never re-applied on pod restarts
