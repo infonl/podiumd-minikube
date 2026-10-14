@@ -18,6 +18,7 @@ from podiumd_minikube import lock
 from podiumd_minikube import memory
 from podiumd_minikube import process
 from podiumd_minikube import tunnel
+from podiumd_minikube.manifests import section
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import PROFILE
@@ -107,11 +108,17 @@ def _key(label: dict[str, str], names: dict[str, str]) -> str:
     return f"{namespace}/{names.get(f'{namespace}/{pod}', pod)}/{label['io.kubernetes.container.name']}"
 
 
+def _cpu_nanoseconds(stat: dict[str, Any] | None) -> int | None:
+    """A crictl stat's CPU counter; None for a container without one yet (starting or stopping)."""
+    value = section(section(stat or {}, "cpu"), "usageCoreNanoSeconds").get("value")
+    return int(value) if value is not None else None
+
+
 def _cores(first: dict[str, Any], later: dict[str, Any] | None) -> float:
-    if later is None:
+    start, end = _cpu_nanoseconds(first), _cpu_nanoseconds(later)
+    if start is None or end is None:
         return 0.0
-    spent = int(later["cpu"]["usageCoreNanoSeconds"]["value"]) - int(first["cpu"]["usageCoreNanoSeconds"]["value"])
-    return spent / 1e9 / CPU_SAMPLE_SECONDS
+    return (end - start) / 1e9 / CPU_SAMPLE_SECONDS
 
 
 def container_usage(items: list[dict[str, Any]], *, cpu: bool = True) -> dict[str, Usage]:
