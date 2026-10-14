@@ -6831,3 +6831,11 @@ the old slugs in openformulieren, openarchiefbeheer and objects
 (`RENAMED_SERVICES`); the rows keep their primary keys, so registration
 backends that point at them keep working. Applied live once by hand before
 the redeploy.
+
+## values.yaml comments trimmed (user: "trim the long history comments")
+
+The 44 comment blocks of five or more lines outside the configuration
+strings (388 lines) now say only the constraint or reason, without the
+history of how it was found (that stays in this log): 345 lines removed, 77
+added. The rendered manifest is unchanged (default profile byte for byte;
+--full differs only in a password a chart generates on each render).

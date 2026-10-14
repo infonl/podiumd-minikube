@@ -232,47 +232,24 @@ podiumd:
         rsin: "123443210"
     mail:
       smtp:
-        # Was a fake placeholder Mailjet hostname that nothing ever
-        # actually pointed at - repointed at mailpit (see
-        # templates/mailpit/), matching every other app's own email
-        # settings. Chart docs confirm username/password are optional -
-        # mailpit accepts unauthenticated SMTP, same as every other app.
+        # Mailpit, as every app; it needs no SMTP login.
         server: mailpit
         port: "1025"
         username: ""
         password: ""
-    # Dotted Service DNS form (not the bare "openzaak" this file's own naming
-    # convention comment above would suggest), deliberately deviating from
-    # it here: OpenZaak echoes back self-referencing resource URLs (e.g. a
-    # catalogus's own "url") built from whatever host ZAC connects with, and
-    # some of those URLs get round-tripped as query filters (e.g.
-    # /catalogi/api/v1/zaaktypen?catalogus=<url>) that OpenZaak re-validates
-    # with Django's URLValidator - which rejects single-label hostnames like
-    # bare "openzaak" ("Voer een geldige URL in."), confirmed live by running
-    # that exact validator inside the openzaak pod. openzaak's own
-    # ALLOWED_HOSTS already includes this dotted form alongside the bare one
-    # (a podiumd/zac chart default) - this is what it's there for.
+    # Dotted Service name: Open Zaak re-validates URLs it built from this host
+    # (e.g. ?catalogus=<url>) with Django's URLValidator, which rejects single-label
+    # hostnames such as "openzaak".
     zgwApis:
       url: https://openzaak.local/
       clientId: zac # as ExternalsPodiumD
       secret: zacSecret
     notificationsSecretKey: openNotificatiesApiSecretKey
-    # Not a podiumd/zac chart value at all - this project's own grouping for
-    # templates/zac/productaanvraag-zaakafhandelparameters-job.yaml's env
-    # vars (that custom Job is the only thing that reads this block). Gives
-    # zaaktypeIdentificatie valid zaakafhandelparameters (case definition +
-    # default group + "niet-ontvankelijk" resultaat - see
-    # ZaaktypeCmmnConfiguration.isValide() in the ZAC source for why all
-    # three are required before ZAC can start a zaak of this type at all)
-    # and points its own productaanvraagtype at the value used below by
-    # podiumd.openformulieren's own form-import Job, so ProductaanvraagService
-    # matches an incoming productaanvraag object to this zaaktype. Confirmed
-    # live end-to-end (form submit -> objects API -> opennotificaties -> ZAC
-    # creates a zaak) before being made declarative here - see plan.md's
-    # productaanvraag-flow entry.
-    # The e2e zaaktype podiumd's create_required_catalogi_job creates, as
-    # ExternalsPodiumD's environments use; group behandelaars of podiumd's PABC
-    # dataset.
+    # Read only by templates/zac/productaanvraag-zaakafhandelparameters-job.yaml.
+    # The e2e zaaktype podiumd's create_required_catalogi_job creates; ZAC starts a
+    # zaak of it only with a case definition, default group and niet-ontvankelijk
+    # resultaat (ZaaktypeCmmnConfiguration.isValide). Group behandelaars of podiumd's
+    # PABC dataset.
     productaanvraag:
       zaaktypeIdentificatie: zaaktype-voor-e2e-testen
       caseDefinitionKey: generiek-zaakafhandelmodel
@@ -303,13 +280,8 @@ podiumd:
       url: https://openformulieren-nginx.local # as ExternalsPodiumD: Open Formulieren's public host
     pabcApi:
       url: http://pabc
-      # Left empty, this is read by PabcClientHeadersFactory's companion
-      # object via MicroProfile Config at class-init time - a missing value
-      # throws NoSuchElementException there, which Java then caches forever
-      # as "Could not initialize class ...PabcClientHeadersFactory" on every
-      # later use (found live via the PabcReadinessHealthCheck). Matches
-      # podiumd.pabc.settings.apiKeys (below) and compose's own
-      # .env.example default.
+      # Required: ZAC's PabcClientHeadersFactory fails at class init without it and
+      # stays broken until restart. Matches podiumd.pabc.settings.apiKeys.
       apiKey: zac-test-api-key
     zacInternalEndpointsApiKey: fakeZacInternalEndpointsApiKey
     smartDocuments:
@@ -619,35 +591,17 @@ podiumd:
       # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
       uwsgi:
         processes: 1
-      # Matches docker-compose.yaml's openzaak.local value exactly. Found
-      # live: left unset, Django refuses every request with
-      # "ImproperlyConfigured: The SECRET_KEY setting must not be empty" -
-      # same class of gap as openklant's secretKey fix above, just missed
-      # for openzaak specifically in the initial pass.
+      # Required: Django refuses every request without SECRET_KEY.
       secretKey: openZaakSecretKey
-      # Default ALLOWED_HOSTS only covers the chart's own in-cluster
-      # fullname/namespace-qualified name (which already covers ZAC's
-      # backend calls via the "openzaak" Service DNS name) - found live:
-      # browsing via the ingress hostname got Django's own
-      # DisallowedHost 400 error page, since "openzaak.local" was never in
-      # that list.
-      # As ExternalsPodiumD: also its nginx Service, and two proxies (edge, nginx).
+      # As ExternalsPodiumD: the public host, its nginx Service, and two proxies (edge, nginx).
       allowedHosts: openzaak.local,openzaak-nginx.podiumd-minikube.svc.cluster.local
       numProxies: 2
       # As ExternalsPodiumD: Secure cookies and https URLs (the edge
       # terminates TLS). Its domain for URLs built outside a request comes
       # from sites_config in configuration.data.
       isHttps: true
-      # Confirmed live: DISABLE_2FA is only read by openzaak.conf.dev/.ci,
-      # neither part of the conf.docker->production->includes.base chain
-      # this container actually uses, so settings.disable2fa is a dead
-      # values.yaml field for this chart - without this override, a fresh
-      # superuser with no registered device hits a real "Tweestapsauthenticatie
-      # instellen" (set up two-step auth) wall instead of reaching the
-      # admin. See the vendored docker_no2fa.py's own header for why
-      # DJANGO_SETTINGS_MODULE=openzaak.conf.dev isn't an option either
-      # (pulls in django-debug-toolbar, not installed in this production
-      # image) - same fix already used for openarchiefbeheer.
+      # The image reads DISABLE_2FA only in its dev settings, which need
+      # django-debug-toolbar; this module honours it (vendored docker_no2fa.py).
       djangoSettingsModule: openzaak.conf.docker_no2fa
       # Chart default is "localhost:25" - a compose-only value that's just
       # a no-op inside this pod in Kubernetes. Pointed at mailpit (see
@@ -806,13 +760,7 @@ podiumd:
                 - administrators
                 make_users_staff: true
                 sync: true
-      # No compose equivalent to match (compose never sets openklant
-      # SUPERUSER credentials either) and, unlike openzaak/opennotificaties/
-      # objecttypen/openformulieren, this chart's values.yaml has no
-      # configuration.superuser field at all to begin with - these values
-      # are consumed by templates/openklant/create-superuser-job.yaml
-      # instead, a custom Job added for exactly this gap. See that Job's
-      # own header comment.
+      # The chart creates no superuser; templates/openklant/create-superuser-job.yaml does.
       superuser:
         username: admin
         password: admin
@@ -833,14 +781,7 @@ podiumd:
       # sites_config.
       siteDomain: openklant.local
       isHttps: true
-      # Unlike openzaak/opennotificaties/objecttypen/openformulieren, this
-      # actually works natively - confirmed live by reading
-      # open_api_framework.conf.base (the shared maykinmedia library
-      # openklant's own conf/base.py wildcard-imports from) directly inside
-      # the running pod: it reads DISABLE_2FA itself, in the real
-      # production settings chain, and sets
-      # MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS accordingly - no
-      # docker_no2fa.py-style shim needed here at all.
+      # Read by the production settings (open_api_framework), no shim needed.
       disable2fa: true
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
@@ -883,14 +824,10 @@ podiumd:
               pathType: ImplementationSpecific
 
   # --- openinwoner (profile: openinwoner) ---
-  # As ExternalsPodiumD and podiumd-infra: Keycloak admin login (no
-  # superuser Job), Open Zaak client "openinwoner", digidMock, Elasticsearch
-  # through ECK (podiumd.eck-operator, on with this profile, one node as
-  # podiumd-infra). eherkenningMock as ExternalsPodiumD: the real DigiD and
-  # eHerkenning are unreachable from here. One replica each, as
-  # podiumd-infra. Not configured:
-  # the e-Suite services (external) and the Open Zaak api group, which both
-  # reference projects leave commented out.
+  # As ExternalsPodiumD and podiumd-infra: Keycloak admin login, Open Zaak client
+  # "openinwoner", digidMock and eherkenningMock (the real DigiD and eHerkenning are
+  # unreachable), Elasticsearch through ECK, one replica each. Not configured, as
+  # both references: the e-Suite services and the Open Zaak api group.
   openinwoner:
     enabled: false
     replicaCount: 1
@@ -1158,14 +1095,10 @@ podiumd:
     enabled: true
     # Its default nameOverride "brp-personen-mock" is the api-proxy's target.
 
-  # --- api-proxy (always on - core), as ExternalsPodiumD ---
-  # Apps call BRP, KvK and BAG at http://api-proxy/<path>, as ExternalsPodiumD.
-  # BRP goes to brp-personen-mock and KvK to KvK's test API, as both reference
-  # projects (needs internet); BAG goes to templates/bag-mock instead of Kadaster's API,
-  # whose key is not public.
-  # templates/api-proxy/ingress.yaml serves the same paths on api-proxy.local.
-  # podiumd's frankgateway replaces it in time; no reference environment
-  # routes through it yet.
+  # --- api-proxy (always on), as ExternalsPodiumD ---
+  # Apps call BRP, KvK and BAG at http://api-proxy/<path>: BRP goes to
+  # brp-personen-mock, KvK to KvK's test API (needs internet), BAG to
+  # templates/bag-mock (Kadaster's key is not public). Also served on api-proxy.local.
   apiproxy:
     enabled: true
     resolverIp: 10.96.0.10 # minikube's kube-dns; the chart's 10.0.0.10 is AKS's
@@ -1216,45 +1149,19 @@ podiumd:
         keycloak_client_secret: keycloakObjectenClientSecret
         create_required_objecttypen_token: objectenRequiredObjecttypenToken
       job:
-        # Declaratively wires the Objects API side of the productaanvraag
-        # flow (openformulieren -> objects API -> opennotificaties -> ZAC):
-        # its own link to Objecttypen API and to Open Notificaties, the
-        # productaanvraag objecttype reference, and the read/write tokens
-        # ZAC and openformulieren authenticate with. Confirmed live
-        # end-to-end against a real minikube cluster before being made
-        # declarative here (see plan.md's productaanvraag-flow entry).
-        #
-        # Deliberately doesn't replicate compose's own "objecten-api-import"
-        # container beyond this one objecttype - that container also seeds
-        # unrelated demo objecttypes (Boom/Straatverlichting/taak/formio)
-        # nothing in this chart consumes.
+        # The productaanvraag flow's Objects API side: Objecttypen and Open Notificaties
+        # services, the productaanvraag objecttype, and ZAC's and Open Formulieren's tokens.
         enabled: true
-      # No compose equivalent to match (objecten isn't part of
-      # dimpact-zaakafhandelcomponent's docker-compose stack at all - see
-      # this block's own top comment). Unlike openformulieren/openklant/
-      # openarchiefbeheer, this chart's start.sh genuinely reads
-      # OBJECTS_SUPERUSER_USERNAME/EMAIL/PASSWORD at boot and creates the
-      # account itself (confirmed live) - same wiring as objecttypen's own
-      # superuser block, no custom Job needed here.
+      # The image creates this user at start (OBJECTS_SUPERUSER_*).
       superuser:
         username: admin
         password: admin
         email: admin@example.com
-      # objecttypen-api: dotted Service DNS form, not bare "objecttypen" -
-      # same URLValidator gotcha as ZAC's own zgwApis.url above (Django
-      # rejects single-label hostnames on any field that round-trips a URL
-      # this API hands back) - confirmed live the same way.
-      #
-      # notificaties-api + notifications_config: "object created"
-      # notifications, client "notificaties" as ExternalsPodiumD.
-      #
-      # objecttypes_config: registers this Objects API's reference to each
-      # objecttype by UUID; podiumd.objecttypen.create_required_objecttypen_job
-      # creates the objecttypes themselves (Objecttypen's setup_configuration
-      # only has a step for tokens).
-      #
-      # tokenauth "zaak" (ZAC) and "formulier" (Open Formulieren, Open Zaak):
-      # only on Productaanvraag-Dimpact, as podiumd-infra.
+      # objecttypen-api: dotted Service name, see ZAC's zgwApis.url.
+      # notificaties-api: "object created" notifications, client "notificaties" as ExternalsPodiumD.
+      # objecttypes_config: references by UUID; create_required_objecttypen_job creates them.
+      # tokenauth "zaak" (ZAC) and "formulier" (Open Formulieren, Open Zaak): only on
+      # Productaanvraag-Dimpact, as podiumd-infra.
       data: |-
         sites_config_enable: true
         sites_config:
@@ -1470,13 +1377,8 @@ podiumd:
                 - administrators
                 make_users_staff: true
                 sync: true
-    # See templates/objecten/configmap-no-solo-cache-settings.yaml's own
-    # header for why this shim exists (django-solo's own cache for
-    # NotificationsConfig intermittently going stale, confirmed live while
-    # building the productaanvraag flow) - same
-    # ConfigMap+extraVolumes+extraVolumeMounts pattern already used
-    # elsewhere in this file for a docker_no2fa.py-style settings override,
-    # just fixing a different upstream gap.
+    # django-solo's cache of NotificationsConfig went stale (seen live); see
+    # templates/objecten/configmap-no-solo-cache-settings.yaml.
     extraVolumes:
       - name: no-solo-cache-settings
         configMap:
@@ -1500,13 +1402,7 @@ podiumd:
       # See openzaak's isHttps comment.
       isHttps: true
       djangoSettingsModule: objects.conf.docker_no_solo_cache
-      # Unlike most other apps fixed here, this works natively - confirmed
-      # live by reading open_api_framework.conf.base (the shared maykinmedia
-      # library objecten's own conf/base.py wildcard-imports from, same as
-      # openklant) directly inside the running pod: it reads DISABLE_2FA
-      # itself, in the real production settings chain, and sets
-      # MAYKIN_2FA_ALLOW_MFA_BYPASS_BACKENDS accordingly - no
-      # docker_no2fa.py-style shim needed here at all.
+      # Read by the production settings (open_api_framework), no shim needed.
       disable2fa: true
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
@@ -1568,24 +1464,13 @@ podiumd:
         # no step for objecttypes; create_required_objecttypen_job creates them,
         # published.
         enabled: true
-      # No compose equivalent to match (objecttypen isn't part of
-      # dimpact-zaakafhandelcomponent's docker-compose stack at all - see
-      # this block's own top comment). Same admin/admin/admin@example.com
-      # convention as opennotificaties's superuser block below purely for
-      # local django-admin access; wired the same way (Deployment's
-      # envFrom already pulls in this Secret/ConfigMap regardless of the
-      # job.enabled=false above, so this alone is enough - confirmed
-      # against objecttypen's own templates/{secret,configmap,deployment}.yaml).
+      # The Deployment reads these through envFrom even with job.enabled false.
       superuser:
         username: admin
         password: admin
         email: admin@example.com
-      # Read tokens for the two consumers of the productaanvraag objecttype
-      # schema: podiumd.objecten (to validate/serve object data against it)
-      # and podiumd.openformulieren (its own admin UI needs to list
-      # objecttypes/versions when building a form's registration backend).
-      # Values match what those two blocks' own zgw_consumers services
-      # authenticate with.
+      # Tokens for the productaanvraag objecttype's readers: Objecten and Open
+      # Formulieren (its admin lists objecttypes for a registration backend).
       data: |-
         sites_config_enable: true
         sites_config:
@@ -1696,19 +1581,8 @@ podiumd:
         processes: 1
       secretKey: objecttypesApiSecretKey
       allowedHosts: objecttypen.local
-      # Confirmed live (the hard way - an earlier version of this comment
-      # claimed objecttypen never enforces 2FA at all, based on a manual
-      # test that turned out to be invalid: `kubectl set env ... KEY-` only
-      # removes an explicit env: entry, it can't suppress a value still
-      # coming from this ConfigMap via envFrom, so that "proof" was
-      # actually still running with DISABLE_2FA=True the whole time). A
-      # real values.yaml-driven redeploy with the key genuinely absent
-      # does hit a "Set up MFA" wall for a fresh superuser with no
-      # registered device - DISABLE_2FA is only read by objecttypes'
-      # own conf.dev, not the conf.docker->production chain this container
-      # actually uses. Same docker_no2fa.py shim as
-      # openzaak/opennotificaties/openforms below (see
-      # settings.djangoSettingsModule).
+      # The image reads DISABLE_2FA only in its dev settings; see openzaak's
+      # djangoSettingsModule.
       djangoSettingsModule: objecttypes.conf.docker_no2fa
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
@@ -1758,13 +1632,7 @@ podiumd:
       secrets:
         keycloak_client_secret: keycloakOpennotificatiesClientSecret
       job:
-        # Wires the "objecten" kanaal + a ZAC abonnement declaratively via
-        # this chart's own bundled setup_configuration Job - the productaanvraag
-        # flow (openformulieren -> objects API -> opennotificaties -> ZAC)
-        # needs this to create a zaak from a submitted form without any
-        # manual post-deploy step. Confirmed live end-to-end against a real
-        # minikube cluster (see plan.md's productaanvraag-flow entry) before
-        # being made declarative here.
+        # The objecten kanaal and ZAC's abonnement, so a submitted form creates a zaak.
         enabled: true
       superuser:
         # Matches compose's OPENNOTIFICATIES_SUPERUSER_USERNAME/_EMAIL and
@@ -1773,17 +1641,10 @@ podiumd:
         password: admin
         email: admin@example.com
       # ZAC's abonnement has ExternalsPodiumD's kanalen (dim1): objecten for
-      # productaanvragen, zaken and documenten for its Solr index, besluiten
-      # and zaaktypen.
-      #
-      # autorisaties-api: confirmed live this is NOT optional - opennotificaties
-      # defaults to the public https://autorisaties-api.vng.cloud when no
-      # local Autorisaties API service is configured, and every incoming
-      # notification-publish request (even to the "objecten" kanaal) gets a
-      # live 403 from that default before ever reaching our own abonnement.
-      # Client "notificaties", as ExternalsPodiumD: its credential and
-      # Applicatie are registered in podiumd.openzaak.configuration.data.
-      #
+      # productaanvragen, zaken and documenten for its Solr index, besluiten and zaaktypen.
+      # autorisaties-api is required: without it Open Notificaties asks the public
+      # autorisaties-api.vng.cloud and rejects every notification (403). Client
+      # "notificaties", as ExternalsPodiumD.
       data: |-
         sites_config_enable: true
         sites_config:
@@ -1954,11 +1815,7 @@ podiumd:
       allowedHosts: opennotificaties.local
       # See openzaak's isHttps comment.
       isHttps: true
-      # See openzaak's own djangoSettingsModule comment above - same
-      # DISABLE_2FA-only-lives-in-conf.dev gap, confirmed live against the
-      # same "Tweestapsauthenticatie instellen" wall (opennotificaties'
-      # actual Django project package is "nrc", not "opennotificaties" -
-      # confirmed against the running pod's own /app/src/nrc/conf/ layout).
+      # Same DISABLE_2FA shim as openzaak (the package is "nrc").
       djangoSettingsModule: nrc.conf.docker_no2fa
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
@@ -1980,12 +1837,7 @@ podiumd:
       cache:
         default: redis-ha-master:6379/3
         axes: redis-ha-master:6379/3
-        # Compose never sets an OIDC-cache env var for opennotificaties, but
-        # this chart's configmap.yaml always renders CACHE_OIDC
-        # unconditionally (no matching {{- if }} guard) - left unset, it
-        # fell through to podiumd's own untouched production default
-        # (redis-ha-master...). Pointed at the shared Redis instead of
-        # leaving that leak in place.
+        # The chart always renders CACHE_OIDC; unset, it points at podiumd's production Redis.
         oidc: redis-ha-master:6379/3
       celery:
         # Own broker DB, see openzaak's celery comment.
@@ -1993,16 +1845,8 @@ podiumd:
         # PUBLISH_BROKER_URL has its own dedicated field (confirmed live
         # against secret.yaml) - matches brokerUrl now that both are Redis.
         publishBrokerUrl: redis://redis-ha-master:6379/6
-        # CELERY_RESULT_BACKEND is defined TWICE on this chart: once here
-        # (feeding configmap.yaml's tags.redis-false branch) and once via
-        # settings.messageBroker.celeryResultBackend below (feeding
-        # secret.yaml). Found live: both the ConfigMap and Secret set the
-        # same env var name via envFrom, and Kubernetes resolves that by
-        # whichever source is listed last in the container's envFrom list
-        # winning - rather than depend on that ordering, both are set here
-        # to the same value so it's correct either way. Leaving only one
-        # set left the other object rendering podiumd's own untouched
-        # production default (redis-ha-master...) instead of ours.
+        # Set here and in settings.messageBroker.celeryResultBackend: the ConfigMap and
+        # the Secret both set CELERY_RESULT_BACKEND, and envFrom order decides which wins.
         resultBackend: redis://redis-ha-master:6379/6
       messageBroker:
         celeryResultBackend: redis://redis-ha-master:6379/6
@@ -2155,29 +1999,13 @@ podiumd:
                 - administrators
                 make_users_staff: true
                 sync: true
-      # No compose equivalent to match (compose never sets openarchiefbeheer
-      # SUPERUSER credentials either - it only ever gets as far as a
-      # commented-out wish to disable 2FA, see settings.djangoSettingsModule
-      # below) and this chart's values.yaml has no configuration.superuser
-      # field at all to begin with - these values are consumed by
-      # templates/openarchiefbeheer/create-superuser-job.yaml instead, a
-      # custom Job added for exactly this gap. See that Job's own header
-      # comment.
+      # The chart creates no superuser; templates/openarchiefbeheer/create-superuser-job.yaml does.
       superuser:
         username: admin
         password: admin
         email: admin@example.com
-    # Real compose *tries* to disable 2FA the naive way
-    # (DJANGO_SETTINGS_MODULE=openarchiefbeheer.conf.dev + DISABLE_2FA=true,
-    # both left commented out in its own environment block) and gives up -
-    # its own comment there says this "errors with `ModuleNotFoundError: No
-    # module named 'debug_toolbar'`", leaving 2FA enforced in real compose
-    # too. This project's own docker_no2fa.py (vendored below) actually
-    # solves it: upstream only reads DISABLE_2FA in that dev-only settings
-    # module, which pulls in django-debug-toolbar (not installed in this
-    # production image) - so a small custom settings module that mirrors
-    # just the DISABLE_2FA handling, without the dev-only dependencies,
-    # mounted with a ConfigMap and extraVolumes/extraVolumeMounts.
+    # The image reads DISABLE_2FA only in its dev settings, which need
+    # django-debug-toolbar; this module honours it (vendored docker_no2fa.py).
     settings:
       djangoSettingsModule: openarchiefbeheer.conf.docker_no2fa
       secretKey: oabSecretKey
@@ -2212,11 +2040,7 @@ podiumd:
         choices: redis-ha-master:6379/14
       celery:
         brokerUrl: redis://redis-ha-master:6379/14
-        # Set both: this chart's own configmap.yaml has a typo reading
-        # "resultBackendl" (not "resultBackend", which is what values.yaml
-        # itself declares) - found live, confirmed directly against the
-        # template. Setting only the correctly-spelled key would silently
-        # leave CELERY_RESULT_BACKEND empty.
+        # Set both: the chart's configmap.yaml reads "resultBackendl" (a typo).
         resultBackend: redis://redis-ha-master:6379/14
         resultBackendl: redis://redis-ha-master:6379/14
       frontend:
@@ -2276,40 +2100,15 @@ podiumd:
       secrets:
         keycloak_client_secret: keycloakOpenformulierenClientSecret
       job:
-        # Wires the ZGW services (openzaak zaken/documenten/catalogi) and the
-        # Objects API group this project's own productaanvraag flow uses -
-        # NOT compose's own openformulieren-init scope (BRP service link,
-        # klantinteracties API group), which this chart's own
-        # configuration.data below deliberately doesn't replicate (nothing
-        # here consumes either yet). Confirmed live end-to-end (form submit
-        # -> objects API -> opennotificaties -> ZAC creates a zaak) against
-        # a real minikube cluster before being made declarative here - see
-        # plan.md's productaanvraag-flow entry.
+        # Services and API groups of the productaanvraag flow.
         enabled: true
-      # Unlike objecttypen/openzaak/opennotificaties, this chart never
-      # wires configuration.superuser to an actual user-creation mechanism
-      # (confirmed live: grepped every template in the vendored chart for
-      # "superuser" - zero hits outside a commented-out
-      # django-setup-configuration example) - these values are consumed by
-      # templates/openformulieren/create-superuser-job.yaml instead, a
-      # custom Job added for exactly this gap. See that Job's own header
-      # comment.
+      # The chart creates no superuser; templates/openformulieren/create-superuser-job.yaml does.
       superuser:
         username: admin
         password: admin
         email: admin@example.com
-      # openzaak-*: dotted Service DNS form, not bare "openzaak" - same
-      # URLValidator gotcha as ZAC's own zgwApis.url above, confirmed live
-      # the same way (a self-referencing catalogus/zaaktype/
-      # informatieobjecttype URL round-tripped through a validated field
-      # elsewhere fails on a single-label hostname). Client "formulier", as
-      # ExternalsPodiumD (podiumd.openzaak.configuration.data).
-      #
-      # objecten-api/objecttypen-api: this chart's own read/write access to
-      # the productaanvraag objecttype schema and to Objects API itself -
-      # tokens match podiumd.objecten's own tokenauth entries and
-      # podiumd.objecttypen's own tokenauth entries above.
-      #
+      # openzaak-*: dotted Service name, see ZAC's zgwApis.url; client "formulier",
+      # as ExternalsPodiumD.
       # local-objects-api group: catalogue_domain/rsin match ZAC's catalogus
       # (ALG, podiumd.zac.organizations.bron.rsin).
       data: |-
@@ -2500,14 +2299,8 @@ podiumd:
       baseUrl: "https://openformulieren-nginx.local"
       # See openzaak's isHttps comment.
       isHttps: true
-      # Confirmed live: DISABLE_2FA is only read by openforms.conf.dev,
-      # not the conf.docker->production->base chain this container
-      # actually uses, so there's no settings.disable2fa-equivalent field
-      # on this chart at all - without this override, a fresh superuser
-      # with no registered device hits a real "Tweestapsauthenticatie
-      # instellen" (set up two-step auth) wall instead of reaching the
-      # admin. Same docker_no2fa.py shim as
-      # openzaak/opennotificaties/objecttypen above.
+      # The image reads DISABLE_2FA only in its dev settings; see openzaak's
+      # djangoSettingsModule.
       djangoSettingsModule: openforms.conf.docker_no2fa
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
@@ -3097,11 +2890,8 @@ podiumd:
               pathType: ImplementationSpecific
 
 # -----------------------------------------------------------------------
-# The monitoring-logging dependency (the metrics profile) and everything
-# nested inside it. Re-tuned throughout for
-# a single-node minikube box - see each override's own comment for the
-# specific production assumption it replaces. Left everything else at
-# this chart's own upstream defaults.
+# monitoring-logging (the metrics profile): chart defaults except where a
+# comment names the single-node reason.
 # -----------------------------------------------------------------------
 monitoring-logging:
   grafana:
@@ -3118,35 +2908,13 @@ monitoring-logging:
     persistence:
       storageClassName: standard
       size: 2Gi
-    # Chart default runs an initContainer that chowns the whole PVC to
-    # grafana's own UID/GID on every pod start, but with only CAP_CHOWN (all
-    # other capabilities explicitly dropped, including CAP_DAC_OVERRIDE) -
-    # confirmed live: that's enough for a *fresh* volume (root:root, world-
-    # readable), but grafana itself creates its csv/pdf/png export dirs 0700
-    # at runtime after that first successful boot, and the same
-    # capability-limited chown can no longer even traverse those on any
-    # *later* restart ("Permission denied", pod stuck in Init:Error forever
-    # - not something that self-heals; every subsequent restart hits it
-    # again). fsGroup (already set at the pod level below via this chart's
-    # own default) reliably applies group ownership on minikube's `standard`
-    # StorageClass without needing this at all - confirmed live restarting
-    # the pod cleanly with this disabled.
+    # Off: its capability-limited chown fails on Grafana's own 0700 export dirs after
+    # the first start (Init:Error); fsGroup covers ownership on minikube's storage.
     initChownData:
       enabled: false
-    # monitoring-logging's own bundled Prometheus datasource hardcodes its
-    # URL as "{{ .Release.Name }}-kube-prometheus-prometheus" - doesn't
-    # match what actually gets deployed: kube-prometheus-stack's own
-    # fullname helper truncates to 26 characters unconditionally (even with
-    # fullnameOverride set, so that can't fix this either), and
-    # "podiumd-minikube-kube-prometheus-stack" is well over that, so the
-    # real Service ends up "podiumd-minikube-kube-prom-prometheus" instead
-    # (confirmed live - Grafana's own datasource health check failed with a
-    # DNS lookup error against the hardcoded name). This whole list has to
-    # be repeated here, not just the one url field - it's a YAML list, and
-    # Helm value overrides replace lists wholly rather than merging them
-    # (unlike maps). Loki's URL is copied verbatim from
-    # monitoring-logging's own values.yaml (correct already - that chart
-    # isn't affected by kube-prometheus-stack's own truncation).
+    # The chart's Prometheus URL assumes "<release>-kube-prometheus-prometheus";
+    # kube-prometheus-stack truncates the name to "podiumd-minikube-kube-prom-prometheus".
+    # The whole list is repeated: Helm replaces lists.
     datasources:
       datasources.yaml:
         apiVersion: 1
@@ -3197,29 +2965,13 @@ monitoring-logging:
       path: /
       pathType: ImplementationSpecific
   kube-prometheus-stack:
-    # Confirmed live: this specific ServiceMonitor sets a field
-    # (spec.endpoints[1].trackTimestampsStaleness) that the CRD schema
-    # actually installed (from this same dependency's own bundled "crds"
-    # subchart - see src/podiumd_minikube/crds.py) doesn't recognize -
-    # a version-skew bug inside monitoring-logging's own dependency tree,
-    # not something introduced here. Rejected outright by the API server's
-    # strict decoding ("unknown field"), so kubelet metrics would never
-    # scrape anyway - disabling the ServiceMonitor is simpler than patching
-    # around a schema mismatch for a scrape target minikube's own single-node
-    # kubelet isn't the primary point of this profile regardless.
+    # Off: its ServiceMonitor sets trackTimestampsStaleness, which the bundled CRD
+    # rejects (version skew inside monitoring-logging).
     kubelet:
       enabled: false
-    # These five create a Service explicitly namespaced to "kube-system"
-    # each (scraping the control-plane components that, on a "real" cluster,
-    # run there) - confirmed live that conflicts outright with the deploy's
-    # single `kubectl apply -n podiumd-minikube -f -` covering the whole
-    # manifest ("the namespace from the provided object 'kube-system' does
-    # not match the namespace 'podiumd-minikube'"). Wouldn't usefully scrape
-    # anything on minikube regardless - its control-plane runs as static
-    # pods with no equivalent scrapeable Services of their own by default,
-    # so disabling loses nothing actually working, unlike kubelet above
-    # (that one's ServiceMonitor CRD-schema mismatch was the real blocker,
-    # not a namespace conflict - it might otherwise have worked).
+    # Off: these create Services in kube-system, which the deploy's single
+    # `kubectl apply -n podiumd-minikube` rejects; minikube's static control-plane
+    # pods have nothing for them to scrape.
     coreDns:
       enabled: false
     kubeControllerManager:
@@ -3328,15 +3080,8 @@ monitoring-logging:
       enabled: false # only needed by Distributed mode's S3-backed storage
     loki:
       commonConfig:
-        # Chart default (3) assumes Distributed mode's normal multi-replica
-        # setup - with singleBinary.replicas: 1 above, every ring this feeds
-        # (ingester, compactor, scheduler, pattern-ingester) only ever has
-        # one real member, so the query path's own quorum math ("need N
-        # healthy out of replication_factor") always came up short and
-        # failed outright - confirmed live: every Loki query (even a plain
-        # label listing) errored "too many unhealthy instances in the ring",
-        # despite the ring itself correctly showing that one member ACTIVE.
-        # Ingestion (the write path) was never affected, only querying.
+        # One replica: with the default 3 every query failed with "too many unhealthy
+        # instances in the ring".
         replication_factor: 1
       storage:
         type: filesystem # was s3 (pointed at the now-disabled minio)
@@ -3360,17 +3105,8 @@ monitoring-logging:
       enabled: false # query-result caching - skippable at dev-scale query volume, not a functional loss
     chunksCache:
       enabled: false # same reasoning as resultsCache above
-    # backend/read/write/compactor and every microservice below are all
-    # Distributed-mode-only standalone pods - SingleBinary mode already runs
-    # all of this (ingestion, querying, compaction) inside its own single
-    # pod above, so every one of these has to stay at 0 or the chart's own
-    # templates/validate.yaml refuses to render (confirmed live: monitoring-
-    # logging's own umbrella values.yaml defaults to deploymentMode:
-    # Distributed and sets indexGateway/queryScheduler/queryFrontend/
-    # distributor/querier/ingester to 2-3 replicas each on that assumption -
-    # every one of those needs zeroing out too, not just backend/read/write/
-    # compactor, or validate.yaml's "single binary and distributed targets
-    # both active" check still fails).
+    # Distributed-mode targets, all 0: SingleBinary runs them, and the chart's
+    # validate.yaml refuses single binary and distributed targets together.
     backend:
       replicas: 0
     read:
@@ -3404,10 +3140,6 @@ monitoring-logging:
         memory: 256Mi
     config:
       exporters:
-        # Same "${env:RELEASE_NAME}-kube-prometheus-prometheus" mismatch as
-        # the grafana Prometheus datasource above (see that key's own
-        # comment for the full why) - this chart's default metrics pipeline
-        # already wires this exporter in; without the fix OTLP metrics fail
-        # to land in Prometheus (DNS lookup failure inside the collector).
+        # Same Prometheus name mismatch as Grafana's datasource above.
         prometheusremotewrite:
           endpoint: http://podiumd-minikube-kube-prom-prometheus:9090/api/v1/write
