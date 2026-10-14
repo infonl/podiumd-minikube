@@ -207,6 +207,22 @@ def ingress_hosts(docs: list[Doc]) -> list[str]:
     return sorted({str(rule["host"]) for rule in _ingress_rules(docs) if rule.get("host")})
 
 
+def drop_duplicate_env(docs: list[Doc]) -> None:
+    """Keeps only the last env entry per name, the one Kubernetes uses.
+
+    A chart value and extraEnvVars can both set a variable (Open Inwoner's
+    low-latency worker: CELERY_WORKER_CONCURRENCY); kubectl apply warns that
+    the earlier one may be dropped.
+    """
+    for doc in docs:
+        for spec in _runtime_pod_specs(doc):
+            for container in _containers(spec):
+                env: list[Doc] = container.get("env") or []
+                last = {item["name"]: index for index, item in enumerate(env)}
+                if len(last) < len(env):
+                    container["env"] = [item for index, item in enumerate(env) if last[item["name"]] == index]
+
+
 def allow_rolling_updates(docs: list[Doc]) -> None:
     """Drops required pod anti-affinity from Deployments.
 
@@ -437,6 +453,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     docs = [doc for doc in loaded if doc and not _is_test_or_delete_hook(doc)]
     disable_service_links(docs)
     allow_rolling_updates(docs)
+    drop_duplicate_env(docs)
     route_outbound(docs)
     route_through_nginx(docs)
     keep_finished_jobs(docs)

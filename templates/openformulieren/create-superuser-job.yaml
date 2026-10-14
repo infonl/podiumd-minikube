@@ -38,19 +38,6 @@ spec:
             - configMapRef:
                 name: openformulieren
           env:
-            # Overrides the ConfigMap's own DJANGO_SETTINGS_MODULE
-            # (openforms.conf.docker_no2fa, needed by the actual
-            # Deployment - see settings.djangoSettingsModule's own
-            # comment) back to the real conf.docker: that shim's own
-            # module isn't mounted into this Job (no reason to - creating
-            # a user via the ORM never touches a login view or 2FA at
-            # all), and importing a DJANGO_SETTINGS_MODULE that doesn't
-            # exist on disk here breaks Django's settings loading in a
-            # confusing way (confirmed live: manifests as "AUTH_USER_MODEL
-            # refers to model 'auth.User' that has not been installed",
-            # not a straightforward ModuleNotFoundError).
-            - name: DJANGO_SETTINGS_MODULE
-              value: openforms.conf.docker
             - name: DJANGO_SUPERUSER_USERNAME
               value: {{ .Values.podiumd.openformulieren.configuration.superuser.username | quote }}
             - name: DJANGO_SUPERUSER_PASSWORD

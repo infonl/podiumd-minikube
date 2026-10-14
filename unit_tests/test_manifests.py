@@ -299,3 +299,13 @@ def test_route_through_nginx_only_when_the_nginx_service_is_rendered():
     manifests.route_through_nginx(without)
     assert with_nginx[0]["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"]["name"] == "zac-nginx"
     assert without[0]["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"]["name"] == "zac"
+
+
+def test_drop_duplicate_env_keeps_the_last_entry_per_name():
+    env = [{"name": "A", "value": "chart"}, {"name": "B", "value": "1"}, {"name": "A", "value": "ours"}]
+    doc: manifests.Doc = {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"env": env}]}}}}
+    manifests.drop_duplicate_env([doc])
+    assert doc["spec"]["template"]["spec"]["containers"][0]["env"] == [
+        {"name": "B", "value": "1"},
+        {"name": "A", "value": "ours"},
+    ]

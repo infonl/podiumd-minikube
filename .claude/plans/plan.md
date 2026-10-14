@@ -6839,3 +6839,19 @@ strings (388 lines) now say only the constraint or reason, without the
 history of how it was found (that stays in this log): 345 lines removed, 77
 added. The rendered manifest is unchanged (default profile byte for byte;
 --full differs only in a password a chart generates on each render).
+
+## Duplicate env, Open Klant's secretKey, Open Formulieren's 2FA shim
+
+- kubectl apply warned that Open Inwoner's low-latency worker had
+  CELERY_WORKER_CONCURRENCY twice (the chart from lowLatencyWorker.concurrency,
+  ours from extraEnvVars; both "1"). Fixup `manifests.drop_duplicate_env` keeps
+  the last entry per name, the one Kubernetes uses; no container in the
+  --full render has a duplicate now.
+- Open Klant had Open Zaak's `secretKey` (copied from compose); now its own.
+  Open Klant encrypts nothing with it; admin sessions start over once.
+- Open Formulieren's production settings read DISABLE_2FA
+  (`openforms/conf/base.py`, checked in the 3.5.8 pod), so the vendored
+  docker_no2fa.py, its ConfigMap and mount, the settings-module override and
+  the superuser Job's counter-override are gone; `extraEnvVars` sets
+  DISABLE_2FA=True. Open Zaak, Open Notificaties, Objecttypen and Open
+  Archiefbeheer keep their shims (their production settings do not read it).

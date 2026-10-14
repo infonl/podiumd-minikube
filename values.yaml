@@ -799,10 +799,7 @@ podiumd:
         username: openklant
         password: openklant
         name: openklant
-      # Matches docker-compose.yaml's openklant.local value exactly (yes,
-      # it really does reuse openzaak's own secret key literally - a
-      # copy-paste artifact in compose itself, not something we introduced).
-      secretKey: openZaakSecretKey
+      secretKey: openKlantSecretKey
       # Own Redis DB, see openzaak's cache comment.
       cache:
         default: redis-ha-master:6379/7
@@ -2274,19 +2271,11 @@ podiumd:
                 - administrators
                 make_users_staff: true
                 sync: true
-    # See settings.djangoSettingsModule below for why the no2fa-settings
-    # mount exists - same ConfigMap+extraVolumes+extraVolumeMounts pattern
-    # already used for openzaak's/opennotificaties's/openarchiefbeheer's
-    # own docker_no2fa.py fix.
-    extraVolumes:
-      - name: no2fa-settings
-        configMap:
-          name: openformulieren-no2fa-settings
-    extraVolumeMounts:
-      - name: no2fa-settings
-        subPath: docker_no2fa.py
-        mountPath: /app/src/openforms/conf/docker_no2fa.py
-        readOnly: true
+    # The production settings read DISABLE_2FA (openforms/conf/base.py); the
+    # chart has no setting for it.
+    extraEnvVars:
+      - name: DISABLE_2FA
+        value: "True"
     settings:
       # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
       uwsgi:
@@ -2299,9 +2288,6 @@ podiumd:
       baseUrl: "https://openformulieren-nginx.local"
       # See openzaak's isHttps comment.
       isHttps: true
-      # The image reads DISABLE_2FA only in its dev settings; see openzaak's
-      # djangoSettingsModule.
-      djangoSettingsModule: openforms.conf.docker_no2fa
       # See openzaak's own email comment above - same chart-default
       # "localhost:25" gap, same fix.
       email:

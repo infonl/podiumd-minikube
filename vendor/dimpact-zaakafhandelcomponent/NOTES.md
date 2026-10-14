@@ -23,7 +23,7 @@ changes is in `.claude/plans/plan.md`.
   fixture data: the apps' setup_configuration Jobs and podiumd's catalogi
   Job create what ZAC's compose fixtures held, as the reference
   environments.
-- `{objecttypen,openzaak,opennotificaties,openformulieren,openarchiefbeheer}/docker_no2fa.py`:
+- `{objecttypen,openzaak,opennotificaties,openarchiefbeheer}/docker_no2fa.py`:
   settings modules that honour `DISABLE_2FA`, which the images only read in
   their dev settings. Read by `templates/<app>/configmap-no2fa-settings.yaml`.
 - `objecten/docker_no_solo_cache.py`: disables django-solo's cache for
