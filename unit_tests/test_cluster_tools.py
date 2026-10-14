@@ -154,3 +154,11 @@ def test_with_pod_resolv_conf_sets_it_once():
     assert f"resolvConf: {provision.POD_RESOLV_CONF}" in config
     assert "clusterDomain: cluster.local" in config
     assert provision.with_pod_resolv_conf(config) is None
+
+
+def test_confirmed_aborts_without_input(monkeypatch: pytest.MonkeyPatch):
+    def no_input(_prompt: str) -> str:
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", no_input)
+    assert not teardown.confirmed("summary", yes=False)

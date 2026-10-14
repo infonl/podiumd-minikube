@@ -20,8 +20,11 @@ def confirmed(summary: str, *, yes: bool) -> bool:
     print(summary)
     if yes:
         return True
-    if input("Type 'yes' to continue: ") == "yes":
-        return True
+    try:
+        if input("Type 'yes' to continue: ") == "yes":
+            return True
+    except EOFError:
+        print("\nNo input to confirm with: pass --yes.")
     print("Aborted - nothing was deleted.")
     return False
 
