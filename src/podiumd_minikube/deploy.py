@@ -166,6 +166,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     storage = _apply_storage_hooks(selected)
     render = selected.render()
     postgres.migrate_major(render)
+    postgres.rename_databases()
     postgres.create_missing_databases()
     postgres.rename_rows()
     if crds.needed(render.docs):

@@ -1377,9 +1377,9 @@ podiumd:
         # Compose's objecten-api-database container's actual Postgres
         # user/db is literally named "objects", not "objecten" - copied
         # as-is, matching 00-create-databases.sql.
-        username: objects
-        password: objects
-        name: objects
+        username: objecten # as ExternalsPodiumD
+        password: objecten
+        name: objecten
       # Own Redis DB, see openzaak's cache comment.
       cache:
         default: redis-ha-master:6379/1
@@ -1554,9 +1554,9 @@ podiumd:
       database:
         host: postgres
         port: 5432
-        username: objecttypes
-        password: objecttypes
-        name: objecttypes
+        username: objecttypen # as ExternalsPodiumD
+        password: objecttypen
+        name: objecttypen
       # Own Redis DB, see openzaak's cache comment.
       cache:
         default: redis-ha-master:6379/0

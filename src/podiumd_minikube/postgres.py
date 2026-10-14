@@ -43,7 +43,7 @@ RENAMES: dict[str, dict[tuple[str, str], dict[str, str]]] = {
             "selectielijst": "vng-selectielijst",
         },
     },
-    "objects": {
+    "objecten": {
         ("zgw_consumers_service", "slug"): {
             "objecttypes-api": "objecttypen-api",
             "open-notificaties": "notificaties-api",
@@ -51,6 +51,8 @@ RENAMES: dict[str, dict[tuple[str, str], dict[str, str]]] = {
     },
     "openzaak": {("catalogi_catalogus", "rsin"): {"123443210": "856683164"}},
 }
+# Old database (and its role) -> ExternalsPodiumD's name; the password becomes the new name.
+RENAMED_DATABASES = {"objects": "objecten", "objecttypes": "objecttypen"}
 # pg_dumpall output of each migration, kept as a backup.
 DUMP_DIR = CHART_DIR / ".postgres-dumps"
 DATA_ROOT = "/var/lib/postgresql/data"
@@ -170,6 +172,31 @@ def create_missing_databases() -> None:
         stdin=script,
     )  # fmt: skip
     print(f"Created database(s) {', '.join(missing)} from {INIT_SQL.name}.")
+
+
+def rename_databases() -> None:
+    """Renames RENAMED_DATABASES and their roles in place; runs before create_missing_databases."""
+    if not kube.exists("deployment/postgres"):
+        return
+    databases = _names("select datname from pg_database;")
+    pod = kube.first_pod("app=postgres")
+    for old, new in RENAMED_DATABASES.items():
+        if old not in databases or new in databases:
+            continue
+        # Postgres renames no database with sessions; its clients reconnect after the deploy rolls them.
+        kube.kubectl(
+            "exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-q", "-v", "ON_ERROR_STOP=1",
+            "-v", f"old={old}", "-v", f"new={new}", "-f", "-",
+            stdin=(
+                'ALTER DATABASE :"old" ALLOW_CONNECTIONS false;\n'
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'old';\n"
+                'ALTER DATABASE :"old" RENAME TO :"new";\n'
+                'ALTER DATABASE :"new" ALLOW_CONNECTIONS true;\n'
+                'ALTER ROLE :"old" RENAME TO :"new";\n'
+                "ALTER ROLE :\"new\" PASSWORD :'new';\n"
+            ),
+        )  # fmt: skip
+        print(f"Renamed database and role {old} to {new}.")
 
 
 def rename_rows() -> None:

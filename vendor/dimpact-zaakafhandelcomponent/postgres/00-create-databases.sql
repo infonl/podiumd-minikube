@@ -13,13 +13,11 @@ CREATE DATABASE openzaak OWNER openzaak;
 CREATE ROLE openklant WITH LOGIN PASSWORD 'openklant';
 CREATE DATABASE openklant OWNER openklant;
 
--- Note: the objecten-api compose service's Postgres user/database is
--- literally named "objects", not "objecten" - copied as-is.
-CREATE ROLE objects WITH LOGIN PASSWORD 'objects';
-CREATE DATABASE objects OWNER objects;
+CREATE ROLE objecten WITH LOGIN PASSWORD 'objecten';
+CREATE DATABASE objecten OWNER objecten;
 
-CREATE ROLE objecttypes WITH LOGIN PASSWORD 'objecttypes';
-CREATE DATABASE objecttypes OWNER objecttypes;
+CREATE ROLE objecttypen WITH LOGIN PASSWORD 'objecttypen';
+CREATE DATABASE objecttypen OWNER objecttypen;
 
 CREATE ROLE opennotificaties WITH LOGIN PASSWORD 'opennotificaties';
 CREATE DATABASE opennotificaties OWNER opennotificaties;
@@ -60,20 +58,13 @@ CREATE DATABASE openbao OWNER openbao;
 CREATE ROLE openinwoner WITH LOGIN PASSWORD 'openinwoner';
 CREATE DATABASE openinwoner OWNER openinwoner;
 
--- PostGIS: only openzaak/objects/opennotificaties/openarchiefbeheer use the
--- postgis/postgis image in docker-compose.yaml (the others use plain
--- postgres:17.10). Explicitly installing the extension per-database here
--- rather than relying on the postgis image's own bundled initdb.d scripts
--- (which modify template1) to have already run first: Postgres executes
--- docker-entrypoint-initdb.d scripts in alphabetical order, and this
--- script's "00-" prefix would otherwise run *before* the postgis image's own
--- scripts (conventionally numbered higher, e.g. "10_postgis.sh"), so
--- databases created here could silently end up without the extension.
+-- PostGIS for the apps that need it, installed here: this script runs before
+-- the postgis image's own initdb scripts, which add it to template1.
 \c openzaak
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-\c objects
+\c objecten
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 \c opennotificaties

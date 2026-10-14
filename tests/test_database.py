@@ -13,8 +13,8 @@ EXPECTED_DATABASES = {
     "keycloak",
     "openzaak",
     "openklant",
-    "objects",
-    "objecttypes",
+    "objecten",
+    "objecttypen",
     "opennotificaties",
     "openarchiefbeheer",
     "openformulieren",
@@ -22,7 +22,7 @@ EXPECTED_DATABASES = {
 }
 
 # Matches 00-create-databases.sql's own PostGIS CREATE EXTENSION statements.
-POSTGIS_DATABASES = {"openzaak", "objects", "opennotificaties", "openarchiefbeheer"}
+POSTGIS_DATABASES = {"openzaak", "objecten", "opennotificaties", "openarchiefbeheer"}
 
 
 def psql(database, query):

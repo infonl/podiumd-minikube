@@ -6879,3 +6879,13 @@ their old bronorganisatie. podiumd-tests uses none of these values.
 The two long comments inside configuration strings (Open Zaak's
 notifications, the objecten classic shape) are trimmed too; that changes
 only comment text in two ConfigMaps.
+
+## Databases objects/objecttypes renamed to objecten/objecttypen (user: "ok do it")
+
+As ExternalsPodiumD (database, user and name per app). Not a data migration:
+`postgres.rename_databases`, run by deploy before create_missing_databases,
+renames an existing database and its role in place (connections refused and
+closed first; Postgres renames no database with sessions) and sets the
+password to the new name; Objecten and Objecttypen reconnect once the deploy
+rolls them with the new settings. The init SQL creates the new names on a
+fresh install; `postgres.RENAMES` uses `objecten`.
