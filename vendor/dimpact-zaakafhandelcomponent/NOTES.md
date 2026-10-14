@@ -44,9 +44,6 @@ changes is in `.claude/plans/plan.md`.
 - `{openklant,openformulieren,openarchiefbeheer}/create_superuser.py`: the
   admin user for apps whose charts create none. Read by
   `templates/<app>/create-superuser-job.yaml`.
-- `openformulieren/create_productaanvraag_form.py`: the productaanvraag
-  form with its Objects API registration. Read by
-  `templates/openformulieren/productaanvraag-form-job.yaml`.
 - `zac/seed_productaanvraag_zaakafhandelparameters.py`: ZAC's
   zaakafhandelparameters for podiumd's e2e zaaktype. Read by
   `templates/zac/productaanvraag-zaakafhandelparameters-job.yaml`.

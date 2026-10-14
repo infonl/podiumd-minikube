@@ -12,21 +12,21 @@ from podiumd_minikube.paths import CHARTS_DIR
 
 # Profiles `deploy --full` turns on; provision-cluster pre-pulls their images too.
 FULL_PROFILE_SETS = [
-    "--set", "objecten.enabled=true", "--set", "podiumd.objecten.enabled=true",
-    "--set", "opennotificaties.enabled=true", "--set", "podiumd.opennotificaties.enabled=true",
-    "--set", "openarchiefbeheer.enabled=true", "--set", "podiumd.openarchiefbeheer.enabled=true",
-    "--set", "openformulieren.enabled=true", "--set", "podiumd.openformulieren.enabled=true",
+    "--set", "podiumd.objecten.enabled=true",
+    "--set", "podiumd.opennotificaties.enabled=true",
+    "--set", "podiumd.openarchiefbeheer.enabled=true",
+    "--set", "podiumd.openformulieren.enabled=true",
     "--set", "metrics.enabled=true",
-    "--set", "openinwoner.enabled=true", "--set", "podiumd.openinwoner.enabled=true",
+    "--set", "podiumd.openinwoner.enabled=true",
     "--set", "podiumd.eck-operator.enabled=true",
-    "--set", "ita.enabled=true", "--set", "podiumd.ita.enabled=true",
-    "--set", "kiss.enabled=true", "--set", "podiumd.kiss.enabled=true", "--set", "podiumd.kiss-eck.enabled=true",
-    "--set", "referentielijsten.enabled=true", "--set", "podiumd.referentielijsten.enabled=true",
-    "--set", "openbeheer.enabled=true", "--set", "podiumd.openbeheer.enabled=true",
-    "--set", "frankgateway.enabled=true", "--set", "podiumd.frankgateway.enabled=true",
+    "--set", "podiumd.ita.enabled=true",
+    "--set", "podiumd.kiss.enabled=true", "--set", "podiumd.kiss-eck.enabled=true",
+    "--set", "podiumd.referentielijsten.enabled=true",
+    "--set", "podiumd.openbeheer.enabled=true",
+    "--set", "podiumd.frankgateway.enabled=true",
     "--set", "podiumd.openbao.enabled=true",
-    "--set", "clamav.enabled=true", "--set", "podiumd.clamav.enabled=true",
-    "--set", "omc.enabled=true", "--set", "podiumd.omc.enabled=true",
+    "--set", "podiumd.clamav.enabled=true",
+    "--set", "podiumd.omc.enabled=true",
 ]  # fmt: skip
 
 

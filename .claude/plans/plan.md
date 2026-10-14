@@ -6763,3 +6763,20 @@ then broke Open Klant's unique indexes. The seed script now exits while
 volume); migrate_major creates it before switching, the cleanup after the
 restore removes it. The restore step is `postgres.restore`, which also
 restarts the Keycloak StatefulSet (the operator's, not in the render).
+
+## Compose leftovers, step 2: unused parts and false comments (user: "do all four in that order")
+
+From a read-only audit against ExternalsPodiumD and podiumd-infra. Removed:
+the top-level profile flags (`objecten.enabled` ... `clamav.enabled`), which
+no template read (every template gates on `podiumd.<app>.enabled`; kept
+`metrics.enabled`, the Chart.yaml condition, and `objecten.merged`); the demo
+productaanvraag form Job (no consumer; forms are podiumd-tests' bootstrap);
+the `-web.local` second hosts of Open Archiefbeheer and Open Formulieren
+(compose parity; allowedHosts now the public host plus the in-cluster nginx
+Service, as ExternalsPodiumD); the `solr.local` Ingress and the `zac-admin`
+Service with its Prometheus scrape job and live test (neither reference
+exposes or scrapes them). Rewrote or dropped comments that were false (the
+deleted vendored realm.json, keycloak-operator "off", Redis DB numbers,
+"compose runs ...", the e2e zaaktype "as ExternalsPodiumD": it is
+podiumd-infra's setting). The rendered manifest lost exactly those objects
+and hosts.

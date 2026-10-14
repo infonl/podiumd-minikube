@@ -41,7 +41,6 @@ the running pods.
 | `test_solr.py` | `manifests.tune_solr`'s JVM settings reach the Solr and ZooKeeper pods the operators build |
 | `test_database.py` | Databases, PostGIS, ZAC's Open Zaak credentials and Open Notificaties' kanaal/abonnement (`templates/postgres`, `values.yaml`) |
 | `test_zgw_service_reachability.py` | The apps' zgw_consumers api_roots answer from inside their pods (`podiumd_minikube.dns`, `manifests.trust_ca`) |
-| `test_monitoring_logging.py` | The scrape job `values.yaml` adds to monitoring-logging's Prometheus (`zac-admin`) |
 | `test_kiss_ita.py` | KISS's Elasticsearch is green with its heap and limit; the edge forwards ITA's chunked bodies |
 | `test_frankgateway.py` | OpenBao unsealed (`podiumd_minikube.openbao`), the outway's routes, ZAC pointed at the outway (`manifests.route_outbound`) |
 | `test_clamav.py` | ClamAV runs with the EICAR-only signatures (`templates/clamav`) |

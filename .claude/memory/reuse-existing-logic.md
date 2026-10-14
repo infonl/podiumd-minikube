@@ -52,7 +52,7 @@ live: the tunnel script's own host list went stale, which is why
    | a database and user for an app | the init SQL in `templates/postgres` |
    | Mailpit | the existing `templates/<name>` Deployment; never a subchart's bundled copy |
    | common labels | `podiumd-minikube.labels` in `templates/_helpers.tpl` |
-   | an optional profile switch | `<name>.enabled` + `podiumd.<name>.enabled` in `values.yaml`, set by `--full` in `podiumd_minikube.deploy.options` |
+   | an optional profile switch | `podiumd.<name>.enabled` in `values.yaml`, set by `--full` (`chart.FULL_PROFILE_SETS`) |
    | kubectl from tests | `kubectl` in `tests/conftest.py` |
    | edge address, pod list, enabled profiles | fixtures `edge_ip`, `pods`, `enabled_profiles` |
    | HTTP to an ingress host from tests | `host_url` |
