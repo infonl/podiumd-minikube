@@ -114,7 +114,8 @@ def _cpu_nanoseconds(stat: dict[str, Any] | None) -> int | None:
     return int(value) if value is not None else None
 
 
-def _cores(first: dict[str, Any], later: dict[str, Any] | None) -> float:
+def sampled_cores(first: dict[str, Any], later: dict[str, Any] | None) -> float:
+    """Cores a container used between two crictl stats CPU_SAMPLE_SECONDS apart; 0 without both counters."""
     start, end = _cpu_nanoseconds(first), _cpu_nanoseconds(later)
     if start is None or end is None:
         return 0.0
@@ -137,7 +138,7 @@ def container_usage(items: list[dict[str, Any]], *, cpu: bool = True) -> dict[st
         key = _key(label, names)
         before = usage.get(key, Usage(0, 0.0))
         mib = round(int(stat["memory"]["workingSetBytes"]["value"]) / MIB)
-        usage[key] = Usage(before.mib + mib, before.cpu + _cores(stat, second.get(stat["attributes"]["id"])))
+        usage[key] = Usage(before.mib + mib, before.cpu + sampled_cores(stat, second.get(stat["attributes"]["id"])))
     return dict(sorted(usage.items()))
 
 
