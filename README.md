@@ -123,8 +123,9 @@ and CPU against the budget and the baseline, and whether the cluster has
 settled (no `metrics-server`, so no `kubectl top`).
 
 Budgets (`tests/test_memory.py`): the default profile at most 16 GiB for the
-minikube node, `--full` at most 20 GiB. Measured with `--full` after a full
-podiumd-tests run (2026-10-08): node 12.3 GiB, containers 11.2 GiB.
+minikube node, `--full` at most 17 GiB. Measured with `--full` after a full
+podiumd-tests run (2026-10-14): node 14.3 GiB, containers 11.8 GiB, of which
+monitoring-logging (profile `metrics`) about 1.2 GiB.
 
 `tests/memory-baseline.json` holds that measurement per container; the test
 fails when a container grows more than 20% + 64 MiB above it. Refresh it
@@ -232,7 +233,7 @@ profile combinations a few times.** Usually an under-provisioned minikube
 VM thrashing under memory pressure — check with `docker stats minikube`
 or `minikube ssh -- free -h`. `provision-cluster` sizes the node at half the
 memory Docker sees (override with `MINIKUBE_MEMORY` in MB); `deploy --full` and
-`provision-cluster` warn when the running node is below the 20 GiB a
+`provision-cluster` warn when the running node is below the 17 GiB a
 `deploy --full` needs, and print the command to raise it live without
 restarting:
 

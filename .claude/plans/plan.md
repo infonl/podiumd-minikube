@@ -6620,3 +6620,16 @@ not delete a null at that depth). The pods with the old rule were deleted by
 hand once. The other required anti-affinities
 (Loki, OpenBao) are StatefulSets, which replace their pod in place.
 Smoke 143 passed, live suite 32 passed.
+
+## --full budget 20 -> 17 GiB (2026-10-14)
+
+The user asked to lower the ceiling. Measured after podiumd-tests' full tier
+20261014-084043, settled: node 14623 MiB, containers 12095 MiB. Of that,
+monitoring-logging (profile `metrics`) is 781 MiB in its containers plus about
+460 MiB on kube-apiserver for its CRDs, so `--full` without it is about
+13.4 GiB. 17 GiB leaves 2.4 GiB (16%) for deploys and growth of
+podiumd-tests' data. The constant is also the cap that `deploy --full` and
+`provision-cluster` warn below, so a node of 17 GiB no longer gets that
+warning. The default profile's 16 GiB stays until it is measured: from the
+baseline it is about 5.2 GiB of containers plus the node's 2.5 GiB overhead
+(an estimate, not measured).
