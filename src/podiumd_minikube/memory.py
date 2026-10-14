@@ -14,9 +14,9 @@ from podiumd_minikube.paths import PROFILE
 MIB = 1024**2
 # Share of the memory Docker sees (the host, or Docker Desktop's VM).
 HOST_FRACTION = 0.5
-# .claude/memory/laptop-resources.md: the default profile within 16 GiB, --full within 17 GiB.
+# .claude/memory/laptop-resources.md: the default profile within 9 GiB, --full within 17 GiB.
 # tests/test_memory.py holds usage to them; a --full node needs at least the --full budget.
-DEFAULT_BUDGET_MB = 16 * 1024
+DEFAULT_BUDGET_MB = 9 * 1024
 FULL_BUDGET_MB = 17 * 1024
 
 

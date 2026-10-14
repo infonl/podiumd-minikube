@@ -13,7 +13,7 @@ production never does (seen live: a 16 GiB cap thrashed until etcd restarted).
 **How to apply:**
 
 - Minimal, not just within budget: keep usage as low as possible without
-  changing behaviour. The budgets (default profile about 12–16 GiB for the
+  changing behaviour. The budgets (default profile at most 9 GiB for the
   minikube node, `--full` at most 17 GiB, checked by
   `tests/test_memory.py`) are ceilings; meeting them never ends the search
   for savings (the user, 2026-10-08). Every new component states its memory

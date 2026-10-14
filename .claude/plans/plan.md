@@ -6663,3 +6663,8 @@ kept the outway URL. Every workload that reads a routed ConfigMap now carries
 the annotation `podiumd-minikube/outbound: <target>`, so toggling
 `frankgateway` rolls it: ZAC on the default profile; with `--full` also
 contact-web, its three sync CronJobs and Open Formulieren.
+
+Default profile measured (user: "go, measure the default profile"): settled
+after podiumd-tests' full tier 20261014-094412 (186 passed, 317 skipped for
+absent components): node 7.0 GiB, containers 4.9 GiB (39 containers). The
+default budget drops from 16 to 9 GiB, about 2 GiB of headroom as `--full`.

@@ -122,8 +122,8 @@ set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`, `solr`,
 and CPU against the budget and the baseline, and whether the cluster has
 settled (no `metrics-server`, so no `kubectl top`).
 
-Budgets (`tests/test_memory.py`): the default profile at most 16 GiB for the
-minikube node, `--full` at most 17 GiB. Measured with `--full` after a full
+Budgets (`tests/test_memory.py`): the default profile at most 9 GiB for the
+minikube node (measured 7.0 GiB, 2026-10-14), `--full` at most 17 GiB. Measured with `--full` after a full
 podiumd-tests run (2026-10-14): node 14.3 GiB, containers 11.8 GiB, of which
 monitoring-logging (profile `metrics`) about 1.2 GiB.
 
