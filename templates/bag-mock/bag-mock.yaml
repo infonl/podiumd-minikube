@@ -1,0 +1,74 @@
+{{/*
+BAG (Kadaster) for the api-proxy: the vendored answers for one address and one
+search, served by nginx. The reference environments call Kadaster with a key
+that is not public.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bag-mock
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  nginx.conf: {{ .Files.Get "files/bag-mock/nginx.conf" | quote }}
+  {{- (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/bag/*.json").AsConfig | nindent 2 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bag-mock
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bag-mock
+  template:
+    metadata:
+      labels:
+        app: bag-mock
+      annotations:
+        checksum/config: {{ print (.Files.Get "files/bag-mock/nginx.conf") (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/bag/*.json").AsConfig | sha256sum }}
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: nginx
+          image: {{ required "images.nginx: set by podiumd-minikube deploy from podiumd's values.yaml" .Values.images.nginx }}
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: config
+              mountPath: /bag
+      volumes:
+        - name: config
+          configMap:
+            name: bag-mock
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bag-mock
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: bag-mock
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

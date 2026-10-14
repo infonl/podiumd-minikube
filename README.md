@@ -73,7 +73,7 @@ environments, with a certificate from a local CA instead of Let's Encrypt:
   trusts the CA, so the apps call each other on `https://<app>.local`.
 
 Leave off `--full` on `podiumd-minikube deploy` to deploy just the core profile (ZAC,
-Open Zaak, Open Klant, PABC, Postgres/Redis/Solr/Keycloak/WireMock),
+Open Zaak, Open Klant, PABC, Postgres/Redis/Solr/Keycloak, the BAG mock),
 matching `values.yaml`'s own default.
 
 ## What's running
@@ -81,7 +81,7 @@ matching `values.yaml`'s own default.
 **Core (always on):** zac, openzaak, openklant, pabc, brp-personen-mock,
 postgres, Keycloak, Redis and Solr (podiumd's keycloak-operator with realm
 `podiumd`, redis-operator and ZAC's SolrCloud, as both reference environments), mailpit (SMTP test server — every app's
-email settings point at it), and the api-proxy with WireMock: apps call
+email settings point at it), and the api-proxy with a BAG mock: apps call
 BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 `https://api-proxy.local` serves the same paths to tests:
 
@@ -89,7 +89,7 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 |---|---|
 | `/haalcentraal/api/brp/` | brp-personen-mock |
 | `/api/v2/zoeken`, `/api/v1/basisprofielen`, `/api/v1/vestigingsprofielen` | KvK's test API (`https://api.kvk.nl/test/...`, needs internet), as both reference projects |
-| `/lvbag/individuelebevragingen/v2/` | WireMock (BAG mappings) |
+| `/lvbag/individuelebevragingen/v2/` | `templates/bag-mock`: nginx serving the vendored answers for one address and one search |
 
 **Optional profiles** (each its own `values.yaml` flag, off by default —
 `podiumd-minikube deploy --full` turns all of them on):

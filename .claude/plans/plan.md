@@ -6780,3 +6780,16 @@ deleted vendored realm.json, keycloak-operator "off", Redis DB numbers,
 "compose runs ...", the e2e zaaktype "as ExternalsPodiumD": it is
 podiumd-infra's setting). The rendered manifest lost exactly those objects
 and hosts.
+
+## Compose leftovers, step 3: WireMock replaced by nginx (user: "replace wiremock by a leaner alternative")
+
+WireMock served three fixed BAG answers (one address with and without
+`expand`, one search) from ZAC's compose mappings, in a JVM of about 70 MiB.
+`templates/bag-mock` serves the same vendored JSON with podiumd's own nginx
+image (`global.images.nginx`, through `chart.bundled_image_sets`), one
+worker, config `files/bag-mock/nginx.conf` (`map` on `expand` and `q`; `if`
+with `try_files` does not work in nginx). Locally: the three answers byte for
+byte with `application/hal+json`, anything else 404, about 3 MiB. Dropped
+with it: WireMock's mappings, its heap and journal tuning, and the Accept
+header matching nothing here needs. api-proxy's BAG location and the
+Frank!Gateway route point at `bag-mock:8080`.

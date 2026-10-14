@@ -1144,7 +1144,7 @@ podiumd:
   # --- api-proxy (always on - core), as ExternalsPodiumD ---
   # Apps call BRP, KvK and BAG at http://api-proxy/<path>, as ExternalsPodiumD.
   # BRP goes to brp-personen-mock and KvK to KvK's test API, as both reference
-  # projects (needs internet); BAG goes to WireMock instead of Kadaster's API,
+  # projects (needs internet); BAG goes to templates/bag-mock instead of Kadaster's API,
   # whose key is not public.
   # templates/api-proxy/ingress.yaml serves the same paths on api-proxy.local.
   # podiumd's frankgateway replaces it in time; no reference environment
@@ -1154,8 +1154,8 @@ podiumd:
     resolverIp: 10.96.0.10 # minikube's kube-dns; the chart's 10.0.0.10 is AKS's
     locations:
       bag:
-        hostHeader: wiremock
-        targetUrl: http://wiremock:8080/lvbag/individuelebevragingen/v2/
+        hostHeader: bag-mock
+        targetUrl: http://bag-mock:8080/lvbag/individuelebevragingen/v2/
       brp:
         hostHeader: brp-personen-mock
         targetUrl: http://brp-personen-mock:5010/haalcentraal/api/brp/
@@ -2826,7 +2826,7 @@ podiumd:
   # with a static seal and Keycloak login, one replica each (single node).
   # Beyond it (user's choice, the chart runbook's step 6): the outway carries
   # the api-proxy's paths to the same targets, as the chart's reference routes
-  # (only KvK's carries its API-key function; BAG's WireMock needs no key), and
+  # (only KvK's carries its API-key function; BAG's mock needs no key), and
   # podiumd_minikube.manifests.route_outbound points
   # the apps' http://api-proxy/ URLs at it. BRP on the outway, as the routes
   # doc places the real BRP; the mock stands in for it (the doc's internal
@@ -2879,9 +2879,9 @@ podiumd:
               type: roundrobin
               scheme: http
               pass_host: rewrite
-              upstream_host: wiremock
+              upstream_host: bag-mock
               nodes:
-                "wiremock:8080": 1
+                "bag-mock:8080": 1
           # The chart routes doc's KvK routes: the test dataset (/test/ prefix),
           # the key read from OpenBao at request time (podiumd_minikube.openbao stores it).
           apiproxy-kvk-basic:

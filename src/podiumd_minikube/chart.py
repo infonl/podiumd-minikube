@@ -38,6 +38,7 @@ def tarball(chart: str, charts_dir: Path = CHARTS_DIR) -> Path | None:
 # Our own Jobs' images, from podiumd's values.yaml: values key -> path there.
 BUNDLED_IMAGES = {
     "busybox": ("global", "images", "busybox"),
+    "nginx": ("global", "images", "nginx"),
     "python": ("keycloak-operator", "jobs", "ensurePodiumdAdminUser", "initImage"),
 }
 

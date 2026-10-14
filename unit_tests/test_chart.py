@@ -30,6 +30,7 @@ def test_bundled_image_sets_come_from_podiumds_values(tmp_path: Path):
 global:
   images:
     busybox: {repository: library/busybox, tag: "1.38.0-glibc@sha256:aa"}
+    nginx: {repository: nginxinc/nginx-unprivileged, tag: "1.31.6"}
     postgres: {repository: library/postgres, tag: "16.15-alpine@sha256:bb"}
 keycloak-operator:
   jobs:
@@ -39,6 +40,7 @@ keycloak-operator:
     assert chart.bundled_image_sets(tmp_path) == []
     make_tgz(tmp_path / "podiumd-4.10.0.tgz", {"podiumd/values.yaml": podiumd_values})
     assert chart.bundled_image_sets(tmp_path) == [
-        "--set", "images.busybox=library/busybox:1.38.0-glibc@sha256:aa", "--set", "images.python=python:3.14.7-slim",
+        "--set", "images.busybox=library/busybox:1.38.0-glibc@sha256:aa",
+        "--set", "images.nginx=nginxinc/nginx-unprivileged:1.31.6", "--set", "images.python=python:3.14.7-slim",
         "--set", "images.postgresMajor=16",
     ]  # fmt: skip

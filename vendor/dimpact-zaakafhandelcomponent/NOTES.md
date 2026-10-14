@@ -9,10 +9,11 @@ changes is in `.claude/plans/plan.md`.
 
 ## Copied verbatim
 
-- `wiremocks/bag-wiremock/`
-  ← `scripts/docker-compose/imports/bag-wiremock/` (`mappings/`, `__files/`).
-  Read by `templates/wiremock/`. ZAC's SmartDocuments mappings are not
-  copied: SmartDocuments is off in ZAC, as in every reference environment.
+- `bag/*.json`
+  ← `scripts/docker-compose/imports/bag-wiremock/__files/`; its WireMock
+  mappings became `files/bag-mock/nginx.conf`. Read by
+  `templates/bag-mock/`. ZAC's SmartDocuments mappings are not copied:
+  SmartDocuments is off in ZAC, as in every reference environment.
 - `postgres/fixtures/openzaak/01-setup-zac-config.sql`
   ← `scripts/docker-compose/imports/openzaak-database/database/`: the
   Applicaties and the catalogus; no zaaktypen (podiumd's
