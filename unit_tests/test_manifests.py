@@ -271,6 +271,19 @@ def test_route_outbound_only_with_the_outway():
     assert config["data"]["BRP"] == "http://frankgateway-outway:9080/x"
 
 
+def test_route_outbound_rolls_the_pods_that_read_a_routed_configmap():
+    def deployment(configmap: str) -> manifests.Doc:
+        container = {"name": "app", "envFrom": [{"configMapRef": {"name": configmap}}]}
+        return {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [container]}}}}
+
+    config: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": "zac"}, "data": {"BRP": "http://api-proxy/x"}}
+    reader, other = deployment("zac"), deployment("pabc")
+    manifests.route_outbound([config, reader, other])
+    annotations = reader["spec"]["template"]["metadata"]["annotations"]
+    assert annotations[manifests.OUTBOUND_ANNOTATION] == manifests.API_PROXY_URL
+    assert "metadata" not in other["spec"]["template"]
+
+
 def _ingress(service: str) -> manifests.Doc:
     backend = {"service": {"name": service, "port": {"number": 80}}}
     return {

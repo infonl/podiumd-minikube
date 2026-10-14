@@ -6654,3 +6654,12 @@ desired set (deploy deletes and recreates them before the apply), and a
 CronJob's runs carry an ownerReference, so they are skipped and go with their
 CronJob. Dry run against the default render: exactly the 16 Jobs and 4
 CronJobs of the disabled profiles.
+
+On the default profile ZAC's KvK lookup answered 500 (podiumd-tests'
+test_company_lookup): `UnknownHostException: frankgateway-outway`.
+`route_outbound` had rewritten ZAC's ConfigMap back to api-proxy, but ZAC
+reads it as env at its start and its pod template had not changed, so it
+kept the outway URL. Every workload that reads a routed ConfigMap now carries
+the annotation `podiumd-minikube/outbound: <target>`, so toggling
+`frankgateway` rolls it: ZAC on the default profile; with `--full` also
+contact-web, its three sync CronJobs and Open Formulieren.

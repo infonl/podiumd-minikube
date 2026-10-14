@@ -28,6 +28,7 @@ Doc = dict[str, Any]
 API_PROXY_URL = "http://api-proxy/"
 OUTWAY_SERVICE = "frankgateway-outway"
 OUTWAY_URL = f"http://{OUTWAY_SERVICE}:9080/"
+OUTBOUND_ANNOTATION = "podiumd-minikube/outbound"
 # ECK resources; ECK renders their StatefulSets and Deployments itself.
 ECK_KINDS = ("Elasticsearch", "Kibana")
 # Laptop budget: these runtimes size themselves by the CPUs they see (all of the
@@ -140,16 +141,39 @@ def disable_service_links(docs: list[Doc]) -> None:
 
 
 def route_outbound(docs: list[Doc]) -> None:
-    """Points ConfigMap values at OUTWAY_URL instead of API_PROXY_URL when the outway is rendered."""
-    if not any(doc.get("kind") == "Service" and name_of(doc) == OUTWAY_SERVICE for doc in docs):
-        return
+    """Points ConfigMap values at OUTWAY_URL instead of API_PROXY_URL when the outway is rendered.
+
+    Their pods are annotated with the target: a pod reads ConfigMap env only at
+    its start, so toggling the outway must roll them.
+    """
+    outway = any(doc.get("kind") == "Service" and name_of(doc) == OUTWAY_SERVICE for doc in docs)
+    target = OUTWAY_URL if outway else API_PROXY_URL
+    routed: set[str] = set()
     for doc in docs:
         if doc.get("kind") != "ConfigMap":
             continue
         data: Doc = doc.get("data") or {}
         for key, value in data.items():
             if isinstance(value, str) and API_PROXY_URL in value:
-                data[key] = value.replace(API_PROXY_URL, OUTWAY_URL)
+                data[key] = value.replace(API_PROXY_URL, target)
+                routed.add(name_of(doc))
+    for doc in docs:
+        spec = _pod_spec(doc)
+        if doc.get("kind") in _POD_SPEC_PATHS and spec is not None and routed & _configmaps_used(spec):
+            template = _mapping(doc, *_POD_SPEC_PATHS[doc["kind"]][:-1])
+            _mapping(template, "metadata", "annotations")[OUTBOUND_ANNOTATION] = target
+
+
+def _configmaps_used(spec: Doc) -> set[str]:
+    """Names of the ConfigMaps a pod spec reads through env, envFrom or volumes."""
+    volumes: list[Doc] = spec.get("volumes") or []
+    names = {section(volume, "configMap").get("name") for volume in volumes}
+    for container in _containers(spec):
+        sources: list[Doc] = container.get("envFrom") or []
+        items: list[Doc] = container.get("env") or []
+        names |= {section(source, "configMapRef").get("name") for source in sources}
+        names |= {section(section(item, "valueFrom"), "configMapKeyRef").get("name") for item in items}
+    return {str(name) for name in names if name}
 
 
 # App Service -> the nginx Service in front of it. ZAC's chart points its
