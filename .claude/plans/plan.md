@@ -6633,3 +6633,9 @@ podiumd-tests' data. The constant is also the cap that `deploy --full` and
 warning. The default profile's 16 GiB stays until it is measured: from the
 baseline it is about 5.2 GiB of containers plus the node's 2.5 GiB overhead
 (an estimate, not measured).
+
+`deploy` without `--full` against a `--full` cluster failed at its last
+step: `openbao.bootstrap` looked for the OpenBao StatefulSet in the cluster,
+found the one the prune had just deleted (still terminating), and applied an
+empty list of Jobs ("error: no objects passed to apply"). It now decides from
+the render: no `openbao-config` Job rendered, no bootstrap.
