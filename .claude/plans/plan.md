@@ -6701,3 +6701,8 @@ an unreleased podiumd 4.9 with a hand-bumped zac chart; ZAC's PKCE stays off,
 as podiumd-infra (`pkceEnabled: "false"`), and `test_pkce_requirements` now
 checks that no client requires PKCE. `values.flag` and `chart.member_text`
 had no other caller and went too.
+
+PABC's repository overrides (pabc-api, pabc-migrations, k8s-wait-for back from
+acrprodmgmt.azurecr.io to ghcr.io) removed too: podiumd 4.9.4 and 4.10.0
+already use the ghcr.io images; the rendered images are unchanged. No image
+override of podiumd's apps is left in values.yaml.

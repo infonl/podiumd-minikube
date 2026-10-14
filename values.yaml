@@ -1203,35 +1203,12 @@ podiumd:
     replicaCount: 1
     postgresql:
       enabled: false # point at the shared Postgres instead of the chart's bundled bitnami one
-    # podiumd's own override remaps all three pabc images to a private Azure
-    # Container Registry (acrprodmgmt.azurecr.io) with an IP allowlist -
-    # confirmed via a direct pull attempt that it actively denies external
-    # IPs. Overridden back to the pabc chart's own upstream defaults
-    # (verified these pull successfully): the true public ghcr.io addresses.
-    # Only overriding `repository`, deliberately not `tag` - podiumd's own
-    # values.yaml already pins a specific tag for the ACR-hosted image
-    # (currently "1.1.0", verified matching), and leaving that field alone
-    # means we keep tracking whatever tag the currently-selected podiumd
-    # version pins, instead of a second, independent hardcoded value here
-    # that could silently drift from it after a
-    # podiumd-minikube set-podiumd-version swap.
-    image:
-      repository: ghcr.io/platform-autorisatie-beheer-component/pabc-api
-    migrations:
-      image:
-        repository: ghcr.io/platform-autorisatie-beheer-component/pabc-migrations
     # As ExternalsPodiumD's ontw environments (icat, dim1): PABC seeded once
     # from podiumd's files/pabc-dataset.json, its realm roles and groups by the Keycloak Job.
     datasetConfigMap:
       enabled: true
     seedJob:
       enabled: true
-    initContainers:
-      waitFor:
-        # Same reasoning as pabc's own image override above - repository
-        # only, tag left to track whatever podiumd's own value currently is.
-        image:
-          repository: ghcr.io/groundnuty/k8s-wait-for
     settings:
       database:
         host: postgres
