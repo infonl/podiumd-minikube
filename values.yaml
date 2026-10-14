@@ -989,6 +989,10 @@ podiumd:
     extraEnvVars:
       - name: CELERY_WORKER_CONCURRENCY
         value: "1"
+      # With 1 web process: the first request on a recycled worker takes 2.5-6 s
+      # (Django warm-up, --lazy-apps); the image recycles every 100 requests.
+      - name: UWSGI_MAX_REQUESTS
+        value: "1000" # as Open Zaak, Objecten and Open Formulieren
     worker:
       replicaCount: 1
     lowLatencyWorker:
@@ -1114,8 +1118,7 @@ podiumd:
             - domain: openinwoner.local
               name: Open Inwoner
     settings:
-      # Laptop budget: 1 web process (image default 4). Needs image >= 2.4.6 (podiumd >= 4.9.4):
-      # 2.4.3 starts uWSGI with --lazy-apps, and its worker restart every 100 requests stalled ~6 s.
+      # Laptop budget: 1 web process (image default 4); see UWSGI_MAX_REQUESTS above.
       uwsgi:
         processes: 1
         threads: 2

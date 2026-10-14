@@ -6706,3 +6706,13 @@ PABC's repository overrides (pabc-api, pabc-migrations, k8s-wait-for back from
 acrprodmgmt.azurecr.io to ghcr.io) removed too: podiumd 4.9.4 and 4.10.0
 already use the ghcr.io images; the rendered images are unchanged. No image
 override of podiumd's apps is left in values.yaml.
+
+Open Inwoner on 1 process still stalled: podiumd-tests measured 2.5-2.6 s
+every ~133 searches. The worker recycles every 100 requests
+(`UWSGI_MAX_REQUESTS` 100 in its start script; Open Zaak, Objecten and Open
+Formulieren 1000, Open Klant never) and the first page request on a fresh
+worker takes 2.6-3.8 s (timed in the pod; `/_healthz/livez/` stays fast).
+Upstream restored `--lazy-apps` on 2026-09-02 (Python 3.13 workers segfault
+when forked from a loaded master), so the next image stalls about 6 s again.
+The user chose `UWSGI_MAX_REQUESTS=1000` with 1 process: a stall about every
+1000 requests, web container 438 -> 317 MiB after a full tier.
