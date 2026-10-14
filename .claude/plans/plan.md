@@ -6689,3 +6689,15 @@ breaks our otel setup hooks" in its /start.sh), so a restarted worker forks
 from the loaded master, as in the other Maykin apps. podiumd 4.9.0-4.9.3 ship
 2.4.3 and are not deployed here any more (user). Expected saving about
 120 MiB (one worker's PSS); podiumd-tests reruns its search-stall check.
+
+## Leftovers for podiumd < 4.9.4 removed (user: "do 1-3")
+
+podiumd 4.9.0-4.9.3 are no longer deployed here. Removed what only served
+them: the Open Formulieren image pin 3.5.5 (4.9.4 and 4.10.0 ship 3.5.8, so
+the pin downgraded it), the Open Zaak pin 1.29.3 (what both ship), and the
+ZAC PKCE experiment (`zac.experimentalPkce`, `chart.zac_pkce_sets` with its
+image 5.4.2, which would downgrade the shipped 5.4.5). The experiment was for
+an unreleased podiumd 4.9 with a hand-bumped zac chart; ZAC's PKCE stays off,
+as podiumd-infra (`pkceEnabled: "false"`), and `test_pkce_requirements` now
+checks that no client requires PKCE. `values.flag` and `chart.member_text`
+had no other caller and went too.

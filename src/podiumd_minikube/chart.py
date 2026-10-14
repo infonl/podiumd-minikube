@@ -6,9 +6,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 
-from podiumd_minikube import values
 from podiumd_minikube.paths import CHARTS_DIR
-from podiumd_minikube.process import UserError
 
 # Profiles `deploy --full` turns on; provision-cluster pre-pulls their images too.
 FULL_PROFILE_SETS = [
@@ -29,8 +27,6 @@ FULL_PROFILE_SETS = [
     "--set", "omc.enabled=true", "--set", "podiumd.omc.enabled=true",
 ]  # fmt: skip
 
-ZAC_PKCE_IMAGE_TAG = "5.4.2"
-
 
 def tarball(chart: str, charts_dir: Path = CHARTS_DIR) -> Path | None:
     """charts/<chart>-*.tgz, or None before `helm dependency update` fetched it."""
@@ -41,16 +37,6 @@ def member_names(tgz: Path) -> list[str]:
     """Paths of all members of tgz."""
     with tarfile.open(tgz) as archive:
         return archive.getnames()
-
-
-def member_text(tgz: Path, name: str) -> str | None:
-    """Content of member name in tgz, or None when absent."""
-    with tarfile.open(tgz) as archive:
-        try:
-            member = archive.extractfile(name)
-        except KeyError:
-            return None
-        return member.read().decode() if member else None
 
 
 @dataclass(frozen=True)
@@ -82,32 +68,4 @@ def objecten_shape(charts_dir: Path = CHARTS_DIR) -> ObjectenShape:
 
 def everything_args(charts_dir: Path = CHARTS_DIR) -> list[str]:
     """helm args that render every profile: all images and hosts the chart can have."""
-    return [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets, *zac_pkce_sets(charts_dir)]
-
-
-def zac_pkce_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
-    """The --set flags of zac.experimentalPkce, refused when the selected zac chart cannot send PKCE.
-
-    Requiring PKCE in the realm while zac never sends it rejects every login
-    (this happened once, see plan.md).
-    """
-    if not values.zac_experimental_pkce():
-        return []
-    tgz = tarball("podiumd", charts_dir)
-    config = member_text(tgz, "podiumd/charts/zaakafhandelcomponent/templates/config.yaml") if tgz else None
-    if "AUTH_ENABLE_PKCE" not in (config or ""):
-        msg = (
-            "zac.experimentalPkce is true, but the selected podiumd version's zac chart has no "
-            "AUTH_ENABLE_PKCE in templates/config.yaml, so every login would be rejected. "
-            "Bump the zac chart to >= 1.0.289 in the --path checkout (see values.yaml's "
-            "podiumd.zac.image.tag comment), or set zac.experimentalPkce to false."
-        )
-        raise UserError(msg)
-    return [
-        "--set",
-        f"podiumd.zac.image.tag={ZAC_PKCE_IMAGE_TAG}",
-        "--set",
-        "podiumd.zac.auth.enablePkce=true",
-        "--set",
-        "podiumd.zac.auth.pkceEnabled=true",
-    ]
+    return [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets]

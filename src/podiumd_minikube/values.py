@@ -1,41 +1,10 @@
-"""Reads values.yaml: flags in its top-level blocks and single settings."""
-
-import re
+"""Reads single settings from values.yaml."""
 
 from pathlib import Path
 
 import yaml
 
 from podiumd_minikube.paths import VALUES_YAML
-
-_TOP_LEVEL_KEY = re.compile(r"^[^\s#]")
-
-
-def _flag_line_indexes(lines: list[str], block: str, key: str) -> list[int]:
-    """Indexes of `<indent>key:` lines inside top-level `block:` (other blocks reuse the key)."""
-    key_line = re.compile(rf"^\s+{re.escape(key)}:")
-    indexes: list[int] = []
-    in_block = False
-    for index, line in enumerate(lines):
-        if line.rstrip("\n") == f"{block}:":
-            in_block = True
-        elif in_block and _TOP_LEVEL_KEY.match(line):
-            in_block = False
-        elif in_block and key_line.match(line):
-            indexes.append(index)
-    return indexes
-
-
-def flag(block: str, key: str, path: Path = VALUES_YAML) -> bool:
-    """Whether any `key: true` line sits in top-level `block:`."""
-    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    true_value = re.compile(rf"^\s+{re.escape(key)}:\s*true")
-    return any(true_value.match(lines[i]) for i in _flag_line_indexes(lines, block, key))
-
-
-def zac_experimental_pkce(path: Path = VALUES_YAML) -> bool:
-    """zac.experimentalPkce."""
-    return flag("zac", "experimentalPkce", path)
 
 
 def kvk_test_api_key(path: Path = VALUES_YAML) -> str:

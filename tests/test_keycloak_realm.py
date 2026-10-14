@@ -1,7 +1,7 @@
 """The wiring values.yaml and manifests.tune_keycloak add to podiumd's Keycloak.
 
-PKCE: zac follows zac.experimentalPkce; the Django apps' clients never
-require it (mozilla-django-oidc-db has no PKCE support, plan.md).
+PKCE: no client requires it; zac has it off (as podiumd-infra) and the
+Django apps' mozilla-django-oidc-db cannot send it (plan.md).
 """
 
 import base64
@@ -14,7 +14,6 @@ from conftest import host_url
 from conftest import kubectl
 
 from podiumd_minikube import manifests
-from podiumd_minikube import values
 from podiumd_minikube.paths import NAMESPACE
 
 REALM = "podiumd"
@@ -67,9 +66,8 @@ def test_issuer_follows_the_frontend_urls(edge_ip, realm, issuer):
 
 
 def test_pkce_requirements(live_clients):
-    assert _pkce(live_clients["zac"]) == ("S256" if values.zac_experimental_pkce() else "")
-    required = [client_id for client_id in DJANGO_APP_CLIENT_IDS if _pkce(live_clients.get(client_id, {}))]
-    assert not required, f"PKCE required for {required}, whose mozilla-django-oidc-db cannot send it: logins break"
+    required = [client_id for client_id in ("zac", *DJANGO_APP_CLIENT_IDS) if _pkce(live_clients.get(client_id, {}))]
+    assert not required, f"PKCE required for {required}, whose apps do not send it: their logins break"
 
 
 def test_jvm_flags_reach_the_operator_built_pod(edge_ip):

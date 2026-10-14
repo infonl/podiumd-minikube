@@ -12,20 +12,6 @@
 # -----------------------------------------------------------------------
 zac:
   enabled: true # "zac" profile - on by default so the app is visible
-  # Off by default. Gates the teammate's zac 5.4.2/chart 1.0.289 PKCE
-  # experiment (see podiumd.zac.image.tag's own comment below,
-  # src/podiumd_minikube/chart.py, and plan.md's PKCE sections for
-  # the full history) - keeps the experiment fully opt-in instead of
-  # silently required just because this values.yaml carries the override.
-  # Turning this on ALSO requires the currently-selected podiumd version
-  # to actually bundle a zac chart with AUTH_ENABLE_PKCE support (e.g. via
-  # a hand-bumped local `--path` checkout, per that comment) -
-  # src/podiumd_minikube/chart.py refuses podiumd-minikube deploy with a clear
-  # message rather than silently reproducing the exact incident this
-  # experiment already caused once (Keycloak requiring PKCE, an
-  # PKCE-unaware zac chart never sending it, every login broken) if it
-  # detects that isn't the case.
-  experimentalPkce: false
   # mailpit (SMTP test server) moved out of this profile - it's now
   # unconditional (templates/mailpit/), since every app's own email
   # settings point at it regardless of which optional profiles are on.
@@ -270,60 +256,6 @@ podiumd:
       allowedHosts: zac.local,zac.podiumd-minikube
     autoscaling:
       enabled: false
-    # No image.tag override here by default (top-level zac.experimentalPkce
-    # is false) - chart default applies. EXPERIMENTAL, tied to a
-    # local-only podiumd dependency bump - not something
-    # `podiumd-minikube set-podiumd-version 4.8.4 <ml-version>` alone reproduces.
-    # PodiumD 4.9's own release notes (Dimpact Confluence, "PDF versie
-    # 4.9") pin zac at chart 1.0.289/app 5.4.2 (both *real, published*
-    # versions - unlike an earlier local-only experiment with unreleased
-    # 1.0.287/5.4.0, back when PR #6490 - "feat: add configurable PKCE
-    # support for the OIDC authorization code flow" - had only just merged),
-    # but PodiumD 4.9 itself is unreleased ("NIET BEGONNEN" on that same
-    # page) - `helm search repo dimpact/podiumd -l` confirms only up to
-    # 4.8.4 exists. Until it ships, getting zac 1.0.289 requires a local
-    # `--path` checkout of the podiumd chart with its own zac dependency
-    # bumped by hand:
-    #
-    #   git clone --depth 1 --branch main \
-    #     git@github.com:Dimpact-Samenwerking/helm-charts.git /tmp/helm-charts
-    #   cd /tmp/helm-charts/charts/podiumd
-    #   sed -i '' 's/version: 1.0.251 # ZAC 5.0.1 helm release/version: 1.0.289 # ZAC 5.4.2 helm release/' Chart.yaml
-    #   helm repo add zac https://infonl.github.io/dimpact-zaakafhandelcomponent/  # if not already added
-    #   helm dependency update .
-    #   cd <this repo>
-    #   podiumd-minikube set-podiumd-version --path /tmp/helm-charts/charts/podiumd
-    #
-    # (.podiumd-versions.yaml records the --path itself, gitignored/personal
-    # like every other version choice there - re-run the above after any
-    # fresh clone or `.podiumd-versions.yaml` loss.)
-    #
-    # Once that chart bump is in place, set top-level zac.experimentalPkce
-    # to true - src/podiumd_minikube/chart.py then does the rest on
-    # every podiumd-minikube deploy run: injects this tag override (chart default,
-    # empty/falling back to .Chart.AppVersion "5.4", is NOT the same image
-    # as 5.4.2 - confirmed via `docker manifest inspect` that
-    # ghcr.io/infonl/zaakafhandelcomponent:5.4 and :5.4.2 have different
-    # digests, 5.4 is frozen at the first 5.4.x patch, not a rolling
-    # alias), patches the vendored realm's own PKCE requirement for this
-    # client back on to match (see auth's comment below,
-    # and src/podiumd_minikube/manifests.py), and reconciles that same
-    # setting into the *already-imported* live Keycloak realm (Keycloak
-    # only ever imports once - see
-    # src/podiumd_minikube/keycloak.py's own header for why a values/
-    # ConfigMap change alone never reaches an already-provisioned
-    # cluster).
-    #
-    # The teammate who built this confirmed it live end to end at the
-    # time (see plan.md's PKCE sections), against a local chart checkout
-    # that isn't currently available - re-verifying the *on* state of
-    # this switch (as opposed to the switch mechanism itself, which is:
-    # each piece above tested individually, and zac.experimentalPkce's
-    # own default-off state confirmed end to end on a fresh deploy - see
-    # plan.md) is blocked until that checkout (or a real podiumd 4.9
-    # release bundling zac 1.0.289+) is actually reachable again. Don't
-    # take "on" being wired up here as proof it currently works - only
-    # that it's ready to, once it can be tested.
     # Laptop budget: ExternalsPodiumD runs -Xmx1024m -Xms1024m. A small -Xms and a
     # periodic G1 cycle give unused heap back (the serial GC kept ZAC's heap near -Xmx).
     # TieredStopAtLevel=1: only the C1 compiler, less code cache and compiler memory.
@@ -337,8 +269,7 @@ podiumd:
     auth:
       server: https://keycloak.local
       secret: keycloakZacClientSecret
-      # No enablePkce: off as ExternalsPodiumD; zac.experimentalPkce turns it on
-      # together with the realm's PKCE requirement (podiumd_minikube.chart).
+      # No enablePkce: off, as podiumd-infra (pkceEnabled "false").
     keycloak:
       adminClient:
         secret: zacAdminClientSecret
@@ -487,21 +418,6 @@ podiumd:
     replicaCount: 1
     autoscaling:
       enabled: false
-    # The bundled chart's own default (1.27.3) is older than the version
-    # docker-compose.yaml pins (1.29.1) - our vendored fixture SQL does raw
-    # INSERTs against this app's own tables, written against schema as of
-    # 1.29.1, so the version matters for compatibility, not just parity.
-    # openklant's bundled default (2.15.0) already matches compose exactly -
-    # no override needed there.
-    # Bumped to 1.29.3 per PodiumD 4.9's own release notes (Dimpact
-    # Confluence) - one patch ahead of docker-compose.yaml's own still-pinned
-    # 1.29.1. Confirmed via the upstream CHANGELOG.rst that 1.29.2/1.29.3 are
-    # bugfix/security-only releases (no new data migrations - the last one,
-    # in 1.29.0, is already included since we're moving forward from 1.29.1,
-    # past it), so this shouldn't affect our vendored fixture SQL's own
-    # schema assumptions.
-    image:
-      tag: "1.29.3"
     flower:
       enabled: false
     worker:
@@ -546,36 +462,9 @@ podiumd:
       # configuration.secrets.keycloak_client_secret below) and plan.md's
       # PKCE sections for the rollout rationale.
       #
-      # PKCE (RFC 9700 requires it for every authorization-code-flow
-      # client): NOT enabled here, and the Keycloak client's own
-      # pkce.code.challenge.method is deliberately left "" (not "S256") to
-      # match - confirmed live this pinned openzaak image (still 2.0.1 as
-      # of the 1.29.1->1.29.3 bump - that upgrade's own upstream changelog
-      # never mentions bumping mozilla-django-oidc-db, and re-checking live
-      # confirms it didn't) has zero PKCE support at all (no `oidc_use_pkce`
-      # field anywhere in its setup-configuration pydantic models, not even
-      # an unused DB column - checked the installed package's own source
-      # directly, not just its changelog). Setting oidc_use_pkce: true here
-      # fails validation outright ("Extra inputs are not permitted");
-      # enforcing PKCE on the Keycloak client while the app can never send a
-      # code_challenge would instead fail every login with "Missing
-      # parameter: code_challenge_method" - the exact same failure mode
-      # already hit for ZAC (see this file's own zac.image.tag comment) and
-      # the same class of incident documented in the sibling podiumd
-      # chart's own docs/apps/keycloak/keycloak-security-updates.md (PKCE
-      # Enforcement section) for enabling this before every component
-      # actually supports it.
-      #
-      # Unlike ZAC, this isn't just "revisit after the next version bump":
-      # checked live across every Django-based ZGW component this project
-      # runs (openzaak/openklant/objecten/objecttypen/opennotificaties/
-      # openformulieren/openarchiefbeheer, whichever of 1.1.1/2.0.1
-      # mozilla-django-oidc-db each one happens to bundle) - none of them
-      # have PKCE support at any version, `grep -ri pkce` across the whole
-      # installed package finds nothing, and the upstream project's own
-      # CHANGELOG.rst and every GitHub issue/PR (searched directly) never
-      # mention it either. tests/test_keycloak_realm.py guards that their
-      # clients never require PKCE.
+      # No PKCE: mozilla-django-oidc-db, in every Django app here, cannot send
+      # a code_challenge, so a client requiring it fails every login
+      # (tests/test_keycloak_realm.py guards this).
       data: |-
         sites_config_enable: true
         sites_config:
@@ -2533,19 +2422,6 @@ podiumd:
     # interactions API group, from the openklant-api service below.
     customerInteractionsConfigJob:
       enabled: true
-    # Found live: chart default (3.4.9) differs from both compose's own
-    # pinned version and this one - a genuine version pin, unlike nginx's
-    # own digest-qualified default just below, which is handled by
-    # src/podiumd_minikube/manifests.py instead of a hardcoded tag here.
-    # Bumped to 3.5.5 per PodiumD 4.9's own release notes (Dimpact
-    # Confluence) - one patch behind docker-compose.yaml's own 3.5.6 (which
-    # moved independently ahead of PodiumD's own tracked version); no
-    # migration/schema changes between 3.5.4 and 3.5.5 per the upstream
-    # CHANGELOG.rst (bugfixes only - broken table markup, formio validation,
-    # templating fixes; two optional one-off data-repair scripts mentioned
-    # there don't apply to this project's own single 2-field test form).
-    image:
-      tag: "3.5.5"
     nginx:
       replicaCount: 1 # compose runs openformulieren-nginx
     worker:

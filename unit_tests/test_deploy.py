@@ -32,19 +32,18 @@ SEAL = ["--set-file", "seal=key"]
 
 
 @pytest.fixture
-def no_pkce(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chart, "zac_pkce_sets", list)
+def seal_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(openbao, "seal_key_args", lambda: SEAL)
 
 
-def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.MonkeyPatch, no_pkce: None):
+def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.MonkeyPatch, seal_key: None):
     monkeypatch.setattr(chart, "objecten_shape", lambda: chart.ObjectenShape(merged=True, sets=["--set", "shape=1"]))
     selected = deploy.options(full=True, extra=["--set", "x=y"])
     assert selected.objecten_merged
     assert selected.helm_args == [*chart.FULL_PROFILE_SETS, "--set", "shape=1", *SEAL, "--set", "x=y"]
 
 
-def test_options_core_has_no_profile_sets(no_pkce: None):
+def test_options_core_has_no_profile_sets(seal_key: None):
     selected = deploy.options(full=False, extra=[])
     assert not selected.objecten_merged
     assert selected.helm_args == SEAL

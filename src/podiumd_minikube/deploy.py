@@ -53,7 +53,7 @@ class Options:
 
 def options(*, full: bool, extra: list[str]) -> Options:
     """Options for a deploy with or without --full, plus extra helm args."""
-    selected = Options(helm_args=chart.zac_pkce_sets())
+    selected = Options()
     if full:
         shape = chart.objecten_shape()
         selected.helm_args += [*chart.FULL_PROFILE_SETS, *shape.sets]
