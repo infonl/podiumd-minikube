@@ -6679,3 +6679,13 @@ after the first start never got the fixture anyway. Removed: the fixture, its
 seed block, the env var and its ConfigMap volume. Among the workloads of the
 default profile, only ZAC's pod template now differs between the profiles
 (its `podiumd-minikube/outbound` annotation, by design).
+
+## Open Inwoner back to 1 uWSGI process (user: "just switch to 1 process")
+
+The 2 processes of 10-10 were for image 2.4.3's `--lazy-apps`: each worker
+restart (every 100 requests) reloaded the app for about 6 s. Image 2.4.6
+(podiumd 4.9.4 and 4.10.0) starts uWSGI without it ("Avoid --lazy-apps as it
+breaks our otel setup hooks" in its /start.sh), so a restarted worker forks
+from the loaded master, as in the other Maykin apps. podiumd 4.9.0-4.9.3 ship
+2.4.3 and are not deployed here any more (user). Expected saving about
+120 MiB (one worker's PSS); podiumd-tests reruns its search-stall check.
