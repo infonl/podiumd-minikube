@@ -183,6 +183,19 @@ def ingress_hosts(docs: list[Doc]) -> list[str]:
     return sorted({str(rule["host"]) for rule in _ingress_rules(docs) if rule.get("host")})
 
 
+def allow_rolling_updates(docs: list[Doc]) -> None:
+    """Drops required pod anti-affinity from Deployments.
+
+    On one node a rolling update's new pod stays Pending next to the old one
+    (Loki's gateway). StatefulSets replace their pod in place and keep it.
+    """
+    for doc in docs:
+        if doc.get("kind") == "Deployment" and (spec := _pod_spec(doc)) is not None:
+            section(section(spec, "affinity"), "podAntiAffinity").pop(
+                "requiredDuringSchedulingIgnoredDuringExecution", None
+            )
+
+
 def _pod_spec(doc: Doc) -> Doc | None:
     """doc's pod spec for workloads (and Jobs), or None."""
     path = _POD_SPEC_PATHS.get(doc.get("kind", "")) or (
@@ -398,6 +411,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     loaded: list[Doc | None] = list(yaml.safe_load_all(strip_image_digests(text)))
     docs = [doc for doc in loaded if doc and not _is_test_or_delete_hook(doc)]
     disable_service_links(docs)
+    allow_rolling_updates(docs)
     route_outbound(docs)
     route_through_nginx(docs)
     keep_finished_jobs(docs)

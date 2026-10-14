@@ -26,6 +26,33 @@ def test_images_skip_an_image_key_without_a_value():
     assert manifests.images(text) == ["c:3"]
 
 
+def test_allow_rolling_updates_drops_required_anti_affinity_from_deployments_only():
+    affinity = """
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution: [{topologyKey: kubernetes.io/hostname}]
+          preferredDuringSchedulingIgnoredDuringExecution: []"""
+    docs = _docs(f"""
+kind: Deployment
+spec:
+  template:
+    spec:{affinity}
+---
+kind: StatefulSet
+spec:
+  template:
+    spec:{affinity}
+""")
+    manifests.allow_rolling_updates(docs)
+    assert docs[0]["spec"]["template"]["spec"]["affinity"] == {
+        "podAntiAffinity": {"preferredDuringSchedulingIgnoredDuringExecution": []}
+    }
+    assert (
+        "requiredDuringSchedulingIgnoredDuringExecution"
+        in docs[1]["spec"]["template"]["spec"]["affinity"]["podAntiAffinity"]
+    )
+
+
 def test_disable_service_links_skips_bare_jobs():
     docs = _docs("""
 kind: Deployment

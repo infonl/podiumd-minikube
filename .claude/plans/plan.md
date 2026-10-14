@@ -6613,8 +6613,10 @@ the AKS nodes use `always` is unverified.
 The deploy that rolled every pod hit a single-node problem: Loki's gateway
 Deployment has a required pod anti-affinity on the hostname, so a rolling
 update's new pod stayed Pending next to the old one (deploy timed out after
-900 s). `loki.gateway.affinity.podAntiAffinity.requiredDuringScheduling...: []`
-in values.yaml (Helm did not delete a null at that depth). The pods with the
-old rule were deleted by hand once. The other required anti-affinities
+900 s). The fixup `manifests.allow_rolling_updates` drops required pod
+anti-affinity from every Deployment, so a chart upgrade that adds one cannot
+block a deploy again (a values.yaml override covered only Loki, and Helm did
+not delete a null at that depth). The pods with the old rule were deleted by
+hand once. The other required anti-affinities
 (Loki, OpenBao) are StatefulSets, which replace their pod in place.
 Smoke 143 passed, live suite 32 passed.
