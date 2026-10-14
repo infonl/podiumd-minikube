@@ -114,6 +114,9 @@ def update_hosts() -> None:
     if replace_hosts_line(current, line) == current:
         print(f"/etc/hosts is up to date:\n{line}")
         return
+    if not sys.stdin.isatty() and not process.succeeds(["sudo", "-n", "true"]):
+        msg = "sudo needs a terminal for its password: run `podiumd-minikube update-hosts` in a terminal"
+        raise UserError(msg)
     print("Caching sudo credentials up front...")
     process.run(["sudo", "-v"], capture=False)
     process.run(["sudo", "cp", str(ETC_HOSTS), f"{ETC_HOSTS}.bak"])
