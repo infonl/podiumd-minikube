@@ -44,7 +44,11 @@ CONTROL_PLANE_ENV = {
     "kube-apiserver": {"GOGC": "50", "GOMEMLIMIT": "1200MiB", **manifests.GO_NO_HUGE_PAGES},
     "etcd": {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES},
     "kube-controller-manager": manifests.GO_NO_HUGE_PAGES,
+    "kube-scheduler": manifests.GO_NO_HUGE_PAGES,
 }
+# The node's Go daemons are systemd services, not static pods; a drop-in sets their env.
+NODE_SERVICES = ("containerd", "kubelet")
+NODE_SERVICE_DROP_IN = "/etc/systemd/system/{}.service.d/20-go-no-huge-pages.conf"
 STATIC_PODS = "/etc/kubernetes/manifests"
 CONTROL_PLANE_TIMEOUT = 300
 KUBELET_CONFIG = "/var/lib/kubelet/config.yaml"
@@ -87,6 +91,7 @@ def start_node() -> None:
     process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, os.cpu_count() or cpus), PROFILE])
     kube.require_minikube_context()
     tune_control_plane()
+    tune_node_services()
     isolate_pod_dns()
 
 
@@ -122,7 +127,11 @@ def _write_node_file(path: str, content: str, mode: str) -> None:
         local = Path(directory) / name
         local.write_text(content, encoding="utf-8")
         process.run(["minikube", "cp", "-p", PROFILE, str(local), staged])
-    kube.node(f"sudo chown root:root {staged} && sudo chmod {mode} {staged} && sudo mv {staged} {path}")
+    directory = str(Path(path).parent)
+    kube.node(
+        f"sudo chown root:root {staged} && sudo chmod {mode} {staged}"
+        f" && sudo mkdir -p {directory} && sudo mv {staged} {path}"
+    )
 
 
 def nameservers_only(resolv_conf: str) -> str:
@@ -154,6 +163,27 @@ def isolate_pod_dns() -> None:
     _write_node_file(KUBELET_CONFIG, config, mode="644")
     print(f"Restarting the kubelet with resolvConf {POD_RESOLV_CONF} (no search domains of the laptop)...")
     kube.node("sudo systemctl restart kubelet")
+
+
+def service_drop_in(env: dict[str, str]) -> str:
+    """A systemd drop-in that adds env to its service."""
+    return "[Service]\n" + "".join(f"Environment={name}={value}\n" for name, value in env.items())
+
+
+def tune_node_services() -> None:
+    """Adds GO_NO_HUGE_PAGES to NODE_SERVICES; restarts the ones it changed (containers outlive containerd)."""
+    wanted = service_drop_in(manifests.GO_NO_HUGE_PAGES)
+    changed: list[str] = []
+    for service in NODE_SERVICES:
+        path = NODE_SERVICE_DROP_IN.format(service)
+        if kube.node(f"cat {path} 2>/dev/null || true").strip() == wanted.strip():
+            continue
+        _write_node_file(path, wanted, mode="644")
+        changed.append(service)
+    if not changed:
+        return
+    print(f"Restarting {', '.join(changed)} with {manifests.GO_NO_HUGE_PAGES}...")
+    kube.node(f"sudo systemctl daemon-reload && sudo systemctl restart {' '.join(changed)}")
 
 
 def tune_control_plane() -> None:

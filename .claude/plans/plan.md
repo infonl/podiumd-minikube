@@ -6899,3 +6899,17 @@ heap target is 1.5x the live heap, so with 700MiB the soft limit was hit
 permanently: 86,000 CPU seconds in 7 h 50 min since the morning's restart.
 The live heap reaches 760 MiB over a day, so the limit is 1200MiB (above
 1.5x of that); it still caps the freed heap the limit was introduced for.
+
+## Huge pages off for the kubelet, containerd and kube-scheduler (user: "go ahead with 1, then 2")
+
+The GODEBUG=disablethp=1 round (bb4d759) reached the containers and three
+static pods, not kube-scheduler nor the node's systemd services. On 10-15,
+after a reboot: kubelet 86 of 156 MiB anonymous memory in huge pages,
+containerd 98 of 154, kube-scheduler 34 of 39. kube-scheduler joins
+`CONTROL_PLANE_ENV`; `provision.tune_node_services` writes a systemd drop-in
+(`/etc/systemd/system/<service>.service.d/20-go-no-huge-pages.conf`) for
+containerd and the kubelet on every start and restarts the ones it changed
+(running containers outlive a containerd restart; seen live). 10 minutes
+after: 142, 135 and 32 MiB, no huge pages: about 40 MiB, less than the huge
+page total suggested (most of it held live heap). The before values are from
+3 hours of uptime, the after values from 10 minutes; recheck after a day.

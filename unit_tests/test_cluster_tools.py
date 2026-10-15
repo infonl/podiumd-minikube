@@ -6,6 +6,7 @@ from conftest import FakeRun
 
 from podiumd_minikube import hosts
 from podiumd_minikube import kube
+from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import ports
 from podiumd_minikube import provision
@@ -136,6 +137,15 @@ def test_tune_control_plane_leaves_tuned_static_pods_alone(fake_run: FakeRun):
     fake_run.on("minikube", "ssh", stdout=provision.with_control_plane_env(STATIC_POD) or "")
     provision.tune_control_plane()
     assert not fake_run.ran("minikube", "cp")
+
+
+def test_tune_node_services_restarts_only_services_without_the_drop_in(fake_run: FakeRun):
+    fake_run.on("minikube", "ssh", stdout=provision.service_drop_in(manifests.GO_NO_HUGE_PAGES))
+    provision.tune_node_services()
+    assert not fake_run.ran("minikube", "cp")
+    fake_run.on("minikube", "ssh", stdout="")
+    provision.tune_node_services()
+    assert fake_run.ran("minikube", "cp")
 
 
 def test_cpuset_args_pin_the_node_to_its_first_cpus_only_when_the_host_has_more():
