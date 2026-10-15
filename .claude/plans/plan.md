@@ -7109,3 +7109,43 @@ the e-mail address both ways on every DigiD login, so another test's
 inwoner login between the two cleanup steps put the tagged address back.
 The e-mail test now changes inwoner2 in its own xdist group; the inwoner's
 account and Open Klant on minikube were repaired by hand.
+
+## podiumd 4.10.0 branch head 13f0a175 (user: "do you want to do a new deploy with those?")
+
+The worktree `helm-charts-podiumd-4.10.0` moved from d4d1b831 to the
+branch head 13f0a175 (#582, #583, #584 merged). A render diff of `deploy
+--full` before the deploy (419 objects, was 414): Keycloak and its
+operator 26.7.3 -> 26.8.1, Open Forms 3.5.8 -> 4.0.2, ZAC 5.4.5 -> 5.9.1,
+PABC 1.1.1 -> 2.1.0, KISS 3.1.3 -> 3.2.0, OMC 1.17.19 -> 2.3.1, OpenBao
+2.6.3 -> 2.7.1, gotenberg 8.37.0, OPA 1.21.1; new: Job
+keycloak-repair-client-scopes, CronJob openbao-token-renewal, ConfigMaps
+create-required-objecttypen-schemas, pabc-prefill and
+openarchiefbeheer-patches. ZAC's objects now carry their namespace.
+
+Found and fixed:
+
+- Path mode packaged the checkout's stale subcharts: `helm dependency
+  update` of this chart packages whatever the checkout's `charts/` holds,
+  here the old pin's (kiss-chart 3.1.3, openforms 1.12.0), and KISS's
+  schema then rejected the render. `dependency.sync` now runs `helm
+  dependency build` in a path checkout first.
+- Open Forms 4.0 rejects `catalogue_domain`, `catalogue_rsin` and
+  `document_type_*` in the `objects_api` and `zgw_api` groups
+  (`extra_forbidden`, helm-charts #583); they are gone from values.yaml, as
+  the chart's migrate-openforms-4.0-api-groups.py does. A registering form
+  sets its own catalogue and document types (told podiumd-tests).
+- The productaanvraag seed picked the first zaaktype with the identificatie;
+  #577 adds a version and ends the old one, so it now takes the one without
+  `eindeGeldigheid`.
+
+The first deploy failed 7 setup Jobs (objecten, openarchiefbeheer,
+openinwoner, openklant, opennotificaties, referentielijsten config and the
+ZAC seed): the Keycloak operator upgrade restarted keycloak-0 four minutes
+after the Jobs started, the admin OIDC step got no discovery document, and
+with `restartPolicy: OnFailure` the 6 retries ran out inside one pod
+(which took its logs with it). Deleting the Jobs and deploying again: all
+completed. Our realm scope repair fixed 1 client on the first deploy and 0
+on the second; the chart's keycloak-repair-client-scopes Job now does it,
+so keycloak.py carries `podiumd<4.10`. Live suite 32 passed; test_memory
+failed only on kube-apiserver 845 -> 1130 MiB after two deploys in a row
+(heap in use 939 MiB, no GC cycle in 30 s: no thrash; watch it).

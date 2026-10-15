@@ -2066,8 +2066,6 @@ podiumd:
         email: admin@example.com
       # openzaak-*: dotted Service name, see ZAC's zgwApis.url; client "formulier",
       # as ExternalsPodiumD.
-      # local-objects-api group: catalogue_domain/rsin match ZAC's catalogus
-      # (ALG, podiumd.zac.organizations.bron.rsin).
       data: |-
         zgw_consumers_config_enable: True
         zgw_consumers:
@@ -2156,15 +2154,10 @@ podiumd:
               objecttypes_service_identifier: objecttypen-api
               documenten_service_identifier: openzaak-documenten-api
               catalogi_service_identifier: openzaak-catalogi-api
-              document_type_submission_report: bijlage
-              document_type_submission_csv: bijlage
-              document_type_attachment: bijlage
-              catalogue_domain: ALG
-              catalogue_rsin: "856683164" # podiumd.zac.organizations.bron.rsin
               organisatie_rsin: "856683164"
 
-        # As ExternalsPodiumD's "Open Zaak" ZGW registration backend; the RSINs
-        # are ZAC's bron RSIN, which catalogus ALG carries.
+        # As ExternalsPodiumD's "Open Zaak" ZGW registration backend; the RSIN is
+        # ZAC's bron RSIN. Open Forms 4.0 takes no catalogue or document types here.
         zgw_api_config_enable: True
         zgw_api:
           groups:
@@ -2173,8 +2166,6 @@ podiumd:
               zaken_service_identifier: openzaak-zaken-api
               documenten_service_identifier: openzaak-documenten-api
               catalogi_service_identifier: openzaak-catalogi-api
-              catalogue_domain: ALG
-              catalogue_rsin: "856683164" # podiumd.zac.organizations.bron.rsin
               organisatie_rsin: "856683164"
               auteur: Aanvrager
               zaak_vertrouwelijkheidaanduiding: openbaar

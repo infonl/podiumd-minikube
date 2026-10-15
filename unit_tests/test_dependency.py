@@ -70,6 +70,8 @@ def test_sync_updates_and_restores_chart_files_even_when_helm_fails(tmp_path: Pa
     during_update: list[str] = []
 
     def failing_helm(args: list[str], **_kwargs: object) -> None:
+        if args[:3] == ["helm", "dependency", "build"]:
+            return
         during_update.append((chart_dir / "Chart.yaml").read_text(encoding="utf-8"))
         (chart_dir / "Chart.lock").write_text("changed\n", encoding="utf-8")
         raise process.ProcessError(args, 1, "fetch failed")
@@ -81,3 +83,13 @@ def test_sync_updates_and_restores_chart_files_even_when_helm_fails(tmp_path: Pa
     assert f'repository: "file://{tmp_path.resolve()}"' in during_update[0]
     assert (chart_dir / "Chart.yaml").read_text(encoding="utf-8") == CHART_YAML
     assert (chart_dir / "Chart.lock").read_text(encoding="utf-8") == "lock\n"
+
+
+def test_sync_builds_a_path_checkouts_subcharts_before_packaging_it(tmp_path: Path, fake_run: FakeRun):
+    chart_dir = _chart_dir(tmp_path)
+    versions = tmp_path / "versions.yaml"
+    dependency.write("podiumd", "path", "/checkout", versions)
+    dependency.write("monitoringLogging", "version", "1.0.14", versions)
+    dependency.sync(versions, chart_dir)
+    assert [call[:3] for call in fake_run.calls] == [["helm", "dependency", "build"], ["helm", "dependency", "update"]]
+    assert fake_run.calls[0][3] == "/checkout"

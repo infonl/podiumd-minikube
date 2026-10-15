@@ -201,9 +201,11 @@ def main():
         f"{OPENZAAK_BASE_URL}/catalogi/api/v1/zaaktypen?catalogus={catalogus_url}&identificatie={ZAAKTYPE_IDENTIFICATIE}",
         headers=zgw_headers,
     )
-    if zaaktypen["count"] == 0:
-        sys.exit(f"No zaaktype found with identificatie={ZAAKTYPE_IDENTIFICATIE!r}")
-    zaaktype = zaaktypen["results"][0]
+    # A chart upgrade adds a version and ends the old one (helm-charts #577).
+    current = [z for z in zaaktypen["results"] if not z.get("eindeGeldigheid")]
+    if not current:
+        sys.exit(f"No current zaaktype found with identificatie={ZAAKTYPE_IDENTIFICATIE!r}")
+    zaaktype = current[0]
     zaaktype_uuid = zaaktype["url"].rstrip("/").rsplit("/", 1)[-1]
 
     session = zac_session(seed_user_password())

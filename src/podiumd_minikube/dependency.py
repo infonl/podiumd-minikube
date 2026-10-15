@@ -106,8 +106,10 @@ def sync(versions_file: Path = VERSIONS_FILE, chart_dir: Path = CHART_DIR) -> No
 
     Skips `helm dependency update` when every dependency is a published
     version that is already fetched; path mode always re-packages the
-    checkout. Both dependencies are edited before one update, because the
-    update re-resolves every dependency at once.
+    checkout, after building the checkout's own subcharts: packaging takes
+    whatever its charts/ holds, also those of an earlier commit. Both
+    dependencies are edited before one update, because the update
+    re-resolves every dependency at once.
     """
     selections = {key: selection(key, versions_file) for key in DEPENDENCIES}
     missing = [DEPENDENCIES[key] for key, selected in selections.items() if selected is None]
@@ -117,6 +119,9 @@ def sync(versions_file: Path = VERSIONS_FILE, chart_dir: Path = CHART_DIR) -> No
     if all(selected.tarball(chart, chart_dir / "charts") for chart, selected in resolved.items()):
         return
 
+    for selected in resolved.values():
+        if selected.mode == "path":
+            process.run(["helm", "dependency", "build", selected.value], capture=False)
     chart_yaml = chart_dir / CHART_YAML.name
     chart_lock = chart_dir / CHART_LOCK.name
     with tempfile.TemporaryDirectory() as backup_dir:

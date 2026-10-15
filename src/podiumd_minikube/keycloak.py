@@ -3,6 +3,7 @@
 The chart's realm config lists only `optionalClientScopes` per client, and
 keycloak-config-cli then creates every client without default client scopes:
 logins get no profile, email or roles (KISS: invalid_scope, ZAC: no roles).
+podiumd<4.10: the chart's keycloak-repair-client-scopes Job does this since.
 """
 
 import base64
