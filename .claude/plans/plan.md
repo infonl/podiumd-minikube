@@ -6925,3 +6925,17 @@ other images ignore the variable, and the server's options (`ES_JAVA_OPTS`)
 are unaffected. After the deploy: PSS 76 and 81 MiB (anonymous 87 -> 63-69),
 about 40 MiB in total. The committed heap stays about 31 MiB either way; the
 saving is the C2 compiler's memory and code cache.
+
+## GOGC=50 for the kubelet, containerd and kube-controller-manager (user: "go ahead with the GOGC=50 one")
+
+kube-apiserver and etcd already ran at `GOGC=50`; the kubelet, containerd and
+kube-controller-manager ran at the default 100, so their heaps grew to twice
+the live heap between collections. `NODE_SERVICE_ENV` (`GOGC=50` plus
+`GO_NO_HUGE_PAGES`) goes into the systemd drop-in, renamed
+`20-podiumd-minikube.conf` because it holds more than the huge pages setting
+(the old file was removed from the node by hand; a fresh node never had it).
+kube-controller-manager gets `GOGC=50` in `CONTROL_PLANE_ENV`. Anonymous
+memory 30 minutes after a restart, without and with GOGC=50: kubelet 160 ->
+110 MiB, containerd 147 -> 89 MiB; kube-controller-manager 89 MiB at 30
+minutes (109 MiB at 82 minutes before, not a like-for-like compare). About
+110 MiB in total; the extra GC CPU of three idle daemons is not measurable.

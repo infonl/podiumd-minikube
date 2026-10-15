@@ -43,12 +43,13 @@ PLATFORM = "linux/amd64"
 CONTROL_PLANE_ENV = {
     "kube-apiserver": {"GOGC": "50", "GOMEMLIMIT": "1200MiB", **manifests.GO_NO_HUGE_PAGES},
     "etcd": {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES},
-    "kube-controller-manager": manifests.GO_NO_HUGE_PAGES,
+    "kube-controller-manager": {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES},
     "kube-scheduler": manifests.GO_NO_HUGE_PAGES,
 }
 # The node's Go daemons are systemd services, not static pods; a drop-in sets their env.
 NODE_SERVICES = ("containerd", "kubelet")
-NODE_SERVICE_DROP_IN = "/etc/systemd/system/{}.service.d/20-go-no-huge-pages.conf"
+NODE_SERVICE_ENV = {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES}
+NODE_SERVICE_DROP_IN = "/etc/systemd/system/{}.service.d/20-podiumd-minikube.conf"
 STATIC_PODS = "/etc/kubernetes/manifests"
 CONTROL_PLANE_TIMEOUT = 300
 KUBELET_CONFIG = "/var/lib/kubelet/config.yaml"
@@ -171,8 +172,8 @@ def service_drop_in(env: dict[str, str]) -> str:
 
 
 def tune_node_services() -> None:
-    """Adds GO_NO_HUGE_PAGES to NODE_SERVICES; restarts the ones it changed (containers outlive containerd)."""
-    wanted = service_drop_in(manifests.GO_NO_HUGE_PAGES)
+    """Adds NODE_SERVICE_ENV to NODE_SERVICES; restarts the ones it changed (containers outlive containerd)."""
+    wanted = service_drop_in(NODE_SERVICE_ENV)
     changed: list[str] = []
     for service in NODE_SERVICES:
         path = NODE_SERVICE_DROP_IN.format(service)
@@ -182,7 +183,7 @@ def tune_node_services() -> None:
         changed.append(service)
     if not changed:
         return
-    print(f"Restarting {', '.join(changed)} with {manifests.GO_NO_HUGE_PAGES}...")
+    print(f"Restarting {', '.join(changed)} with {NODE_SERVICE_ENV}...")
     kube.node(f"sudo systemctl daemon-reload && sudo systemctl restart {' '.join(changed)}")
 
 

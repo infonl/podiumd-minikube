@@ -6,7 +6,6 @@ from conftest import FakeRun
 
 from podiumd_minikube import hosts
 from podiumd_minikube import kube
-from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import ports
 from podiumd_minikube import provision
@@ -140,7 +139,7 @@ def test_tune_control_plane_leaves_tuned_static_pods_alone(fake_run: FakeRun):
 
 
 def test_tune_node_services_restarts_only_services_without_the_drop_in(fake_run: FakeRun):
-    fake_run.on("minikube", "ssh", stdout=provision.service_drop_in(manifests.GO_NO_HUGE_PAGES))
+    fake_run.on("minikube", "ssh", stdout=provision.service_drop_in(provision.NODE_SERVICE_ENV))
     provision.tune_node_services()
     assert not fake_run.ran("minikube", "cp")
     fake_run.on("minikube", "ssh", stdout="")
