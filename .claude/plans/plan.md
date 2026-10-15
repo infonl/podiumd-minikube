@@ -7052,3 +7052,20 @@ the spike with the real render: agent 126 MiB, operator 47 MiB, env
 enforced, port-forward and exec through a policy) pass again.
 `tests/test_cni.py` checks that kindnet and kube-proxy are gone, ds/cilium
 is ready and cilium-config carries the values (2 passed on the spike).
+
+### The main cluster on Cilium (user: "go ahead with the migration")
+
+Rebuilt on 2026-10-15 (teardown-cluster, provision-cluster, deploy --full;
+Kees ran it, the auto-mode classifier blocks the teardown for me). NGF and
+cert-manager installed unchanged on Cilium; every workload rolled out and
+every Job completed (early Job attempts failed while their dependencies
+started, as on any empty cluster). The tunnel works with
+`lbExternalClusterIP: false`, as the spike showed. Live suite: 32 passed;
+`test_memory` failed only on Alloy (76 -> 187 MiB), which reads every log of
+the new cluster from the start; recheck before refreshing the baseline.
+
+Settled after the deploy: Cilium agent cgroup 351 MiB (anon 154, kernel
+102: with 72 endpoints, each endpoint has its own policy map of
+`policyMapMax` entries, so this grows with the pod count), operator 44 MiB.
+`cilium-dbg status`: KubeProxyReplacement True, 365/365 controllers healthy.
+The spike profile is deleted.
