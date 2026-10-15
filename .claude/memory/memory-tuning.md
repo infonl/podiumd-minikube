@@ -44,6 +44,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 | Kibana | off | `podiumd.kiss-eck.eck-kibana.enabled: false` | -0.7 GiB |
 | ClamAV | EICAR-only signature database | `podiumd.clamav` + `templates/clamav` | 19 MiB instead of 973 |
 | KISS contact-web | 1 replica | `podiumd.kiss.replicaCount` (chart default 2) | -0.12 GiB |
+| Cilium (agent, operator) | fixed BPF map sizes (CT TCP 65536, CT any 32768, NAT and neigh 65536, policy, LB and auth 16384); limits 512Mi/192Mi for GOMEMLIMIT; 1 operator replica (AKS 2) | `cni.values()`, the render through `manifests.limit_runtimes` (`cni.render`) | the agent's cgroup 556 -> 162 MiB (BPF maps sized from the host's 93 GiB: 420 MiB kernel memory); with CAPACITY_ENV and GOMEMLIMIT agent 126, operator 47 MiB on the spike |
 | minikube node | 6 CPUs: quota and cpuset 0-5 | `provision.start_node` (`MINIKUBE_CPUS`): `docker update --cpus=6 --cpuset-cpus=0-5 minikube`; the quota alone still showed 24 CPUs to `nproc` (24 nginx workers) | caps CPU-scaled defaults: edge nginx 24 -> 6 workers (96 -> 54 MiB); full tier 7:31 -> 6:36 |
 
 ## Checks
@@ -64,6 +65,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
   `uwsgi` processes in the web pod (master + http + 1 worker = 3; Open
   Archiefbeheer has no http router: 2).
 - Control plane: `kubectl -n kube-system get pod kube-apiserver-minikube etcd-minikube -o jsonpath='{..env}'` shows `GOGC=50`, `GODEBUG=disablethp=1` (and `GOMEMLIMIT=1200MiB` on kube-apiserver); kube-apiserver's `/metrics` `go_gc_gogc_percent` is 50, and `go_gc_cycles_total_gc_cycles_total` rises by a few per minute, not per second. kubelet and containerd: `minikube ssh -- 'sudo systemctl show -p Environment kubelet containerd'` shows `GOGC=50 GODEBUG=disablethp=1`.
+- Cilium: `kubectl -n kube-system get cm cilium-config` shows `bpf-ct-global-tcp-max` 65536; the agent cgroup's `memory.stat` `kernel` is tens of MiB, not hundreds.
 - Elasticsearch: `_nodes/os` shows `allocated_processors` 1; the java process' environ has `MALLOC_ARENA_MAX=2` (ECK builds the pods, so a fixup that misses its pod templates misses them).
 - .NET: the env of the five apps has `DOTNET_gcServer=0`,
   `DOTNET_gcConcurrent=0`, `DOTNET_GCConserveMemory=7`.

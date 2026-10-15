@@ -1,6 +1,6 @@
 """Creates the minikube cluster this chart deploys to.
 
-Starts minikube, installs NGINX Gateway Fabric (the edge) and cert-manager
+Starts minikube with Cilium, installs NGINX Gateway Fabric (the edge) and cert-manager
 (with the local CA issuer), fetches the dependencies and loads every image the chart can
 reference: minikube's inner Docker has no internet access.
 """
@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 from podiumd_minikube import chart
+from podiumd_minikube import cni
 from podiumd_minikube import dependency
 from podiumd_minikube import disk
 from podiumd_minikube import gateway
@@ -63,7 +64,8 @@ def _env_int(name: str, default: int) -> int:
 
 
 def start_minikube(cpus: int, memory_mb: int) -> None:
-    """Starts the profile with the docker driver, or checks the running one's memory."""
+    """Starts the profile with the docker driver and Cilium, or checks the running one's memory."""
+    cni_manifest = cni.write_manifest()
     if process.succeeds(["minikube", "status", "-p", PROFILE]):
         print(f"minikube profile '{PROFILE}' is already running - leaving it as-is.")
         print("(delete it first with podiumd-minikube teardown-cluster if you want a genuinely fresh start)")
@@ -72,9 +74,10 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
     print(f"Starting minikube (cpus={cpus}, memory={memory_mb}MB)...")
     # Without --driver=docker minikube silently falls back to qemu2.
     process.run(
-        ["minikube", "start", "-p", PROFILE, "--driver=docker", f"--cpus={cpus}", f"--memory={memory_mb}"],
+        ["minikube", "start", "-p", PROFILE, "--driver=docker", f"--cpus={cpus}", f"--memory={memory_mb}",
+         f"--cni={cni_manifest}", *cni.START_ARGS],
         capture=False,
-    )
+    )  # fmt: skip
 
 
 def cpuset_args(cpus: int, host_cpus: int) -> list[str]:
@@ -91,6 +94,7 @@ def start_node() -> None:
     # GOMAXPROCS; the cpuset makes them see `cpus` (seen: 24 nginx workers).
     process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, os.cpu_count() or cpus), PROFILE])
     kube.require_minikube_context()
+    cni.apply()
     tune_control_plane()
     tune_node_services()
     isolate_pod_dns()

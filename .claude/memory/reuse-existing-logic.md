@@ -56,6 +56,7 @@ live: the tunnel script's own host list went stale, which is why
    | kubectl from tests | `kubectl` in `tests/conftest.py` |
    | edge address, pod list, enabled profiles | fixtures `edge_ip`, `pods`, `enabled_profiles` |
    | HTTP to an ingress host from tests | `host_url` |
+   | the CNI (Cilium), its values and start flags | `podiumd_minikube.cni` |
    | the edge's routes, Gateway and certificate | `podiumd_minikube.gateway` (routes come from the rendered Ingresses) |
 
 ## While changing code

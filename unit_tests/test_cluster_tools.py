@@ -1,9 +1,11 @@
 """Context guard, /etc/hosts, port mappings, teardown, provision and polling helpers."""
 
 import pytest
+import yaml
 
 from conftest import FakeRun
 
+from podiumd_minikube import cni
 from podiumd_minikube import hosts
 from podiumd_minikube import kube
 from podiumd_minikube import polling
@@ -171,3 +173,25 @@ def test_confirmed_aborts_without_input(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr("builtins.input", no_input)
     assert not teardown.confirmed("summary", yes=False)
+
+
+def test_cilium_render_gets_capacity_env_and_a_memory_limit(fake_run: FakeRun):
+    agent = {
+        "kind": "DaemonSet",
+        "metadata": {"name": "cilium"},
+        "spec": {"template": {"spec": {"containers": [{"name": "cilium-agent", "resources": cni.AGENT_RESOURCES}]}}},
+    }
+    fake_run.on("helm", "template", stdout=yaml.safe_dump(agent))
+    env = yaml.safe_load(cni.render())["spec"]["template"]["spec"]["containers"][0]["env"]
+    names = {item["name"] for item in env}
+    assert {"GODEBUG", "GOMEMLIMIT"} <= names
+    values = yaml.safe_load(fake_run.stdins[0] or "")
+    assert values["kubeProxyReplacement"] is True
+    assert values["bpf"]["lbExternalClusterIP"] is False
+
+
+def test_cilium_apply_refuses_a_kindnet_node(fake_run: FakeRun):
+    fake_run.on("kubectl", "get", "daemonset/kindnet")
+    with pytest.raises(UserError, match="teardown-cluster"):
+        cni.apply()
+    assert not fake_run.ran("kubectl", "apply")

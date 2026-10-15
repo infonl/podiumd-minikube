@@ -29,7 +29,7 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
 ```bash
 podiumd-minikube set-podiumd-version <version> <monitoring-logging-version>  # required — see below
                                      # (or --path <dir> for a local podiumd chart checkout)
-podiumd-minikube provision-cluster      # starts minikube, installs NGINX Gateway Fabric, pre-loads every image
+podiumd-minikube provision-cluster      # starts minikube with Cilium, installs NGINX Gateway Fabric, pre-loads every image
 podiumd-minikube deploy --full          # renders and applies the chart (every optional profile on)
 podiumd-minikube setup-tunnel           # asks sudo for the route, then runs `minikube tunnel` in the background
 ```
@@ -52,12 +52,19 @@ to the authenticated app on login.
 
 As ExternalsPodiumD: NGINX Gateway Fabric with Gateway `public-gateway` in
 namespace `ingress-basic`; `deploy` turns every rendered Ingress into an
-HTTPRoute (`src/podiumd_minikube/gateway.py`). Two consequences of its nginx, both as
-there: request bodies above 1 MB get 413, and request bodies are buffered.
-One deviation: larger response-header buffers, for KISS's login cookie
-(`.claude/plans/plan.md`). The edge Service has the fixed ClusterIP
-`10.96.0.200`, which `minikube tunnel` exposes, so the `/etc/hosts` line
-stays valid across rebuilds.
+HTTPRoute (`src/podiumd_minikube/gateway.py`), with ExternalsPodiumD's live
+proxy and client settings policies (no request-body limit, 128k buffers).
+The edge Service has the fixed ClusterIP `10.96.0.200`, which `minikube
+tunnel` exposes, so the `/etc/hosts` line stays valid across rebuilds.
+
+### Network
+
+As ExternalsPodiumD's ontw and most test clusters: Cilium 1.19 is the CNI and
+replaces kube-proxy, NetworkPolicies are enforced, Hubble and the L7 proxy
+are off (`src/podiumd_minikube/cni.py`). The only policy is the Keycloak
+operator's. A cluster provisioned before Cilium still runs kindnet;
+`start-cluster` and `provision-cluster` refuse it: run `teardown-cluster`,
+then `provision-cluster` (this deletes the volumes).
 
 ### HTTPS
 
@@ -148,7 +155,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 
 | Command | What it does |
 |---|---|
-| `podiumd-minikube provision-cluster` | Starts minikube (sized for the full stack), installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
+| `podiumd-minikube provision-cluster` | Starts minikube (sized for the full stack) with Cilium, installs NGINX Gateway Fabric, pre-pulls every image, runs `helm dependency update` |
 | `podiumd-minikube deploy [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune) |
 | `podiumd-minikube show-cluster-status` | Node and per-container memory and CPU (against the budget and `tests/memory-baseline.json`), profiles, recent restarts and failed Jobs, tunnel, lock and disk; reads only (`--top N`, `--all`) |
 | `podiumd-minikube start-cluster` | After a reboot: starts minikube, waits until every pod reports its state since the start and the apps are ready, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |

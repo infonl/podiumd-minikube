@@ -6952,3 +6952,103 @@ at 256m, measured after an earlier tier). The tier had 2 failures, neither
 from Elasticsearch: `test_begeleider_starts_a_samenwerking[chromium-inwoner]`
 (waits for `contact_approve`) also failed twice on 10-14 at 256m, and
 `test_uploaded_document_reaches_the_zaak` passed when rerun.
+
+## Cilium on ExternalsPodiumD's AKS clusters (user: "make a plan to add cilium similar to how externals has it")
+
+The network section above said the AKS network plugin is in neither repo;
+that stays true for the repos, but `az aks list` (2026-10-15) shows it per
+cluster. Azure CNI overlay with the Cilium dataplane and Cilium network
+policy: every ontw cluster (dim1-3, dimp, icat, info, mayk) and test dimp,
+gene, icat, rott, plus accp-gene. Azure CNI without a policy engine: the
+other acceptance clusters and test asse, ensc. Production is not visible to
+our account. Advanced networking (Hubble) is off everywhere. podiumd-infra
+uses Cilium only with `enable_nap=true` (johnb00); kees00 runs Azure CNI
+overlay without it.
+
+Read-only on t-dimp and o-dimp (INFO VPN, host routes to the API servers):
+
+- `ds/cilium` and `deploy/cilium-operator` (2 replicas), Microsoft's builds
+  of Cilium v1.19.8 (`cilium-distroless:v1.19.8-260923`); the DaemonSet adds
+  `azure-iptables-monitor` and `cilium-fluent-bit` containers. No kube-proxy
+  pods, no cilium-envoy, no Hubble. No resource requests or limits.
+- `cilium-config` is identical on both clusters (144 keys). The keys that
+  matter here: `kube-proxy-replacement=true`, `routing-mode=native`,
+  `ipam=delegated-plugin` (Azure CNI hands out the addresses),
+  `enable-ipv4-masquerade=false`, `enable-l7-proxy=false`,
+  `enable-hubble=false`, `enable-policy=default`,
+  `enable-k8s-networkpolicy=true`, `bpf-lb-sock=false`,
+  `bpf-lb-external-clusterip=false`, `enable-host-legacy-routing=true`,
+  `identity-allocation-mode=crd`, `enable-cilium-endpoint-slice=true`.
+- NetworkPolicies: only `kube-system/konnectivity-agent` (AKS's) and
+  `podiumd/keycloak-network-policy` (the Keycloak operator's, the same one
+  minikube already has, unenforced under kindnet). No
+  CiliumNetworkPolicy or CiliumClusterwideNetworkPolicy.
+- Usage: the cilium pods use 288-497 MiB per node (with fluent-bit and the
+  iptables monitor), 27-35m CPU.
+
+So "like ExternalsPodiumD" means: Cilium 1.19 as the only CNI and service
+proxy, Kubernetes NetworkPolicy enforced, no L7 proxy, no Hubble, no
+policies of its own. On minikube the Azure parts cannot be copied: IPAM must
+be Cilium's own (`kubernetes`), and with no Azure overlay to masquerade,
+Cilium must masquerade itself. `bpf-lb-external-clusterip=false` conflicts
+with the laptop's route to the edge's ClusterIP; that is the first thing to
+prove on a spike cluster.
+
+### Spike: Cilium 1.19.8 on a second minikube profile (user: "go ahead with the spike, always on")
+
+Profile `podiumd-cilium` (`--keep-context`, 2 CPUs, 3 GiB, Kubernetes
+1.37.0), next to the main cluster. Findings:
+
+- minikube refuses `--cni=false` with containerd ("The containerd container
+  runtime requires CNI"). `--cni=<file>` takes a manifest, so the Cilium
+  chart is rendered with `helm template` and handed to minikube start; with
+  `--extra-config=kubeadm.skip-phases=addon/kube-proxy` and
+  `kubeadm.pod-network-cidr=10.244.0.0/16` the node runs without kube-proxy.
+  `k8sServiceHost: control-plane.minikube.internal`, port 8443.
+- Values as AKS's `cilium-config`: kube-proxy replacement, native routing
+  with legacy host routing, no L7 proxy, no envoy, no Hubble, socket LB off,
+  `bpf.lbExternalClusterIP: false`, CRD identities, policy mode default.
+  Not copyable: IPAM `kubernetes` (AKS: Azure's delegated plugin) and
+  iptables masquerade on (AKS: done by the Azure overlay).
+- The edge path works without a deviation: with `lbExternalClusterIP: false`
+  a container outside the node, routed through it as the laptop is, times
+  out on 10.96.0.200; once the Service's LoadBalancer status holds that IP
+  (what minikube tunnel writes on the main cluster) it gets 200. Pod to
+  Service and node to ClusterIP work.
+- NetworkPolicy is enforced: a policy allowing port 80 only from
+  `app=allowed` blocks another pod and the outside path, allows the labelled
+  pod; `kubectl port-forward`, `kubectl exec` and the node's own requests
+  (kubelet probes) still pass.
+- Memory: the agent's cgroup held 556 MiB, 420 of it kernel memory: the BPF
+  maps, sized by `bpf-map-dynamic-size-ratio` 0.0025 from the host's 93 GiB,
+  not the node's limit (CT maps are LRU, always preallocated). Fixed sizes
+  (`mapDynamicSizeRatio: 0`, CT TCP 65536, CT any 32768, NAT and neigh 65536,
+  policy, LB and auth maps 16384) bring it to 162 MiB (anon 114, kernel 34);
+  the operator uses 56 MiB. kindnet (20) and kube-proxy (26) go away, so
+  about +170 MiB before the GODEBUG/GOGC/GOMEMLIMIT tuning the other Go
+  daemons get (90 of the agent's anon memory was in huge pages).
+
+### Cilium in provisioning (user: "go ahead with the code")
+
+`src/podiumd_minikube/cni.py` holds the values (as the spike, with the AKS
+facts above), renders chart 1.19.8 with `helm template --repo
+https://helm.cilium.io`, adds `CAPACITY_ENV` and `GOMEMLIMIT` through
+`manifests.limit_runtimes`, and writes the result to `.cni/cilium.yaml`
+(gitignored). `provision.start_minikube` passes that file as `--cni` with
+`cni.START_ARGS` (no kube-proxy, pod CIDR 10.244.0.0/16); the path is fixed
+because minikube stores it in the profile and rereads it on every start.
+`start_node` then applies the manifest, so changed values reach a running
+node, and refuses a node that still runs kindnet (a cluster from before
+Cilium): two CNIs on one node would break every pod's network. Such a
+cluster needs `teardown-cluster` and `provision-cluster`.
+
+`bpf.mapDynamicSizeRatio: 0` from the spike had no effect (the chart skips
+a falsy value; cilium-config kept 0.0025); the fixed map sizes override the
+ratio for the maps that matter, so the key is gone. Limits: agent
+192Mi/512Mi, operator 64Mi/192Mi (AKS sets none; ours give GOMEMLIMIT). On
+the spike with the real render: agent 126 MiB, operator 47 MiB, env
+`GOMEMLIMIT`, `GODEBUG=disablethp=1`, `MALLOC_ARENA_MAX=2`; the probes
+(pod to Service, node to ClusterIP, outside to the LoadBalancer IP, policy
+enforced, port-forward and exec through a policy) pass again.
+`tests/test_cni.py` checks that kindnet and kube-proxy are gone, ds/cilium
+is ready and cilium-config carries the values (2 passed on the spike).

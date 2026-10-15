@@ -46,6 +46,8 @@ session_memory.json
 .pki/
 # OpenBao's seal key, root token and recovery key (src/podiumd_minikube/openbao.py).
 .openbao/
+# The rendered Cilium manifest minikube start rereads (src/podiumd_minikube/cni.py).
+.cni/
 # pg_dumpall backups of Postgres major migrations (src/podiumd_minikube/postgres.py).
 .postgres-dumps/
 *.egg-info/
