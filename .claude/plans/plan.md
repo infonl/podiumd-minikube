@@ -7069,3 +7069,11 @@ Settled after the deploy: Cilium agent cgroup 351 MiB (anon 154, kernel
 `policyMapMax` entries, so this grows with the pod count), operator 44 MiB.
 `cilium-dbg status`: KubeProxyReplacement True, 365/365 controllers healthy.
 The spike profile is deleted.
+
+podiumd-tests on the Cilium cluster (its results 20261015-134457 smoke,
+20261015-134516 core): bootstrap (with seeding) exit 0, doctor all ok
+("1 agents ready; no Hubble"), smoke 143 passed / 7 xfailed, core 187
+passed / 8 xfailed, 0 failed. It now records `cilium-dbg monitor --type
+drop` per run: 0 policy drops in both runs. A hand-made TCP connect from
+openzaak to keycloak-0:7800 showed "Policy denied", so the Keycloak
+operator's policy is enforced, as on AKS.
