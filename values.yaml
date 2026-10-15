@@ -138,8 +138,9 @@ podiumd:
                       cpu: 1000m
                       memory: 1536Mi
                   env:
+                    # Laptop budget: ExternalsPodiumD 1g; old gen peaks at 100 MiB.
                     - name: ES_JAVA_OPTS
-                      value: "-Xms256m -Xmx256m"
+                      value: &esJavaOpts "-Xms192m -Xmx192m"
           volumeClaimTemplates:
             - metadata:
                 name: elasticsearch-data
@@ -1001,9 +1002,8 @@ podiumd:
                       cpu: 1000m
                       memory: 1536Mi
                   env:
-                    # Laptop budget: a quarter of ExternalsPodiumD's 1g heap; old gen stays under 100 MiB.
                     - name: ES_JAVA_OPTS
-                      value: "-Xms256m -Xmx256m"
+                      value: *esJavaOpts
                     - name: PRE_STOP_ADDITIONAL_WAIT_SECONDS
                       value: "15"
           volumeClaimTemplates:

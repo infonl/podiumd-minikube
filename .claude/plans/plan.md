@@ -6939,3 +6939,16 @@ memory 30 minutes after a restart, without and with GOGC=50: kubelet 160 ->
 110 MiB, containerd 147 -> 89 MiB; kube-controller-manager 89 MiB at 30
 minutes (109 MiB at 82 minutes before, not a like-for-like compare). About
 110 MiB in total; the extra GC CPU of three idle daemons is not measurable.
+
+## Elasticsearch heap 192m (user: "go ahead with the Elasticsearch heap 192m too")
+
+At 256m the old generation of both clusters peaked under 100 MiB, so both
+nodeSets share one `ES_JAVA_OPTS` anchor at `-Xms192m -Xmx192m`
+(ExternalsPodiumD 1g). After `deploy --full` and a podiumd-tests full tier:
+KISS heap 155 of 192 MiB in use, old peak 94 MiB; Open Inwoner 134 of 192,
+old peak 100 MiB; no full GC, no circuit breaker tripped, no restarts.
+Working set after the tier: KISS 581 MiB, Open Inwoner 570 MiB (669 and 647
+at 256m, measured after an earlier tier). The tier had 2 failures, neither
+from Elasticsearch: `test_begeleider_starts_a_samenwerking[chromium-inwoner]`
+(waits for `contact_approve`) also failed twice on 10-14 at 256m, and
+`test_uploaded_document_reaches_the_zaak` passed when rerun.
