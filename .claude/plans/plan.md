@@ -7104,3 +7104,8 @@ address `test_profile_email_reaches_open_klant` sets (its restore does not
 stick), so the begeleider's contact finds no account. Sent to podiumd-tests.
 `test_object_is_found_in_kiss_search[kennisartikel]` passed on rerun and
 also failed once on 10-14; a kiss-sync timing flake.
+podiumd-tests fixed the samenwerking failure in 36e2d8c: Open Inwoner syncs
+the e-mail address both ways on every DigiD login, so another test's
+inwoner login between the two cleanup steps put the tagged address back.
+The e-mail test now changes inwoner2 in its own xdist group; the inwoner's
+account and Open Klant on minikube were repaired by hand.
