@@ -7077,3 +7077,30 @@ passed / 8 xfailed, 0 failed. It now records `cilium-dbg monitor --type
 drop` per run: 0 policy drops in both runs. A hand-made TCP connect from
 openzaak to keycloak-0:7800 showed "Policy denied", so the Keycloak
 operator's policy is enforced, as on AKS.
+
+### Cilium's BPF maps on the full cluster (user: "go ahead and measure policyMapMax 4096")
+
+The agent's cgroup reached 465 MiB (anon 263, kernel 105) after the tiers.
+`bpftool map show` summed by map: 101.7 MiB, of which the socket reverse
+NAT map 38.3 (440754 entries: `bpf-sock-rev-map-max` is not in the chart,
+so the dynamic ratio still sized it from the host's memory), policy stats
+29.5 (65536 entries, per-CPU LRU), CT 8.5 + 4.3, SNAT 7.5, nodeport 5.0.
+The per-endpoint policy maps are LPM tries that allocate per entry used
+(memlock 0; at most 6 entries per endpoint here), so `policyMapMax 4096`
+saves nothing and stays at AKS's 16384. With `policyStatsMapMax 16384` and
+`extraConfig: bpf-sock-rev-map-max: 16384`: maps 42.7 MiB, agent cgroup 157
+MiB (anon 117, kernel 29) right after its restart.
+
+Found on the way: a values change that only touches cilium-config did not
+restart the agent, so `cni.apply` left the old maps in place;
+`rollOutCiliumPods` and `operator.rollOutPods` add a config checksum to the
+pod templates. tests/test_cni.py: 2 passed.
+
+The two failures of the full tier are not Cilium's:
+`test_begeleider_starts_a_samenwerking[chromium-inwoner]` has failed in
+every minikube full tier since 2026-10-14 14:53 (green at 14:13, on
+kindnet): the inwoner's Open Inwoner account keeps the tagged e-mail
+address `test_profile_email_reaches_open_klant` sets (its restore does not
+stick), so the begeleider's contact finds no account. Sent to podiumd-tests.
+`test_object_is_found_in_kiss_search[kennisartikel]` passed on rerun and
+also failed once on 10-14; a kiss-sync timing flake.

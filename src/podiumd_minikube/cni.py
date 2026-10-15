@@ -56,11 +56,16 @@ def values() -> dict[str, Any]:
             "policyMapMax": 16384,
             "lbMapMax": 16384,
             "authMapMax": 16384,
+            "policyStatsMapMax": 16384,
         },
+        # Not in the chart; the dynamic ratio otherwise sizes it at 440754 entries (38 MiB).
+        "extraConfig": {"bpf-sock-rev-map-max": "16384"},
+        # A cilium-config change alone does not restart the agent; the checksum annotation does.
+        "rollOutCiliumPods": True,
+        "operator": {"replicas": 1, "resources": OPERATOR_RESOURCES, "rollOutPods": True},
         "identityAllocationMode": "crd",
         "policyEnforcementMode": "default",
         "resources": AGENT_RESOURCES,
-        "operator": {"replicas": 1, "resources": OPERATOR_RESOURCES},
     }
 
 
