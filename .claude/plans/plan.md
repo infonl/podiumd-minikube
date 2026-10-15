@@ -7149,3 +7149,17 @@ on the second; the chart's keycloak-repair-client-scopes Job now does it,
 so keycloak.py carries `podiumd<4.10`. Live suite 32 passed; test_memory
 failed only on kube-apiserver 845 -> 1130 MiB after two deploys in a row
 (heap in use 939 MiB, no GC cycle in 30 s: no thrash; watch it).
+
+### OMC 2.3.1's Open VTB settings (IN-3179, helm-charts PR #600)
+
+On 13f0a175 OMC 2.3.1 answered every notification 500 ("The settings do
+not contain a given value, or the value is empty: ZGW_AUTH_KEY_OPENVTB"): 2.x
+builds a client for Open VTB at startup, and the chart left
+`omc.settings.zgw.auth.key.openvtb` and `endpoint.openVtb` empty. podiumd-infra
+gave kees00 placeholders (9841998); at Kees's request the helm-charts session
+made PR #600 (be1b8939): chart defaults "not-configured" and
+`https://openvtb.invalid`. minikube deployed the PR branch (worktree at
+be1b8939, no values change here): test_notification_is_recognized
+[without-source] passes; the as-opennotificaties variant and
+test_new_zaak_mails_the_initiator are strict xfails on the `source` defect
+again (206, inner 422). Reported to the PR.
