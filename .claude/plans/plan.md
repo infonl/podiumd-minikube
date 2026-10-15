@@ -6913,3 +6913,15 @@ containerd and the kubelet on every start and restarts the ones it changed
 after: 142, 135 and 32 MiB, no huge pages: about 40 MiB, less than the huge
 page total suggested (most of it held live heap). The before values are from
 3 hours of uptime, the after values from 10 minutes; recheck after a day.
+
+## Elasticsearch's launcher JVM: smaller heap, C1 only
+
+ES 8 starts the server from a launcher JVM (`elasticsearch-cli`, `-Xms4m
+-Xmx64m -XX:+UseSerialGC`) that stays resident as the server's parent: PSS
+98 and 97 MiB in KISS's and Open Inwoner's pods, with 13 MiB of heap in use,
+metaspace 14 MiB, code cache 5 MiB. Its script appends `CLI_JAVA_OPTS`
+(later flags win), so `CAPACITY_ENV` sets `-Xmx32m -XX:TieredStopAtLevel=1`;
+other images ignore the variable, and the server's options (`ES_JAVA_OPTS`)
+are unaffected. After the deploy: PSS 76 and 81 MiB (anonymous 87 -> 63-69),
+about 40 MiB in total. The committed heap stays about 31 MiB either way; the
+saving is the C2 compiler's memory and code cache.
