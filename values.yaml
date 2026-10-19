@@ -830,6 +830,11 @@ podiumd:
       replicaCount: 1
     tags:
       redis: false
+    # Job openinwoner-configure-kvk writes KvKConfig, as podiumd-infra kees00.
+    # The FQDN: Django's URLValidator rejects a host without a dot. The Job
+    # bypasses manifests.route_outbound, so KvK skips the Frank!Gateway outway.
+    kvk:
+      apiRoot: http://api-proxy.podiumd-minikube.svc.cluster.local/api/
     configuration:
       enabled: true
       secrets:

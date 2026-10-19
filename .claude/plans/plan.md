@@ -7221,3 +7221,15 @@ The API assigns its own uuids, so `files/openklant/create_omc_actor.py`
 creates it (geautomatiseerde actor "OMC") with `manage.py shell`, run by the
 openklant-create-superuser Job when OMC is on. Live test:
 `tests/test_database.py::test_openklant_has_omcs_actor`.
+
+### Open Inwoner's KvK through the chart (helm-charts #604)
+
+podiumd-tests' request (2026-10-19): `openinwoner.kvk.apiRoot` set to
+`http://api-proxy.podiumd-minikube.svc.cluster.local/api/`, as podiumd-infra
+kees00 (ExternalsPodiumD's charts predate #604 and leave KvKConfig to the
+admin). The chart's Job openinwoner-configure-kvk then writes KvKConfig, and
+podiumd-tests drops its bootstrap step openinwoner-kvk. The FQDN because
+Django's URLValidator rejects `http://api-proxy/api/`. The Job inlines the URL
+in its script, not in a ConfigMap, so `manifests.route_outbound` leaves it
+alone: with the frankgateway profile Open Inwoner's KvK still goes to the
+api-proxy, not the outway.
