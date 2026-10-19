@@ -7182,3 +7182,18 @@ values.yaml now sets `zac.objecttypenApi` (no template reads it; the check
 still requires it; podiumd-infra sets it on every environment) to the same
 token as `objectenApi`, and the Gotenberg basic auth to `zac` /
 `zacOfficeConverterPassword` (neither reference project overrides it).
+
+### Postgres serves TLS (podiumd 4.10 sslmode require)
+
+The security review (#568) sets `database.sslmode: require` for every Maykin
+app, as the reference environments' Azure Postgres needs (podiumd-infra:
+"Required for Azure PostgreSQL"). Our Postgres had no TLS: openzaak and
+openklant waited forever on `pg_isready` ("no response"), and the deploy
+timed out. `manifests.serve_postgres_tls` (deploy renders only) adds a
+cert-manager Certificate `postgres-tls` from the local CA (`tls.certificate`,
+now taking the name) and starts Postgres with `ssl=on`. Postgres refuses a
+key it does not own with mode 0600, so the container copies it from the
+Secret before `docker-entrypoint.sh`. Verified live: Certificate Ready,
+openzaak/openklant/zac roll out, openklant-config succeeds. The first
+deploy after the change also restarted Postgres (Recreate), and the Jobs
+that ran during that restart failed ("No route to host"); a second deploy passed.

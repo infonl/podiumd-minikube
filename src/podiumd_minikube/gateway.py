@@ -242,7 +242,7 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         raise process.UserError(msg)
     print("\nApplying the NGINX Gateway Fabric Gateway and routes (gateway.py)...")
     objects = [
-        tls.certificate(EDGE_NAMESPACE, hosts),
+        tls.certificate(tls.CERTIFICATE, EDGE_NAMESPACE, hosts),
         gateway_manifest(),
         proxy_settings_manifest(),
         client_settings_manifest(),

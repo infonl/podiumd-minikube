@@ -156,6 +156,32 @@ def test_trust_ca_mounts_the_ca_in_workloads_and_jobs():
     assert docs[3]["spec"]["template"]["spec"]["containers"][0]["env"]
 
 
+def test_serve_postgres_tls_adds_the_certificate_and_turns_on_ssl():
+    postgres: manifests.Doc = {
+        "kind": "Deployment",
+        "metadata": {"name": "postgres"},
+        "spec": {"template": {"spec": {"containers": [{"name": "postgres", "args": ["postgres"]}]}}},
+    }
+    other: manifests.Doc = {
+        "kind": "Deployment",
+        "metadata": {"name": "zac"},
+        "spec": {"template": {"spec": {"containers": []}}},
+    }
+    docs = manifests.serve_postgres_tls([other, postgres])
+    certificate = docs[-1]
+    assert certificate["kind"] == "Certificate"
+    assert certificate["spec"]["secretName"] == manifests.POSTGRES_TLS
+    assert "postgres" in certificate["spec"]["dnsNames"]
+    container = postgres["spec"]["template"]["spec"]["containers"][0]
+    assert container["args"][:3] == ["postgres", "-c", "ssl=on"]
+    assert container["command"][-1] == "--"
+    assert "install -o postgres -m 600 /etc/postgres-tls/tls.key" in container["command"][2]
+    assert postgres["spec"]["template"]["spec"]["volumes"] == [
+        {"name": manifests.POSTGRES_TLS, "secret": {"secretName": manifests.POSTGRES_TLS}}
+    ]
+    assert manifests.serve_postgres_tls([other]) == [other]
+
+
 def test_limit_runtimes_adds_capacity_env_unless_the_container_sets_it():
     docs: list[manifests.Doc] = [
         {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "DOTNET_gcServer", "value": "1"}]}]}}}},

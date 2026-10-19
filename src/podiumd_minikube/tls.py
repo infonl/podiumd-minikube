@@ -13,14 +13,14 @@ from podiumd_minikube.pki import ISSUER
 CERTIFICATE = "podiumd-tls"
 
 
-def certificate(namespace: str, hosts: list[str]) -> dict[str, Any]:
-    """The Certificate (Secret podiumd-tls) for hosts in namespace, issued by the local CA."""
+def certificate(name: str, namespace: str, hosts: list[str]) -> dict[str, Any]:
+    """The Certificate (and its Secret) name for hosts in namespace, issued by the local CA."""
     return {
         "apiVersion": "cert-manager.io/v1",
         "kind": "Certificate",
-        "metadata": {"name": CERTIFICATE, "namespace": namespace},
+        "metadata": {"name": name, "namespace": namespace},
         "spec": {
-            "secretName": CERTIFICATE,
+            "secretName": name,
             "issuerRef": {"name": ISSUER, "kind": "ClusterIssuer", "group": "cert-manager.io"},
             "dnsNames": hosts,
         },

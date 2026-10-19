@@ -5,8 +5,9 @@ from podiumd_minikube import tls
 
 
 def test_certificate_covers_the_hosts_in_the_namespace():
-    certificate = tls.certificate("ingress-basic", ["zac.local", "pabc.local"])
-    assert certificate["metadata"]["namespace"] == "ingress-basic"
+    certificate = tls.certificate("podiumd-tls", "ingress-basic", ["zac.local", "pabc.local"])
+    assert certificate["metadata"] == {"name": "podiumd-tls", "namespace": "ingress-basic"}
+    assert certificate["spec"]["secretName"] == "podiumd-tls"
     assert certificate["spec"]["dnsNames"] == ["zac.local", "pabc.local"]
     assert certificate["spec"]["issuerRef"]["name"] == "podiumd-local-ca"
 

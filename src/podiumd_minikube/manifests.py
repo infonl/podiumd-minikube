@@ -17,6 +17,7 @@ import yaml
 
 from podiumd_minikube import pki
 from podiumd_minikube import process
+from podiumd_minikube import tls
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -297,6 +298,51 @@ def trust_ca(docs: list[Doc]) -> None:
             add_env(container, pki.TRUST_ENV)
 
 
+POSTGRES_TLS = "postgres-tls"
+_POSTGRES_TLS_DIR = "/etc/postgres-tls"
+
+
+def serve_postgres_tls(docs: list[Doc]) -> list[Doc]:
+    """Turns on TLS in the Postgres Deployment, with a Certificate from the local CA added to docs.
+
+    podiumd's apps connect with sslmode require, as to the reference
+    environments' Azure Postgres. Postgres refuses a key file that its user
+    cannot own with mode 0600, so the entrypoint copies it from the Secret first.
+    """
+    for doc in docs:
+        if doc.get("kind") != "Deployment" or name_of(doc) != "postgres":
+            continue
+        spec = cast("Doc", _pod_spec(doc))
+        spec.setdefault("volumes", []).append({"name": POSTGRES_TLS, "secret": {"secretName": POSTGRES_TLS}})
+        container = _containers(spec)[0]
+        container.setdefault("volumeMounts", []).append(
+            {"name": POSTGRES_TLS, "mountPath": _POSTGRES_TLS_DIR, "readOnly": True}
+        )
+        key, cert = "/var/run/postgresql/tls.key", "/var/run/postgresql/tls.crt"
+        container["command"] = [
+            "sh",
+            "-c",
+            (
+                f"install -o postgres -m 600 {_POSTGRES_TLS_DIR}/tls.key {key}"
+                f" && install -o postgres -m 644 {_POSTGRES_TLS_DIR}/tls.crt {cert}"
+                ' && exec docker-entrypoint.sh "$@"'
+            ),
+            "--",
+        ]
+        container["args"] = [
+            *container["args"],
+            "-c",
+            "ssl=on",
+            "-c",
+            f"ssl_cert_file={cert}",
+            "-c",
+            f"ssl_key_file={key}",
+        ]
+        service = f"postgres.{NAMESPACE}"
+        return [*docs, tls.certificate(POSTGRES_TLS, NAMESPACE, ["postgres", service, f"{service}.svc"])]
+    return docs
+
+
 def keep_finished_jobs(docs: list[Doc]) -> None:
     """Drops ttlSecondsAfterFinished from Jobs, so deploy sees their outcome after its slower steps.
 
@@ -464,6 +510,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     limit_runtimes(docs)
     if ca_trust:
         trust_ca(docs)
+        docs = serve_postgres_tls(docs)
     if objecten_merged:
         fixup_merged_objecten(docs)
     return Render(
