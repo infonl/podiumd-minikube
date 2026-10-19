@@ -264,6 +264,15 @@ podiumd:
     objectenApi:
       url: https://objecten.local
       token: objectenZaakToken
+    # No template reads it, but podiumd's placeholder check (validations.yaml)
+    # rejects the chart's "objectentoken"; values as objectenApi, URL as podiumd-infra.
+    objecttypenApi:
+      url: https://objecttypen.local
+      token: objectenZaakToken
+    # Basic auth between ZAC and Gotenberg; the placeholder check rejects the chart's "dummy".
+    office_converter:
+      username: zac
+      password: zacOfficeConverterPassword
     # BRP/KvK/BAG through the api-proxy, as ExternalsPodiumD.
     brpApi:
       url: http://api-proxy/haalcentraal/api/brp/

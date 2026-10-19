@@ -7172,3 +7172,13 @@ was stopped, and `stop_tunnel` asked `minikube ip`, which fails (exit 83) on
 a stopped profile. `stop_tunnel` now deletes the route via the gateway that
 `ip route show` reports (`tunnel.routed_via`, also used by setup-tunnel), and
 nothing when there is no route.
+
+### podiumd's placeholder-credential check (helm-charts #568)
+
+3b0d3b4a fails the render when a value is "dummy", "objectentoken" and the
+like (`validations.yaml`, from the 4.10.0 security review #568). It named
+`zac.objecttypenApi.token` and `zac.office_converter.username`/`password`.
+values.yaml now sets `zac.objecttypenApi` (no template reads it; the check
+still requires it; podiumd-infra sets it on every environment) to the same
+token as `objectenApi`, and the Gotenberg basic auth to `zac` /
+`zacOfficeConverterPassword` (neither reference project overrides it).
