@@ -139,6 +139,8 @@ check-typed-exception = true  # Enable additional checks for try-except-pass
 # (S603/S607), fake tokens and dev passwords (S105/S106). bandit does not
 # scan them either.
 "{tests,unit_tests}/**" = ["S101", "ARG001", "ARG005", "SLF001", "INP001", "PT018", "RUF059", "S603", "S607", "S105", "S106"]
+# files/: scripts an app's `manage.py shell` runs, not a package.
+"files/**" = ["INP001"]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -7208,3 +7208,16 @@ auth/oidc/config` fetches Keycloak's discovery document through the edge
 Keycloak answered behind it; the Job retried (backoffLimit 6) and completed
 after 5 min 36 s. The wait is now 600 s, inside the Job's own retry budget.
 A second `deploy --full` finished the round.
+
+### OMC's actor in Open Klant
+
+podiumd-tests' Notify receipt test (2026-10-19): after a delivery receipt OMC
+registers a klantcontact, then `POST actorklantcontacten` failed 400 "Actor
+object bestaat niet." and OMC answered 500. `omc.settings.omc.actor.id`
+(3a91832c-f2bd-4f22-8d5b-557b44c0ed38, as ExternalsPodiumD dim1/icat and
+podiumd-infra kees00) names an Open Klant actor that no chart or reference
+project creates in code; the reference environments have it from their data.
+The API assigns its own uuids, so `files/openklant/create_omc_actor.py`
+creates it (geautomatiseerde actor "OMC") with `manage.py shell`, run by the
+openklant-create-superuser Job when OMC is on. Live test:
+`tests/test_database.py::test_openklant_has_omcs_actor`.

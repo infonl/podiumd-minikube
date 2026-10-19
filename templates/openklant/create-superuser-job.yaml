@@ -8,6 +8,8 @@ begin with) and why it's safe to rerun: it's idempotent (get_or_create +
 set_password), so re-applying its already-succeeded, unchanged spec is a
 safe no-op like any other Job here.
 
+With OMC on, it also creates OMC's actor (files/openklant/create_omc_actor.py).
+
 Unlike openformulieren's own version of this Job, no DJANGO_SETTINGS_MODULE
 override is needed - openklant's settings.djangoSettingsModule is never
 overridden to a docker_no2fa-style shim in the first place (see
@@ -44,7 +46,11 @@ spec:
           command:
             - sh
             - -c
+            {{- if .Values.podiumd.omc.enabled }}
+            - python src/manage.py shell < /app/create_superuser.py && python src/manage.py shell < /app/create_omc_actor.py
+            {{- else }}
             - python src/manage.py shell < /app/create_superuser.py
+            {{- end }}
           envFrom:
             - secretRef:
                 name: openklant
@@ -57,10 +63,16 @@ spec:
               value: {{ .Values.podiumd.openklant.configuration.superuser.password | quote }}
             - name: DJANGO_SUPERUSER_EMAIL
               value: {{ .Values.podiumd.openklant.configuration.superuser.email | quote }}
+            - name: OMC_ACTOR_ID
+              value: {{ .Values.podiumd.omc.settings.omc.actor.id | quote }}
           volumeMounts:
             - name: create-superuser-script
               mountPath: /app/create_superuser.py
               subPath: create_superuser.py
+              readOnly: true
+            - name: create-superuser-script
+              mountPath: /app/create_omc_actor.py
+              subPath: create_omc_actor.py
               readOnly: true
       volumes:
         - name: create-superuser-script

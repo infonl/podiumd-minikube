@@ -6,3 +6,4 @@ metadata:
     {{- include "podiumd-minikube.labels" . | nindent 4 }}
 data:
   create_superuser.py: {{ .Files.Get "vendor/dimpact-zaakafhandelcomponent/openklant/create_superuser.py" | quote }}
+  create_omc_actor.py: {{ .Files.Get "files/openklant/create_omc_actor.py" | quote }}

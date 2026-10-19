@@ -100,3 +100,13 @@ def test_opennotificaties_has_objecten_kanaal_and_zac_abonnement(enabled_profile
         "https://zac.local/rest/notificaties"
         in psql("opennotificaties", "SELECT callback_url FROM datamodel_abonnement;").split()
     )
+
+
+def test_openklant_has_omcs_actor(enabled_profiles):
+    """openklant-create-superuser creates the actor OMC links its klantcontacten to."""
+    if not enabled_profiles.get("omc"):
+        pytest.skip("'omc' profile is not deployed")
+    actor_id = yaml.safe_load(VALUES_YAML.read_text(encoding="utf-8"))["podiumd"]["omc"]["settings"]["omc"]["actor"][
+        "id"
+    ]
+    assert psql("openklant", f"SELECT naam FROM klantinteracties_actor WHERE uuid = '{actor_id}';") == "OMC"
