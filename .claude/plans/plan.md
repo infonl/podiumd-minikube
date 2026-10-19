@@ -7197,3 +7197,14 @@ Secret before `docker-entrypoint.sh`. Verified live: Certificate Ready,
 openzaak/openklant/zac roll out, openklant-config succeeds. The first
 deploy after the change also restarted Postgres (Recreate), and the Jobs
 that ran during that restart failed ("No route to host"); a second deploy passed.
+
+### openbao-config wait on a fresh install
+
+Fresh `deploy --full` of podiumd 4.10 (round 2 of podiumd-tests' bug-report
+verification, helm-charts ad7f35c9): `openbao.bootstrap` waited 180 s for the
+openbao-config Job and failed the deploy. The Job's `vault write
+auth/oidc/config` fetches Keycloak's discovery document through the edge
+(`https://keycloak.local`, 10.96.0.200) and got "no route to host" until
+Keycloak answered behind it; the Job retried (backoffLimit 6) and completed
+after 5 min 36 s. The wait is now 600 s, inside the Job's own retry budget.
+A second `deploy --full` finished the round.

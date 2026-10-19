@@ -165,6 +165,7 @@ def bootstrap(render: manifests.Render) -> None:
         _mint_token(root, POLICY, POLICY_HCL, BOOTSTRAP_SECRET)
     kube.kubectl_shown("delete", "job", CONFIG_JOB, "-n", NAMESPACE, "--ignore-not-found")
     kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(jobs))
-    kube.kubectl_shown("wait", "--for=condition=complete", f"job/{CONFIG_JOB}", "-n", NAMESPACE, "--timeout=180s")
+    # On a fresh install the Job retries until Keycloak answers through the edge: 5.5 min seen.
+    kube.kubectl_shown("wait", "--for=condition=complete", f"job/{CONFIG_JOB}", "-n", NAMESPACE, "--timeout=600s")
     if kube.exists(f"deployment/{OUTWAY}"):
         _wire_outway(root)
