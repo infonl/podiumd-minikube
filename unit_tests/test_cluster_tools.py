@@ -96,12 +96,11 @@ def test_route_args_cover_the_service_network_via_the_node():
     ]  # fmt: skip
 
 
-def test_route_is_current_only_via_the_node(fake_run: FakeRun):
+def test_routed_via_reads_the_gateway_of_the_route(fake_run: FakeRun):
     fake_run.on("ip", "route", "show", stdout="10.96.0.0/12 via 192.168.49.2 dev br-f9a9ff7171ee \n")
-    assert tunnel.route_is_current("192.168.49.2")
-    assert not tunnel.route_is_current("192.168.58.2")
+    assert tunnel.routed_via() == "192.168.49.2"
     fake_run.on("ip", "route", "show", stdout="")
-    assert not tunnel.route_is_current("192.168.49.2")
+    assert tunnel.routed_via() is None
 
 
 def test_replace_hosts_line_is_unchanged_when_the_line_is_current():

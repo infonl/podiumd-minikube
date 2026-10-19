@@ -26,10 +26,10 @@ def route_args(action: str, node_ip: str) -> list[str]:
     return ["sudo", "ip", "route", action, SERVICE_CIDR, "via", node_ip]
 
 
-def route_is_current(node_ip: str) -> bool:
-    """Whether the service network is already routed via the node, so no sudo is needed."""
+def routed_via() -> str | None:
+    """The gateway the service network is routed via, or None without a route."""
     shown = process.output(["ip", "route", "show", SERVICE_CIDR]).split()
-    return shown[1:3] == ["via", node_ip]
+    return shown[2] if shown[1:2] == ["via"] else None
 
 
 def setup_tunnel() -> None:
@@ -49,7 +49,7 @@ def setup_tunnel() -> None:
         print(STOP_HINT)
         return
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
-    if route_is_current(node_ip):
+    if routed_via() == node_ip:
         print(f"{SERVICE_CIDR} is already routed via the minikube node {node_ip}.")
     else:
         print(f"Routing {SERVICE_CIDR} via the minikube node {node_ip} (sudo may ask for your password)...")
@@ -77,9 +77,11 @@ def stop_tunnel() -> None:
         process.run(["pkill", "-f", TUNNEL_PATTERN], check=False)
     else:
         print("No 'minikube tunnel' runs.")
-    node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
-    print(f"Removing the route {SERVICE_CIDR} via {node_ip} (sudo may ask for your password)...")
-    process.run(route_args("del", node_ip), capture=False, check=False)
+    # The route, not `minikube ip`: that fails on a stopped cluster.
+    node_ip = routed_via()
+    if node_ip:
+        print(f"Removing the route {SERVICE_CIDR} via {node_ip} (sudo may ask for your password)...")
+        process.run(route_args("del", node_ip), capture=False, check=False)
     print("Tunnel stopped; the *.local hosts are unreachable from this machine until podiumd-minikube setup-tunnel.")
 
 

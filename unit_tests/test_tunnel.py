@@ -93,13 +93,15 @@ def test_setup_tunnel_without_an_edge_ip_shows_the_log(
     assert "line 9\n" not in err
 
 
-@pytest.mark.parametrize("pgrep", [0, 1])
-def test_stop_tunnel_removes_the_route_whether_or_not_it_runs(machine: FakeRun, pgrep: int):
+@pytest.mark.parametrize(("pgrep", "route"), [(0, f"10.96.0.0/12 via {NODE_IP} dev br0\n"), (1, "")])
+def test_stop_tunnel_removes_only_an_existing_route(machine: FakeRun, pgrep: int, route: str):
     machine.on("pgrep", "-f", tunnel.TUNNEL_PATTERN, returncode=pgrep, stdout="4242\n")
+    machine.on("ip", "route", "show", stdout=route)
     machine.on("sudo", returncode=2)
     tunnel.stop_tunnel()
     assert bool(machine.ran("pkill", "-f", tunnel.TUNNEL_PATTERN)) is (pgrep == 0)
-    assert machine.ran("sudo") == [tunnel.route_args("del", NODE_IP)]
+    assert machine.ran("sudo") == ([tunnel.route_args("del", NODE_IP)] if route else [])
+    assert not machine.ran("minikube", "ip")
 
 
 def test_hosts_hint_is_quiet_when_etc_hosts_is_current(machine: FakeRun):

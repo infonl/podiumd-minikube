@@ -7163,3 +7163,12 @@ be1b8939, no values change here): test_notification_is_recognized
 [without-source] passes; the as-opennotificaties variant and
 test_new_zaak_mails_the_initiator are strict xfails on the `source` defect
 again (206, inner 422). Reported to the PR.
+
+### teardown-cluster on a stopped cluster
+
+The first fresh install for podiumd-tests' 4.10 bug-report re-verification
+(2026-10-19, helm-charts 3b0d3b4a) stopped in teardown-cluster: the cluster
+was stopped, and `stop_tunnel` asked `minikube ip`, which fails (exit 83) on
+a stopped profile. `stop_tunnel` now deletes the route via the gateway that
+`ip route show` reports (`tunnel.routed_via`, also used by setup-tunnel), and
+nothing when there is no route.
