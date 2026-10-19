@@ -106,7 +106,6 @@ def test_openklant_has_omcs_actor(enabled_profiles):
     """openklant-create-superuser creates the actor OMC links its klantcontacten to."""
     if not enabled_profiles.get("omc"):
         pytest.skip("'omc' profile is not deployed")
-    actor_id = yaml.safe_load(VALUES_YAML.read_text(encoding="utf-8"))["podiumd"]["omc"]["settings"]["omc"]["actor"][
-        "id"
-    ]
-    assert psql("openklant", f"SELECT naam FROM klantinteracties_actor WHERE uuid = '{actor_id}';") == "OMC"
+    omc = yaml.safe_load(VALUES_YAML.read_text(encoding="utf-8"))["podiumd"]["omc"]["settings"]["omc"]
+    actors = psql("openklant", "SELECT uuid, naam FROM klantinteracties_actor;").splitlines()
+    assert f"{omc['actor']['id']}|OMC" in actors
