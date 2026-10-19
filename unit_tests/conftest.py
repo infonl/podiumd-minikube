@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from podiumd_minikube import lock
+from podiumd_minikube import polling
 from podiumd_minikube import process
 
 
@@ -76,5 +77,13 @@ def private_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Every test gets its own lock file; the shared cluster's is never touched."""
     path = tmp_path / "minikube-lock"
     monkeypatch.setattr(lock, "LOCK_FILE", path)
-    monkeypatch.delenv(lock.HOLD_ENV, raising=False)
+    # setenv first: monkeypatch restores only what it saw, and lock.take writes os.environ.
+    monkeypatch.setenv(lock.HOLD_ENV, "")
+    monkeypatch.delenv(lock.HOLD_ENV)
     return path
+
+
+@pytest.fixture
+def poll_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """polling.wait_until asks its probe once, without sleeping."""
+    monkeypatch.setattr(polling, "wait_until", lambda probe, **_: probe() or None)

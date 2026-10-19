@@ -2,12 +2,31 @@
 
 import argparse
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 
+from conftest import FakeRun
+
 from podiumd_minikube import chart
+from podiumd_minikube import crds
+from podiumd_minikube import dependency
 from podiumd_minikube import deploy
+from podiumd_minikube import disk
+from podiumd_minikube import dns
+from podiumd_minikube import gateway
+from podiumd_minikube import hosts
+from podiumd_minikube import keycloak
+from podiumd_minikube import kube
 from podiumd_minikube import manifests
+from podiumd_minikube import memory
 from podiumd_minikube import openbao
+from podiumd_minikube import pki
+from podiumd_minikube import postgres
+from podiumd_minikube import process
+from podiumd_minikube import prune
+from podiumd_minikube.paths import NAMESPACE
 
 
 def test_apply_errors_counts_server_and_client_side_failures():
@@ -102,3 +121,166 @@ def test_rolled_out_reads_ecks_own_status_for_elasticsearch():
     assert not deploy.rolled_out(elasticsearch(2, "green", "ApplyingChanges"))
     assert not deploy.rolled_out(elasticsearch(2, "unknown", "Ready"))
     assert not deploy.rolled_out(elasticsearch(1, "green", "Ready"))
+
+
+def _doc(kind: str, name: str) -> dict[str, Any]:
+    return {"kind": kind, "metadata": {"name": name}}
+
+
+def test_render_passes_helm_args_and_splits_out_crds(fake_run: FakeRun):
+    crd, configmap = _doc("CustomResourceDefinition", "a.x"), _doc("ConfigMap", "c")
+    fake_run.on("helm", "template", stdout=manifests.dump([crd, configmap]))
+    render = deploy.Options(helm_args=["--set", "a=b"]).render("-s", deploy.STORAGE_HOOKS)
+    assert fake_run.ran("helm", "template")[0][-4:] == ["--set", "a=b", "-s", deploy.STORAGE_HOOKS]
+    assert (render.docs, render.crds) == ([configmap], [crd])
+
+
+CRD = _doc("CustomResourceDefinition", "a.x")
+RENDER = manifests.Render(
+    docs=[
+        {"apiVersion": "monitoring.coreos.com/v1", **_doc("ServiceMonitor", "m")},
+        _doc("Deployment", "zac"),
+        _doc("Job", "openzaak-config"),
+    ],
+    large_configmaps=[_doc("ConfigMap", "dashboards")],
+    crds=[CRD],
+)
+STORAGE = manifests.Render(
+    docs=[_doc("PersistentVolume", "pv"), _doc("PersistentVolumeClaim", "pvc")], large_configmaps=[]
+)
+IMMUTABLE = 'Error from server (Invalid): PersistentVolume "pv" is invalid: spec: Forbidden: spec is immutable\n'
+STEPS = [
+    (kube, "require_minikube_context"),
+    (disk, "check"),
+    (memory, "check"),
+    (dependency, "sync"),
+    (pki, "apply_trust"),
+    (postgres, "migrate_major"),
+    (postgres, "rename_databases"),
+    (postgres, "create_missing_databases"),
+    (postgres, "rename_rows"),
+    (crds, "apply_monitoring_logging_crds"),
+    (gateway, "apply"),
+    (dns, "apply_hosts"),
+    (keycloak, "repair_default_client_scopes"),
+    (openbao, "bootstrap"),
+    (prune, "prune"),
+]
+
+
+def _job_status(condition: str) -> dict[str, Any]:
+    return {**_doc("Job", "openzaak-config"), "status": {"conditions": [{"type": condition, "status": "True"}]}}
+
+
+@pytest.fixture
+def live(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """`kubectl get -o json` answers by resource: zac rolled out, the Job complete."""
+    status = {"observedGeneration": 1, "replicas": 1, "updatedReplicas": 1, "readyReplicas": 1}
+    answers: dict[str, Any] = {
+        "deployment/zac": {"metadata": {"generation": 1}, "status": status},
+        "job": {"items": [_job_status("Complete")]},
+    }
+    monkeypatch.setattr(kube, "get_json", lambda resource, *_args: answers[resource])
+    return answers
+
+
+@pytest.fixture
+def called(
+    fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, fixed_sets: None, tmp_path: Path, live: dict[str, Any]
+) -> list[str]:
+    """deploy()'s steps outside this module and its shown kubectl commands, in order.
+
+    The CA exists; the full apply hits the 2 expected storage errors.
+    """
+    steps: list[str] = []
+    for module, name in STEPS:
+        monkeypatch.setattr(module, name, lambda *_a, _name=name, **_k: steps.append(_name))
+    monkeypatch.setattr(kube, "kubectl_shown", lambda *args, stdin=None: steps.append(" ".join(args)))
+    monkeypatch.setattr(deploy.Options, "render", lambda _self, *args: STORAGE if args else RENDER)
+    monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
+    monkeypatch.setattr(pki, "CA_CERT", tmp_path / "ca.crt")
+    pki.CA_CERT.write_text("")
+    fake_run.on("kubectl", "create", "namespace", stdout="kind: Namespace\n")
+    fake_run.on("kubectl", "apply", "-n", NAMESPACE, returncode=1, stdout=IMMUTABLE * 2)
+    return steps
+
+
+def _deploy() -> None:
+    deploy.deploy(full=False, force_prune=False, extra=[])
+
+
+def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
+    _deploy()
+    storage_job = deploy.STORAGE_PERMISSIONS_JOB
+    assert called == [
+        "require_minikube_context",
+        "check",
+        "check",
+        "sync",
+        "apply_trust",
+        f"delete job {storage_job} -n {NAMESPACE} --ignore-not-found",
+        f"apply -n {NAMESPACE} -f -",
+        f"wait --for=condition=complete job/{storage_job} -n {NAMESPACE} --timeout=60s",
+        "migrate_major",
+        "rename_databases",
+        "create_missing_databases",
+        "rename_rows",
+        "apply_monitoring_logging_crds",
+        f"delete job openzaak-config -n {NAMESPACE} --ignore-not-found",
+        "apply --server-side --force-conflicts -f -",
+        "wait --for=condition=Established crd/a.x --timeout=60s",
+        f"apply --server-side -n {NAMESPACE} -f -",
+        "apply",
+        "apply_hosts",
+        "repair_default_client_scopes",
+        "bootstrap",
+        "prune",
+    ]
+    assert fake_run.calls == [
+        ["kubectl", "create", "namespace", NAMESPACE, "--dry-run=client", "-o", "yaml"],
+        ["kubectl", "apply", "-f", "-"],
+        ["kubectl", "get", f"job/{storage_job}", "-n", NAMESPACE],
+        ["kubectl", "apply", "-n", NAMESPACE, "-f", "-"],
+    ]
+    assert fake_run.stdins[1] == "kind: Namespace\n"
+    assert fake_run.stdins[3] == RENDER.manifest
+
+
+@pytest.mark.parametrize(("returncode", "said"), [(0, "Applied cleanly."), (1, "expected and HARMLESS")])
+def test_deploy_reports_the_apply_outcome(
+    fake_run: FakeRun, called: list[str], capsys: pytest.CaptureFixture[str], returncode: int, said: str
+):
+    fake_run.on("kubectl", "apply", "-n", NAMESPACE, returncode=returncode, stdout=IMMUTABLE * 2 * returncode)
+    fake_run.on("kubectl", "get", f"job/{deploy.STORAGE_PERMISSIONS_JOB}", returncode=1)
+    _deploy()
+    assert said in capsys.readouterr().out
+    assert not [step for step in called if step.startswith("wait --for=condition=complete")]
+
+
+def test_deploy_fails_on_unexpected_apply_errors(fake_run: FakeRun, called: list[str]):
+    fake_run.on("kubectl", "apply", "-n", NAMESPACE, returncode=1, stdout=IMMUTABLE * 3)
+    with pytest.raises(process.UserError, match=r"^3 apply error\(s\), expected exactly 2 "):
+        _deploy()
+    assert called[-1] == "wait --for=condition=Established crd/a.x --timeout=60s"
+
+
+def test_deploy_fails_on_a_failed_job(called: list[str], live: dict[str, Any]):
+    live["job"]["items"] = [_job_status("Failed")]
+    with pytest.raises(process.UserError, match=r"^Job\(s\) failed: openzaak-config: "):
+        _deploy()
+
+
+def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(
+    called: list[str], live: dict[str, Any], poll_once: None
+):
+    live["job"]["items"] = []
+    live["deployment/zac"]["status"]["readyReplicas"] = 0
+    with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac; running: openzaak-config$"):
+        _deploy()
+
+
+def test_deploy_needs_the_local_ca(called: list[str]):
+    pki.CA_CERT.unlink()
+    with pytest.raises(process.UserError, match=r"^no local CA"):
+        _deploy()
+    assert "apply_trust" not in called

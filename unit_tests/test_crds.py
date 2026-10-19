@@ -2,11 +2,15 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
 
+from conftest import FakeRun
 from conftest import make_tgz
 
+from podiumd_minikube import chart
 from podiumd_minikube import crds
+from podiumd_minikube.process import UserError
 
 
 def _crd(name: str, version: str | None) -> str:
@@ -37,3 +41,44 @@ def test_crd_documents_keeps_the_newest_copy_per_name(tmp_path: Path):
         ("podlogs.y", {}),
         ("servicemonitors.x", {crds.PROMETHEUS_OPERATOR_VERSION: "0.90.1"}),
     ]
+
+
+def test_crd_documents_skips_non_yaml_members_and_other_kinds(tmp_path: Path):
+    tgz = make_tgz(
+        tmp_path / "monitoring-logging-1.0.0.tgz",
+        {
+            "m/README.md": _crd("readme.x", None),
+            "m/crds/mixed.yaml": "---\n" + _crd("probes.x", None) + "---\nkind: Service\nmetadata:\n  name: s\n",
+        },
+    )
+    assert [doc["metadata"]["name"] for doc in crds.crd_documents(str(tgz))] == ["probes.x"]
+
+
+@pytest.mark.parametrize(
+    ("api_version", "expected"), [("monitoring.coreos.com/v1", True), ("monitoring.example.com/v1", False)]
+)
+def test_needed_only_for_prometheus_operator_kinds(api_version: str, *, expected: bool):
+    assert crds.needed([{"apiVersion": "v1"}, {"apiVersion": api_version}]) is expected
+
+
+@pytest.mark.parametrize(
+    ("members", "error"),
+    [(None, "no charts/monitoring-logging-"), ({"m/Chart.yaml": "name: m\n"}, "no CustomResourceDefinition in ")],
+)
+def test_apply_monitoring_logging_crds_needs_crds_in_the_tarball(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, members: dict[str, str] | None, error: str
+):
+    tgz = make_tgz(tmp_path / "monitoring-logging-1.0.0.tgz", members) if members else None
+    monkeypatch.setattr(chart, "tarball", lambda _name: tgz)
+    with pytest.raises(UserError, match=f"^{error}"):
+        crds.apply_monitoring_logging_crds()
+
+
+def test_apply_monitoring_logging_crds_applies_server_side(
+    fake_run: FakeRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    tgz = make_tgz(tmp_path / "monitoring-logging-1.0.0.tgz", {"m/crds/probes.yaml": _crd("probes.x", None)})
+    monkeypatch.setattr(chart, "tarball", lambda _name: tgz)
+    crds.apply_monitoring_logging_crds()
+    assert fake_run.calls == [["kubectl", "apply", "--server-side", "--force-conflicts", "-f", "-"]]
+    assert yaml.safe_load(fake_run.stdins[0] or "")["metadata"]["name"] == "probes.x"

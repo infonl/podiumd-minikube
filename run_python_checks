@@ -10,9 +10,9 @@ usage() {
 Usage: run_python_checks [-h|--help]
 
 Runs ruff check, shellcheck, ruff format --check, jscpd, pymarkdown,
-vulture, bandit, basedpyright, pylint and pytest (unit_tests/ only;
-tests/ needs a live cluster) on src/, unit_tests/ and tests/, fastest
-first. Stops at the first failure. Upgrades .venv first when it was last
+vulture, bandit, basedpyright, pylint and pytest (unit_tests/ only, with
+the coverage threshold from pyproject.toml; tests/ needs a live cluster)
+on src/, unit_tests/ and tests/, fastest first. Stops at the first failure. Upgrades .venv first when it was last
 upgraded over a day ago or pyproject.toml changed since.
 HELP
 }
@@ -84,6 +84,7 @@ step "pylint (src)" pylint "${code[@]}"
 # lets pylint resolve conftest without analyzing it.
 step "pylint (unit_tests)" env PYTHONPATH=unit_tests pylint --disable="$tests_pylint_disable" "${unit_test_files[@]}"
 step "pylint (tests)" env PYTHONPATH=tests pylint --disable="$tests_pylint_disable" "${live_test_files[@]}"
-step "pytest (unit_tests)" python3 -m pytest -q
+# Coverage source and threshold: [tool.coverage] in pyproject.toml.
+step "pytest (unit_tests, with coverage)" python3 -m pytest -q --cov --cov-report=term-missing:skip-covered
 
 echo "=== all checks passed ==="

@@ -16,6 +16,7 @@ dependencies = [
 # The live suite in tests/ and the tools of run_python_checks; unpinned on purpose, new rules are welcome.
 dev = [
     "pytest>=8.0",
+    "pytest-cov",  # coverage of the unit tests (run_python_checks)
     "requests>=2.31",
     "ruff",
     "pymarkdownlnt",
@@ -257,3 +258,9 @@ testpaths = ["unit_tests"]
 # Test modules import their fakes from unit_tests/conftest.py.
 pythonpath = ["unit_tests"]
 addopts = "-ra"
+
+[tool.coverage.run]
+source = ["src/podiumd_minikube"]
+
+[tool.coverage.report]
+fail_under = 85

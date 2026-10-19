@@ -1,5 +1,6 @@
 """podiumd_minikube.versions: selecting and describing dependency versions."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -50,3 +51,36 @@ def test_describe_reports_whether_the_tarball_is_fetched(tmp_path: Path):
     (tmp_path / "podiumd-4.9.3.tgz").touch()
     assert "already fetched" in versions.describe("podiumd", tmp_path, versions_file)[1]
     assert versions.describe("monitoringLogging", tmp_path, versions_file) == []
+
+
+@pytest.mark.parametrize(
+    ("make", "message"), [(lambda _path: None, "not a directory"), (Path.mkdir, "no Chart.yaml in")]
+)
+def test_set_path_needs_a_chart_directory(
+    versions_file: Path, tmp_path: Path, make: Callable[[Path], object], message: str
+):
+    checkout = tmp_path / "podiumd"
+    make(checkout)
+    with pytest.raises(UserError, match=message):
+        versions.set_path(checkout, versions_file=versions_file)
+
+
+def test_describe_warns_about_a_moved_checkout(tmp_path: Path):
+    versions_file = tmp_path / "versions.yaml"
+    dependency.write("podiumd", "path", str(tmp_path / "gone"), versions_file)
+    assert versions.describe("podiumd", tmp_path, versions_file) == [
+        f"  Local checkout: {tmp_path / 'gone'}",
+        "    WARNING: no Chart.yaml there - the checkout moved or was removed.",
+    ]
+
+
+def test_show_prints_each_selection_and_raises_for_missing_ones(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    versions_file = tmp_path / "versions.yaml"
+    dependency.write("podiumd", "version", "4.9.3", versions_file)
+    with pytest.raises(UserError, match="entry for monitoring-logging"):
+        versions.show(tmp_path, versions_file)
+    out = capsys.readouterr().out
+    assert "podiumd:\n  Version: 4.9.3\n" in out
+    assert "monitoring-logging:\n  Not configured - run podiumd-minikube set-podiumd-version.\n" in out
+    dependency.write("monitoringLogging", "version", "1.0.15", versions_file)
+    versions.show(tmp_path, versions_file)
