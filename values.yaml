@@ -7,6 +7,12 @@ objecten:
   merged: false
 metrics:
   enabled: false # monitoring-logging (Grafana, Prometheus, Loki, Alloy), as both reference environments
+# Realm acc-mock in our own Keycloak: the stand-in for Dimpact's acceptance
+# Keycloak behind identity provider accp-dimp-oidc; its user signs in through it.
+accMock:
+  username: acc-admin
+  password: accMockAdminPassword
+  clientSecret: &accMockClientSecret accMockOtaauthClientSecret
 podiumd:
   enabled: true
 
@@ -53,6 +59,83 @@ podiumd:
       # the realm roles and groups podiumd-tests' bootstrap assigns.
       skipRoles: false
       skipGroups: false
+      # As kees00 and ExternalsPodiumD ontw/test (alias accp-dimp-oidc), federating
+      # to realm acc-mock (templates/keycloak/acc-mock-realm.yaml) instead of
+      # Dimpact's acceptance Keycloak.
+      adminIdentityProviders:
+        identityProviders:
+        - alias: accp-dimp-oidc
+          displayName: acc-mock (stand-in for dimpact acceptance users)
+          providerId: keycloak-oidc
+          enabled: true
+          updateProfileFirstLoginMode: "on"
+          trustEmail: false
+          storeToken: false
+          addReadTokenRoleOnCreate: false
+          authenticateByDefault: false
+          linkOnly: false
+          hideOnLogin: false
+          config:
+            clientId: otaauth
+            clientSecret: *accMockClientSecret
+            clientAuthMethod: client_secret_post
+            issuer: https://keycloak.local/realms/acc-mock
+            authorizationUrl: https://keycloak.local/realms/acc-mock/protocol/openid-connect/auth
+            logoutUrl: https://keycloak.local/realms/acc-mock/protocol/openid-connect/logout
+            # Keycloak does not trust the local CA: its own backchannel calls go in-cluster.
+            tokenUrl: http://keycloak-service:8080/realms/acc-mock/protocol/openid-connect/token
+            jwksUrl: http://keycloak-service:8080/realms/acc-mock/protocol/openid-connect/certs
+            userInfoUrl: http://keycloak-service:8080/realms/acc-mock/protocol/openid-connect/userinfo
+            useJwksUrl: "true"
+            validateSignature: "true"
+            syncMode: LEGACY
+            pkceEnabled: "false"
+            # Keycloak 26.8 (CVE-2026-12388) refuses admin-mapper with 403 without it.
+            allowAdminRoleMapping: "true"
+      adminIdentityProviderMappers:
+        identityProviderMappers:
+          - name: admin-mapper
+            identityProviderAlias: accp-dimp-oidc
+            identityProviderMapper: oidc-hardcoded-role-idp-mapper
+            config:
+              syncMode: FORCE
+              role: admin
+      realmIdentityProviders:
+        identityProviders:
+        - alias: accp-dimp-oidc
+          displayName: acc-mock (stand-in for dimpact acceptance users)
+          providerId: keycloak-oidc
+          enabled: true
+          updateProfileFirstLoginMode: "on"
+          trustEmail: false
+          storeToken: false
+          addReadTokenRoleOnCreate: false
+          authenticateByDefault: false
+          linkOnly: false
+          hideOnLogin: false
+          config:
+            clientId: otaauth
+            clientSecret: *accMockClientSecret
+            clientAuthMethod: client_secret_post
+            issuer: https://keycloak.local/realms/acc-mock
+            authorizationUrl: https://keycloak.local/realms/acc-mock/protocol/openid-connect/auth
+            logoutUrl: https://keycloak.local/realms/acc-mock/protocol/openid-connect/logout
+            # Keycloak does not trust the local CA: its own backchannel calls go in-cluster.
+            tokenUrl: http://keycloak-service:8080/realms/acc-mock/protocol/openid-connect/token
+            jwksUrl: http://keycloak-service:8080/realms/acc-mock/protocol/openid-connect/certs
+            userInfoUrl: http://keycloak-service:8080/realms/acc-mock/protocol/openid-connect/userinfo
+            useJwksUrl: "true"
+            validateSignature: "true"
+            syncMode: LEGACY
+            pkceEnabled: "false"
+      realmIdentityProviderMappers:
+        identityProviderMappers:
+          - name: user are administrators
+            identityProviderAlias: accp-dimp-oidc
+            identityProviderMapper: oidc-hardcoded-group-idp-mapper
+            config:
+              syncMode: FORCE
+              group: /administrators
       smtp:
         server: mailpit
         port: "1025"

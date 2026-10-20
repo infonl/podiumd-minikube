@@ -7315,3 +7315,32 @@ Footprint (minikube only; kees00 keeps the chart sizes): ZaakBrug heap
 3388 MiB); Open VTB 1 replica, 1 uWSGI process (3 uwsgi processes: master,
 http, worker). First working sets, unsettled: zaakbrug 676, openvtb 211,
 add-in backend 27 and frontend 6, redis-exporter 21, clamav-exporter 8 MiB.
+
+## Admin identity provider stand-in (podiumd-tests' handoff 887a327/9a10dc4; user: "Yes, build it")
+
+kees00 4.10.0 and ExternalsPodiumD (dim1, dim3, dimp, icat, info, mayk ontw;
+dimp test) set `keycloak.config.adminIdentityProviders`,
+`adminIdentityProviderMappers`, `realmIdentityProviders` and
+`realmIdentityProviderMappers`: IdP `accp-dimp-oidc` federates to Dimpact's
+acceptance Keycloak, `admin-mapper` gives its users the master `admin` role,
+and the podiumd realm puts them in `/administrators`. Keycloak 26.8
+(CVE-2026-12388) refuses the admin mapper with 403 unless the IdP has
+`allowAdminRoleMapping: "true"`; that broke kees00's deploy on 2026-10-20
+(podiumd-infra e0492af, helm-charts #623). minikube set none of this.
+
+Now the same four blocks (alias `accp-dimp-oidc`, the estates' mapper names)
+federate to realm `acc-mock` in our own Keycloak, created by Job
+import-acc-mock-realm-job (keycloak-config-cli, as the chart's realm imports,
+from `templates/keycloak/acc-mock-realm.yaml`): client `otaauth`, user
+`acc-admin`, credentials in Secret `keycloak-acc-mock` (values `accMock`; the
+client secret is one YAML anchor). Keycloak does not trust the local CA, so the
+IdP's backchannel URLs (token, JWKS, userinfo) use
+http://keycloak-service:8080; the issuer stays https://keycloak.local/realms/acc-mock
+because KC_HOSTNAME fixes it, and the browser URLs stay public.
+
+Verified live (Keycloak 26.8.1): both imports succeed with the admin mapper;
+a login on security-admin-console with kc_idp_hint=accp-dimp-oidc goes to
+acc-mock, back to master, creates the brokered user and stops at
+CONFIGURE_TOTP: minikube keeps the chart's `adminOtpEnabled` default (true), as
+kees00, dim1 ontw and dimp test; six ExternalsPodiumD ontw environments set
+it false.

@@ -1,0 +1,120 @@
+{{- /*
+Realm acc-mock (values accMock): the IdP accp-dimp-oidc in the master and
+podiumd realms federates to it, as the estates federate to Dimpact's
+acceptance Keycloak. keycloak-config-cli as the chart's realm imports; reruns
+on every deploy.
+*/}}
+{{- $kc := .Subcharts.podiumd.Values.keycloak }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-acc-mock
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+stringData:
+  username: {{ .Values.accMock.username | quote }}
+  password: {{ .Values.accMock.password | quote }}
+  client-secret: {{ .Values.accMock.clientSecret | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-acc-mock-realm
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  acc-mock.yaml: |
+    realm: acc-mock
+    enabled: true
+    clients:
+      - clientId: otaauth
+        enabled: true
+        publicClient: false
+        clientAuthenticatorType: client-secret
+        secret: $(env:ACC_MOCK_CLIENT_SECRET)
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        redirectUris:
+          - {{ $kc.config.adminFrontendUrl }}/realms/master/broker/accp-dimp-oidc/endpoint*
+          - {{ $kc.config.realmFrontendUrl }}/realms/{{ $kc.config.realm }}/broker/accp-dimp-oidc/endpoint*
+    users:
+      - username: $(env:ACC_MOCK_USERNAME)
+        enabled: true
+        email: acc-admin@example.com
+        emailVerified: true
+        firstName: Acc
+        lastName: Admin
+        credentials:
+          - type: password
+            value: $(env:ACC_MOCK_PASSWORD)
+            temporary: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: import-acc-mock-realm-job
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        {{- include "podiumd-minikube.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kc-config-cli
+          image: {{ include "podiumd.image" $kc.keycloakConfigCli.image }}
+          env:
+            - name: KEYCLOAK_URL
+              value: http://keycloak-service:8080
+            - name: KEYCLOAK_CLIENTID
+              value: keycloak-operator
+            - name: KEYCLOAK_CLIENTSECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-operator-client-secret
+                  key: client-secret
+            - name: KEYCLOAK_GRANTTYPE
+              value: client_credentials
+            - name: KEYCLOAK_REALM
+              value: master
+            - name: IMPORT_FILES_LOCATIONS
+              value: /config/acc-mock.yaml
+            - name: IMPORT_VARSUBSTITUTION_ENABLED
+              value: "true"
+            - name: ACC_MOCK_USERNAME
+              valueFrom:
+                secretKeyRef: {name: keycloak-acc-mock, key: username}
+            - name: ACC_MOCK_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: keycloak-acc-mock, key: password}
+            - name: ACC_MOCK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: keycloak-acc-mock, key: client-secret}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: realm
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-acc-mock-realm
+        - name: tmp
+          emptyDir: {}
