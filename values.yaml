@@ -313,7 +313,7 @@ podiumd:
       limits:
         memory: 128Mi
   # --- zaakbrug (profile: zaakbrug), as podiumd-infra jimme00 and the chart's
-  # zaakbrug-deploy.md; dtap stage as kees00. Laptop budget: heap 768M, C1 only
+  # zaakbrug-deploy.md; dtap stage as kees00. Laptop budget: heap 640M, C1 only
   # (chart Xms=Xmx=4G, 5Gi/6Gi; ontw idles at 3388 MiB).
   zaakbrug:
     enabled: false
@@ -328,7 +328,7 @@ podiumd:
       memory:
         percentage: false
         minimum: 128M
-        maximum: 768M
+        maximum: 640M
       # Serial GC by JVM ergonomics (limit below 1792 MiB): old gen settles at 330 MiB.
       javaOpts: -XX:TieredStopAtLevel=1
       dtap:

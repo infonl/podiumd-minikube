@@ -7446,3 +7446,9 @@ add-in backend 35 and frontend 6, redis-exporter 22, clamav-exporter 8 MiB;
 kube-apiserver 1142 MiB after about ten deploys (GOMEMLIMIT 1200MiB; it drops
 on a restart). Next candidate: ZaakBrug's maximum heap 768M -> 640M (old gen
 holds 332 MiB) once podiumd-tests exercises ZaakBrug.
+
+ZaakBrug's maximum heap 768M -> 640M (user: "Lower the ZaakBrug heap to 640M
+now"). 5 minutes after start: 733 MiB working set, old gen 244 MiB used of
+407 MiB committed, young gen 184 MiB committed. The serial GC keeps what it
+committed at startup, so the saving shows at peaks (it was 779 MiB after a
+full tier at 768M); re-measure after podiumd-tests' ZaakBrug tests.
