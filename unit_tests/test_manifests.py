@@ -3,6 +3,7 @@
 import yaml
 
 from podiumd_minikube import manifests
+from podiumd_minikube.paths import NAMESPACE
 
 DIGEST = "a" * 64
 
@@ -357,3 +358,17 @@ def test_drop_duplicate_env_keeps_the_last_entry_per_name():
         {"name": "B", "value": "1"},
         {"name": "A", "value": "ours"},
     ]
+
+
+def test_scrape_only_from_prometheus_narrows_only_the_namespace_rule():
+    own = {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": NAMESPACE}}}
+    ingress_controller = {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "ingress-basic"}}}
+    client = {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "zac"}}}
+    policy: manifests.Doc = {
+        "kind": "NetworkPolicy",
+        "spec": {"ingress": [{"from": [own, ingress_controller, client]}]},
+    }
+    manifests.scrape_only_from_prometheus([policy])
+    assert own["podSelector"] == {"matchLabels": manifests.PROMETHEUS_POD}
+    assert "podSelector" not in ingress_controller
+    assert client == {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "zac"}}}

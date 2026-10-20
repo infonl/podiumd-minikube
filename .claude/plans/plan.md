@@ -7416,3 +7416,25 @@ untested. The service-link collisions cannot happen on an estate: `solr`
 and `rabbitmq` Services are gone in 4.10, the chart sets the `<app>_PORT`
 variables apps read, and `POSTGRES_PORT` only meets minikube's own
 `postgres` Service.
+
+## The chart's NetworkPolicies, phase 1 (user: "Yes, as kees00")
+
+podiumd-infra kees00 (4.10.0, Cilium) runs `networkPolicies.enabled: true`
+with phase 1 only (ingress allow-lists on the sensitive backends) and no
+extra rules; `frankgateway.networkPolicies` stays off. minikube now does the
+same, with `ingressControllerNamespace: ingress-basic` (NGF's data plane,
+which reaches OpenBao). Cilium enforces them, as on ExternalsPodiumD's dim1-3
+and dimp clusters. Rendered: redis-ha, openbao, frankgateway-etcd,
+elasticsearch, zac-solr, zac-zookeeper, zac-office-converter and clamav
+(kees00's seven plus ClamAV, which runs here).
+
+Deviation: the estates scrape from namespace `monitoring`; our Prometheus
+shares the namespace, and `monitoringNamespace: podiumd-minikube` alone would
+open the whole namespace on those ports, which for Solr (8983) and OpenBao
+(8200) are the main ports. `manifests.scrape_only_from_prometheus` adds the
+Prometheus pod selector to that rule.
+
+Live: all Prometheus targets up (Redis and ClamAV exporters behind their
+policies), https://openbao.local through the edge 200, live suite 34 passed.
+podiumd-tests: no test or mock talks to these backends directly, no extra
+rule needed (its kees00 full tier passed with the same set).

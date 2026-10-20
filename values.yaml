@@ -368,6 +368,15 @@ podiumd:
         besluitenApi:
           rootUrl: https://openzaak.local/besluiten/api/v1/
 
+  # The chart's phase 1 (ingress allow-lists for the sensitive backends), as
+  # podiumd-infra kees00; Cilium enforces them, as on ExternalsPodiumD's dim1-3
+  # and dimp clusters. Prometheus runs in this namespace, not in "monitoring";
+  # manifests.scrape_only_from_prometheus narrows that rule to its pod.
+  networkPolicies:
+    enabled: true
+    ingressControllerNamespace: ingress-basic
+    monitoringNamespace: podiumd-minikube
+
   # --- zac (always on - the app itself) ---
   zac:
     enabled: true

@@ -407,6 +407,28 @@ def mount_zaakbrug_role_mapping(docs: list[Doc]) -> None:
             ]
 
 
+PROMETHEUS_POD = {"app.kubernetes.io/name": "prometheus"}
+
+
+def scrape_only_from_prometheus(docs: list[Doc]) -> None:
+    """Narrows the chart's NetworkPolicy rules for networkPolicies.monitoringNamespace to the Prometheus pod.
+
+    The estates scrape from a namespace of their own; here Prometheus shares
+    NAMESPACE, which the rule would open whole (Solr and OpenBao serve metrics
+    on their main ports).
+    """
+    for doc in docs:
+        if doc.get("kind") != "NetworkPolicy":
+            continue
+        rules: list[Doc] = section(doc, "spec").get("ingress") or []
+        for rule in rules:
+            peers: list[Doc] = rule.get("from") or []
+            for peer in peers:
+                labels: Doc = section(peer, "namespaceSelector").get("matchLabels") or {}
+                if labels == {"kubernetes.io/metadata.name": NAMESPACE} and "podSelector" not in peer:
+                    peer["podSelector"] = {"matchLabels": dict(PROMETHEUS_POD)}
+
+
 def limit_runtimes(docs: list[Doc]) -> None:
     """Adds CAPACITY_ENV to every container of every workload, Job and operator pod template; GOMEMLIMIT where limited.
 
@@ -534,6 +556,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     tune_keycloak(docs)
     tune_solr(docs)
     mount_zaakbrug_role_mapping(docs)
+    scrape_only_from_prometheus(docs)
     limit_runtimes(docs)
     if ca_trust:
         trust_ca(docs)
