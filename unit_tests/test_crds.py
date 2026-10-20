@@ -1,4 +1,4 @@
-"""podiumd_minikube.crds: the monitoring-logging CRDs."""
+"""podiumd_minikube.crds: the monitoring-logging CRDs and the Keycloak operator's upstream ones."""
 
 from pathlib import Path
 
@@ -82,3 +82,34 @@ def test_apply_monitoring_logging_crds_applies_server_side(
     crds.apply_monitoring_logging_crds()
     assert fake_run.calls == [["kubectl", "apply", "--server-side", "--force-conflicts", "-f", "-"]]
     assert yaml.safe_load(fake_run.stdins[0] or "")["metadata"]["name"] == "probes.x"
+
+
+def test_keycloak_version_reads_podiumds_anchor(tmp_path: Path):
+    assert crds.keycloak_version(tmp_path) is None
+    values = 'keycloak:\n  image:\n    tag: &keycloakImageVersion "26.8.1"\n'
+    make_tgz(tmp_path / "podiumd-4.10.0.tgz", {"podiumd/values.yaml": values})
+    assert crds.keycloak_version(tmp_path) == "26.8.1"
+
+
+def test_with_upstream_keycloak_replaces_only_keycloaks_crds(monkeypatch: pytest.MonkeyPatch):
+    fetched: list[str] = []
+
+    def fetch(url: str) -> str | None:
+        fetched.append(url)
+        return None if "saml" in url else _crd(url.rsplit("/", 1)[1].removesuffix("-v1.yml"), None)
+
+    monkeypatch.setattr(crds, "_fetch", fetch)
+    bundled = [yaml.safe_load(_crd("keycloaks.k8s.keycloak.org", None)), yaml.safe_load(_crd("other.x", None))]
+    names = [doc["metadata"]["name"] for doc in crds.with_upstream_keycloak(bundled, "26.8.1")]
+    assert names == [
+        "other.x", "keycloaks.k8s.keycloak.org", "keycloakrealmimports.k8s.keycloak.org",
+        "keycloakoidcclients.k8s.keycloak.org",
+    ]  # fmt: skip
+    assert fetched[0].endswith("/26.8.1/kubernetes/keycloaks.k8s.keycloak.org-v1.yml")
+    assert crds.with_upstream_keycloak(bundled, None) == bundled
+
+
+def test_with_upstream_keycloak_refuses_a_version_without_crds(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(crds, "_fetch", lambda _url: None)
+    with pytest.raises(UserError, match="no Keycloak CRDs upstream"):
+        crds.with_upstream_keycloak([], "1.0.0")

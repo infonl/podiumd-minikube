@@ -7525,3 +7525,27 @@ render on a new cluster failed with "ensure CRDs are installed first" (the
 operators' CRDs are applied from that render). `deploy.Options.render` now
 falls back to the plain render on that error; on such a cluster lookup
 finds nothing anyway.
+
+## skipRoles/skipGroups back to false; the Keycloak operator's CRDs from upstream
+
+The first fresh install with skipRoles/skipGroups true (helm-charts 8e286297)
+showed what the setting covers: the realm import's whole `roles:` block, realm
+and client roles (keycloak-podiumd-realm-config.yaml:1150-1216), and the
+groups. The realm then held only pabc-keycloak-groups-job's six PABC roles and
+groups, and podiumd-tests' bootstrap failed (no Klantcontactmedewerker, no
+pabc administrator, no kiss Beheerder: kiss-kanalen got 403). The chart docs
+advise false for O/T (docs/apps/pabc/enabling-pabc.md:232); true is for
+long-lived realms that already have their roles (dimp test/ontw, dim2, dim3,
+info), which a reinstalled minikube never has. Back to false (user's call),
+with `deploy --skip-roles` as the opt-in; the earlier switch to true, made on
+ExternalsPodiumD's majority without reading what the setting covers, was wrong.
+After the redeploy the realm has 11 realm roles (podiumd-admin included) and
+the client roles (kiss: Kennisbank, Klantcontactmedewerker, Redacteur, Beheerder).
+
+podiumd-tests' CRD check found keycloak-operator 26.8.1 on older CRDs
+(keycloaks without spec.unsupported.podTemplate.spec.schedulingGroup): the
+render carries the adfinis subchart's bundled ones. As the chart's
+scripts/install-keycloak-operator-crds.sh and the 4.10.0 upgrade docs require,
+`crds.with_upstream_keycloak` replaces them, on every deploy, with upstream
+keycloak-k8s-resources' CRDs for podiumd's keycloakImageVersion (26.8.1;
+the client CRDs only exist from 26.7.0, so a 404 is skipped).

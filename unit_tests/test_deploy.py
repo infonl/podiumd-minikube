@@ -202,6 +202,7 @@ def called(
     monkeypatch.setattr(deploy.Options, "render", lambda _self, *args: STORAGE if args else RENDER)
     monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
     monkeypatch.setattr(pki, "CA_CERT", tmp_path / "ca.crt")
+    monkeypatch.setattr(crds, "keycloak_version", lambda: None)
     pki.CA_CERT.write_text("")
     fake_run.on("kubectl", "create", "namespace", stdout="kind: Namespace\n")
     fake_run.on("kubectl", "apply", "-n", NAMESPACE, returncode=1, stdout=IMMUTABLE * 2)

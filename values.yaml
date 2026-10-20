@@ -59,9 +59,13 @@ podiumd:
       realm: podiumd # the chart's default; templates/zac's seed Job reads it
       adminFrontendUrl: https://keycloak-admin.local
       realmFrontendUrl: https://keycloak.local
-      # skipRoles/skipGroups stay the chart default (true), as ExternalsPodiumD dimp
-      # test and ontw, dim2, dim3 and info; dim1, icat, mayk and kees00 import them
-      # (deploy --import-roles).
+      # The realm import creates the realm and client roles and the groups, as the chart
+      # docs advise for O/T (enabling-pabc.md), dim1, icat, mayk and kees00. With the
+      # chart default true (dimp test/ontw, dim2, dim3, info: realms that already have
+      # their roles) a fresh realm lacks them and podiumd-tests' bootstrap fails
+      # (Klantcontactmedewerker, pabc administrator, kiss Beheerder). deploy --skip-roles opts in.
+      skipRoles: false
+      skipGroups: false
       # As kees00 and ExternalsPodiumD ontw/test (alias accp-dimp-oidc), federating
       # to realm acc-mock (templates/keycloak/acc-mock-realm.yaml) instead of
       # Dimpact's acceptance Keycloak.

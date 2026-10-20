@@ -23,12 +23,12 @@ METRICS_SETS = [
 ]  # fmt: skip
 NO_METRICS_SETS = [arg.replace("=true", "=false") for arg in METRICS_SETS]
 
-# deploy --import-roles: keycloak.config.skipRoles/skipGroups false, as ExternalsPodiumD
-# dim1, icat, mayk and podiumd-infra kees00: the realm import also creates the realm roles
-# and groups. Only a fresh realm shows the difference (nothing removes them again).
-IMPORT_ROLES_SETS = [
-    "--set", "podiumd.keycloak.config.skipRoles=false",
-    "--set", "podiumd.keycloak.config.skipGroups=false",
+# deploy --skip-roles: keycloak.config.skipRoles/skipGroups true, the chart default: the realm
+# import creates no realm or client roles and no groups; pabc-keycloak-groups-job adds PABC's.
+# Only a fresh realm shows the difference (nothing removes existing roles).
+SKIP_ROLES_SETS = [
+    "--set", "podiumd.keycloak.config.skipRoles=true",
+    "--set", "podiumd.keycloak.config.skipGroups=true",
 ]  # fmt: skip
 
 # Profiles `deploy --full` turns on; provision-cluster pre-pulls their images too.

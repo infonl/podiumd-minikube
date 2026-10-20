@@ -125,12 +125,13 @@ def _apply_storage_hooks(selected: Options) -> manifests.Render:
 
 
 def _apply_crds(render: manifests.Render) -> None:
-    """Applies the render's CRDs server-side and waits until they are established."""
+    """Applies the render's CRDs (the Keycloak operator's from upstream) server-side and waits until established."""
     if not render.crds:
         return
-    print(f"\nApplying {len(render.crds)} CRD(s) first...")
-    kube.kubectl_shown("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=manifests.dump(render.crds))
-    names = [f"crd/{manifests.name_of(doc)}" for doc in render.crds]
+    docs = crds.with_upstream_keycloak(render.crds, crds.keycloak_version())
+    print(f"\nApplying {len(docs)} CRD(s) first...")
+    kube.kubectl_shown("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=manifests.dump(docs))
+    names = [f"crd/{manifests.name_of(doc)}" for doc in docs]
     kube.kubectl_shown("wait", "--for=condition=Established", *names, "--timeout=60s")
 
 
@@ -282,7 +283,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """Adds deploy's arguments to parser; unknown ones (--set x=y) go to helm."""
     parser.add_argument("--full", action="store_true", help="enable every optional profile")
     parser.add_argument(
-        "--import-roles", action="store_true", help="realm import also creates the realm roles and groups, as kees00"
+        "--skip-roles",
+        action="store_true",
+        help="realm import without roles and groups (chart default; a fresh realm then lacks them)",
     )
     parser.add_argument(
         "--force-prune", action="store_true", help=f"prune more than {prune.LARGE_PRUNE_THRESHOLD} orphaned resources"
