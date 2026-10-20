@@ -337,9 +337,9 @@ podiumd:
         percentage: false
         minimum: 128M
         maximum: 640M
-      # Serial GC by JVM ergonomics (limit below 1792 MiB); the free ratios let it give back
-      # heap after a full GC (it kept 612 of 640 MiB committed with 268 MiB in use).
-      javaOpts: -XX:TieredStopAtLevel=1 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30
+      # Serial GC by JVM ergonomics (limit below 1792 MiB). Heap free ratios gave nothing: the
+      # serial GC only shrinks at a full GC, which a full tier does not trigger.
+      javaOpts: -XX:TieredStopAtLevel=1
       dtap:
         stage: TST
       credentials:

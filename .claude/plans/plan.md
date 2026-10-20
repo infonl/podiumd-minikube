@@ -7607,3 +7607,9 @@ The ZAC collector subchart's template writes `replicas` only when
 `replicaCount` is truthy (`and (not autoscaling.enabled) (.Values.replicaCount)`),
 so ExternalsPodiumD's `replicaCount: 0` runs 1 pod. Under `--otel` minikube
 drops that Deployment in the render (`manifests.is_unused_zac_collector`).
+Settled check after a clean full tier (20:49-20:59 CEST, 572.71 s for 562
+tests: 1.019 s per test against 1.015 before, so no slowdown): Postgres 387
+MiB (before 407), Alloy anon 57 (74); ZaakBrug 909 MiB, old gen 416 MiB
+committed and 247 used: no full GC ran, so the heap free ratios returned
+nothing and are removed again. Net gain of the round about 40 MiB.
+Memory baseline refreshed from this state (node 16660, containers 14664 MiB).
