@@ -59,10 +59,9 @@ podiumd:
       realm: podiumd # the chart's default; templates/zac's seed Job reads it
       adminFrontendUrl: https://keycloak-admin.local
       realmFrontendUrl: https://keycloak.local
-      # As podiumd-infra and ExternalsPodiumD's ontw environments (icat, dim1, mayk):
-      # the realm roles and groups podiumd-tests' bootstrap assigns.
-      skipRoles: false
-      skipGroups: false
+      # skipRoles/skipGroups stay the chart default (true), as ExternalsPodiumD dimp
+      # test and ontw, dim2, dim3 and info; dim1, icat, mayk and kees00 import them
+      # (deploy --import-roles).
       # As kees00 and ExternalsPodiumD ontw/test (alias accp-dimp-oidc), federating
       # to realm acc-mock (templates/keycloak/acc-mock-realm.yaml) instead of
       # Dimpact's acceptance Keycloak.
@@ -163,6 +162,9 @@ podiumd:
     enabled: true
     redis-ha:
       replicaCount: 1 # chart 3
+      # labelMasterCronJob keeps the chart's every 2 minutes: ExternalsPodiumD's office-hours
+      # schedule suits environments suspended at night; a laptop restarting Redis in the
+      # evening would leave redis-ha-master without endpoints until morning.
       # Laptop budget: chart 256Mi/512Mi.
       resources:
         requests:
@@ -391,10 +393,12 @@ podiumd:
     enabled: true
     replicaCount: 1
     # As ExternalsPodiumD: ZAC's nginx in front of WildFly (podiumd enables
-    # it); it adds HSTS and nosniff and allows 150 MB request bodies.
+    # it), which adds HSTS and nosniff; 150 MB documents (chart 4.10: 500/600M).
+    maxFileSizeMB: 150
     nginx:
       useXForwardedHost: true
       allowedHosts: zac.local,zac.podiumd-minikube
+      client_max_body_size: 150M
     autoscaling:
       enabled: false
     # Laptop budget: ExternalsPodiumD runs -Xmx1024m -Xms1024m. A small -Xms and a
@@ -491,6 +495,9 @@ podiumd:
       enabled: false
     signaleringen:
       deleteOlderThanDays: "14"
+      # As ExternalsPodiumD.
+      sendZaakSignaleringenSchedule: "0 9 * * 1-5"
+      deleteOldSignaleringenSchedule: "30 9 * * 1-5"
     # ZAC's SolrCloud through the chart's solr-operator, as ExternalsPodiumD; ZAC's
     # init-solr-zac-core container creates the zac collection.
     solr-operator:
@@ -555,6 +562,8 @@ podiumd:
       enabled: true
       client_id: integratieteam
       secret: integratieteamSecret
+      # As podiumd-infra kees00 (ExternalsPodiumD false): templates/zac's productaanvraag
+      # seed and podiumd-tests' ZAC flows use this zaaktype.
       e2eTestZaaktype:
         create: true
     configuration:
@@ -777,6 +786,8 @@ podiumd:
         password: admin
         email: noreply@example.com
     settings:
+      # As ExternalsPodiumD (admins sign in through Keycloak).
+      disable2fa: true
       # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
       uwsgi:
         processes: 1
@@ -1026,6 +1037,9 @@ podiumd:
       # (Django warm-up, --lazy-apps); the image recycles every 100 requests.
       - name: UWSGI_MAX_REQUESTS
         value: "1000" # as Open Zaak, Objecten and Open Formulieren
+      # As ExternalsPodiumD (settings.extraEnvVars there; this chart merges both).
+      - name: DIGID_METADATA
+        value: /app/media/metadata
     worker:
       replicaCount: 1
     lowLatencyWorker:
@@ -1985,6 +1999,8 @@ podiumd:
                 - naam: besluiten
                 - naam: zaaktypen
     settings:
+      # As ExternalsPodiumD (admins sign in through Keycloak).
+      disable2fa: true
       # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
       uwsgi:
         processes: 1

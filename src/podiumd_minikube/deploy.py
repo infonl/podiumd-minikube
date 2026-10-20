@@ -274,7 +274,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """Adds deploy's arguments to parser; unknown ones (--set x=y) go to helm."""
     parser.add_argument("--full", action="store_true", help="enable every optional profile")
     parser.add_argument(
-        "--skip-roles", action="store_true", help="realm import without roles and groups, as the chart default and dimp"
+        "--import-roles", action="store_true", help="realm import also creates the realm roles and groups, as kees00"
     )
     parser.add_argument(
         "--force-prune", action="store_true", help=f"prune more than {prune.LARGE_PRUNE_THRESHOLD} orphaned resources"

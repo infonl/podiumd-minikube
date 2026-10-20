@@ -7482,3 +7482,39 @@ hang 30-60 s and the edge answer 504 (before Cilium: a fast 500). Checked:
   when the pod stops answering keeps its connection without reply until the
   edge's 60 s read timeout. A short client timeout in ZAC would make that
   fail fast; openklant-nginx's proxy_connect/read_timeout of 300 s is podiumd's.
+
+## Audit against ExternalsPodiumD: no missing components, no unexplained differences (user's rule, 2026-10-20)
+
+User: "minikube should not lack features or components or have unexplainable
+differences in config." Compared every key that one of ExternalsPodiumD's 8
+environments sets (origin/main c977556: dim1, dimp ontw/test, icat, mayk on
+podiumd 4.9.1, info 4.8.0, dim3 4.7.8, dim2 4.6.6) with minikube's effective
+value (podiumd 4.10 defaults + values.yaml + --full). 153 keys remained after
+dropping hosts, secrets, database hosts, mail relays and registries.
+
+- Components: none missing; minikube runs a superset (podiumd-infra's
+  optional set). Out: `mi` (SFTP target), the datamigratie app (external).
+- 4.9 keys without effect in 4.10: Bitnami Keycloak (cache, truststore
+  env, config-cli, serviceMonitor, adminOtpEnabled), separate objecttypen,
+  kisselastic, per-app Redis and RabbitMQ, Open Archiefbeheer's
+  twoFactorAuthentication, and openzaak `configuration.notificaties(.Authorization)`
+  (chart 1.14 templates do not read them; notifications come from configuration.data).
+- Mocks and minikube constraints: Mailpit without TLS, BAG mock, MSAL
+  placeholders, the acc-mock IdP, no SFTP; capacity in memory-tuning.md.
+- Aligned now: ZAC maxFileSizeMB 150 and nginx client_max_body_size 150M (7
+  envs; chart 4.10 defaults 500/600M), ZAC signalering schedules (8), Open
+  Inwoner DIGID_METADATA (8), disable2fa on Open Zaak and Open Notificaties
+  (6, incl. dimp test), skipRoles/skipGroups back to the chart default true
+  (dimp test/ontw, dim2, dim3, info; dim1, icat, mayk false: `deploy --import-roles`).
+- Kept, explained in values.yaml: redis-ha's label-master CronJob every 2
+  minutes (ExternalsPodiumD's office-hours schedule suits environments
+  suspended at night; a laptop restarting Redis in the evening would leave
+  redis-ha-master without endpoints); e2eTestZaaktype as kees00; PABC
+  functioneelBeheerderRole `administrator` as the chart's realm and dim1
+  (dimp test/ontw and info set `administrators`; podiumd-tests checks whether
+  that role exists there).
+- Not taken: the datamigratie client and the KISS website crawler (no app or
+  test uses them here), ZAC to the otel-collector (removed with Tempo),
+  icat-only BRP protocollering and KISS BRP headers (chart default and the majority).
+Effect on tests before the change: only skipRoles and the PABC role could
+let a test pass here that fails on dimp test.
