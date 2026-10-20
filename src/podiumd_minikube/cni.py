@@ -66,6 +66,8 @@ def values() -> dict[str, Any]:
         "identityAllocationMode": "crd",
         "policyEnforcementMode": "default",
         "resources": AGENT_RESOURCES,
+        # As the control plane (provision.CONTROL_PLANE_ENV): collect at 1.5x the live heap.
+        "extraEnv": [{"name": "GOGC", "value": "50"}],
     }
 
 

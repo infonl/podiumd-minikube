@@ -25,3 +25,7 @@ def test_apply_applies_the_manifest_and_waits_for_the_agent(fake_run: FakeRun):
         ["kubectl", "apply", "-f", str(cni.MANIFEST)],
         ["kubectl", "rollout", "status", "-n", "kube-system", "daemonset/cilium", "--timeout=300s"],
     ]
+
+
+def test_values_give_the_agent_gogc_50():
+    assert {"name": "GOGC", "value": "50"} in cni.values()["extraEnv"]

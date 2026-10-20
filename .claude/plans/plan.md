@@ -7452,3 +7452,16 @@ now"). 5 minutes after start: 733 MiB working set, old gen 244 MiB used of
 407 MiB committed, young gen 184 MiB committed. The serial GC keeps what it
 committed at startup, so the saving shows at peaks (it was 779 MiB after a
 full tier at 768M); re-measure after podiumd-tests' ZaakBrug tests.
+
+## cilium-agent: leaked monitors, then GOGC=50
+
+cilium-agent stood at 501 MiB against a 354 MiB baseline: eight
+`cilium-dbg monitor --type drop --json` processes (73 MiB RSS each) left by
+podiumd-tests' drop recorder, whose `kubectl exec` it stopped locally while the
+remote monitor, writing only on a drop, never noticed (fixed in podiumd-tests
+aaf5a6a; on AKS's distroless image the user chose to record only around tests
+that expect drops). Clean: 241 MiB, Go heap 163 MiB held. The 354 MiB
+baseline already held leaked monitors. Then `GOGC=50` on the agent (user's
+go; `cni.values` extraEnv, as the control plane), applied with `cni.apply`
+under the lock: 25 minutes later 129 MiB working set, Go heap 117 MiB held,
+47 MiB live; edge, reachability and CNI tests pass.
