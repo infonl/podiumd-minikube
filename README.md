@@ -134,8 +134,9 @@ settled (no `metrics-server`, so no `kubectl top`).
 
 Budgets (`tests/test_memory.py`): the default profile at most 9 GiB for the
 minikube node (measured 7.0 GiB, 2026-10-14), `--full` at most 17 GiB. Measured with `--full` after a full
-podiumd-tests run (2026-10-14): node 14.3 GiB, containers 11.8 GiB, of which
-monitoring-logging (profile `metrics`) about 1.2 GiB.
+podiumd-tests run (2026-10-20, with Open VTB, ZaakBrug, the Office add-in and
+the exporters): node 16.0 GiB, containers 13.9 GiB, of which ZaakBrug 0.8 GiB
+and monitoring-logging (profile `metrics`) about 1.2 GiB.
 
 `tests/memory-baseline.json` holds that measurement per container; the test
 fails when a container grows more than 20% + 64 MiB above it. Refresh it

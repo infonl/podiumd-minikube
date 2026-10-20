@@ -7438,3 +7438,11 @@ Live: all Prometheus targets up (Redis and ClamAV exporters behind their
 policies), https://openbao.local through the edge 200, live suite 34 passed.
 podiumd-tests: no test or mock talks to these backends directly, no extra
 rule needed (its kees00 full tier passed with the same set).
+
+Memory after podiumd-tests' full tier 20261020-112620 (baseline refreshed
+2026-10-20): node 16384 MiB of the 17 GiB budget, containers 14262 MiB
+(baseline before the extension 12691). New: zaakbrug 779, openvtb 230,
+add-in backend 35 and frontend 6, redis-exporter 22, clamav-exporter 8 MiB;
+kube-apiserver 1142 MiB after about ten deploys (GOMEMLIMIT 1200MiB; it drops
+on a restart). Next candidate: ZaakBrug's maximum heap 768M -> 640M (old gen
+holds 332 MiB) once podiumd-tests exercises ZaakBrug.
