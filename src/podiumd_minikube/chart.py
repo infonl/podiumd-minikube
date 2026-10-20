@@ -34,7 +34,8 @@ SKIP_ROLES_SETS = [
 # deploy --otel: the apps' OpenTelemetry metrics, as ExternalsPodiumD dim1, info and mayk and
 # the chart's values-enable-observability.yaml, into monitoring-logging's collector (so with the
 # metrics profile). Opt-in: about 50 MiB per Maykin web pod. ZAC reads its endpoint only with its
-# own collector subchart enabled; at 0 replicas, renamed, as its default name is the shared collector's.
+# own collector subchart enabled; renamed (its default name is the shared collector's), its
+# Deployment dropped by manifests.is_unused_zac_collector.
 OTEL_COLLECTOR = "http://podiumd-minikube-opentelemetry-collector:4317"
 OTEL_APPS = ("openzaak", "opennotificaties", "objecten", "openklant", "openformulieren", "openinwoner")
 OTEL_SETS = [
@@ -53,7 +54,6 @@ OTEL_SETS = [
         for arg in ("--set", f"podiumd.{app}.settings.otel.{key}={value}")
     ),
     "--set", "podiumd.zac.opentelemetry-collector.enabled=true",
-    "--set", "podiumd.zac.opentelemetry-collector.replicaCount=0",
     "--set", "podiumd.zac.opentelemetry-collector.fullnameOverride=zac-opentelemetry-collector",
     "--set", f"podiumd.zac.opentelemetry_zaakafhandelcomponent.endpoint={OTEL_COLLECTOR}",
 ]  # fmt: skip

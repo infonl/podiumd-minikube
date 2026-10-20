@@ -343,6 +343,16 @@ def serve_postgres_tls(docs: list[Doc]) -> list[Doc]:
     return docs
 
 
+# deploy --otel enables ZAC's collector subchart only for ZAC's endpoint; its template omits
+# `replicas` for replicaCount 0 (`and ... .Values.replicaCount`), so Kubernetes would run 1.
+ZAC_COLLECTOR = "zac-opentelemetry-collector"
+
+
+def is_unused_zac_collector(doc: Doc) -> bool:
+    """Whether doc is the Deployment of ZAC's own otel-collector, which nothing calls."""
+    return doc.get("kind") == "Deployment" and name_of(doc) == ZAC_COLLECTOR
+
+
 def keep_finished_jobs(docs: list[Doc]) -> None:
     """Drops ttlSecondsAfterFinished from Jobs, so deploy sees their outcome after its slower steps.
 
@@ -566,7 +576,7 @@ class Render:
 def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
     loaded: list[Doc | None] = list(yaml.safe_load_all(strip_image_digests(text)))
-    docs = [doc for doc in loaded if doc and not _is_test_or_delete_hook(doc)]
+    docs = [doc for doc in loaded if doc and not _is_test_or_delete_hook(doc) and not is_unused_zac_collector(doc)]
     disable_service_links(docs)
     allow_rolling_updates(docs)
     drop_duplicate_env(docs)

@@ -379,3 +379,10 @@ def test_scrape_only_from_prometheus_narrows_only_the_namespace_rule():
     assert own["podSelector"] == {"matchLabels": manifests.PROMETHEUS_POD}
     assert "podSelector" not in ingress_controller
     assert client == {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "zac"}}}
+
+
+def test_fix_up_drops_only_zacs_own_collector_deployment():
+    collector = {"kind": "Deployment", "metadata": {"name": manifests.ZAC_COLLECTOR}}
+    service = {"kind": "Service", "metadata": {"name": manifests.ZAC_COLLECTOR}}
+    render = manifests.fix_up(manifests.dump([collector, service]), objecten_merged=False)
+    assert render.docs == [service]

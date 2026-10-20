@@ -7603,3 +7603,7 @@ own opentelemetry-collector subchart enabled; that subchart's default name is
 `<release>-opentelemetry-collector`, the shared collector's, so it runs at 0
 replicas as `zac-opentelemetry-collector` and ZAC points at the shared one.
 podiumd-tests' metrics test needs `--otel`.
+The ZAC collector subchart's template writes `replicas` only when
+`replicaCount` is truthy (`and (not autoscaling.enabled) (.Values.replicaCount)`),
+so ExternalsPodiumD's `replicaCount: 0` runs 1 pod. Under `--otel` minikube
+drops that Deployment in the render (`manifests.is_unused_zac_collector`).
