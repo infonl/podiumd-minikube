@@ -7465,3 +7465,20 @@ baseline already held leaked monitors. Then `GOGC=50` on the agent (user's
 go; `cni.values` extraEnv, as the control plane), applied with `cni.apply`
 under the lock: 25 minutes later 129 MiB working set, Go heap 117 MiB held,
 47 MiB live; edge, reachability and CNI tests pass.
+
+## Slow 504s during an Open Klant outage: what is and is not the cause (user: "yes, verify it")
+
+podiumd-tests' chaos test scales deployment openklant to 0 and saw ZAC's call
+hang 30-60 s and the edge answer 504 (before Cilium: a fast 500). Checked:
+- Cilium refuses a Service without endpoints at once
+  (`service-no-backend-response: reject`; a probe connect fails in 0 s).
+- The edge path (NGF -> ExternalName openklant-nginx -> openklant ClusterIP)
+  does not hang: in two controlled outages (lock held), 120 probes 0.5 s apart
+  got 401 from the old pod during its 30 s grace period, then 502 in about 4 ms
+  once Cilium dropped the terminating backend.
+- ZAC's log during podiumd-tests' runs shows both "Server response from
+  Klanten: 504 (Gateway Timeout)" and 502. So the hang depends on ZAC's
+  requests, not on routing. Unverified explanation: a request in flight
+  when the pod stops answering keeps its connection without reply until the
+  edge's 60 s read timeout. A short client timeout in ZAC would make that
+  fail fast; openklant-nginx's proxy_connect/read_timeout of 300 s is podiumd's.
