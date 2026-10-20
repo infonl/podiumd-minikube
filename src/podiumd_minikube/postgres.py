@@ -20,6 +20,7 @@ from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import VENDOR_DIR
 
 INIT_SQL = VENDOR_DIR / "postgres" / "00-create-databases.sql"
+ALLOW_LIST_SQL = CHART_DIR / "files" / "postgres" / "00-azure-extension-allow-list.sql"
 # Values setup_configuration and podiumd's Jobs look rows up by, renamed to
 # ExternalsPodiumD's: database -> (table, column) -> {old: new}. Without the
 # rename they add a new row beside the old one (zgw_consumers_service.api_root
@@ -57,14 +58,14 @@ RENAMED_DATABASES = {"objects": "objecten", "objecttypes": "objecttypen"}
 DUMP_DIR = CHART_DIR / ".postgres-dumps"
 DATA_ROOT = "/var/lib/postgresql/data"
 _ROLE = re.compile(r"CREATE ROLE (\w+) ")
-_DATABASE = re.compile(r'CREATE DATABASE "?(\w+)"? OWNER (\w+);')
+_DATABASE = re.compile(r"CREATE DATABASE (\w+);")
 
 
 def missing_sql(init_sql: str, databases: set[str], roles: set[str]) -> tuple[list[str], str]:
     """(names, script): the init SQL's statements for the databases not in databases.
 
-    A database's statements are its CREATE ROLE (unless that role exists), its
-    CREATE DATABASE and the statements after its `\\c` line.
+    A database's statements are its role's CREATE ROLE (same name; unless that
+    role exists), its CREATE DATABASE and the statements after its `\\c` lines.
     """
     statements = [line for line in init_sql.splitlines() if line.strip() and not line.startswith("--")]
     role_lines = {m.group(1): line for line in statements if (m := _ROLE.match(line))}
@@ -73,8 +74,8 @@ def missing_sql(init_sql: str, databases: set[str], roles: set[str]) -> tuple[li
     for line in statements:
         if (m := _DATABASE.match(line)) and m.group(1) not in databases:
             missing.append(m.group(1))
-            if m.group(2) not in roles:
-                script.append(role_lines[m.group(2)])
+            if m.group(1) not in roles:
+                script.append(role_lines[m.group(1)])
             script.append(line)
     connected = ""
     for line in statements:
@@ -172,6 +173,39 @@ def create_missing_databases() -> None:
         stdin=script,
     )  # fmt: skip
     print(f"Created database(s) {', '.join(missing)} from {INIT_SQL.name}.")
+
+
+def align_with_azure() -> None:
+    """Gives each app database to postgres with ALL granted to its owner, and installs the extension allow-list.
+
+    As the init SQL, for clusters provisioned before it; idempotent. Also drops
+    openzaak's unused "uuid-ossp", which Azure does not allow.
+    """
+    if not kube.exists("deployment/postgres"):
+        return
+    owners = dict(
+        line.split("|")
+        for line in _psql("select datname, pg_get_userbyid(datdba) from pg_database where datname <> 'template0';")
+        .strip()
+        .splitlines()
+    )
+    script = ["\\set ON_ERROR_STOP on"]
+    for database, owner in owners.items():
+        script += [f"\\c {database}", ALLOW_LIST_SQL.read_text(encoding="utf-8")]
+        if owner != "postgres":
+            script += [
+                f"ALTER DATABASE {database} OWNER TO postgres;",
+                f"GRANT ALL ON DATABASE {database} TO {owner};",
+                f"GRANT ALL ON SCHEMA public TO {owner};",
+            ]
+    if "openzaak" in owners:
+        script += ["\\c openzaak", 'DROP EXTENSION IF EXISTS "uuid-ossp";']
+    pod = kube.first_pod("app=postgres")
+    kube.kubectl(
+        "exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-q", "-f", "-", stdin="\n".join(script)
+    )
+    if moved := sorted(database for database, owner in owners.items() if owner != "postgres"):
+        print(f"Databases given to postgres, with grants to their app role: {', '.join(moved)}")
 
 
 def rename_databases() -> None:

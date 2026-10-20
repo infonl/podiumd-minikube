@@ -19,35 +19,35 @@ from podiumd_minikube.paths import NAMESPACE
 
 INIT_SQL = """-- comment
 CREATE ROLE a WITH LOGIN PASSWORD 'a';
-CREATE DATABASE a OWNER a;
-CREATE ROLE pabc WITH LOGIN PASSWORD 'pabc';
-CREATE DATABASE "Pabc" OWNER pabc;
+CREATE DATABASE a;
 CREATE ROLE b WITH LOGIN PASSWORD 'b';
-CREATE DATABASE b OWNER b;
+CREATE DATABASE b;
 \\c a
 CREATE EXTENSION IF NOT EXISTS postgis;
 \\c b
 CREATE EXTENSION IF NOT EXISTS postgis;
+\\c b
+GRANT ALL ON DATABASE b TO b;
 """
 
 
 def test_missing_sql_only_covers_missing_databases():
-    missing, script = postgres.missing_sql(INIT_SQL, {"a", "Pabc"}, {"a", "pabc"})
+    missing, script = postgres.missing_sql(INIT_SQL, {"a"}, {"a"})
     assert missing == ["b"]
-    assert (
-        script
-        == "CREATE ROLE b WITH LOGIN PASSWORD 'b';\nCREATE DATABASE b OWNER b;\n\\c b\nCREATE EXTENSION IF NOT EXISTS postgis;\n"
+    assert script == (
+        "CREATE ROLE b WITH LOGIN PASSWORD 'b';\nCREATE DATABASE b;\n"
+        "\\c b\nCREATE EXTENSION IF NOT EXISTS postgis;\n\\c b\nGRANT ALL ON DATABASE b TO b;\n"
     )
 
 
-def test_missing_sql_keeps_existing_role_and_quoted_names():
-    missing, script = postgres.missing_sql(INIT_SQL, {"a", "b"}, {"a", "b", "pabc"})
-    assert missing == ["Pabc"]
-    assert script == 'CREATE DATABASE "Pabc" OWNER pabc;\n'
+def test_missing_sql_keeps_an_existing_role():
+    missing, script = postgres.missing_sql(INIT_SQL, {"a"}, {"a", "b"})
+    assert missing == ["b"]
+    assert script.startswith("CREATE DATABASE b;\n")
 
 
 def test_missing_sql_nothing_missing():
-    assert postgres.missing_sql(INIT_SQL, {"a", "b", "Pabc"}, set()) == ([], "")
+    assert postgres.missing_sql(INIT_SQL, {"a", "b"}, set()) == ([], "")
 
 
 def test_major_of_a_postgis_image():
@@ -75,21 +75,24 @@ def cluster(fake_run: FakeRun) -> FakeRun:
     return fake_run
 
 
-@pytest.mark.parametrize("step", [postgres.create_missing_databases, postgres.rename_databases, postgres.rename_rows])
+@pytest.mark.parametrize(
+    "step",
+    [postgres.create_missing_databases, postgres.align_with_azure, postgres.rename_databases, postgres.rename_rows],
+)
 def test_steps_skip_a_cluster_without_postgres(fake_run: FakeRun, step: Callable[[], None]):
     fake_run.on("kubectl", "get", "deployment/postgres", returncode=1)
     step()
     assert fake_run.calls == [["kubectl", "get", "deployment/postgres", "-n", NAMESPACE]]
 
 
-@pytest.mark.parametrize(("databases", "script"), [("a\nPabc\n", "CREATE ROLE b WITH LOGIN"), ("a\nb\nPabc\n", None)])
+@pytest.mark.parametrize(("databases", "script"), [("a\n", "CREATE ROLE b WITH LOGIN"), ("a\nb\n", None)])
 def test_create_missing_databases_runs_the_missing_part_of_the_init_sql(
     cluster: FakeRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, databases: str, script: str | None
 ):
     monkeypatch.setattr(postgres, "INIT_SQL", tmp_path / "init.sql")
     postgres.INIT_SQL.write_text(INIT_SQL, encoding="utf-8")
     cluster.on(*PSQL, "select datname from pg_database;", stdout=databases)
-    cluster.on(*PSQL, "select rolname from pg_roles;", stdout="a\npabc\n")
+    cluster.on(*PSQL, "select rolname from pg_roles;", stdout="a\n")
     postgres.create_missing_databases()
     created = [stdin for call, stdin in zip(cluster.calls, cluster.stdins, strict=True) if "ON_ERROR_STOP=1" in call]
     if script is None:
@@ -182,3 +185,16 @@ def test_restore_errors_keep_the_dump_and_the_old_data(cluster: FakeRun, tmp_pat
     with pytest.raises(process.UserError, match=r'Postgres 17 had errors \(dump kept in .*pg16.sql\): relation "x"'):
         postgres.restore(dump, 17, _render(17))
     assert not cluster.ran("kubectl", "exec", "-n", NAMESPACE, POD, "--", "find")
+
+
+def test_align_with_azure_moves_app_databases_and_installs_the_allow_list_everywhere(cluster: FakeRun):
+    query = "select datname, pg_get_userbyid(datdba) from pg_database where datname <> 'template0';"
+    cluster.on(*PSQL, query, stdout="template1|postgres\nopenzaak|openzaak\n")
+    postgres.align_with_azure()
+    [script] = [stdin for call, stdin in zip(cluster.calls, cluster.stdins, strict=True) if call[-2:] == ["-f", "-"]]
+    assert script is not None
+    assert script.count("CREATE EVENT TRIGGER azure_extension_allow_list") == 2
+    assert "ALTER DATABASE openzaak OWNER TO postgres;" in script
+    assert "GRANT ALL ON SCHEMA public TO openzaak;" in script
+    assert "ALTER DATABASE template1" not in script
+    assert script.endswith('\\c openzaak\nDROP EXTENSION IF EXISTS "uuid-ossp";')

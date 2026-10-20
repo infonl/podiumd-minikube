@@ -120,3 +120,13 @@ def test_openvtb_has_omcs_api_token(enabled_profiles):
         "openvtb", "SELECT t.key, u.username FROM authtoken_token t JOIN accounts_user u ON u.id = t.user_id;"
     ).splitlines()
     assert f"{zgw['auth']['key']['openvtb']}|omc" in tokens
+
+
+def test_databases_are_set_up_as_on_azure():
+    """postgres.align_with_azure / the init SQL: postgres owns every database, each has the extension allow-list."""
+    owners = psql("postgres", "SELECT datname, pg_get_userbyid(datdba) FROM pg_database WHERE datname <> 'template0';")
+    databases = dict(line.split("|") for line in owners.splitlines())
+    assert {name for name, owner in databases.items() if owner != "postgres"} == set()
+    for database in databases:
+        triggers = psql(database, "SELECT evtname FROM pg_event_trigger;").split()
+        assert "azure_extension_allow_list" in triggers, database

@@ -7370,3 +7370,30 @@ it false.
   adds PABC's; that Job only adds, so the difference shows on a fresh realm
   only. The default stays false (as kees00), since podiumd-tests' bootstrap
   assigns those roles.
+
+## Postgres as Azure Flexible Server: grants and the extension allow-list (podiumd-tests' handoff e5fa3b6, item 3)
+
+As podiumd-infra's scripts/create-postgresql-databases.sh and
+create-test-environment.yml (`azure.extensions = POSTGIS,PG_TRGM`):
+
+- The init SQL creates each database without OWNER (so postgres, standing in
+  for the server admin, owns it) and grants the app role ALL on its database
+  and on schema public; apps still own the tables they create, as on Azure.
+  kees00's admin role also gets azure_pg_admin, which may create allow-listed
+  extensions; here the init SQL creates PostGIS up front instead (pg_trgm is a
+  trusted extension, which the database CREATE grant covers).
+- `files/postgres/00-azure-extension-allow-list.sql`: an event trigger that
+  fails CREATE EXTENSION of anything but postgis and pg_trgm. Event triggers
+  are per database, so the init SQL installs it in template1 before creating
+  the databases.
+- `postgres.align_with_azure`, every deploy: gives each database with another
+  owner to postgres with ALL granted to that owner, and (re)installs the
+  trigger in template1 and every database. The first run moved 18 databases.
+  It also drops openzaak's "uuid-ossp" (from the compose init SQL; nothing
+  depends on it, and Azure does not allow it).
+- Found on the way: the ConfigMap replaces the image's
+  /docker-entrypoint-initdb.d, so postgis/postgis's own 10_postgis.sh never
+  runs (the init SQL's old comment said it added PostGIS to template1); that
+  is why Open VTB's database lacked PostGIS.
+
+Live: deploy --full green; tests/test_database.py checks owner and trigger.

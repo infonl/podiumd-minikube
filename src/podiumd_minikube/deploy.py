@@ -169,6 +169,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     postgres.migrate_major(render)
     postgres.rename_databases()
     postgres.create_missing_databases()
+    postgres.align_with_azure()
     postgres.rename_rows()
     if crds.needed(render.docs):
         print("\nApplying monitoring-logging's own CRDs first...")
