@@ -114,8 +114,8 @@ def deploy_extended(argv: list[str]) -> None:
 
 def _deploy(command: Command, argv: list[str]) -> None:
     args, extra = deployment.add_arguments(_parser(command)).parse_known_args(argv)
-    skip_roles = chart.SKIP_ROLES_SETS if args.skip_roles else []
-    deployment.deploy(full=args.full, force_prune=args.force_prune, extra=[*skip_roles, *extra])
+    options = [*(chart.SKIP_ROLES_SETS if args.skip_roles else []), *(chart.OTEL_SETS if args.otel else [])]
+    deployment.deploy(full=args.full, force_prune=args.force_prune, extra=[*options, *extra])
 
 
 def expose_postgres(argv: list[str]) -> None:

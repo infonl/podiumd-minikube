@@ -7588,3 +7588,18 @@ target, and Loki received nothing from 19:21 to 20:05 CEST (podiumd-tests'
 test_every_pod_logs_to_loki). values.yaml now carries NODE_NAME in that list;
 tests/test_monitoring.py checks both entries. Lesson: a list override
 replaces the chart's list, so copy its entries.
+
+## OpenTelemetry metrics: opt-in `deploy --otel` (user's choice)
+
+ExternalsPodiumD dim1, info and mayk set `settings.otel.disabled: false` for
+the Maykin apps (icat sets true, the others leave the default off) and point
+ZAC at the collector; the chart's values-enable-observability.yaml does the
+same. Measured on Open Zaak, each 5 minutes after start: web 238 -> 291 MiB
+(+53), worker and beat unchanged, the collector +5. Six Maykin web pods would
+add about 300 MiB, the node about 16.9 of its 17 GiB. The user chose an
+opt-in (`chart.OTEL_SETS`, with the metrics profile) over raising the budget
+or folding Celery beat into the workers. ZAC reads its endpoint only with its
+own opentelemetry-collector subchart enabled; that subchart's default name is
+`<release>-opentelemetry-collector`, the shared collector's, so it runs at 0
+replicas as `zac-opentelemetry-collector` and ZAC points at the shared one.
+podiumd-tests' metrics test needs `--otel`.

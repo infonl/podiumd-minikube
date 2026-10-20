@@ -7,6 +7,8 @@ objecten:
   merged: false
 metrics:
   enabled: false # monitoring-logging (Grafana, Prometheus, Loki, Alloy), as both reference environments
+# The apps' OpenTelemetry metrics (ExternalsPodiumD dim1, info, mayk) are opt-in, `deploy --otel`
+# (chart.OTEL_SETS): about 50 MiB per Maykin web pod, and --full sits near its 17 GiB budget.
 # Realm acc-mock in our own Keycloak: the stand-in for Dimpact's acceptance
 # Keycloak behind identity provider accp-dimp-oidc; its user signs in through it.
 accMock:

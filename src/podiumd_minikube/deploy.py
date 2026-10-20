@@ -283,6 +283,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """Adds deploy's arguments to parser; unknown ones (--set x=y) go to helm."""
     parser.add_argument("--full", action="store_true", help="enable every optional profile")
     parser.add_argument(
+        "--otel",
+        action="store_true",
+        help="apps send OpenTelemetry metrics (with the metrics profile); ~50 MiB per web pod",
+    )
+    parser.add_argument(
         "--skip-roles",
         action="store_true",
         help="realm import without roles and groups (chart default; a fresh realm then lacks them)",
