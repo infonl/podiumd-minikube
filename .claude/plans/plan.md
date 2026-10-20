@@ -7233,3 +7233,18 @@ Django's URLValidator rejects `http://api-proxy/api/`. The Job inlines the URL
 in its script, not in a ConfigMap, so `manifests.route_outbound` leaves it
 alone: with the frankgateway profile Open Inwoner's KvK still goes to the
 api-proxy, not the outway.
+
+### Keycloak's public hostname on a fresh install (helm-charts #620)
+
+podiumd-tests' known-issues re-check (2026-10-20) installs helm-charts
+feature/podiumd-4.10.0 9294c856 plus PR #620 (branch
+verify/podiumd-4.10.0-pr620, d3254424, charts/podiumd tree 638325c0). #620's
+docs (8cbc19b3) say a fresh install sets `keycloak.hostname.hostname` to the
+public realm host: the Keycloak CR otherwise takes `adminFrontendUrl` for both
+hostnames, and discovery hands out keycloak-admin endpoints until the realm
+import sets the podiumd realm's `frontendUrl`; Jobs, PABC and ITA that read
+discovery before that keep the admin host ("Restart login cookie not found").
+values.yaml sets `https://keycloak.local`, the URL form podiumd-infra kees00
+(4.10.0) uses; ExternalsPodiumD sets nothing (existing environments only). The
+admin hostname stays on its `adminFrontendUrl` fallback. No OMC Open VTB
+override to drop: #600 was always deployed without one.

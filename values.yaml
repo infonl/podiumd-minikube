@@ -41,6 +41,10 @@ podiumd:
         memory: 512Mi
       limits:
         memory: 768Mi
+    # A fresh install needs the public host, else discovery serves the admin host
+    # until the realm import (helm-charts #620 docs); as podiumd-infra kees00.
+    hostname:
+      hostname: https://keycloak.local
     config:
       realm: podiumd # the chart's default; templates/zac's seed Job reads it
       adminFrontendUrl: https://keycloak-admin.local
