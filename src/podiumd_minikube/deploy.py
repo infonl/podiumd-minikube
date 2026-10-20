@@ -39,6 +39,13 @@ _CLIENT_SIDE_ERRORS = re.compile(
 )
 
 
+# As `helm upgrade`: the chart's `lookup` reads the live cluster (a plain `helm template`
+# gets nothing, so e.g. Grafana's admin password changed on every deploy).
+# --take-ownership skips Helm's check that a release owns the live objects: kubectl
+# apply manages them here, and a dry run writes nothing.
+LOOKUP_ARGS = ["--dry-run=server", "--take-ownership"]
+
+
 @dataclass
 class Options:
     """What to render: helm --set flags and the fixups they imply."""
@@ -48,7 +55,7 @@ class Options:
 
     def render(self, *args: str) -> manifests.Render:
         """`helm template` with these options and args, fixed up."""
-        text = manifests.helm_template(*self.helm_args, *args)
+        text = manifests.helm_template(*LOOKUP_ARGS, *self.helm_args, *args)
         return manifests.fix_up(text, objecten_merged=self.objecten_merged, ca_trust=True)
 
 

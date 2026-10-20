@@ -247,6 +247,37 @@ instead, which means Helm's install/upgrade hooks never fire —
 (`templates/storage-hooks.yaml`'s PV/PVC pre-provisioning) as a separate
 step instead.
 
+The render does run the chart's `lookup` against the cluster, as `helm upgrade`
+does (`helm template --dry-run=server --take-ownership`, `deploy.LOOKUP_ARGS`).
+What stays untested: hook order and weights, `.Release.Revision` above 1, Helm's
+three-way merge, and the "field is immutable" failure of a changed fixed-name
+Job (deploy recreates its Jobs, and warns about fixed-name Jobs ExternalsPodiumD
+does not delete first).
+
+## Differences from the estates
+
+What minikube does differently from ExternalsPodiumD and podiumd-infra, and what
+that leaves untested here (podiumd-tests then needs a real environment).
+
+| Area | minikube | Estates | Untested here |
+|---|---|---|---|
+| Nodes | 1 node; required pod anti-affinity dropped (`manifests.allow_rolling_updates`) | several nodes | scheduling and spreading, node failure, zone outages |
+| Replicas | 1 everywhere: Redis, Keycloak (`instances: 1`), Elasticsearch, Solr, ZooKeeper, web pods | Redis 3 (ExternalsPodiumD relabels the master in office hours), Keycloak 2 (kees00 with a PDB), Open Inwoner ES 2, KISS ES 3 | failover, Redis master switch, Keycloak cluster cache, PDBs |
+| Storage | hostPath ReadWriteOnce (`templates/storage-hooks.yaml`) | Azure Files SMB/NFS, shared between pods | multi-pod shared media, Azure Files permissions and latency |
+| Postgres | in-cluster PostGIS 15, owned by postgres with grants and the Azure extension allow-list | Azure Flexible Server 15 | Azure TLS and network rules, connection limits, server parameters |
+| Edge | NGINX Gateway Fabric with HTTPRoutes generated from the chart's Ingresses (`podiumd_minikube.gateway`); local CA | ExternalsPodiumD: hand-written HTTPRoutes with `X-Forwarded-*`; public certificates (kees00: NGF since 2026-10-20) | a route the generator derives but the estates write differently, public TLS |
+| Pod tuning | service links off, GC and malloc settings, `GOMEMLIMIT`, the local CA in every pod (`manifests.fix_up`) | chart defaults | behaviour that depends on heap size or GC, CA handling through the chart's own options |
+| Keycloak | does not trust the local CA, so the admin IdP stand-in's backchannel is in-cluster http | public https | the IdP's TLS to the acceptance Keycloak |
+| External services | BAG mock with two answers, Mailpit without STARTTLS, ClamAV with only EICAR, IdP stand-in `acc-mock`, Office add-in with placeholder MSAL ids, no e-Suite | Kadaster BAG, relay SMTP, full ClamAV, Dimpact's acceptance Keycloak, Entra ID, e-Suite on some | real data shapes, STARTTLS, real signatures, Office sign-in, e-Suite |
+| Monitoring | Grafana anonymous, Loki filesystem store, opt-in (`metrics` profile) | Grafana through Keycloak client `monitoring`; ExternalsPodiumD Loki distributed | Grafana login, Loki at scale |
+| Clients | no datamigratie client, no `mi` export | on where those run | datamigratie, MI SFTP export |
+
+The service links minikube turns off cannot clash on an estate: the Services
+that broke Solr and the Open Notificaties worker (`solr`, `rabbitmq`) are gone
+in podiumd 4.10, the chart sets the `<app>_PORT` variables apps read
+explicitly (Open VTB's values say why), and `POSTGRES_PORT` would only clash
+with minikube's in-cluster `postgres` Service.
+
 ## Troubleshooting
 
 **Cluster becomes sluggish or unresponsive, especially after switching

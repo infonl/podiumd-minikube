@@ -131,7 +131,7 @@ def test_render_passes_helm_args_and_splits_out_crds(fake_run: FakeRun):
     crd, configmap = _doc("CustomResourceDefinition", "a.x"), _doc("ConfigMap", "c")
     fake_run.on("helm", "template", stdout=manifests.dump([crd, configmap]))
     render = deploy.Options(helm_args=["--set", "a=b"]).render("-s", deploy.STORAGE_HOOKS)
-    assert fake_run.ran("helm", "template")[0][-4:] == ["--set", "a=b", "-s", deploy.STORAGE_HOOKS]
+    assert fake_run.ran("helm", "template")[0][-6:] == [*deploy.LOOKUP_ARGS, "--set", "a=b", "-s", deploy.STORAGE_HOOKS]
     assert (render.docs, render.crds) == ([configmap], [crd])
 
 

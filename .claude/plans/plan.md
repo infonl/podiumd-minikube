@@ -7397,3 +7397,22 @@ create-test-environment.yml (`azure.extensions = POSTGIS,PG_TRGM`):
   is why Open VTB's database lacked PostGIS.
 
 Live: deploy --full green; tests/test_database.py checks owner and trigger.
+
+## The render runs lookup as helm upgrade; differences documented (podiumd-tests' handoff e5fa3b6, items 1a and 4)
+
+`helm upgrade --install --dry-run=server` cannot run against this namespace:
+Helm refuses objects its release does not own ("cannot be imported into the
+current release"), and Helm 4's `helm template --dry-run=server` checks the
+same. With `--take-ownership` the check is skipped, and a dry run writes
+nothing, so every deploy now renders with `helm template --dry-run=server
+--take-ownership` (`deploy.LOOKUP_ARGS`, 3 s): the chart's `lookup` reads the
+cluster as in `helm upgrade`. Compared with a plain render only Grafana
+changed: its admin password was regenerated on every deploy (Secret, PVC and
+Deployment); it now stays (checked across a deploy). A real `helm upgrade`
+into a scratch namespace would need a second full stack, beyond the laptop
+budget. README "Why not helm install?" names what stays untested; README
+"Differences from the estates" lists the rest, with what each leaves
+untested. The service-link collisions cannot happen on an estate: `solr`
+and `rabbitmq` Services are gone in 4.10, the chart sets the `<app>_PORT`
+variables apps read, and `POSTGRES_PORT` only meets minikube's own
+`postgres` Service.
