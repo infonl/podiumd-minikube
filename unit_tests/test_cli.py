@@ -12,6 +12,7 @@ import pytest
 
 from conftest import FakeRun
 
+from podiumd_minikube import chart
 from podiumd_minikube import cli
 from podiumd_minikube import deploy
 from podiumd_minikube import kube
@@ -95,6 +96,7 @@ def test_cluster_lock_run_keeps_the_commands_own_double_dash(tmp_path: Path):
     ("argv", "module", "function", "expected"),
     [
         (["deploy", "--full", "--set", "a=b"], deploy, "deploy", ((), {"full": True, "force_prune": False, "extra": ["--set", "a=b"]})),
+        (["deploy", "--skip-roles"], deploy, "deploy", ((), {"full": False, "force_prune": False, "extra": chart.SKIP_ROLES_SETS})),
         (["deploy-extended", "--force-prune"], deploy, "deploy", ((), {"full": True, "force_prune": True, "extra": cli.EXTENDED[1:]})),
         (["expose-postgres"], services, "expose_postgres", ((5432,), {})),
         (["expose-postgres", "15432"], services, "expose_postgres", ((15432,), {})),

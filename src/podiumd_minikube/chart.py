@@ -23,6 +23,14 @@ METRICS_SETS = [
 ]  # fmt: skip
 NO_METRICS_SETS = [arg.replace("=true", "=false") for arg in METRICS_SETS]
 
+# deploy --skip-roles: keycloak.config.skipRoles/skipGroups true, the chart default and
+# ExternalsPodiumD dimp. The realm import then creates no realm roles or groups and
+# pabc-keycloak-groups-job adds PABC's; it only adds, so only a fresh realm shows the difference.
+SKIP_ROLES_SETS = [
+    "--set", "podiumd.keycloak.config.skipRoles=true",
+    "--set", "podiumd.keycloak.config.skipGroups=true",
+]  # fmt: skip
+
 # Profiles `deploy --full` turns on; provision-cluster pre-pulls their images too.
 FULL_PROFILE_SETS = [
     "--set", "podiumd.objecten.enabled=true",
@@ -76,7 +84,7 @@ def member_text(tgz: Path, name: str) -> str | None:
 
 
 def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
-    """--set images.<key>=<repository>:<tag> for BUNDLED_IMAGES and images.postgresMajor; none before a fetch.
+    """--set images.<key>=<repository>:<tag> for BUNDLED_IMAGES; none before a fetch.
 
     Without them the templates fail on `required`.
     """
@@ -91,8 +99,7 @@ def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
         for step in path:
             image = image[step]
         sets += ["--set", f"images.{key}={image['repository']}:{image['tag']}"]
-    postgres_tag = str(podiumd_values["global"]["images"]["postgres"]["tag"])
-    return [*sets, "--set", f"images.postgresMajor={postgres_tag.split('.', maxsplit=1)[0]}"]
+    return sets
 
 
 @dataclass(frozen=True)

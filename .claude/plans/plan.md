@@ -7344,3 +7344,29 @@ acc-mock, back to master, creates the brokered user and stops at
 CONFIGURE_TOTP: minikube keeps the chart's `adminOtpEnabled` default (true), as
 kees00, dim1 ontw and dimp test; six ExternalsPodiumD ontw environments set
 it false.
+
+## Postgres 15, the fixed-name Job check, deploy --skip-roles (podiumd-tests' handoff e5fa3b6; user's go on each)
+
+- Postgres major follows the Azure estates, not the release image (user:
+  "switch to 15, version should stay the same as on aks"): podiumd-infra
+  kees00 creates Flexible Server 15; ExternalsPodiumD keeps no server config
+  in its repo and podiumd-tests has no access. `images.postgresMajor: 15` in
+  values.yaml; `chart.bundled_image_sets` no longer derives it from podiumd's
+  `global.images.postgres` (16). `postgres.migrate_major` handled the
+  downgrade unchanged: pg_dumpall of 16, fresh 15 data directory, restore
+  without errors, clients restarted; the dump stays in `.postgres-dumps/`.
+- `upgrade.undeleted_fixed_jobs`, warned by every deploy: the chart's
+  non-hook Jobs with a fixed name (no content hash or revision suffix) that
+  ExternalsPodiumD's pipeline does not delete before `helm upgrade`
+  (pipelines/application.yml, "Delete stale one-shot Jobs"). It finds
+  `openbeheer-config`: Open Beheer runs on ExternalsPodiumD dim1, dimp, info
+  and mayk ontw, so a change to that Job's pod spec fails their upgrade with
+  "field is immutable". Sent to podiumd-tests. openformulieren-,
+  openinwoner- and opennotificaties-config are hooks now (their deletes are
+  harmless leftovers).
+- `deploy --skip-roles` (`chart.SKIP_ROLES_SETS`): keycloak.config.skipRoles
+  and skipGroups true, the chart default and ExternalsPodiumD dimp. The realm
+  import then creates no realm roles or groups and pabc-keycloak-groups-job
+  adds PABC's; that Job only adds, so the difference shows on a fresh realm
+  only. The default stays false (as kees00), since podiumd-tests' bootstrap
+  assigns those roles.

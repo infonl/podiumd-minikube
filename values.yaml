@@ -13,6 +13,10 @@ accMock:
   username: acc-admin
   password: accMockAdminPassword
   clientSecret: &accMockClientSecret accMockOtaauthClientSecret
+images:
+  # As the Azure estates (podiumd-infra kees00: Flexible Server 15), not the
+  # release's bundled postgres image (16): SQL that needs a newer major fails there.
+  postgresMajor: 15
 podiumd:
   enabled: true
 

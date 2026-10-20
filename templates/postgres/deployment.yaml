@@ -24,8 +24,8 @@ spec:
       enableServiceLinks: false
       containers:
         - name: postgres
-          # The release's Postgres major (podiumd's global.images.postgres); PostGIS 3.5.
-          image: postgis/postgis:{{ required "images.postgresMajor: set by podiumd-minikube deploy from podiumd's values.yaml" .Values.images.postgresMajor }}-3.5
+          # values.yaml images.postgresMajor (as the Azure estates); PostGIS 3.5.
+          image: postgis/postgis:{{ .Values.images.postgresMajor }}-3.5
           # As podiumd-infra's Azure Postgres; the default 100 ran out with
           # every profile on (each app's workers keep their connections).
           args: ["postgres", "-c", "max_connections=500"]

@@ -25,6 +25,7 @@ from podiumd_minikube import polling
 from podiumd_minikube import postgres
 from podiumd_minikube import process
 from podiumd_minikube import prune
+from podiumd_minikube import upgrade
 from podiumd_minikube.paths import NAMESPACE
 
 STORAGE_HOOKS = "templates/storage-hooks.yaml"
@@ -181,6 +182,10 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     gateway.apply(render.docs, chart_hosts)
     dns.apply_hosts(chart_hosts)
 
+    if undeleted := upgrade.undeleted_fixed_jobs(render.docs):
+        print(
+            f"\nWARNING: fixed-name Jobs ExternalsPodiumD does not delete before helm upgrade: {', '.join(undeleted)}"
+        )
     print()
     keycloak.repair_default_client_scopes(render)
     openbao.bootstrap(render)
@@ -260,6 +265,9 @@ def _wait_ready(render: manifests.Render) -> None:
 def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """Adds deploy's arguments to parser; unknown ones (--set x=y) go to helm."""
     parser.add_argument("--full", action="store_true", help="enable every optional profile")
+    parser.add_argument(
+        "--skip-roles", action="store_true", help="realm import without roles and groups, as the chart default and dimp"
+    )
     parser.add_argument(
         "--force-prune", action="store_true", help=f"prune more than {prune.LARGE_PRUNE_THRESHOLD} orphaned resources"
     )
