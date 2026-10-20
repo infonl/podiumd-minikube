@@ -276,6 +276,15 @@ podiumd:
     enabled: false
     extraArgs:
       - --foreground
+    # The exporter sidecar (metrics profile), as the chart's values-enable-observability.yaml.
+    metrics:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
     extraVolumes:
       - name: signatures
         configMap:
