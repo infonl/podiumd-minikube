@@ -10,13 +10,26 @@ import yaml
 
 from podiumd_minikube.paths import CHARTS_DIR
 
+# The metrics profile: monitoring-logging and the exporters it scrapes, as kees00 and
+# ExternalsPodiumD. Their ServiceMonitors need the monitoring CRDs (+460 MiB on
+# kube-apiserver), so the exporters never come without it.
+METRICS_SETS = [
+    "--set", "metrics.enabled=true",
+    "--set", "podiumd.clamav.metrics.enabled=true",
+    "--set", "podiumd.clamav.metrics.serviceMonitor.enabled=true",
+    "--set", "podiumd.redis-operator.redis-ha.redisExporter.enabled=true",
+    "--set", "podiumd.redis-operator.redis-ha.redisExporter.podMonitor.enabled=true",
+    "--set", "podiumd.eck-operator.podMonitor.enabled=true",
+]  # fmt: skip
+NO_METRICS_SETS = [arg.replace("=true", "=false") for arg in METRICS_SETS]
+
 # Profiles `deploy --full` turns on; provision-cluster pre-pulls their images too.
 FULL_PROFILE_SETS = [
     "--set", "podiumd.objecten.enabled=true",
     "--set", "podiumd.opennotificaties.enabled=true",
     "--set", "podiumd.openarchiefbeheer.enabled=true",
     "--set", "podiumd.openformulieren.enabled=true",
-    "--set", "metrics.enabled=true",
+    *METRICS_SETS,
     "--set", "podiumd.openinwoner.enabled=true",
     "--set", "podiumd.eck-operator.enabled=true",
     "--set", "podiumd.ita.enabled=true",
@@ -27,6 +40,9 @@ FULL_PROFILE_SETS = [
     "--set", "podiumd.openbao.enabled=true",
     "--set", "podiumd.clamav.enabled=true",
     "--set", "podiumd.omc.enabled=true",
+    "--set", "podiumd.openvtb.enabled=true",
+    "--set", "podiumd.zaakbrug.enabled=true",
+    "--set", "podiumd.zgw-office-addin.enabled=true",
 ]  # fmt: skip
 
 

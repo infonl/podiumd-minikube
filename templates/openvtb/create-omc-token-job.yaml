@@ -1,0 +1,48 @@
+{{- /* Retries (OnFailure) until the Deployment has migrated the database. */}}
+{{- if and .Values.podiumd.openvtb.enabled .Values.podiumd.omc.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openvtb-create-omc-token-script
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+data:
+  create_omc_token.py: {{ .Files.Get "files/openvtb/create_omc_token.py" | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openvtb-create-omc-token
+  labels:
+    {{- include "podiumd-minikube.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "podiumd-minikube.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-omc-token
+          image: "{{ .Values.podiumd.openvtb.image.repository }}:{{ .Values.podiumd.openvtb.image.tag }}"
+          imagePullPolicy: {{ .Values.podiumd.openvtb.image.pullPolicy }}
+          workingDir: /app
+          command: ["sh", "-c", "python src/manage.py shell < /scripts/create_omc_token.py"]
+          envFrom:
+            - secretRef:
+                name: openvtb
+            - configMapRef:
+                name: openvtb
+          env:
+            - name: OMC_TOKEN
+              value: {{ .Values.podiumd.omc.settings.zgw.auth.key.openvtb | quote }}
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: openvtb-create-omc-token-script
+{{- end }}

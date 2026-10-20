@@ -109,3 +109,14 @@ def test_openklant_has_omcs_actor(enabled_profiles):
     omc = yaml.safe_load(VALUES_YAML.read_text(encoding="utf-8"))["podiumd"]["omc"]["settings"]["omc"]
     actors = psql("openklant", "SELECT uuid, naam FROM klantinteracties_actor;").splitlines()
     assert f"{omc['actor']['id']}|OMC" in actors
+
+
+def test_openvtb_has_omcs_api_token(enabled_profiles):
+    """openvtb-create-omc-token stores the token OMC sends to Open VTB (omc.settings.zgw.auth.key.openvtb)."""
+    if not (enabled_profiles.get("openvtb") and enabled_profiles.get("omc")):
+        pytest.skip("'openvtb' and 'omc' profiles are not both deployed")
+    zgw = yaml.safe_load(VALUES_YAML.read_text(encoding="utf-8"))["podiumd"]["omc"]["settings"]["zgw"]
+    tokens = psql(
+        "openvtb", "SELECT t.key, u.username FROM authtoken_token t JOIN accounts_user u ON u.id = t.user_id;"
+    ).splitlines()
+    assert f"{zgw['auth']['key']['openvtb']}|omc" in tokens

@@ -1,0 +1,4 @@
+{{- /* The console and the ZDS SOAP endpoints share this host. */}}
+{{- if .Values.podiumd.zaakbrug.enabled }}
+{{ include "podiumd-minikube.ingress" (dict "root" . "name" "zaakbrug" "host" "zaakbrug.local" "service" "zaakbrug") }}
+{{- end }}

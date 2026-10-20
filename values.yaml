@@ -64,11 +64,13 @@ podiumd:
         monitoring:
           secret: keycloakMonitoringClientSecret
           oidcUrl: https://grafana.local
-        # No Datamigratie or Zaakbrug here.
+        # No Datamigratie here.
         datamigratie:
           enabled: false
+        # Rendered only with podiumd.zaakbrug.enabled.
         zaakbrug:
-          enabled: false
+          secret: keycloakZaakbrugClientSecret
+          oidcUrl: https://zaakbrug.local
   # --- Redis: podiumd's redis-operator, as both reference environments ---
   redis-operator:
     enabled: true
@@ -87,8 +89,21 @@ podiumd:
             storageClassName: standard
   apisix:
     enabled: false # already false by default upstream, set explicitly for clarity
+  # --- zgw-office-addin (profile: zgw-office-addin) ---
+  # As podiumd-infra anna00/bas00: placeholder MSAL ids, no Entra app, so Office
+  # sign-in fails; the frontend serves its manifest and the backend calls Open Zaak.
   zgw-office-addin:
-    enabled: false # as podiumd-infra; ExternalsPodiumD's needs Entra ID (MSAL), which has no local stand-in
+    enabled: false
+    common:
+      appEnv: podiumd-minikube
+      frontendUrl: https://office-addin.local
+      msalTenantId: 00000000-0000-0000-0000-000000000000
+      msalClientId: 00000000-0000-0000-0000-000000000000
+    backend:
+      msalSecret: placeholder-entra-not-configured
+      zgwApis:
+        url: https://openzaak.local
+        secret: officeAddInSecret
   # ita and kiss: own blocks before the monitoring-logging dependency.
   # One node, as podiumd-infra (ExternalsPodiumD runs three).
   kiss-eck:
@@ -160,6 +175,12 @@ podiumd:
     # podiumd-minikube (its Role/RoleBinding land there).
     managedNamespaces:
       - podiumd-minikube
+    # The metrics profile turns on its podMonitor. ExternalsPodiumD and the chart's
+    # values-enable-observability.yaml set metricsPort, which eck-operator 3.x
+    # ignores: its metrics.port default "0" wins.
+    config:
+      metrics:
+        port: "8080"
   # As both reference projects, but laptop budget: clamd loads only the EICAR
   # signature (13 MiB instead of 973 MiB with the official databases) and
   # freshclam never runs (no internet needed). The "-" argument makes the
@@ -195,8 +216,70 @@ podiumd:
         memory: 32Mi
       limits:
         memory: 128Mi
+  # --- zaakbrug (profile: zaakbrug), as podiumd-infra jimme00 and the chart's
+  # zaakbrug-deploy.md; dtap stage as kees00. Laptop budget: heap 768M, C1 only
+  # (chart Xms=Xmx=4G, 5Gi/6Gi; ontw idles at 3388 MiB).
   zaakbrug:
     enabled: false
+    fullnameOverride: zaakbrug
+    resources:
+      requests:
+        cpu: 100m
+        memory: 768Mi
+      limits:
+        memory: 1536Mi
+    frank:
+      memory:
+        percentage: false
+        minimum: 128M
+        maximum: 768M
+      # Serial GC by JVM ergonomics (limit below 1792 MiB): old gen settles at 330 MiB.
+      javaOpts: -XX:TieredStopAtLevel=1
+      dtap:
+        stage: TST
+      credentials:
+        secret: zaakbrug-secrets
+        key: credentials.properties
+      zakenApi:
+        jwt:
+          password: zaakbrugSecret
+      # Console SSO; Frank binds only these dotted keys.
+      environmentVariables:
+        application.security.console.authentication.type: OAUTH2
+        application.security.console.authentication.provider: custom
+        application.security.console.authentication.clientId: zaakbrug
+        application.security.console.authentication.clientSecret: keycloakZaakbrugClientSecret
+        application.security.console.authentication.issuerUri: https://keycloak.local/realms/podiumd
+        application.security.console.authentication.authorizationUri: https://keycloak.local/realms/podiumd/protocol/openid-connect/auth
+        application.security.console.authentication.tokenUri: https://keycloak.local/realms/podiumd/protocol/openid-connect/token
+        application.security.console.authentication.userInfoUri: https://keycloak.local/realms/podiumd/protocol/openid-connect/userinfo
+        application.security.console.authentication.jwkSetUri: https://keycloak.local/realms/podiumd/protocol/openid-connect/certs
+        application.security.console.authentication.userNameAttributeName: preferred_username
+        application.security.console.authentication.scopes: openid,profile,email,roles
+        application.security.console.authentication.authoritiesClaimName: roles
+    connections:
+      create: true
+      jdbc:
+        # Empty, as jimme00: the chart then names it jdbc/<release>, which Narayana
+        # looks up (the docs' jdbc/podiumd fits only release "podiumd").
+        - name: ""
+          type: postgresql
+          host: postgres
+          port: "5432"
+          database: zaakbrug
+          username: zaakbrug
+          password: zaakbrug
+          ssl: true
+    zaakbrug:
+      zgw:
+        zakenApi:
+          rootUrl: https://openzaak.local/zaken/api/v1/
+        catalogiApi:
+          rootUrl: https://openzaak.local/catalogi/api/v1/
+        documentenApi:
+          rootUrl: https://openzaak.local/documenten/api/v1/
+        besluitenApi:
+          rootUrl: https://openzaak.local/besluiten/api/v1/
 
   # --- zac (always on - the app itself) ---
   zac:
@@ -434,6 +517,11 @@ podiumd:
               secret: omcSecret
             - identifier: openbeheer
               secret: openbeheerSecret
+            - identifier: zaakbrug
+              secret: zaakbrugSecret
+            # The add-in's backend hardcodes this client id.
+            - identifier: office-add-in
+              secret: officeAddInSecret
             # As ExternalsPodiumD.
             - identifier: integratieteam
               secret: integratieteamSecret
@@ -499,6 +587,16 @@ podiumd:
                 - openbeheer
               heeft_alle_autorisaties: true
               label: Open Beheer
+            - uuid: 8d1d1c5e-6a0b-4b8e-9f3a-2c7e5b1a4f60
+              client_ids:
+                - zaakbrug
+              heeft_alle_autorisaties: true
+              label: Zaakbrug
+            - uuid: 5e2b7c41-93d8-4f0a-b6c2-7a1e9d3f8b25
+              client_ids:
+                - office-add-in
+              heeft_alle_autorisaties: true
+              label: ZGW Office add-in
             # As ExternalsPodiumD.
             - uuid: 3595eece-ba8a-47c9-a388-496086c9677f
               client_ids:
@@ -2498,6 +2596,77 @@ podiumd:
         default: redis-ha-master:6379/17
         axes: redis-ha-master:6379/17
 
+  # --- openvtb (profile: openvtb) ---
+  # No reference environment runs it: the chart's openvtb-BASICS.md, shaped
+  # like Open Beheer. templates/openvtb's Job gives OMC its API token.
+  openvtb:
+    enabled: false
+    replicaCount: 1 # chart 2
+    configuration:
+      oidcUrl: https://openvtb.local
+      secrets:
+        keycloak_client_secret: keycloakOpenvtbClientSecret
+      data: |-
+        oidc_db_config_enable: true
+        oidc_db_config_admin_auth:
+          providers:
+            - identifier: keycloak-provider
+              oidc_use_nonce: true
+              oidc_nonce_size: 32
+              oidc_state_size: 32
+              endpoint_config:
+                oidc_op_discovery_endpoint: https://keycloak.local/realms/podiumd/
+          items:
+            - identifier: admin-oidc
+              oidc_provider_identifier: keycloak-provider
+              enabled: true
+              oidc_rp_client_id: openvtb
+              oidc_rp_client_secret: {value_from: {env: keycloak_client_secret}}
+              oidc_rp_scopes_list:
+                - openid
+                - email
+                - profile
+                - roles
+              oidc_rp_sign_algo: RS256
+              userinfo_claims_source: id_token
+              options:
+                user_settings:
+                  claim_mappings:
+                    username:
+                      - preferred_username
+                    first_name:
+                      - given_name
+                    last_name:
+                      - family_name
+                    email:
+                      - email
+                groups_settings:
+                  claim_mapping:
+                    - groups
+                  sync: true
+                  sync_pattern: "*"
+                  default_groups: []
+                  make_users_staff: true
+                  superuser_group_names:
+                    - administrators
+    settings:
+      # Laptop budget: 1 web process (chart 2); the chart's 2 threads stay.
+      uwsgi:
+        processes: "1"
+      allowedHosts: openvtb.local,.svc.cluster.local
+      secretKey: openvtbSecretKey
+      environment: podiumd-minikube
+      database:
+        host: postgres
+        name: openvtb
+        username: openvtb
+        password: openvtb
+      email:
+        host: mailpit
+        port: 1025
+        useTLS: false
+        defaultFrom: noreply@example.com
+
   # --- omc (profile: omc), as ExternalsPodiumD (icat) ---
   # Notify goes to podiumd-tests' Notify mock (its webhook receiver, created
   # by its bootstrap); podiumd-tests also subscribes OMC to Open
@@ -2539,6 +2708,8 @@ podiumd:
             openklant: openklantOmcToken
             objecten: objectenOmcToken
             objectTypen: objecttypenOmcToken
+            # Open VTB's API token for OMC; templates/openvtb's Job creates it.
+            openvtb: omcOpenvtbToken
         endpoint:
           openNotificaties: https://opennotificaties.local/api/v1
           openZaak: https://openzaak.local/zaken/api/v1
@@ -2547,6 +2718,8 @@ podiumd:
           besluiten: https://openzaak.local/besluiten/api/v1
           objecten: https://objecten.local/api/v2
           objectTypen: https://objecttypen.local/api/v2
+          # OMC fetches {openVtb}/berichten/{uuid}.
+          openVtb: https://openvtb.local/berichten/api/v1
         whitelist:
           zaakCreate:
             ids: "*"

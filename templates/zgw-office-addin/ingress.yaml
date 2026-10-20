@@ -1,0 +1,4 @@
+{{- /* The frontend serves the manifest and proxies the API to the backend. */}}
+{{- if index .Values.podiumd "zgw-office-addin" "enabled" }}
+{{ include "podiumd-minikube.ingress" (dict "root" . "name" "zgw-office-addin" "host" "office-addin.local" "service" "zgw-office-addin-frontend") }}
+{{- end }}

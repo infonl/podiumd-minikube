@@ -52,6 +52,11 @@ CREATE DATABASE openbeheer OWNER openbeheer;
 -- OpenBao (frankgateway profile); its schema Job creates the tables.
 CREATE ROLE openbao WITH LOGIN PASSWORD 'openbao';
 CREATE DATABASE openbao OWNER openbao;
+-- Open VTB and ZaakBrug (their profiles).
+CREATE ROLE openvtb WITH LOGIN PASSWORD 'openvtb';
+CREATE DATABASE openvtb OWNER openvtb;
+CREATE ROLE zaakbrug WITH LOGIN PASSWORD 'zaakbrug';
+CREATE DATABASE zaakbrug OWNER zaakbrug;
 
 -- Open Inwoner (openinwoner profile): a PodiumD component, not in
 -- docker-compose; credentials made up like contact's.
@@ -74,6 +79,9 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 \c openinwoner
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+\c openvtb
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- zac database schema/grants, copied from zac-database/init-zac-database.sql

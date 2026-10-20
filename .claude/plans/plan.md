@@ -7248,3 +7248,70 @@ values.yaml sets `https://keycloak.local`, the URL form podiumd-infra kees00
 (4.10.0) uses; ExternalsPodiumD sets nothing (existing environments only). The
 admin hostname stays on its `adminFrontendUrl` fallback. No OMC Open VTB
 override to drop: #600 was always deployed without one.
+
+## --full gets Open VTB, ZaakBrug, the ZGW Office add-in and the metrics exporters (user: "if --full is no longer full, should it not be extended?")
+
+A comparison of every `enabled` flag of the podiumd 4.10 chart over 23
+reference values files (podiumd-infra values/*, ExternalsPodiumD
+gemeenten/*/*) against `--full` found these podiumd 4.10 parts off here and on
+elsewhere. The user approved each one, with the footprint cuts below, after
+podiumd-tests' #620 re-check round:
+
+- `zaakbrug`: podiumd-infra jimme00 (the only environment with it) and the
+  chart's zaakbrug-deploy.md; `dtap.stage` TST as kees00. Open Zaak client
+  `zaakbrug` (heeft_alle_autorisaties), Keycloak client `zaakbrug` (console
+  SSO through the `application.security.console.authentication.*`
+  properties), database `zaakbrug`, host zaakbrug.local (console and ZDS SOAP
+  endpoints). `manifests.mount_zaakbrug_role_mapping` mounts podiumd's
+  ConfigMap `zaakbrug-oauth-role-mapping`, which ExternalsPodiumD mounts with
+  a post-deploy `kubectl patch` (the zaakbrug chart has no extraVolumes).
+- `openvtb`: no reference environment runs it; the chart's openvtb-BASICS.md,
+  shaped like Open Beheer (admin OIDC, Keycloak client `openvtb`), 1 replica,
+  database `openvtb` with PostGIS, PVC `openvtb`, host openvtb.local. OMC
+  points at it (`endpoint.openVtb` https://openvtb.local/berichten/api/v1, as
+  podiumd-infra found: OMC fetches {endpoint}/berichten/{uuid}). Open VTB
+  authenticates its API with DRF tokens tied to a user and
+  setup_configuration has no token step, so Job openvtb-create-omc-token
+  (`files/openvtb/create_omc_token.py`, `manage.py shell`) creates user `omc`
+  with the token from `omc.settings.zgw.auth.key.openvtb`.
+- `zgw-office-addin`: placeholder MSAL ids as podiumd-infra anna00/bas00 and
+  kees00's older values (kees00/4.10.0 has it off until real ids exist); Office
+  sign-in fails, the frontend serves manifest-office.xml on office-addin.local
+  and the backend calls Open Zaak as client `office-add-in`, which its JWT
+  hardcodes (seen in the running backend's app.js). The earlier note that
+  Entra ID keeps it off was wrong: the reference environments deploy it with
+  placeholders.
+- Exporters, with the metrics profile only (`chart.METRICS_SETS`; their
+  ServiceMonitors would pull in the monitoring CRDs, +460 MiB on
+  kube-apiserver): `clamav.metrics` + serviceMonitor,
+  `redis-operator.redis-ha.redisExporter` + podMonitor, `eck-operator`
+  podMonitor, as kees00/anna00/bas00/johnb00 and ExternalsPodiumD
+  dim1/icat/info/mayk. deploy-extended turns them off with metrics
+  (`chart.NO_METRICS_SETS`).
+- Left off, with reason: `mi` (SFTP export target), the datamigratie client
+  (external app), `zac.brpApi.protocollering` and the BAG urlRewrite (icat
+  only), `keycloak.podDisruptionBudget` (one node).
+
+Found live:
+- Open VTB's migrations run `CREATE EXTENSION postgis`, which its role may
+  not: the init SQL now creates it, as for the other PostGIS apps (the live
+  database got it by hand once).
+- ZaakBrug looped on "no default datasource [jdbc/podiumd-minikube] found":
+  Narayana looks up `jdbc/<instance name>`, the release name; the docs'
+  `jdbc/podiumd` fits release "podiumd" only. The jdbc name stays empty, as
+  jimme00, so the chart derives it.
+- The ECK operator podMonitor did not render with `config.metricsPort` (as
+  ExternalsPodiumD and the chart's values-enable-observability.yaml): eck-operator
+  3.x reads `config.metrics.port` first, and its default "0" is a non-empty
+  string, so `metricsPort` is never consulted. `config.metrics.port: "8080"`
+  renders the PodMonitor; Prometheus scrapes all three exporters. Sent to
+  podiumd-tests for a helm-charts report.
+- ZaakBrug runs the serial GC by JVM ergonomics (memory limit below 1792 MiB),
+  so G1 flags had no effect; after 15 minutes the old generation holds 332 MiB
+  of 512 MiB, metaspace 120 MiB, so the 768M maximum heap stays.
+
+Footprint (minikube only; kees00 keeps the chart sizes): ZaakBrug heap
+128M-768M, C1 only, 768Mi/1536Mi (chart Xms=Xmx=4G, 5Gi/6Gi; ontw idles at
+3388 MiB); Open VTB 1 replica, 1 uWSGI process (3 uwsgi processes: master,
+http, worker). First working sets, unsettled: zaakbrug 676, openvtb 211,
+add-in backend 27 and frontend 6, redis-exporter 21, clamav-exporter 8 MiB.

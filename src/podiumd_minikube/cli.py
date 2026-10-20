@@ -6,6 +6,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from podiumd_minikube import chart
 from podiumd_minikube import deploy as deployment
 from podiumd_minikube import kube
 from podiumd_minikube import lock
@@ -22,7 +23,7 @@ from podiumd_minikube import versions
 PROG = "podiumd-minikube"
 EXTENDED = [
     "--full",
-    "--set", "metrics.enabled=false",
+    *chart.NO_METRICS_SETS,
     "--set", "podiumd.openzaak.worker.replicaCount=1",
     "--set", "podiumd.openklant.worker.replicaCount=1",
 ]  # fmt: skip

@@ -247,6 +247,28 @@ def test_tune_solr_sets_the_solr_and_zookeeper_jvm_env():
     assert {"name": "MALLOC_ARENA_MAX", "value": "2"} in zookeeper_env
 
 
+def test_mount_zaakbrug_role_mapping_mounts_both_files_only_with_the_configmap():
+    def deployment() -> manifests.Doc:
+        return {
+            "kind": "Deployment",
+            "metadata": {"name": "zaakbrug"},
+            "spec": {"template": {"spec": {"containers": [{"name": "zaakbrug"}]}}},
+        }
+
+    configmap: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": manifests.ZAAKBRUG_ROLE_MAPPING}}
+    mounted = deployment()
+    manifests.mount_zaakbrug_role_mapping([configmap, mounted])
+    spec = mounted["spec"]["template"]["spec"]
+    assert spec["volumes"] == [
+        {"name": manifests.ZAAKBRUG_ROLE_MAPPING, "configMap": {"name": manifests.ZAAKBRUG_ROLE_MAPPING}}
+    ]
+    paths = [mount["mountPath"] for mount in spec["containers"][0]["volumeMounts"]]
+    assert paths == ["/opt/frank/resources/oauth-role-mapping.properties", "/opt/frank/resources/RoutingProfiles.json"]
+    untouched = deployment()
+    manifests.mount_zaakbrug_role_mapping([untouched])
+    assert "volumes" not in untouched["spec"]["template"]["spec"]
+
+
 def test_keep_finished_jobs_drops_only_the_jobs_ttl():
     job: manifests.Doc = {"kind": "Job", "spec": {"ttlSecondsAfterFinished": 60, "backoffLimit": 6}}
     cron: manifests.Doc = {"kind": "CronJob", "spec": {"jobTemplate": {"spec": {"ttlSecondsAfterFinished": 60}}}}

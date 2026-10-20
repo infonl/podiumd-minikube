@@ -113,9 +113,12 @@ BRP, KvK and BAG at `http://api-proxy/...` as in ExternalsPodiumD.
 | `omc` | OMC 1.17.19 rejects real notifications (see `plan.md`; podiumd-tests marks it as an expected failure). OMC on `https://omc.local`; `podiumd.omc.settings.notify.api.baseUrl` takes a Notify mock (needs `objecten`, `opennotificaties`) |
 | `referentielijsten` | Referentielijsten on `https://referentielijsten.local` |
 | `openbeheer` | Open Beheer on `https://openbeheer.local` (needs `objecten`) |
+| `openvtb` | Open VTB on `https://openvtb.local`; with `omc`, a Job creates OMC's API token there |
+| `zaakbrug` | ZaakBrug (ZDS to ZGW) on `https://zaakbrug.local`: Frank!Framework console with Keycloak login and the SOAP endpoints, on Open Zaak (client `zaakbrug`) |
+| `zgw-office-addin` | ZGW Office add-in on `https://office-addin.local`, with placeholder MSAL ids: the manifest is served, Office sign-in fails (no Entra app); its backend calls Open Zaak as client `office-add-in` |
 | `frankgateway` | Frank!Gateway's outway (with etcd) and OpenBao on `https://openbao.local`; apps then call BRP/KvK/BAG at `http://frankgateway-outway:9080/...` instead of the api-proxy. OpenBao's seal key, root token and recovery key live in `.openbao/` (gitignored) |
 | `clamav` | ClamAV's clamd on `clamav:3310` with only the EICAR test signature (no freshclam, no internet); Open Inwoner's virus scan setting is test wiring (podiumd-tests) |
-| `metrics` | monitoring-logging, as both reference environments: Grafana on `https://grafana.local`, Prometheus (scrapes ZAC), Loki with Alloy, the otel-collector |
+| `metrics` | monitoring-logging, as both reference environments: Grafana on `https://grafana.local`, Prometheus (scrapes ZAC, and the ClamAV, Redis and ECK operator exporters), Loki with Alloy, the otel-collector |
 
 Ingress hostnames (all `*.local`, once the tunnel + `/etc/hosts` entry are
 set up): `zac`, `keycloak`, `openzaak`, `openklant`, `pabc`, `solr`,

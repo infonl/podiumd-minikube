@@ -1,0 +1,3 @@
+{{- if .Values.podiumd.openvtb.enabled }}
+{{ include "podiumd-minikube.ingress" (dict "root" . "name" "openvtb" "host" "openvtb.local" "service" "openvtb") }}
+{{- end }}

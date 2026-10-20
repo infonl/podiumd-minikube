@@ -381,6 +381,32 @@ def tune_solr(docs: list[Doc]) -> None:
         add_env(_mapping(body, "zookeeperRef", "provided", "zookeeperPodPolicy"), ZOOKEEPER_ENV | CAPACITY_ENV)
 
 
+ZAAKBRUG_ROLE_MAPPING = "zaakbrug-oauth-role-mapping"
+_ZAAKBRUG_RESOURCES = "/opt/frank/resources"
+
+
+def mount_zaakbrug_role_mapping(docs: list[Doc]) -> None:
+    """Mounts podiumd's ConfigMap ZAAKBRUG_ROLE_MAPPING into ZaakBrug, which Frank needs at startup.
+
+    The zaakbrug chart has no extraVolumes; ExternalsPodiumD mounts it with a
+    post-deploy `kubectl patch` (podiumd's zaakbrug-deploy.md, step 5c).
+    """
+    if not any(doc.get("kind") == "ConfigMap" and name_of(doc) == ZAAKBRUG_ROLE_MAPPING for doc in docs):
+        return
+    for doc in docs:
+        spec = _pod_spec(doc)
+        if doc.get("kind") != "Deployment" or name_of(doc) != "zaakbrug" or spec is None:
+            continue
+        volumes: list[Doc] = spec.get("volumes") or []
+        spec["volumes"] = [*volumes, {"name": ZAAKBRUG_ROLE_MAPPING, "configMap": {"name": ZAAKBRUG_ROLE_MAPPING}}]
+        for container in _containers(spec):
+            mounts: list[Doc] = container.get("volumeMounts") or []
+            container["volumeMounts"] = mounts + [
+                {"name": ZAAKBRUG_ROLE_MAPPING, "mountPath": f"{_ZAAKBRUG_RESOURCES}/{key}", "subPath": key}
+                for key in ("oauth-role-mapping.properties", "RoutingProfiles.json")
+            ]
+
+
 def limit_runtimes(docs: list[Doc]) -> None:
     """Adds CAPACITY_ENV to every container of every workload, Job and operator pod template; GOMEMLIMIT where limited.
 
@@ -507,6 +533,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     keep_finished_jobs(docs)
     tune_keycloak(docs)
     tune_solr(docs)
+    mount_zaakbrug_role_mapping(docs)
     limit_runtimes(docs)
     if ca_trust:
         trust_ca(docs)
