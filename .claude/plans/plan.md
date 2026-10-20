@@ -7613,3 +7613,34 @@ MiB (before 407), Alloy anon 57 (74); ZaakBrug 909 MiB, old gen 416 MiB
 committed and 247 used: no full GC ran, so the heap free ratios returned
 nothing and are removed again. Net gain of the round about 40 MiB.
 Memory baseline refreshed from this state (node 16660, containers 14664 MiB).
+
+## Next (planned 2026-10-20, not started): Celery beat inside the workers
+
+The last large footprint lever. Five beat pods (baseline after a full tier):
+Open Formulieren 248, Open Inwoner 246, Open Zaak 186, Open Notificaties 135,
+Open Archiefbeheer 120 MiB, 935 MiB in total, each a separate Python process
+with Django loaded. The images start beat with /celery_beat.sh and the worker
+with /celery_worker.sh; the worker script passes no extra arguments, so `-B`
+cannot be appended. Beat flags differ: Open Inwoner uses
+django_celery_beat's DatabaseScheduler, the others a schedule file
+`-s ../celerybeat/beat`, some with an empty `--pidfile=`. No podiumd-tests
+test refers to beat pods; `seed-volume --scale-cluster N` scales Open Zaak's
+worker, which with an embedded beat would run its periodic tasks N times.
+
+1. Measure (nothing committed): on Open Zaak by hand, worker command = its
+   image's `exec celery ... worker ...` line plus `-B -s /tmp/celerybeat-schedule`,
+   openzaak-beat at 0 replicas; worker memory before/after and periodic tasks
+   firing in its log; after a full tier. Expect 50-70% of the beat pod (the
+   embedded beat is a forked child; copy-on-write pages get dirtied). Stop if
+   Open Zaak saves under about 80 MiB.
+2. Implement: `manifests.embed_celery_beat` with one table per app (worker
+   Deployment, the image's worker command plus `-B` and the app's beat flags,
+   the beat Deployment to drop; Open Inwoner's main worker only). A live test
+   compares the table with /celery_worker.sh and /celery_beat.sh in the
+   running images. The fixup refuses a worker with more than 1 replica;
+   agree with podiumd-tests on --scale-cluster. Record the difference
+   (values.yaml, plan.md, README): a worker crash also stops the schedule.
+3. Verify: deploy, podiumd-tests full and chaos tiers, measure, refresh the
+   baseline, commit.
+Open decisions: default or opt-in (default only if step 1 shows at least
+0.5 GiB over five apps); start step 1.
