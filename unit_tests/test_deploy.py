@@ -26,7 +26,9 @@ from podiumd_minikube import pki
 from podiumd_minikube import postgres
 from podiumd_minikube import process
 from podiumd_minikube import prune
+from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
+from podiumd_minikube.paths import RELEASE_NAME
 
 
 def test_apply_errors_counts_server_and_client_side_failures():
@@ -286,3 +288,14 @@ def test_deploy_needs_the_local_ca(called: list[str]):
     with pytest.raises(process.UserError, match=r"^no local CA"):
         _deploy()
     assert "apply_trust" not in called
+
+
+def test_render_falls_back_to_plain_helm_template_without_the_crds(fake_run: FakeRun):
+    configmap = _doc("ConfigMap", "c")
+    fake_run.on("helm", "template", stdout=manifests.dump([configmap]))
+    server = ("helm", "template", RELEASE_NAME, str(CHART_DIR), "-n", NAMESPACE, "--include-crds", *deploy.LOOKUP_ARGS)
+    fake_run.on(*server, returncode=1, stderr="no matches for kind; ensure CRDs are installed first")
+    assert deploy.Options().render().docs == [configmap]
+    calls = fake_run.ran("helm", "template")
+    assert "--dry-run=server" in calls[0]
+    assert "--dry-run=server" not in calls[-1]

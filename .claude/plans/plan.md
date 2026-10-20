@@ -7518,3 +7518,10 @@ dropping hosts, secrets, database hosts, mail relays and registries.
   icat-only BRP protocollering and KISS BRP headers (chart default and the majority).
 Effect on tests before the change: only skipRoles and the PABC role could
 let a test pass here that fails on dimp test.
+
+Found on the next fresh install (helm-charts 8e286297): `helm template
+--dry-run=server` also maps every kind against the cluster, so the first
+render on a new cluster failed with "ensure CRDs are installed first" (the
+operators' CRDs are applied from that render). `deploy.Options.render` now
+falls back to the plain render on that error; on such a cluster lookup
+finds nothing anyway.

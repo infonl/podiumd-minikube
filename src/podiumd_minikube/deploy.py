@@ -44,6 +44,9 @@ _CLIENT_SIDE_ERRORS = re.compile(
 # --take-ownership skips Helm's check that a release owns the live objects: kubectl
 # apply manages them here, and a dry run writes nothing.
 LOOKUP_ARGS = ["--dry-run=server", "--take-ownership"]
+# A server-side dry run also maps every kind; before the operators' CRDs exist (a fresh
+# cluster, where lookup finds nothing anyway) the render falls back to plain helm template.
+_CRDS_MISSING = "ensure CRDs are installed first"
 
 
 @dataclass
@@ -55,7 +58,12 @@ class Options:
 
     def render(self, *args: str) -> manifests.Render:
         """`helm template` with these options and args, fixed up."""
-        text = manifests.helm_template(*LOOKUP_ARGS, *self.helm_args, *args)
+        try:
+            text = manifests.helm_template(*LOOKUP_ARGS, *self.helm_args, *args)
+        except process.ProcessError as error:
+            if _CRDS_MISSING not in error.stderr:
+                raise
+            text = manifests.helm_template(*self.helm_args, *args)
         return manifests.fix_up(text, objecten_merged=self.objecten_merged, ca_trust=True)
 
 
