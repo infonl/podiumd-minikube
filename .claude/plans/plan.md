@@ -7549,3 +7549,42 @@ scripts/install-keycloak-operator-crds.sh and the 4.10.0 upgrade docs require,
 `crds.with_upstream_keycloak` replaces them, on every deploy, with upstream
 keycloak-k8s-resources' CRDs for podiumd's keycloakImageVersion (26.8.1;
 the client CRDs only exist from 26.7.0, so a 404 is skipped).
+
+## Objecttypen API 401 for Objecten and Open Beheer (podiumd-tests' test_zgw_services_authenticate)
+
+With Open Object 4 the objecten app serves objecttypen.local, so only its
+token table counts. Objecten's own `objecttypen-api` service sent
+`Token objectenToObjecttypenToken` and Open Beheer's `objecttypen-service`
+`Token objecttypenOpenbeheerToken`, classic-objecttypen tokens Open Object does
+not know: 401. `manifests.fixup_merged_objecten` covered only Open Formulieren;
+it now maps each client's Objecttypen service to that client's objecten token
+(`MERGED_OBJECTTYPEN_TOKENS`) and adds objecten's own header token to Open
+Object's tokens. Same family as helm-charts #627 on ExternalsPodiumD (one
+Open Object, one token and one service per client).
+
+## Footprint round after the 8e286297 install (user: "do the recommendation + start with 5 measurements")
+
+Measured under podiumd-tests' full tier first:
+- Postgres: 489 MiB charged; `shared_buffers` sits in shmem (154 MiB), which
+  the working set counts fully; the data pages read through the kernel are
+  mostly inactive file cache, which it does not. `shared_buffers` 128MB ->
+  64MB (templates/postgres/deployment.yaml): 407 -> 367 MiB right after a full
+  tier (shmem 154 -> 88; anon 210 -> 239 in the larger tier).
+- ZaakBrug: the serial GC kept 612 of 640 MiB committed with 268 MiB in use.
+  `-XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30` (cap stays 640M): 798 -> 756 MiB.
+- Alloy: 247 MiB = 74 MiB anon + 160 MiB active log-file cache; `GOGC=50`
+  can only trim the anon part. Settled number still to measure.
+- Solr: commits about 180 MiB of its 512m heap (old gen 118 MiB); a lower
+  cap saves nothing, so not done.
+- Full tier duration: 557.42 s for 549 tests before (a read-only agent in
+  parallel), 610.90 s for 562 after (nothing in parallel; one Open
+  Archiefbeheer race of 89 s): +7% per test, the slowest tests unchanged
+  (worldline 130 s both). No clear slowdown from shared_buffers 64MB.
+
+Found live: setting `monitoring-logging.alloy.alloy.extraEnv` (for GOGC)
+replaced the chart's own list, which held `NODE_NAME` (fieldRef
+spec.nodeName). Alloy's `env("NODE_NAME")` keep rule then dropped every log
+target, and Loki received nothing from 19:21 to 20:05 CEST (podiumd-tests'
+test_every_pod_logs_to_loki). values.yaml now carries NODE_NAME in that list;
+tests/test_monitoring.py checks both entries. Lesson: a list override
+replaces the chart's list, so copy its entries.

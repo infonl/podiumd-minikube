@@ -104,19 +104,26 @@ def test_fixup_merged_objecten_removes_classic_only_settings():
             {
                 "objecttypes": {"items": [{"identifier": "x", "service_identifier": "y"}]},
                 "tokenauth": {"items": [{"identifier": "zac"}]},
+                "zgw_consumers": {"services": [{"identifier": "objecttypen-api", "header_value": "Token self"}]},
             },
         ),
         _configmap(
             "openformulieren-configuration",
             {"zgw_consumers": {"services": [{"identifier": "objecttypen-api", "header_value": "Token old"}]}},
         ),
+        _configmap(
+            "openbeheer-configuration",
+            {"zgw_consumers": {"services": [{"identifier": "objecttypen-service", "header_value": "Token old"}]}},
+        ),
     ]
     manifests.fixup_merged_objecten(docs)
-    objecten = yaml.safe_load(docs[0]["data"]["configuration.yaml"])
-    openformulieren = yaml.safe_load(docs[1]["data"]["configuration.yaml"])
+    objecten, openformulieren, openbeheer = (yaml.safe_load(doc["data"]["configuration.yaml"]) for doc in docs)
     assert objecten["objecttypes"]["items"] == [{"identifier": "x"}]
-    assert objecten["tokenauth"]["items"] == [{"identifier": "zac"}, manifests.REQUIRED_OBJECTTYPEN_TOKEN]
+    tokens = objecten["tokenauth"]["items"]
+    assert tokens[:2] == [{"identifier": "zac"}, manifests.REQUIRED_OBJECTTYPEN_TOKEN]
+    assert tokens[2]["token"] == "self"
     assert openformulieren["zgw_consumers"]["services"][0]["header_value"] == "Token objectenFormulierToken"
+    assert openbeheer["zgw_consumers"]["services"][0]["header_value"] == "Token objectenOpenbeheerToken"
 
 
 def test_fix_up_leaves_objecten_alone_on_the_classic_shape():

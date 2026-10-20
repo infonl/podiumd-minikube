@@ -335,8 +335,9 @@ podiumd:
         percentage: false
         minimum: 128M
         maximum: 640M
-      # Serial GC by JVM ergonomics (limit below 1792 MiB): old gen settles at 330 MiB.
-      javaOpts: -XX:TieredStopAtLevel=1
+      # Serial GC by JVM ergonomics (limit below 1792 MiB); the free ratios let it give back
+      # heap after a full GC (it kept 612 of 640 MiB committed with 268 MiB in use).
+      javaOpts: -XX:TieredStopAtLevel=1 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30
       dtap:
         stage: TST
       credentials:
@@ -3297,6 +3298,17 @@ monitoring-logging:
     # podiumd and monitoring).
     logCollectionNamespaces:
       - podiumd-minikube
+    # Laptop budget, as Loki: GOGC=50 (its anon memory; most of its working set is log-file cache).
+    alloy:
+      # Helm replaces lists: the chart's NODE_NAME must stay, or its env("NODE_NAME")
+      # keep rule drops every log target (Loki got nothing).
+      extraEnv:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: GOGC
+          value: "50"
   prometheus-pushgateway:
     enabled: false # as ExternalsPodiumD
   loki:
