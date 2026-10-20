@@ -1277,6 +1277,8 @@ podiumd:
         oidcUrl: https://pabc.local
         clientId: pabc
         clientSecret: pabcClientSecret
+        # The pabc client role for the management UI, as the chart and its docs (dimp test,
+        # dimp ontw and info set "administrators", the functional role's name; unverified).
         functioneelBeheerderRole: administrator
         # As ExternalsPodiumD: the username claim. requireHttps and
         # pkceEnabled stay at the chart defaults (Keycloak is https here; the

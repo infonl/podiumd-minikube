@@ -17,6 +17,7 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
   python3 -m venv .venv
   .venv/bin/pip install -e '.[dev]'
   source .venv/bin/activate   # puts podiumd-minikube on PATH
+  git config core.hooksPath .githooks   # every commit runs ./run_python_checks first
   ```
 
   `bin/<command>` runs `podiumd-minikube <command>` from `.venv` without

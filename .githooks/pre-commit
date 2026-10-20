@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Blocks a commit that fails ./run_python_checks (activate with: git config core.hooksPath .githooks).
+# Checks the working tree, not only the staged files; `git commit --no-verify` skips it.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+if ! ./run_python_checks; then
+    echo "pre-commit: ./run_python_checks failed; fix it, or commit with --no-verify to skip" >&2
+    exit 1
+fi
