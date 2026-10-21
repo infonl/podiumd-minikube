@@ -271,7 +271,7 @@ that leaves untested here (podiumd-tests then needs a real environment).
 | Pod tuning | service links off, GC and malloc settings, `GOMEMLIMIT`, the local CA in every pod (`manifests.fix_up`) | chart defaults | behaviour that depends on heap size or GC, CA handling through the chart's own options |
 | Keycloak | does not trust the local CA, so the admin IdP stand-in's backchannel is in-cluster http | public https | the IdP's TLS to the acceptance Keycloak |
 | External services | BAG mock with two answers, Mailpit without STARTTLS, ClamAV with only EICAR, IdP stand-in `acc-mock`, Office add-in with placeholder MSAL ids, no e-Suite | Kadaster BAG, relay SMTP, full ClamAV, Dimpact's acceptance Keycloak, Entra ID, e-Suite on some | real data shapes, STARTTLS, real signatures, Office sign-in, e-Suite |
-| Monitoring | Grafana anonymous, Loki filesystem store, opt-in (`metrics` profile) | Grafana through Keycloak client `monitoring`; ExternalsPodiumD Loki distributed | Grafana login, Loki at scale |
+| Monitoring | Grafana anonymous, Loki filesystem store, opt-in (`metrics` profile); 12 CRDs of unused kinds not applied (`crds.UNUSED_MONITORING_LOGGING_CRDS`: Alertmanager, ThanosRuler, PrometheusAgent, ScrapeConfig, Grafana Agent, rollout operator) | Grafana through Keycloak client `monitoring`; ExternalsPodiumD Loki distributed; all CRDs | Grafana login, Loki at scale |
 | Clients | no datamigratie client, no `mi` export | on where those run | datamigratie, MI SFTP export |
 
 The service links minikube turns off cannot clash on an estate: the Services

@@ -31,6 +31,25 @@ KEYCLOAK_CRD_GROUP = ".k8s.keycloak.org"
 # The client CRDs exist upstream from Keycloak 26.7.0 only.
 KEYCLOAK_CRDS = ("keycloaks", "keycloakrealmimports", "keycloakoidcclients", "keycloaksamlclients")
 _KEYCLOAK_VERSION = re.compile(r'&keycloakImageVersion "?([0-9][0-9.]*)"?')
+# Kinds no component here uses (Alertmanager is off, as in podiumd-infra; no Grafana Agent or rollout
+# operator runs). The Prometheus operator skips their controllers when absent; each CRD costs the
+# kube-apiserver memory (these five monitoring ones: about 45 MiB of live heap).
+UNUSED_MONITORING_LOGGING_CRDS = frozenset(
+    {
+        "alertmanagerconfigs.monitoring.coreos.com",
+        "alertmanagers.monitoring.coreos.com",
+        "prometheusagents.monitoring.coreos.com",
+        "scrapeconfigs.monitoring.coreos.com",
+        "thanosrulers.monitoring.coreos.com",
+        "grafanaagents.monitoring.grafana.com",
+        "integrations.monitoring.grafana.com",
+        "logsinstances.monitoring.grafana.com",
+        "metricsinstances.monitoring.grafana.com",
+        "podlogs.monitoring.grafana.com",
+        "replicatemplates.rollout-operator.grafana.com",
+        "zoneawarepoddisruptionbudgets.rollout-operator.grafana.com",
+    }
+)
 
 
 class _CrdLoader(yaml.SafeLoader):  # pylint: disable=too-many-ancestors
@@ -86,7 +105,7 @@ def apply_monitoring_logging_crds() -> None:
     if not tgz:
         msg = "no charts/monitoring-logging-*.tgz: run provision-cluster or deploy first (helm dependency update)"
         raise UserError(msg)
-    crds = crd_documents(str(tgz))
+    crds = [doc for doc in crd_documents(str(tgz)) if name_of(doc) not in UNUSED_MONITORING_LOGGING_CRDS]
     if not crds:
         msg = f"no CustomResourceDefinition in {tgz}: check the monitoring-logging version"
         raise UserError(msg)

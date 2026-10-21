@@ -7669,3 +7669,26 @@ stop whenever its worker crashes, a coupling podiumd-tests' chaos tier would
 then exercise. The fixup, its drift test and the replica guard cost more
 upkeep than the saving is worth. Footprint room comes from capacity-only
 cuts instead.
+
+## Footprint 2026-10-21: unused CRDs
+
+kube-apiserver is the largest container (1140 MiB in the baseline). A heap
+profile (`kubectl get --raw /debug/pprof/heap`) showed a live heap of 435-466
+MiB, most of it per-CRD state: serving info 86 MiB, OpenAPI v3 specs 45-97
+MiB. Object counts are small (906 events, 124 pods), so the CRDs are the
+lever: 76 CRDs, 8.25 MiB of JSON. Five monitoring.coreos.com CRDs have no
+instance and no use anywhere: Alertmanager (off in podiumd-infra and the chart
+default), AlertmanagerConfig, ThanosRuler, PrometheusAgent and ScrapeConfig,
+1.85 MiB together. Deleted live (Kees's go) and the operator restarted: it logs
+`resource "alertmanagers" ... not installed in the cluster` per kind and skips
+those controllers; Prometheus kept running. Live heap after: 401-406 MiB, so
+about 45 MiB less; RSS stays until the Go scavenger returns it.
+`crds.apply_monitoring_logging_crds` now skips these and seven more from the
+tarball whose operators do not run here (Loki's grafana-agent-operator and
+rollout-operator CRDs, Alloy's PodLogs; Alloy's config uses no PodLogs). A
+cluster that has them keeps them until it is provisioned again; deleted by
+hand on this one.
+Not done, each about 10-20 MiB and each watched by a running controller-runtime
+operator that may fail to start without them: Redis operator's RedisCluster,
+Redis and RedisSentinel, Solr's SolrPrometheusExporter, ECK's 12 unused kinds,
+NGF's experimental Gateway API kinds.

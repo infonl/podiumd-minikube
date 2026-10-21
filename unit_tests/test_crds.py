@@ -74,14 +74,20 @@ def test_apply_monitoring_logging_crds_needs_crds_in_the_tarball(
         crds.apply_monitoring_logging_crds()
 
 
-def test_apply_monitoring_logging_crds_applies_server_side(
+def test_apply_monitoring_logging_crds_applies_the_used_ones_server_side(
     fake_run: FakeRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    tgz = make_tgz(tmp_path / "monitoring-logging-1.0.0.tgz", {"m/crds/probes.yaml": _crd("probes.x", None)})
+    tgz = make_tgz(
+        tmp_path / "monitoring-logging-1.0.0.tgz",
+        {
+            "m/crds/probes.yaml": _crd("probes.x", None),
+            "m/crds/thanos.yaml": _crd("thanosrulers.monitoring.coreos.com", None),
+        },
+    )
     monkeypatch.setattr(chart, "tarball", lambda _name: tgz)
     crds.apply_monitoring_logging_crds()
     assert fake_run.calls == [["kubectl", "apply", "--server-side", "--force-conflicts", "-f", "-"]]
-    assert yaml.safe_load(fake_run.stdins[0] or "")["metadata"]["name"] == "probes.x"
+    assert [doc["metadata"]["name"] for doc in yaml.safe_load_all(fake_run.stdins[0] or "")] == ["probes.x"]
 
 
 def test_keycloak_version_reads_podiumds_anchor(tmp_path: Path):

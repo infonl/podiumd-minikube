@@ -44,6 +44,7 @@ memory, so a baseline taken after our suite alone is too low (Open Inwoner
 | monitoring-logging: Alloy GC | `GOGC=50`; its `extraEnv` must keep the chart's `NODE_NAME` (Helm replaces lists) | `monitoring-logging.alloy.alloy.extraEnv` | 247 MiB = 74 anon + 160 active log-file cache; GOGC trims only the anon part (settled number pending) |
 | Postgres | `shared_buffers=64MB` (default 128MB): it is shmem, counted fully in the working set | `templates/postgres/deployment.yaml` args | 407 -> 367 and 387 MiB after full tiers (shmem 154 -> 88); full tier 1.015 -> 1.019 s per test, unchanged |
 | monitoring-logging: Loki, sidecars | Loki 512Mi/1Gi as podiumd-infra; Grafana's and Loki's sidecars 80-96Mi/128-160Mi | `loki.singleBinary.resources`, `grafana.sidecar`, `loki.sidecar` | Loki 310 -> 210 MiB |
+| kube-apiserver: CRDs | 12 monitoring-logging CRDs of kinds nothing uses are not applied; the Prometheus operator logs `not installed in the cluster` and skips their controllers | `crds.UNUSED_MONITORING_LOGGING_CRDS` | live heap 435-466 -> 401-406 MiB (the five monitoring.coreos.com ones); about 24 MiB of live heap per MiB of CRD JSON |
 | Kibana | off | `podiumd.kiss-eck.eck-kibana.enabled: false` | -0.7 GiB |
 | ClamAV | EICAR-only signature database | `podiumd.clamav` + `templates/clamav` | 19 MiB instead of 973 |
 | KISS contact-web | 1 replica | `podiumd.kiss.replicaCount` (chart default 2) | -0.12 GiB |
