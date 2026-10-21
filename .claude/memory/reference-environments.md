@@ -29,8 +29,8 @@ makes the tests prove something the real environments do not do.
 - Deviate only where minikube cannot do the same (single node, no Azure, no
   cloud operators, no public DNS), and record each deviation with its reason
   in `values.yaml` and `plan.md`.
-- Requests from podiumd-tests are checked against both projects the same way,
-  and wait for the user's go before they are implemented. What ExternalsPodiumD
+- Requests from podiumd-tests are checked against both projects the same way.
+  What ExternalsPodiumD
   and podiumd-infra configure outweighs what a podiumd-tests handoff asks for
   (the user, 2026-10-07): where they differ, follow the reference projects and
   tell podiumd-tests.
