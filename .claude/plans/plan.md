@@ -7692,3 +7692,27 @@ Not done, each about 10-20 MiB and each watched by a running controller-runtime
 operator that may fail to start without them: Redis operator's RedisCluster,
 Redis and RedisSentinel, Solr's SolrPrometheusExporter, ECK's 12 unused kinds,
 NGF's experimental Gateway API kinds.
+
+## Footprint 2026-10-21: Grafana GOGC, Celery max-memory-per-child (dropped)
+
+Both tried on a fresh `deploy --full` (10:24 CEST), measured after
+podiumd-tests' full tier (532 passed, 9:36).
+- Grafana `GOGC=50` (`monitoring-logging.grafana.env`), as Loki and Alloy:
+  working set 239 -> 116 MiB. Kept.
+- `CELERY_WORKER_MAX_MEMORY_PER_CHILD=358400` (350 MiB) in `CAPACITY_ENV`:
+  Celery 5 reads `CELERY_WORKER_*` as worker options (confirmed for
+  max-tasks-per-child in `inspect stats`; max-memory-per-child is not shown
+  there or in `inspect conf`). The largest child reached 302 MiB, so the limit
+  never fired; the Open Formulieren worker was 436 MiB (baseline 407).
+  Dropped as unused. A lower limit would restart children often, each paying
+  its Django start-up before its next task, which changes behaviour.
+
+## Node pod limit 110: reached during a deploy, left as is
+
+During the `--full` deploy every Job is recreated and every Deployment rolls
+at once; with the old pods still terminating, the node passed the kubelet's
+110 pods. 70 pods got `Too many pods` between 10:12:18 and 10:12:59 and were
+scheduled within that window; nothing failed. Settled: 83 active pods.
+Raising it (`--extra-config=kubelet.max-pods=150`) needs a cluster restart and
+gains about 40 s per deploy; do it when the settled count nears 110 or a
+deploy's wait times out.

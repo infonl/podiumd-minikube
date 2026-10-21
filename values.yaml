@@ -3166,6 +3166,9 @@ monitoring-logging:
     persistence:
       storageClassName: standard
       size: 2Gi
+    # Laptop budget, as Loki and Alloy: collect at 1.5x the live heap instead of 2x.
+    env:
+      GOGC: "50"
     # Off: its capability-limited chown fails on Grafana's own 0700 export dirs after
     # the first start (Init:Error); fsGroup covers ownership on minikube's storage.
     initChownData:
