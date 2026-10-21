@@ -7614,7 +7614,7 @@ committed and 247 used: no full GC ran, so the heap free ratios returned
 nothing and are removed again. Net gain of the round about 40 MiB.
 Memory baseline refreshed from this state (node 16660, containers 14664 MiB).
 
-## Next (planned 2026-10-20, not started): Celery beat inside the workers
+## Dropped (planned 2026-10-20, dropped 2026-10-21): Celery beat inside the workers
 
 The last large footprint lever. Five beat pods (baseline after a full tier):
 Open Formulieren 248, Open Inwoner 246, Open Zaak 186, Open Notificaties 135,
@@ -7658,5 +7658,14 @@ Open Inwoner uses the same scheduler; Open Formulieren, Open Notificaties and
 Open Archiefbeheer set none (file schedule). The two blocked apps hold 432 of
 the 935 MiB. Making it work needs code injected into the images (closing
 Django's connections before the fork), which is a change in behaviour, not
-capacity. Parked: the three file-schedule apps are 503 MiB in beat pods, and
+capacity. Not pursued: the three file-schedule apps are 503 MiB in beat pods, and
 an embedded beat saves only part of that, below the 0.5 GiB threshold.
+
+Dropped, 2026-10-21 (Kees), neither default nor opt-in. An opt-in for the
+three file-schedule apps (about 250-350 MiB, estimated) would be a deploy
+flag nobody passes. It would add a shape neither ExternalsPodiumD nor
+podiumd-infra runs (separate beat pods for all five apps). Beat would also
+stop whenever its worker crashes, a coupling podiumd-tests' chaos tier would
+then exercise. The fixup, its drift test and the replica guard cost more
+upkeep than the saving is worth. Footprint room comes from capacity-only
+cuts instead.
