@@ -7741,3 +7741,16 @@ renders only when `.Values.podiumd` has no `objecttypenCompatService.enabled`:
 the chart's own Service does the same job, as in the estates. Render checked:
 on 8e286297 the alias renders; on the verify branch with #631 only the chart's
 Service, with the same selector and ports as `objecten`.
+
+## OpenBao metrics listener (helm-charts #625): off
+
+#625 adds a metrics-only listener on 9101 with a ServiceMonitor and
+PodMonitor (`openbao.serverTelemetry.serviceMonitor.enabled` plus the
+`metrics` port in `server.extraPorts` and `server.service.extraPorts`). Only
+the chart's `values-enable-observability.yaml` turns it on: ExternalsPodiumD
+has no `serverTelemetry`, and podiumd-infra kees00 takes only the redis
+exporter from that file. So it stays off here, and podiumd-tests'
+`test_openbao.py` skips its 5 listener tests ("no OpenBao Service with a
+metrics port"). The user (2026-10-21): wait until an estate turns it on.
+When it comes: add it to the metrics profile; OpenBao pods restart once, and
+the static seal means no manual unseal.
