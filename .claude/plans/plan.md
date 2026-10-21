@@ -7728,3 +7728,16 @@ scheduled within that window; nothing failed. Settled: 83 active pods.
 Raising it (`--extra-config=kubelet.max-pods=150`) needs a cluster restart and
 gains about 40 s per deploy; do it when the settled count nears 110 or a
 deploy's wait times out.
+
+## objecttypen alias Service vs helm-charts #631
+
+helm-charts #631 adds a ClusterIP Service `objecttypen` to the podiumd chart
+(`objecttypenCompatService.enabled`, default true; selector
+`app.kubernetes.io/name: objecten`, 80 -> 8000), for the gateways that still
+route the old objecttypen hostname. Our ExternalName alias of the same name
+would then appear twice in one release and fail the install (reported by the
+helm-charts session). `templates/objecten/service-objecttypen-alias.yaml` now
+renders only when `.Values.podiumd` has no `objecttypenCompatService.enabled`:
+the chart's own Service does the same job, as in the estates. Render checked:
+on 8e286297 the alias renders; on the verify branch with #631 only the chart's
+Service, with the same selector and ports as `objecten`.
