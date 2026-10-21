@@ -444,13 +444,15 @@ def limit_runtimes(docs: list[Doc]) -> None:
 
     Without GOMEMLIMIT the Go runtime only collects when its heap has doubled
     and runs into the OOM killer under a peak (Tempo, at 256Mi); the value
-    comes from the container's own limit through the downward API.
+    comes from the container's own limit through the downward API, without
+    containerName: the Keycloak operator copies the env into its update Job's
+    containers, which have other names.
     """
     for doc in docs:
         for container in [c for spec in _runtime_pod_specs(doc) for c in _containers(spec)]:
             add_env(container, CAPACITY_ENV)
             if section(section(container, "resources"), "limits").get("memory"):
-                limit = {"resourceFieldRef": {"containerName": container["name"], "resource": "limits.memory"}}
+                limit = {"resourceFieldRef": {"resource": "limits.memory"}}
                 _add_env_from(container, {GO_MEMORY_LIMIT: limit})
 
 

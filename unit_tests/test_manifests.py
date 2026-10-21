@@ -237,7 +237,7 @@ def test_limit_runtimes_gives_containers_with_a_memory_limit_gomemlimit():
     tempo, zac, own = docs[0]["spec"]["template"]["spec"]["containers"]
     go = {
         "name": "GOMEMLIMIT",
-        "valueFrom": {"resourceFieldRef": {"containerName": "tempo", "resource": "limits.memory"}},
+        "valueFrom": {"resourceFieldRef": {"resource": "limits.memory"}},
     }
     assert go in tempo["env"]
     assert not any(item["name"] == "GOMEMLIMIT" for item in zac["env"])

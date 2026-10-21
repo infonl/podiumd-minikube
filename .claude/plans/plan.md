@@ -7707,6 +7707,18 @@ podiumd-tests' full tier (532 passed, 9:36).
   Dropped as unused. A lower limit would restart children often, each paying
   its Django start-up before its next task, which changes behaviour.
 
+## keycloak-update-job failed: GOMEMLIMIT named the container
+
+Found by podiumd-tests' `test_jobs_succeeded` after the deploy above. The
+Keycloak operator's update Job (owner: the Keycloak resource) stayed in
+`Init:CreateContainerConfigError`, `Error: container keycloak not found`, and
+reached BackoffLimitExceeded. `manifests.limit_runtimes` set `GOMEMLIMIT` from
+`resourceFieldRef` with `containerName: keycloak`; the operator copies the
+podTemplate env into the Job's containers `actual` and `desired`. Fix: no
+containerName, which the API accepts for env vars and resolves against the
+container itself (server dry-run checked). Keycloak itself became Ready
+through a recreate, so only the Job failed.
+
 ## Node pod limit 110: reached during a deploy, left as is
 
 During the `--full` deploy every Job is recreated and every Deployment rolls
