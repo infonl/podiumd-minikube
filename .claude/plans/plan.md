@@ -7644,3 +7644,19 @@ worker, which with an embedded beat would run its periodic tasks N times.
    baseline, commit.
 Open decisions: default or opt-in (default only if step 1 shows at least
 0.5 GiB over five apps); start step 1.
+
+Step 1, 2026-10-21 (Kees's go; reverted, nothing committed besides this
+note): stopped before any measurement. Open Zaak's worker with `-B -s
+/tmp/celerybeat-schedule` (openzaak-beat at 0) crashed its embedded beat on
+3 of 3 starts: `django.db.utils.OperationalError: consuming input failed:
+... SSL SYSCALL error: Bad file descriptor`. Open Zaak sets
+`CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"`
+(src/openzaak/conf/includes/base.py:398), and Celery forks the Beat process
+from a worker that already holds an open Postgres connection, which the child
+then shares. The worker still logs "ready", so the schedule stops silently.
+Open Inwoner uses the same scheduler; Open Formulieren, Open Notificaties and
+Open Archiefbeheer set none (file schedule). The two blocked apps hold 432 of
+the 935 MiB. Making it work needs code injected into the images (closing
+Django's connections before the fork), which is a change in behaviour, not
+capacity. Parked: the three file-schedule apps are 503 MiB in beat pods, and
+an embedded beat saves only part of that, below the 0.5 GiB threshold.
