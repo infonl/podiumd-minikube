@@ -62,6 +62,7 @@ def test_install_cert_manager_skips_the_running_version_and_moves_an_old_release
     fake_run.on(
         "helm", "list", "-n", EDGE_NAMESPACE, stdout=json.dumps([{"chart": f"cert-manager-{pki.CERT_MANAGER_VERSION}"}])
     )
+    fake_run.on("helm", "get", "values", stdout=json.dumps(pki.cert_manager_values()))
     pki.install_cert_manager()
     moved = [
         ["helm", "uninstall", "cert-manager", "-n", pki.OLD_CERT_MANAGER_NAMESPACE, "--wait"],
@@ -71,8 +72,14 @@ def test_install_cert_manager_skips_the_running_version_and_moves_an_old_release
     assert not fake_run.ran("helm", "upgrade")
 
 
-def test_install_cert_manager_installs_another_version_with_its_values(fake_run: FakeRun):
-    fake_run.on("helm", "list", "-n", EDGE_NAMESPACE, stdout=json.dumps([{"chart": "cert-manager-v1.0.0"}]))
+@pytest.mark.parametrize(
+    ("version", "values"), [("v1.0.0", {}), (pki.CERT_MANAGER_VERSION, {"cainjector": {"replicaCount": 1}})]
+)
+def test_install_cert_manager_installs_another_version_or_values(
+    fake_run: FakeRun, version: str, values: dict[str, Any]
+):
+    fake_run.on("helm", "list", "-n", EDGE_NAMESPACE, stdout=json.dumps([{"chart": f"cert-manager-{version}"}]))
+    fake_run.on("helm", "get", "values", stdout=json.dumps(values))
     pki.install_cert_manager()
     (upgrade,) = fake_run.ran("helm", "upgrade", "--install", "cert-manager", "jetstack/cert-manager")
     assert upgrade[upgrade.index("--version") + 1] == pki.CERT_MANAGER_VERSION

@@ -139,15 +139,6 @@ def test_tune_control_plane_leaves_tuned_static_pods_alone(fake_run: FakeRun):
     assert not fake_run.ran("minikube", "cp")
 
 
-def test_tune_node_services_restarts_only_services_without_the_drop_in(fake_run: FakeRun):
-    fake_run.on("minikube", "ssh", stdout=provision.service_drop_in(provision.NODE_SERVICE_ENV))
-    provision.tune_node_services()
-    assert not fake_run.ran("minikube", "cp")
-    fake_run.on("minikube", "ssh", stdout="")
-    provision.tune_node_services()
-    assert fake_run.ran("minikube", "cp")
-
-
 def test_cpuset_args_pin_the_node_to_its_first_cpus_only_when_the_host_has_more():
     assert provision.cpuset_args(6, 24) == ["--cpuset-cpus=0-5"]
     assert not provision.cpuset_args(6, 6)

@@ -18,6 +18,9 @@ HOST_FRACTION = 0.5
 # tests/test_memory.py holds usage to them; a --full node needs at least the --full budget.
 DEFAULT_BUDGET_MB = 9 * 1024
 FULL_BUDGET_MB = 17 * 1024
+# The host kernel's transparent huge pages ("always") keep heap memory the Go runtime
+# has released charged until memory runs short: containers, control plane, node services.
+GO_NO_HUGE_PAGES = {"GODEBUG": "disablethp=1"}
 
 
 def wanted_mb(host_total_mb: int, override: str | None) -> int:

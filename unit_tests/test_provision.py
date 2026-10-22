@@ -127,11 +127,14 @@ def test_tune_control_plane_writes_untuned_pods_and_waits_until_tuned_and_ready(
     )
 
 
-def test_tune_node_services_writes_the_drop_in_and_restarts_both(fake_run: FakeRun):
+def test_tune_node_services_writes_and_restarts_only_what_differs(fake_run: FakeRun):
+    (path, content) = provision.node_drop_ins()["kubelet"]
+    fake_run.on(*SSH, f"cat {path} 2>/dev/null || true", stdout=content)
     provision.tune_node_services()
-    drop_ins = [call[-1] for call in fake_run.ran("minikube", "cp")]
-    assert drop_ins == ["/etc/kubernetes/.20-podiumd-minikube.conf"] * 2
-    assert fake_run.calls[-1][-1] == "sudo systemctl daemon-reload && sudo systemctl restart containerd kubelet"
+    assert len(fake_run.ran("minikube", "cp")) == 2
+    assert (
+        fake_run.calls[-1][-1] == "sudo systemctl daemon-reload && sudo systemctl restart containerd systemd-journald"
+    )
 
 
 RESOLV = "nameserver 192.168.49.1\nsearch home\n"

@@ -16,6 +16,7 @@ import certifi
 import yaml
 
 from podiumd_minikube import kube
+from podiumd_minikube import memory
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube.paths import CHART_DIR
@@ -54,12 +55,15 @@ def ensure_ca() -> bool:
 
 def cert_manager_values() -> dict[str, Any]:
     """ExternalsPodiumD's pipelines/values/cert-manager.yml without its AKS parts (ACR images, nodeSelector)."""
+    # The cainjector caches every Secret and CRD it watches: 98 MiB at the Go default GOGC 100.
+    go_env = {"GOGC": "50", **memory.GO_NO_HUGE_PAGES}
 
-    def component(memory: str, limit: str) -> dict[str, Any]:
+    def component(request: str, limit: str) -> dict[str, Any]:
         return {
             "image": {"tag": CERT_MANAGER_IMAGE_TAG},
             "replicaCount": 1,
-            "resources": {"requests": {"cpu": "10m", "memory": memory}, "limits": {"cpu": "20m", "memory": limit}},
+            "resources": {"requests": {"cpu": "10m", "memory": request}, "limits": {"cpu": "20m", "memory": limit}},
+            "extraEnv": [{"name": name, "value": value} for name, value in go_env.items()],
         }
 
     return {
@@ -93,11 +97,19 @@ def _move_from_old_namespace() -> None:
     kube.kubectl("delete", "namespace", OLD_CERT_MANAGER_NAMESPACE, "--wait=true")
 
 
-def install_cert_manager() -> None:
-    """Installs or upgrades cert-manager to CERT_MANAGER_VERSION; skips it when that version runs."""
-    _move_from_old_namespace()
+def _installed() -> bool:
+    """True when the cert-manager release runs CERT_MANAGER_VERSION with cert_manager_values()."""
     releases = json.loads(process.output(["helm", "list", "-n", CERT_MANAGER_NAMESPACE, "-o", "json"]))
-    if any(release["chart"] == f"cert-manager-{CERT_MANAGER_VERSION}" for release in releases):
+    if not any(release["chart"] == f"cert-manager-{CERT_MANAGER_VERSION}" for release in releases):
+        return False
+    values = process.output(["helm", "get", "values", "cert-manager", "-n", CERT_MANAGER_NAMESPACE, "-o", "json"])
+    return json.loads(values) == cert_manager_values()
+
+
+def install_cert_manager() -> None:
+    """Installs or upgrades cert-manager to CERT_MANAGER_VERSION and its values; skips it when both run."""
+    _move_from_old_namespace()
+    if _installed():
         print(f"cert-manager {CERT_MANAGER_VERSION} already installed in '{CERT_MANAGER_NAMESPACE}' - skipping.")
         return
     print(f"Installing cert-manager {CERT_MANAGER_VERSION}...")

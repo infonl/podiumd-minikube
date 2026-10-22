@@ -7859,3 +7859,19 @@ no timeouts; 10m43s against 10m36s. Five minutes after it:
 - Open Formulieren worker 464 MiB, +150 above its baseline (no change was made
   there): the candidate for the glibc malloc trial below.
 Both kept.
+
+### Node journal cap and cert-manager GOGC (user: "do 1 and 3")
+
+The node's journald keeps its journal in `/run/log/journal`, a tmpfs that
+counts as node memory: 98 MiB. `provision.tune_node_services` writes a
+journald drop-in with `RuntimeMaxUse=16M` beside the containerd and kubelet
+drop-ins (`node_drop_ins`) and restarts only the services whose drop-in
+changed: 16 MiB after. cert-manager's three components get `GOGC=50` and
+`GODEBUG=disablethp=1` through `pki.cert_manager_values`.
+`install_cert_manager` skipped whenever the chart version matched, so the env
+would never have reached a running cluster; it now also compares
+`helm get values` with `cert_manager_values()`. `tls.py` imports `pki` as a
+module to break the import cycle manifests -> tls -> pki -> manifests.
+Applied 18:33-18:35; after podiumd-tests' full tier (18:36-18:46, 592 passed,
+10m27s): cainjector 98 -> 44, controller 33 -> 22, webhook 38 -> 12 MiB
+(partly the restart).

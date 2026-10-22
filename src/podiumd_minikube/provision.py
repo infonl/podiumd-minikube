@@ -43,15 +43,18 @@ PLATFORM = "linux/amd64"
 # 1.5 GiB). The limit must stay above 1.5x that heap: at 700MiB it collected six
 # times a second (3 cores).
 CONTROL_PLANE_ENV = {
-    "kube-apiserver": {"GOGC": "25", "GOMEMLIMIT": "1200MiB", **manifests.GO_NO_HUGE_PAGES},
-    "etcd": {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES},
-    "kube-controller-manager": {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES},
-    "kube-scheduler": manifests.GO_NO_HUGE_PAGES,
+    "kube-apiserver": {"GOGC": "25", "GOMEMLIMIT": "1200MiB", **memory.GO_NO_HUGE_PAGES},
+    "etcd": {"GOGC": "50", **memory.GO_NO_HUGE_PAGES},
+    "kube-controller-manager": {"GOGC": "50", **memory.GO_NO_HUGE_PAGES},
+    "kube-scheduler": memory.GO_NO_HUGE_PAGES,
 }
 # The node's Go daemons are systemd services, not static pods; a drop-in sets their env.
 NODE_SERVICES = ("containerd", "kubelet")
-NODE_SERVICE_ENV = {"GOGC": "50", **manifests.GO_NO_HUGE_PAGES}
+NODE_SERVICE_ENV = {"GOGC": "50", **memory.GO_NO_HUGE_PAGES}
 NODE_SERVICE_DROP_IN = "/etc/systemd/system/{}.service.d/20-podiumd-minikube.conf"
+# The node keeps its journal in /run, a tmpfs counted as node memory (90 MiB seen).
+JOURNALD_DROP_IN = "/etc/systemd/journald.conf.d/20-podiumd-minikube.conf"
+JOURNALD_CONFIG = "[Journal]\nRuntimeMaxUse=16M\n"
 STATIC_PODS = "/etc/kubernetes/manifests"
 CONTROL_PLANE_TIMEOUT = 300
 KUBELET_CONFIG = "/var/lib/kubelet/config.yaml"
@@ -176,19 +179,26 @@ def service_drop_in(env: dict[str, str]) -> str:
     return "[Service]\n" + "".join(f"Environment={name}={value}\n" for name, value in env.items())
 
 
+def node_drop_ins() -> dict[str, tuple[str, str]]:
+    """Service -> (drop-in path, content) that tune_node_services writes."""
+    env = service_drop_in(NODE_SERVICE_ENV)
+    return {
+        **{service: (NODE_SERVICE_DROP_IN.format(service), env) for service in NODE_SERVICES},
+        "systemd-journald": (JOURNALD_DROP_IN, JOURNALD_CONFIG),
+    }
+
+
 def tune_node_services() -> None:
-    """Adds NODE_SERVICE_ENV to NODE_SERVICES; restarts the ones it changed (containers outlive containerd)."""
-    wanted = service_drop_in(NODE_SERVICE_ENV)
+    """Writes node_drop_ins(); restarts the services it changed (containers outlive containerd)."""
     changed: list[str] = []
-    for service in NODE_SERVICES:
-        path = NODE_SERVICE_DROP_IN.format(service)
+    for service, (path, wanted) in node_drop_ins().items():
         if kube.node(f"cat {path} 2>/dev/null || true").strip() == wanted.strip():
             continue
         _write_node_file(path, wanted, mode="644")
         changed.append(service)
     if not changed:
         return
-    print(f"Restarting {', '.join(changed)} with {NODE_SERVICE_ENV}...")
+    print(f"Restarting {', '.join(changed)}...")
     kube.node(f"sudo systemctl daemon-reload && sudo systemctl restart {' '.join(changed)}")
 
 

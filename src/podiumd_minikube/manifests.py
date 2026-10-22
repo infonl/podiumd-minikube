@@ -15,6 +15,7 @@ from typing import cast
 
 import yaml
 
+from podiumd_minikube import memory
 from podiumd_minikube import pki
 from podiumd_minikube import process
 from podiumd_minikube import tls
@@ -36,10 +37,7 @@ ECK_KINDS = ("Elasticsearch", "Kibana")
 # host's) and keep memory for throughput; other runtimes ignore the variables.
 # .NET: workstation GC without the background GC, compacting more. glibc: up to
 # 8 malloc arenas per CPU in threaded processes (uWSGI threads, JVMs).
-# Go: the host kernel's transparent huge pages ("always") keep heap memory the
-# runtime has released charged to the container until memory runs short.
 # Elasticsearch: its launcher JVM stays resident beside the server (heap in use 13 MiB).
-GO_NO_HUGE_PAGES = {"GODEBUG": "disablethp=1"}
 CAPACITY_ENV = {
     "DOTNET_gcServer": "0",
     "DOTNET_gcConcurrent": "0",
@@ -47,7 +45,7 @@ CAPACITY_ENV = {
     "APISIX_WORKER_PROCESSES": "2",
     "MALLOC_ARENA_MAX": "2",
     "CLI_JAVA_OPTS": "-Xmx32m -XX:TieredStopAtLevel=1",
-    **GO_NO_HUGE_PAGES,
+    **memory.GO_NO_HUGE_PAGES,
 }
 GO_MEMORY_LIMIT = "GOMEMLIMIT"
 # Laptop budget, Keycloak: kc.sh sets -XX:+UseG1GC, which -XX:-UseG1GC switches off for the
