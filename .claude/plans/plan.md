@@ -7836,3 +7836,26 @@ Measured 5 minutes after the tier, per candidate:
   OpenAPI v3 builder (43). 65 CRDs, 6.2 MiB JSON; about 2.9 MiB of it in CRDs
   without objects, most of which an operator watches (cert-manager, Cilium,
   NGINX Gateway Fabric, redis-, solr-, Keycloak and ECK operators).
+
+### ZaakBrug G1 and kube-apiserver GOGC 25 (user: "try G1 with periodic GC on ZaakBrug", "try GOGC 25 on the apiserver")
+
+ZaakBrug runs JDK 25 without a GC flag, so ergonomics picks the serial GC
+(limit below 1792 MiB); it only shrinks at a full GC, which a tier does not
+trigger. `javaOpts` now sets G1 with the same periodic GC and free ratios as
+ZAC. kube-apiserver's GOGC 50 -> 25, applied with
+`provision.tune_control_plane()` at 18:15 (the static pod restarts; the
+cert-manager cainjector exited on the lost leader lease and restarted, as at
+every kube-apiserver restart).
+
+podiumd-tests' full tier 18:15-18:26: 592 passed, identical to the baseline,
+no timeouts; 10m43s against 10m36s. Five minutes after it:
+- ZaakBrug: 953 -> 659 MiB working set (cgroup anon 655 MiB).
+- kube-apiserver: 1047 -> 526 MiB working set, RSS 1163 -> 606 MiB, heap goal
+  409 MiB at a live heap of 325 (1.26x), 3 GC cycles a minute idle. Part of the
+  drop is the restart: the live heap was 572 MiB before and grows with uptime
+  and deploys. At a 572 MiB live heap GOGC 25 puts the goal at about 715 MiB
+  instead of 865, so about 150 MiB of the saving lasts.
+- Node 16128 -> 15.2 GiB, containers 14150 -> 13.3 GiB.
+- Open Formulieren worker 464 MiB, +150 above its baseline (no change was made
+  there): the candidate for the glibc malloc trial below.
+Both kept.
