@@ -134,7 +134,7 @@ def test_render_passes_helm_args_and_splits_out_crds(fake_run: FakeRun):
     fake_run.on("helm", "template", stdout=manifests.dump([crd, configmap]))
     render = deploy.Options(helm_args=["--set", "a=b"]).render("-s", deploy.STORAGE_HOOKS)
     assert fake_run.ran("helm", "template")[0][-6:] == [*deploy.LOOKUP_ARGS, "--set", "a=b", "-s", deploy.STORAGE_HOOKS]
-    assert (render.docs, render.crds) == ([configmap], [crd])
+    assert ([manifests.name_of(doc) for doc in render.docs], render.crds[0]["kind"]) == (["c"], crd["kind"])
 
 
 CRD = _doc("CustomResourceDefinition", "a.x")
@@ -296,7 +296,7 @@ def test_render_falls_back_to_plain_helm_template_without_the_crds(fake_run: Fak
     fake_run.on("helm", "template", stdout=manifests.dump([configmap]))
     server = ("helm", "template", RELEASE_NAME, str(CHART_DIR), "-n", NAMESPACE, "--include-crds", *deploy.LOOKUP_ARGS)
     fake_run.on(*server, returncode=1, stderr="no matches for kind; ensure CRDs are installed first")
-    assert deploy.Options().render().docs == [configmap]
+    assert [manifests.name_of(doc) for doc in deploy.Options().render().docs] == [manifests.name_of(configmap)]
     calls = fake_run.ran("helm", "template")
     assert "--dry-run=server" in calls[0]
     assert "--dry-run=server" not in calls[-1]

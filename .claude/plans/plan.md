@@ -7754,3 +7754,25 @@ exporter from that file. So it stays off here, and podiumd-tests'
 metrics port"). The user (2026-10-21): wait until an estate turns it on.
 When it comes: add it to the metrics profile; OpenBao pods restart once, and
 the static seal means no manual unseal.
+
+## Helm's release annotations on every rendered object (helm-charts #631 as merged)
+
+The merged #631 (feature/podiumd-4.10.0 03691596) refuses to render when a
+Service `objecttypen` exists without `meta.helm.sh/release-name` of this
+release. `helm upgrade` sets that annotation on every object it applies, so
+the estates pass; our deploy applies `helm template` output with kubectl, so
+the live Service (applied from combined-2's #631) had none, and the
+`--dry-run=server` render failed with "does not belong to release
+podiumd-minikube". `manifests.mark_release_owner` now adds
+`meta.helm.sh/release-name` and `release-namespace` to every rendered object,
+as `helm upgrade` does. A cluster deployed before this fails its first render
+once, because the render runs before the apply: annotate the Service by hand
+(`kubectl -n podiumd-minikube annotate svc objecttypen
+meta.helm.sh/release-name=podiumd-minikube
+meta.helm.sh/release-namespace=podiumd-minikube`), as done on 2026-10-22.
+A fresh cluster has no Service at render time.
+
+Same day: the worktree's `charts/podiumd/Chart.lock` (gitignored, written by
+the combined-2 build) still pinned zac 1.0.338 while #632 asks 1.0.355;
+`helm dependency build` refuses a stale lock. `helm dependency update` in
+podiumd and monitoring-logging fixed it.

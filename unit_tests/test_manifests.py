@@ -12,6 +12,10 @@ def _docs(text: str) -> list[manifests.Doc]:
     return [doc for doc in yaml.safe_load_all(text) if doc]
 
 
+def _names(docs: list[manifests.Doc]) -> list[str]:
+    return [manifests.name_of(doc) for doc in docs]
+
+
 def test_strip_image_digests_keeps_the_tag():
     text = f"image: repo/app:1.2@sha256:{DIGEST}\nimage: other:2\n"
     assert manifests.strip_image_digests(text) == "image: repo/app:1.2\nimage: other:2\n"
@@ -129,7 +133,7 @@ def test_fixup_merged_objecten_removes_classic_only_settings():
 def test_fix_up_leaves_objecten_alone_on_the_classic_shape():
     doc = _configmap("objecten-configuration", {"objecttypes": {"items": [{"service_identifier": "y"}]}})
     render = manifests.fix_up(yaml.safe_dump(doc), objecten_merged=False)
-    assert render.docs == [doc]
+    assert render.docs[0]["data"] == doc["data"]
 
 
 def test_fix_up_splits_off_large_configmaps():
@@ -140,9 +144,8 @@ def test_fix_up_splits_off_large_configmaps():
     }
     small = {"kind": "ConfigMap", "metadata": {"name": "small"}, "data": {"x": "y"}}
     render = manifests.fix_up(yaml.safe_dump_all([large, small]), objecten_merged=False)
-    assert render.docs == [small]
-    assert render.large_configmaps == [large]
-    assert _docs(render.manifest) == [small]
+    assert _names(render.docs) == _names(_docs(render.manifest)) == ["small"]
+    assert _names(render.large_configmaps) == ["dashboards"]
 
 
 def test_trust_ca_mounts_the_ca_in_workloads_and_jobs():
@@ -285,6 +288,15 @@ def test_keep_finished_jobs_drops_only_the_jobs_ttl():
     assert cron["spec"]["jobTemplate"]["spec"] == {"ttlSecondsAfterFinished": 60}
 
 
+def test_mark_release_owner_keeps_existing_annotations():
+    annotated: manifests.Doc = {"kind": "Service", "metadata": {"annotations": {"a": "b"}}}
+    bare: manifests.Doc = {"kind": "Service", "metadata": {"annotations": None}}
+    manifests.mark_release_owner([annotated, bare])
+    owner = {"meta.helm.sh/release-name": "podiumd-minikube", "meta.helm.sh/release-namespace": NAMESPACE}
+    assert annotated["metadata"]["annotations"] == {"a": "b", **owner}
+    assert bare["metadata"]["annotations"] == owner
+
+
 def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
     resources: manifests.Doc = {"limits": {"memory": "768Mi"}}
     builder: manifests.Doc = {"name": "keycloak-builder"}
@@ -314,8 +326,7 @@ def test_fix_up_separates_crds_for_server_side_apply():
     crd = {"kind": "CustomResourceDefinition", "metadata": {"name": "elasticsearches.elasticsearch.k8s.elastic.co"}}
     other = {"kind": "Service", "metadata": {"name": "zac"}}
     render = manifests.fix_up(yaml.safe_dump_all([crd, other]), objecten_merged=False)
-    assert render.crds == [crd]
-    assert render.docs == [other]
+    assert (_names(render.crds), _names(render.docs)) == (["elasticsearches.elasticsearch.k8s.elastic.co"], ["zac"])
 
 
 def test_route_outbound_only_with_the_outway():
@@ -385,4 +396,4 @@ def test_fix_up_drops_only_zacs_own_collector_deployment():
     collector = {"kind": "Deployment", "metadata": {"name": manifests.ZAC_COLLECTOR}}
     service = {"kind": "Service", "metadata": {"name": manifests.ZAC_COLLECTOR}}
     render = manifests.fix_up(manifests.dump([collector, service]), objecten_merged=False)
-    assert render.docs == [service]
+    assert [doc["kind"] for doc in render.docs] == ["Service"]

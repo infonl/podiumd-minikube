@@ -353,6 +353,14 @@ def is_unused_zac_collector(doc: Doc) -> bool:
     return doc.get("kind") == "Deployment" and name_of(doc) == ZAC_COLLECTOR
 
 
+def mark_release_owner(docs: list[Doc]) -> None:
+    """Adds the release annotations `helm upgrade` sets; the chart's objecttypen-compat-service checks them."""
+    for doc in docs:
+        _mapping(doc, "metadata", "annotations").update(
+            {"meta.helm.sh/release-name": RELEASE_NAME, "meta.helm.sh/release-namespace": NAMESPACE}
+        )
+
+
 def keep_finished_jobs(docs: list[Doc]) -> None:
     """Drops ttlSecondsAfterFinished from Jobs, so deploy sees their outcome after its slower steps.
 
@@ -585,6 +593,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     route_outbound(docs)
     route_through_nginx(docs)
     keep_finished_jobs(docs)
+    mark_release_owner(docs)
     tune_keycloak(docs)
     tune_solr(docs)
     mount_zaakbrug_role_mapping(docs)
