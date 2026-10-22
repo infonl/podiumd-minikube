@@ -6493,7 +6493,11 @@ same DB numbers. `flush-redis` finds the master by `app=redis-ha,redis-role=mast
   by the next `on`. The Keycloak PDB stays off: `keycloak.podDisruptionBudget`
   is off in ExternalsPodiumD (on only in podiumd-infra kees00). After `off`,
   the command waits for a Ready pod with the master label: removing the
-  master's pod leaves the label to the CronJob (not seen live).
+  master's pod leaves the label to the CronJob. Not seen live: podiumd-tests'
+  failover test (podiumd-tests 229722a) deleted the master pod, and
+  redis-operator 0.27 promoted no replica; the recreated redis-ha-0 was master
+  again with its PVC's data within 25 s, so the master stays on redis-ha-0
+  unless it is down longer.
 - The chart's `redis-ha-pre-delete` Job is a Helm pre-delete hook that deletes
   the RedisReplication; `kubectl apply` would run it on every deploy.
   `manifests.fix_up` now drops delete hooks along with test hooks.
