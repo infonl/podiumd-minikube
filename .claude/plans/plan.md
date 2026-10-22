@@ -7875,3 +7875,21 @@ module to break the import cycle manifests -> tls -> pki -> manifests.
 Applied 18:33-18:35; after podiumd-tests' full tier (18:36-18:46, 592 passed,
 10m27s): cainjector 98 -> 44, controller 33 -> 22, webhook 38 -> 12 MiB
 (partly the restart).
+
+### glibc malloc trim trial on Open Formulieren: dropped (user: "do the python plan")
+
+Question: can the Python pods give freed heap back sooner? glibc raises its
+mmap and trim thresholds dynamically up to 32 MiB, so freed memory can stay in
+the heap. Trial 18:33-18:57: `MALLOC_TRIM_THRESHOLD_` and
+`MALLOC_MMAP_THRESHOLD_` at 131072 (fixed, which turns the dynamic adjustment
+off) on openformulieren and openformulieren-worker with `kubectl set env`
+(both glibc 2.36, Debian 12). podiumd-tests' full tier: 592 passed. Measured 5
+minutes after the tier, against the same point after the tier before:
+- web: uWSGI worker PSS 213 -> 212 MiB, master 107 -> 108, http router 102:
+  no change.
+- worker: Celery parent 210 -> 170, child 232 -> 193 MiB PSS, working set
+  464 -> 350 MiB. But the pod had just restarted, and the working set is
+  still above the baseline taken without the trial (314 MiB after a full tier
+  at 18:04), so the drop is the restart, not the trim.
+Below the 20 MiB per process that would justify a `CAPACITY_ENV` entry for
+about 35 Python containers: reverted, nothing committed in code.
