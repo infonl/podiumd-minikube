@@ -7893,3 +7893,12 @@ minutes after the tier, against the same point after the tier before:
   at 18:04), so the drop is the restart, not the trim.
 Below the 20 MiB per process that would justify a `CAPACITY_ENV` entry for
 about 35 Python containers: reverted, nothing committed in code.
+
+### Memory baseline after the 2026-10-22 tuning
+
+Refreshed at 19:14 CEST after podiumd-tests' full tier (18:59-19:09, 592
+passed, 9m59s) with ZaakBrug G1, kube-apiserver GOGC 25, the journal cap and
+cert-manager GOGC 50 in place: node 16128 -> 15503 MiB, containers 14150 ->
+13450 MiB. Down: kube-apiserver 1047 -> 545, ZaakBrug 953 -> 664, cainjector
+98 -> 44, webhook 38 -> 12 MiB. Up by 30-40 MiB, tier variation with no change
+made there: Open Formulieren worker, Open Inwoner, Loki, Postgres, Solr.
