@@ -6474,9 +6474,15 @@ and podiumd-infra; every app's DSN moved from `redis:6379` to
 `redis-ha-master:6379` (the chart's default host carries namespace `podiumd`),
 same DB numbers. `flush-redis` finds the master by `app=redis-ha,redis-role=master`.
 
-- `replicaCount: 1` (chart 3), 32Mi/128Mi (chart 256Mi/512Mi), PVC on
-  `standard`. Settled after the deploy: Redis 9 MiB, operator 25 MiB (old
-  Redis 14 MiB).
+- 32Mi/128Mi (chart 256Mi/512Mi), PVC on `standard`. Settled after the
+  deploy: Redis 9 MiB, operator 25 MiB (old Redis 14 MiB).
+- The chart's 3 replicas (2026-10-22; was 1), as ExternalsPodiumD and
+  podiumd-infra, which both keep the default: the PDB `redis-ha-replication`
+  (maxUnavailable 1, helm-charts #634) and failover are only testable with
+  replicas. Cost: redis-ha-1 and -2 each about 38 MiB (redis 23-26,
+  exporter 12-14); node 15.5 -> 15.4 GiB at the next measurement, within the
+  17 GiB budget. `test_redis.py` checks that one pod holds the master label,
+  not which one.
 - The chart's `redis-ha-pre-delete` Job is a Helm pre-delete hook that deletes
   the RedisReplication; `kubectl apply` would run it on every deploy.
   `manifests.fix_up` now drops delete hooks along with test hooks.

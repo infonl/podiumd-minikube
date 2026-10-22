@@ -167,7 +167,6 @@ podiumd:
   redis-operator:
     enabled: true
     redis-ha:
-      replicaCount: 1 # chart 3
       # labelMasterCronJob keeps the chart's every 2 minutes: ExternalsPodiumD's office-hours
       # schedule suits environments suspended at night; a laptop restarting Redis in the
       # evening would leave redis-ha-master without endpoints until morning.
