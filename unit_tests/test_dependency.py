@@ -93,3 +93,23 @@ def test_sync_builds_a_path_checkouts_subcharts_before_packaging_it(tmp_path: Pa
     dependency.sync(versions, chart_dir)
     assert [call[:3] for call in fake_run.calls] == [["helm", "dependency", "build"], ["helm", "dependency", "update"]]
     assert fake_run.calls[0][3] == "/checkout"
+
+
+def test_sync_updates_a_path_checkouts_stale_chart_lock(tmp_path: Path, fake_run: FakeRun):
+    chart_dir = _chart_dir(tmp_path)
+    versions = tmp_path / "versions.yaml"
+    dependency.write("podiumd", "path", "/checkout", versions)
+    dependency.write("monitoringLogging", "version", "1.0.14", versions)
+    fake_run.on("helm", "dependency", "build", returncode=1, stderr="Error: the lock file (Chart.lock) is out of sync")
+    dependency.sync(versions, chart_dir)
+    assert [call[2:] for call in fake_run.calls[:2]] == [["build", "/checkout"], ["update", "/checkout"]]
+
+
+def test_sync_raises_other_build_errors(tmp_path: Path, fake_run: FakeRun):
+    chart_dir = _chart_dir(tmp_path)
+    versions = tmp_path / "versions.yaml"
+    dependency.write("podiumd", "path", "/checkout", versions)
+    dependency.write("monitoringLogging", "version", "1.0.14", versions)
+    fake_run.on("helm", "dependency", "build", returncode=1, stderr="Error: no repository definition")
+    with pytest.raises(process.ProcessError):
+        dependency.sync(versions, chart_dir)

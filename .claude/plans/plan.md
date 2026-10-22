@@ -7775,4 +7775,8 @@ A fresh cluster has no Service at render time.
 Same day: the worktree's `charts/podiumd/Chart.lock` (gitignored, written by
 the combined-2 build) still pinned zac 1.0.338 while #632 asks 1.0.355;
 `helm dependency build` refuses a stale lock. `helm dependency update` in
-podiumd and monitoring-logging fixed it.
+podiumd and monitoring-logging fixed it. `dependency.sync` now runs that
+update itself when a checkout's build fails with "out of sync" (the user's
+go). Checked on a copy whose lock was built for 1.0.338: build failed, update
+rewrote the lock to 1.0.355. Helm writes a new Chart.lock only when its
+digest changes, so a hand-edited version line is no test.

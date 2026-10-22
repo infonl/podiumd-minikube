@@ -101,6 +101,20 @@ def _chart_reference(selected: Selection) -> tuple[str, str]:
     return "@dimpact", selected.value
 
 
+def _build_subcharts(chart: str) -> None:
+    """`helm dependency build` of a checkout; `update` when its Chart.lock no longer matches Chart.yaml.
+
+    The checkout's Chart.lock is gitignored, so a checkout of a commit that changes a dependency keeps the old one.
+    """
+    try:
+        process.run(["helm", "dependency", "build", chart])
+    except process.ProcessError as error:
+        if "out of sync" not in error.stderr:
+            raise
+        print(f"Chart.lock of {chart} is out of sync with its Chart.yaml: running helm dependency update...")
+        process.run(["helm", "dependency", "update", chart], capture=False)
+
+
 def sync(versions_file: Path = VERSIONS_FILE, chart_dir: Path = CHART_DIR) -> None:
     """Makes charts/*.tgz match .podiumd-versions.yaml.
 
@@ -121,7 +135,7 @@ def sync(versions_file: Path = VERSIONS_FILE, chart_dir: Path = CHART_DIR) -> No
 
     for selected in resolved.values():
         if selected.mode == "path":
-            process.run(["helm", "dependency", "build", selected.value], capture=False)
+            _build_subcharts(selected.value)
     chart_yaml = chart_dir / CHART_YAML.name
     chart_lock = chart_dir / CHART_LOCK.name
     with tempfile.TemporaryDirectory() as backup_dir:
