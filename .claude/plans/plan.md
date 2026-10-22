@@ -7801,3 +7801,38 @@ update itself when a checkout's build fails with "out of sync" (the user's
 go). Checked on a copy whose lock was built for 1.0.338: build failed, update
 rewrote the lock to 1.0.355. Helm writes a new Chart.lock only when its
 digest changes, so a hand-edited version line is no test.
+
+## Footprint inspection, 2026-10-22 (user: "can the memory footprint be reduced further?")
+
+Memory baseline refreshed at 18:04 CEST after podiumd-tests' full tier
+(17:41-17:52, 592 passed, one pod per component, all profiles): node 14930 ->
+16128 MiB, containers 13557 -> 14150 MiB. Largest rises: zaakbrug 813 -> 953,
+keycloak 466 -> 489, keycloak operator 176 -> 190.
+
+Measured 5 minutes after the tier, per candidate:
+- Open Formulieren web: 740 MiB during the tier (+296), 425 after: one uWSGI
+  worker at 190 MiB PSS, master 107, http router 101. Tier-only; nothing to do.
+- Celery workers: parent and child about equal (Open Formulieren 172/193,
+  Open Zaak 124/140, Open Inwoner 149/138, Open Archiefbeheer 95/105 MiB PSS;
+  Open Notificaties 216 in one process). The images already recycle the child:
+  `--max-tasks-per-child=50` (Open Zaak, Open Inwoner, Open Notificaties) or
+  `CELERY_WORKER_MAX_TASKS_PER_CHILD` 100 (Open Formulieren). Neither
+  ExternalsPodiumD, podiumd-infra nor helm-charts sets a per-child limit. A
+  memory limit per child would save about 20 MiB per worker: dropped.
+- ZAC: heap 264 used of 337 committed (G1, free ratio 30 already), non-heap
+  273 committed of which metaspace 214 (WildFly's classes). Nothing to trim.
+- Elasticsearch (Open Inwoner, KISS): server PSS 555/560 MiB = heap 192
+  committed (old gen 88-99 used) + non-heap 208-217 (metaspace 154-157: the
+  bundled modules) + native; launcher 77-81 MiB; 37-40 documents. A smaller
+  heap risks the breakers (old gen peaks at 100 MiB); C1 only would save
+  10-20 MiB of code cache. Not pursued.
+- kube-apiserver: 1059 MiB working set, live heap 550 MiB (401-406 after the
+  CRD filter on 2026-10-21), GC goal 804-840 MiB at GOGC 50, so GOMEMLIMIT
+  1200MiB does not bind. Stored objects total a few MiB (84 secrets 1.3,
+  117 ConfigMaps 2.8 MiB). A heap profile (`kubectl get --raw
+  /debug/pprof/heap`, read with `go tool pprof` in a golang:1.25-alpine
+  container) puts most of the live heap in CRD handling: OpenAPI spec merging
+  and aggregation (106 + 81 MiB), CRD serving info (71), CRD conversion (45),
+  OpenAPI v3 builder (43). 65 CRDs, 6.2 MiB JSON; about 2.9 MiB of it in CRDs
+  without objects, most of which an operator watches (cert-manager, Cilium,
+  NGINX Gateway Fabric, redis-, solr-, Keycloak and ECK operators).
