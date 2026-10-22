@@ -6476,13 +6476,24 @@ same DB numbers. `flush-redis` finds the master by `app=redis-ha,redis-role=mast
 
 - 32Mi/128Mi (chart 256Mi/512Mi), PVC on `standard`. Settled after the
   deploy: Redis 9 MiB, operator 25 MiB (old Redis 14 MiB).
-- The chart's 3 replicas (2026-10-22; was 1), as ExternalsPodiumD and
-  podiumd-infra, which both keep the default: the PDB `redis-ha-replication`
-  (maxUnavailable 1, helm-charts #634) and failover are only testable with
-  replicas. Cost: redis-ha-1 and -2 each about 38 MiB (redis 23-26,
-  exporter 12-14); node 15.5 -> 15.4 GiB at the next measurement, within the
-  17 GiB budget. `test_redis.py` checks that one pod holds the master label,
-  not which one.
+- One pod, as Keycloak (chart: Redis 3, Keycloak 2; ExternalsPodiumD and
+  podiumd-infra keep both defaults). The user (2026-10-22): no redundancy on
+  a laptop, more pods only for a test that needs them, without a redeploy.
+  Commit 2392e74 ran the chart's 3 for a few hours: redis-ha-1 and -2 each
+  about 38 MiB (redis 23-26, exporter 12-14); podiumd-tests verified the
+  #634 PDB `redis-ha-replication` with it.
+- `podiumd-minikube replicas on|off` (`replicas.py`): renders with and
+  without `replicas.SETS` (7 s each, identical between runs) and applies only
+  the difference: a merge patch per changed object, objects one render lacks
+  created or deleted. Live: `on` patches RedisReplication `clusterSize` and
+  Keycloak `instances`, 79 s until redis-ha 3/3 (2 replicas connected) and
+  keycloak 2/2 (Infinispan cluster view of 2, keycloak-0 not restarted);
+  `off` 13 s, the master label stays on redis-ha-0. The scaled-down pods'
+  PVCs `redis-ha-redis-ha-1`/`-2` stay (StatefulSet retention) and are reused
+  by the next `on`. The Keycloak PDB stays off: `keycloak.podDisruptionBudget`
+  is off in ExternalsPodiumD (on only in podiumd-infra kees00). After `off`,
+  the command waits for a Ready pod with the master label: removing the
+  master's pod leaves the label to the CronJob (not seen live).
 - The chart's `redis-ha-pre-delete` Job is a Helm pre-delete hook that deletes
   the RedisReplication; `kubectl apply` would run it on every deploy.
   `manifests.fix_up` now drops delete hooks along with test hooks.

@@ -172,6 +172,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | `podiumd-minikube show-podiumd-version` | Prints the current version selection and fetch status per dependency |
 | `podiumd-minikube show-port-mappings` | Prints how host traffic reaches each deployed app (Ingress hostname → backend Service:port) |
 | `podiumd-minikube expose-postgres [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |
+| `podiumd-minikube replicas on\|off` | `on`: Redis at 3 pods, Keycloak at 2 (the chart's counts) for tests that need more than one pod; `off`: one each, as `values.yaml` and every deploy. Patches the live objects, no deploy (`on` about 80 s) |
 | `podiumd-minikube flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
 | `podiumd-minikube update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
 | `podiumd-minikube deploy-extended` | `deploy --full` without metrics, with openzaak's and openklant's Celery workers |
@@ -193,7 +194,7 @@ cluster, so whoever changes it holds the lock file first
 (`../.minikube-lock`, one line: who, what, start time; `MINIKUBE_LOCK_FILE`
 overrides the path). `deploy`, `deploy-extended`, `reset-namespace`,
 `teardown-cluster`, `start-cluster`, `provision-cluster`,
-`flush-redis` and `setup-tunnel stop` take it
+`flush-redis`, `replicas` and `setup-tunnel stop` take it
 themselves and refuse while someone else holds it. Reading (kubectl get,
 logs, the test suite) needs no lock.
 

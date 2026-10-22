@@ -54,6 +54,7 @@ PROFILE_PODS = {
     "frankgateway": "frankgateway-outway",
     "clamav": "clamav",
     "metrics": "podiumd-minikube-grafana",
+    "replicas": "redis-ha-1",
 }
 
 

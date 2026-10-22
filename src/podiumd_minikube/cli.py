@@ -13,6 +13,7 @@ from podiumd_minikube import lock
 from podiumd_minikube import ports
 from podiumd_minikube import process
 from podiumd_minikube import provision
+from podiumd_minikube import replicas as multi_pod
 from podiumd_minikube import restart
 from podiumd_minikube import services
 from podiumd_minikube import status
@@ -141,6 +142,13 @@ def provision_cluster(argv: list[str]) -> None:
     provision.provision()
 
 
+def replicas(argv: list[str]) -> None:
+    """Runs Redis (3) and Keycloak (2) with the chart's pod counts (on) or one pod each (off), without a deploy."""
+    parser = _parser(replicas)
+    parser.add_argument("action", choices=["on", "off"])
+    multi_pod.switch(on=parser.parse_args(argv).action == "on")
+
+
 def reset_namespace(argv: list[str]) -> int:
     """Empties the podiumd-minikube namespace and its cluster-wide leftovers, after confirmation."""
     return teardown.reset_namespace(yes=_yes(reset_namespace, argv))
@@ -234,6 +242,7 @@ COMMANDS: dict[str, Command] = {
         expose_postgres,
         flush_redis,
         provision_cluster,
+        replicas,
         reset_namespace,
         set_podiumd_version,
         setup_tunnel,

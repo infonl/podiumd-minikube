@@ -38,7 +38,7 @@ podiumd:
       ensureOperatorSa:
         clientSecret: keycloakOperatorClientSecret
   keycloak:
-    instances: "1"
+    instances: "1" # chart 2; `podiumd-minikube replicas on` for tests that need 2
     auth:
       adminUser: admin
       adminPassword: admin
@@ -167,6 +167,7 @@ podiumd:
   redis-operator:
     enabled: true
     redis-ha:
+      replicaCount: 1 # chart 3; `podiumd-minikube replicas on` for tests that need 3
       # labelMasterCronJob keeps the chart's every 2 minutes: ExternalsPodiumD's office-hours
       # schedule suits environments suspended at night; a laptop restarting Redis in the
       # evening would leave redis-ha-master without endpoints until morning.
