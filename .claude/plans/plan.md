@@ -8153,3 +8153,11 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   exit 1 (tested in sh: success, success on a later attempt, give-up). Start-up
   timing only; ExternalsPodiumD and podiumd-infra keep the chart's probes,
   CPU limit and failing init container.
+- The 19:13 deploy (putting these fixups on) failed after 89 s: the Keycloak
+  CR changed, so the operator replaced keycloak-0, and our
+  `keycloak.repair_default_client_scopes` ran kcadm.sh in it through
+  `kubectl exec` just then (exit 137). The realm import it waits for had
+  completed against the old pod. The chart's repair Job hit the same restart
+  once and retried by itself. Since podiumd 4.10 that Job does the repair, so
+  our step now returns when the render has it (`CHART_REPAIR_JOB_PREFIX`); it
+  stays for podiumd<4.10. `deploy.jobs` moved to `Render.jobs`, which both use.

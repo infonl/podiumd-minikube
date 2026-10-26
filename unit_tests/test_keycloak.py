@@ -55,6 +55,11 @@ def _render(*jobs: str) -> manifests.Render:
     return manifests.Render(docs=[{"kind": "Job", "metadata": {"name": name}} for name in jobs], large_configmaps=[])
 
 
+def test_repair_leaves_it_to_the_charts_job(fake_run: FakeRun):
+    keycloak.repair_default_client_scopes(_render(f"{keycloak.CHART_REPAIR_JOB_PREFIX}-1"))
+    assert fake_run.calls == []
+
+
 def test_repair_skips_a_cluster_without_keycloak(fake_run: FakeRun):
     fake_run.on("kubectl", "get", f"pod/{keycloak.POD}", returncode=1)
     keycloak.repair_default_client_scopes(_render())

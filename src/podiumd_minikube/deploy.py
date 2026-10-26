@@ -95,11 +95,6 @@ def expected_storage_errors(storage: manifests.Render) -> int:
     return 2 * sum(1 for doc in storage.docs if doc.get("kind") == "PersistentVolume")
 
 
-def jobs(render: manifests.Render) -> list[str]:
-    """The Jobs in render (all idempotent)."""
-    return [manifests.name_of(doc) for doc in render.docs if doc.get("kind") == "Job"]
-
-
 def _rerun_jobs(render: manifests.Render) -> None:
     """Deletes the render's Jobs so the apply recreates and re-runs them.
 
@@ -107,7 +102,7 @@ def _rerun_jobs(render: manifests.Render) -> None:
     immutable, so a changed spec cannot be applied, and an unchanged one only
     re-runs once its TTL has removed it.
     """
-    names = jobs(render)
+    names = render.jobs
     if names:
         print(f"Deleting {len(names)} Job(s) so this deploy re-runs them...")
         kube.kubectl_shown("delete", "job", *names, "-n", NAMESPACE, "--ignore-not-found")
@@ -259,7 +254,7 @@ def _wait_ready(render: manifests.Render) -> None:
         if doc.get("kind") in ("Deployment", "StatefulSet", *manifests.ECK_KINDS)
     ]
     kinds = ",".join(sorted({workload.split("/")[0] for workload in workloads}))
-    names = jobs(render)
+    names = render.jobs
 
     def job_state() -> tuple[list[str], list[str]]:
         return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)

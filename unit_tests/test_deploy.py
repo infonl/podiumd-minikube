@@ -90,7 +90,7 @@ def test_jobs_are_every_job_in_the_render():
         ],
         large_configmaps=[],
     )
-    assert deploy.jobs(render) == ["openzaak-config", "pabc-migrations-1"]
+    assert render.jobs == ["openzaak-config", "pabc-migrations-1"]
 
 
 def test_unfinished_jobs_splits_running_and_failed():

@@ -652,6 +652,11 @@ class Render:
     charts: dict[str, str] = field(default_factory=dict[str, str])
 
     @property
+    def jobs(self) -> list[str]:
+        """Names of the Jobs in docs (all idempotent)."""
+        return [name_of(doc) for doc in self.docs if doc.get("kind") == "Job"]
+
+    @property
     def manifest(self) -> str:
         """docs as YAML."""
         return dump(self.docs)

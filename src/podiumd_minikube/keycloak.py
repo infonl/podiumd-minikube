@@ -22,6 +22,8 @@ REALM = "podiumd"
 POD = "keycloak-0"
 ADMIN_SECRET = "keycloak-podiumd-admin"  # nosec B105  # noqa: S105 - a Secret name
 IMPORT_JOB_PREFIX = "import-podiumd-realm-job"
+# podiumd>=4.10 renders this Job, which does the same repair (and survives a Keycloak restart).
+CHART_REPAIR_JOB_PREFIX = "keycloak-repair-client-scopes"
 IMPORT_TIMEOUT = 900
 # Keycloak's own clients keep their scopes.
 BUILTIN_CLIENTS = {"account", "account-console", "admin-cli", "broker", "realm-management", "security-admin-console"}
@@ -54,14 +56,16 @@ def missing_default_scopes(clients: list[dict[str, Any]], defaults: list[dict[st
 
 
 def _import_done(render: manifests.Render) -> bool:
-    jobs = [manifests.name_of(d) for d in render.docs if d.get("kind") == "Job"]
-    imports = [name for name in jobs if name.startswith(IMPORT_JOB_PREFIX)]
+    imports = [name for name in render.jobs if name.startswith(IMPORT_JOB_PREFIX)]
     return all(kube.get_json("job", name, "-n", NAMESPACE).get("status", {}).get("succeeded") for name in imports)
 
 
 def repair_default_client_scopes(render: manifests.Render) -> None:
-    """Gives every chart client without default client scopes the realm's, once the realm import has run."""
-    if not kube.exists(f"pod/{POD}"):
+    """Gives every chart client without default client scopes the realm's, once the realm import has run.
+
+    Skipped when the chart's own repair Job is rendered: an exec here failed when the deploy replaced keycloak-0.
+    """
+    if any(name.startswith(CHART_REPAIR_JOB_PREFIX) for name in render.jobs) or not kube.exists(f"pod/{POD}"):
         return
     print("Repairing the podiumd realm's client scopes (keycloak.py)...")
     if not polling.wait_until(lambda: _import_done(render), timeout=IMPORT_TIMEOUT, interval=10):
