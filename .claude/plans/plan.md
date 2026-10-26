@@ -8029,3 +8029,30 @@ release.
   combined-4 f0548763 for both charts).
 - `kube.reference` builds kubectl's "Kind.group/name"; it was
   `replicas._resource`.
+
+### Deploy speed (user: "is there any speed that can be gained in cluster-bootstrap and in deploy?")
+
+Measured on combined-4 with `--full` (2026-10-26):
+
+- `dependency.sync` with a checkout selected took 32 s on every deploy:
+  `helm dependency build` of the monitoring-logging checkout (20 s; it
+  refreshes every repository index and downloads every subchart again), then
+  `helm dependency update` of this chart (refresh, and podiumd 4.10.0's tgz
+  downloaded again). Now the checkout's subcharts are built only when
+  `helm dependency list` reports one not ok, and when every published version
+  is fetched, the checkout is packaged with `helm package`: 0.3 s. The
+  packaged monitoring-logging tgz holds the same 856 files with the same
+  contents as the one `helm dependency update` built.
+- `fix_up` parsed the render with PyYAML's pure-Python loader: 3.1 s of a
+  6.9 s render; libyaml (`CSafeLoader`, `CSafeDumper`) 0.3 s, dumping
+  0.5 -> 0.06 s; the loaded documents are equal. A `--full` render
+  6.9 -> 3.2 s; deploy renders twice, `replicas` twice.
+- The ready wait ran one `kubectl get` per workload per poll: 62 calls,
+  2.4 s; now one call for all kinds, 0.2 s.
+- Not changed: the storage-hooks render (2.9 s) could reuse the full render.
+- The longest step: podiumd's Job `keycloak-repair-client-scopes` ran 304 s
+  of the 09:35 deploy (the other Jobs at most 100 s): about 60 `kcadm.sh`
+  calls, each a JVM start, 4-5 s at the chart's `cpu: 500m` limit against
+  1.2 s in keycloak-0.
+- Two consecutive renders differ anyway (CRD order, a random Grafana admin
+  password without the lookup), so a render hash cannot compare them.

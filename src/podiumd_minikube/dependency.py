@@ -101,11 +101,19 @@ def _chart_reference(selected: Selection) -> tuple[str, str]:
     return "@dimpact", selected.value
 
 
+def _subcharts_fetched(chart: str) -> bool:
+    """Whether `helm dependency list` reports every subchart of the checkout at chart as ok."""
+    listed = process.output(["helm", "dependency", "list", chart]).splitlines()[1:]
+    return all(line.split("\t")[-1].strip() == "ok" for line in listed if line.strip())
+
+
 def _build_subcharts(chart: str) -> None:
-    """`helm dependency build` of a checkout; `update` when its Chart.lock no longer matches Chart.yaml.
+    """`helm dependency build` of a checkout unless its subcharts are fetched; `update` when its Chart.lock is stale.
 
     The checkout's Chart.lock is gitignored, so a checkout of a commit that changes a dependency keeps the old one.
     """
+    if _subcharts_fetched(chart):
+        return
     try:
         process.run(["helm", "dependency", "build", chart])
     except process.ProcessError as error:
@@ -118,24 +126,42 @@ def _build_subcharts(chart: str) -> None:
 def sync(versions_file: Path = VERSIONS_FILE, chart_dir: Path = CHART_DIR) -> None:
     """Makes charts/*.tgz match .podiumd-versions.yaml.
 
-    Skips `helm dependency update` when every dependency is a published
-    version that is already fetched; path mode always re-packages the
-    checkout, after building the checkout's own subcharts: packaging takes
-    whatever its charts/ holds, also those of an earlier commit. Both
-    dependencies are edited before one update, because the update
-    re-resolves every dependency at once.
+    Skips `helm dependency update` when every published version is already
+    fetched; a checkout is then packaged directly (the update refetches every
+    repository index and dependency: 30 s). A checkout's own subcharts are
+    built first when `helm dependency list` reports one missing or at another
+    version: packaging takes whatever its charts/ holds. Both dependencies
+    are edited before one update, because the update re-resolves every
+    dependency at once.
     """
     selections = {key: selection(key, versions_file) for key in DEPENDENCIES}
     missing = [DEPENDENCIES[key] for key, selected in selections.items() if selected is None]
     if missing:
         raise missing_error(missing)
     resolved = {DEPENDENCIES[key]: selected for key, selected in selections.items() if selected}
-    if all(selected.tarball(chart, chart_dir / "charts") for chart, selected in resolved.items()):
-        return
+    charts_dir = chart_dir / "charts"
+    checkouts = {chart: selected.value for chart, selected in resolved.items() if selected.mode == "path"}
+    published = {chart: selected for chart, selected in resolved.items() if selected.mode == "version"}
+    if all(selected.tarball(chart, charts_dir) for chart, selected in published.items()):
+        _package(checkouts, charts_dir)
+    else:
+        for checkout in checkouts.values():
+            _build_subcharts(checkout)
+        _update(resolved, chart_dir)
 
-    for selected in resolved.values():
-        if selected.mode == "path":
-            _build_subcharts(selected.value)
+
+def _package(checkouts: dict[str, str], charts_dir: Path) -> None:
+    """Packages each checkout into charts_dir in place of its earlier tarball."""
+    for chart, checkout in checkouts.items():
+        _build_subcharts(checkout)
+        for old in charts_dir.glob(f"{chart}-*.tgz"):
+            old.unlink()
+        process.run(["helm", "package", checkout, "-d", str(charts_dir)])
+        print(f"Packaged {chart} from {checkout}.")
+
+
+def _update(resolved: dict[str, Selection], chart_dir: Path) -> None:
+    """`helm dependency update` with Chart.yaml pointing at the selections; Chart.yaml and Chart.lock restored."""
     chart_yaml = chart_dir / CHART_YAML.name
     chart_lock = chart_dir / CHART_LOCK.name
     with tempfile.TemporaryDirectory() as backup_dir:
