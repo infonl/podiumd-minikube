@@ -8125,3 +8125,22 @@ combined-4 monitoring-logging checkout), from timestamped deploy output:
 - The repair Job's per-client kcadm.sh calls are registered as known issue
   podiumd-chart-26 (podiumd-known-issues 470a014, Low): one listing of all
   clients' scopes would replace about 4 calls per client.
+
+### start-cluster time (user: "measure start-cluster")
+
+`minikube stop` (26 s), then `start-cluster` on the `--full` cluster
+(2026-10-26 19:04): 206 s, exit 0. The 10.96.0.0/12 route survived the stop
+(`linkdown`), so the tunnel step needed no sudo. Phases: `minikube start` and
+node tuning 12 s; pods re-reporting since the boot 5 s; waiting for the
+workloads 185 s. Ready after the node was up: ZAC 186 s, Open Inwoner 153 s,
+Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
+
+- ZAC: init container `init-solr-zac-core` (curl to Solr) failed with exit 7
+  at 18:05:52, the second Solr became Ready; kubelet's back-off retried it 52 s
+  later, then ZAC took 63 s to become Ready.
+- Keycloak: `keycloak-builder` init container (`kc.sh build` on every start,
+  podiumd's `keycloak.podTemplate`, CPU limit 1) 40 s; the server started in
+  11 s but became Ready 55 s later: its readiness probe has
+  `initialDelaySeconds: 60` (startup probe 30 s, period 10 s).
+- Open Inwoner: init `openinwoner-search-index` failed once while its
+  Elasticsearch was starting; retried after 11 s.
