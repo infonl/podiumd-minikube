@@ -8074,3 +8074,29 @@ Measured on combined-4 with `--full` (2026-10-26):
   the chart's repair Job ends later.
 - Two consecutive renders differ anyway (CRD order, a random Grafana admin
   password without the lookup), so a render hash cannot compare them.
+
+Deploy times with `--full`, same charts (published podiumd 4.10.0 plus the
+combined-4 monitoring-logging checkout), from timestamped deploy output:
+
+| Phase | 17:51 | 18:06 |
+| --- | --- | --- |
+| Disk check, sync, namespace | 1 s | 1 s |
+| Storage hooks, CRDs, Job deletion | 31 s | 31 s |
+| Full apply, large ConfigMaps, Gateway, DNS | 25 s | 25 s |
+| `repair_default_client_scopes` (waits for the realm import) | 166 s | 32 s |
+| OpenBao, prune | 10 s | 15 s |
+| Ready wait | 21 s | 61 s |
+| Total | 254 s | 165 s |
+
+- 17:51: sync, libyaml, the single ready poll and the repair Job's 2 CPUs in
+  place; the realm imports still at 200m, and Keycloak restarted (71 s, see
+  above). The 09:35 deploy before these changes took about 6.5 minutes (an
+  estimate: its start time was not recorded).
+- 18:06: the realm imports at 2 CPUs as well, Keycloak not restarted. The
+  imports took 21-28 s (podiumd 28 s, against 167 s at 17:51). The chart's
+  repair Job ran 115 s: it waits about 30 s for the podiumd import, then its
+  kcadm.sh calls took about 85 s (66 s on the idle node: the other Jobs and
+  restarting pods share the CPUs). The ready wait is that Job.
+- What remains is the repair Job's one JVM start per kcadm.sh call, which
+  only podiumd's chart can change, and about 1 minute before the Keycloak
+  steps; the storage-hooks render (about 3 s) is the next small item there.
