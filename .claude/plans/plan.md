@@ -8059,5 +8059,18 @@ Measured on combined-4 with `--full` (2026-10-26):
   500m. Copies of the Job on the idle cluster: 283 s at 500m, 66 s at 2. Set
   to 2 in values.yaml (requests 50m and memory as the chart): capacity only,
   the Job does the same calls. Recorded as a deviation there.
+- The 17:51 deploy: 254 s, exit 0. Its slowest step was the podiumd realm
+  import (`import-podiumd-realm-job`, 167 s), which our client-scope repair
+  and the chart's repair Job wait for. Of that, 71 s were a Keycloak restart
+  (the builder init container's new heap flags): the first import failed with
+  `NoRouteToHostException` and the retry waited for Keycloak. The import's
+  keycloak-config-cli runs at the chart's `configCliResources` limit 200m:
+  copies of the Job took 37 s at 200m, 7 s at 2 (Spring Boot start 21.7 ->
+  1.4 s). Set to 2 for both realm imports (podiumd, master); requests and
+  memory as the chart; ExternalsPodiumD and podiumd-infra keep 200m.
+- Our `keycloak.repair_default_client_scopes` is a podiumd<4.10 leftover (the
+  chart's Job does the same since); it waits for the import, then found
+  nothing to repair. Skipping it would not shorten the deploy: the wait for
+  the chart's repair Job ends later.
 - Two consecutive renders differ anyway (CRD order, a random Grafana admin
   password without the lookup), so a render hash cannot compare them.
