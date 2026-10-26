@@ -8206,3 +8206,7 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   restart in any run; the wait took 16, 33 and 4 s. Last Ready: Open Inwoner
   144-152 s (its search-index init fails once while Elasticsearch starts) and
   ZAC 137-193 s; in run 2 Solr was Ready at 122 s and ZAC at 193 s.
+- After all deploy and start-up changes: podiumd-tests' smoke tier (176
+  passed, 9 xfailed, 1 xpassed) and full tier 20261026-192243 (591 passed,
+  0 failed, 22 skipped, 30 xfailed, 2 xpassed: podiumd-chart-1 from #481,
+  zac-7; 11:45, the same as the 11:53 run before the changes).
