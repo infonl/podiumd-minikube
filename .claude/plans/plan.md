@@ -7929,3 +7929,17 @@ Jobs that failed while the node started, each completed on a retry:
   schedules ran at once, before ZAC and OpenBao were ready; completed after
   11 min and 77 s.
 The Job backoff covers this; nothing to change.
+
+### ZAC "Geen toestemming" after logout (full tier 09:38): not the cluster start
+
+podiumd-tests' `test_logout_ends_the_session` ended on ZAC's "Geen toestemming"
+page instead of Keycloak's login form, at 09:40:23, 13 minutes after
+start-cluster had every workload ready (PABC answered throughout). Loki shows a
+race between logout and a new login in one Keycloak session: at 09:40:22 ZAC
+took a code for session `VqZHJD...` (login), at 09:40:23 the browser came back
+to `https://zac.local/?code=...` with a second code of that same session,
+Keycloak logged `SessionResurrectionGuardListener: Detected resurrection of
+previously removed cache entry` (the logout had removed the session) and
+answered ZAC's token request `CODE_TO_TOKEN_ERROR invalid_code`; ZAC answered
+403. Keycloak and ZAC behaviour, one Keycloak instance: nothing in
+start-cluster or this chart's wiring. Handed to podiumd-tests.
