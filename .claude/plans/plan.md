@@ -8008,7 +8008,8 @@ release.
 - `deploy` writes ConfigMap `podiumd-minikube-deployed` (`deployed.record`)
   right after the full apply: time, command line, each dependency's selection
   (a checkout with its branch and commit, and "uncommitted changes" when
-  dirty), this repo's branch and commit, and `Render.charts`. It carries no
+  dirty), and `Render.charts`. Not this repo's commit (the user: not
+  relevant). It carries no
   chart labels, so prune leaves it; server-side apply, as the map is 24 KB
   (483 objects with `--full`).
 - `Render.charts` maps "Kind/name" to the chart that renders it, from helm
@@ -8024,6 +8025,6 @@ release.
   Grafana 3, Loki 2 + gateway, Prometheus 2, its operator, otel-collector),
   podiumd-minikube 3 (Postgres, Mailpit, bag-mock), other 1. The record for
   the 09:35 deploy was written by hand from the known facts (`deploy --full`,
-  combined-4 f0548763 for both charts, podiumd-minikube 5671897).
+  combined-4 f0548763 for both charts).
 - `kube.reference` builds kubectl's "Kind.group/name"; it was
   `replicas._resource`.

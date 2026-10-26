@@ -16,7 +16,6 @@ from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube.dependency import DEPENDENCIES
-from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
 
@@ -53,7 +52,6 @@ def record(command: str, render: manifests.Render) -> None:
         "time": datetime.now(UTC).isoformat(timespec="seconds"),
         "command": command,
         **{chart: selected(key) for key, chart in DEPENDENCIES.items()},
-        RELEASE_NAME: checkout(CHART_DIR),
         "charts": json.dumps(render.charts, sort_keys=True),
     }
     doc = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": CONFIGMAP}, "data": data}
@@ -108,7 +106,7 @@ def lines(items: list[dict[str, Any]]) -> list[str]:
             f"Running     containers: {total}",
         ]
     when = datetime.fromisoformat(deployed["time"]).astimezone()
-    result = [f"Deployed    {when:%Y-%m-%d %H:%M %Z}: {deployed['command']} ({RELEASE_NAME} {deployed[RELEASE_NAME]})"]
+    result = [f"Deployed    {when:%Y-%m-%d %H:%M %Z}: {deployed['command']}"]
     for key, chart in DEPENDENCIES.items():
         now = selected(key)
         differs = f"; selected now: {now}" if now != deployed.get(chart) else ""

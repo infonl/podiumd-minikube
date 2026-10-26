@@ -73,7 +73,6 @@ def test_selected_names_a_version_or_a_checkout_with_its_commit(fake_run: FakeRu
 
 def test_record_writes_the_configmap(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(deployed, "selected", lambda key: f"{key} 1.0")
-    monkeypatch.setattr(deployed, "checkout", lambda _directory: "main abc1234")
     deployed.record("deploy --full", manifests.Render(docs=[], large_configmaps=[], charts=CHARTS))
     assert fake_run.calls == [["kubectl", "apply", "--server-side", "--force-conflicts", "-n", NAMESPACE, "-f", "-"]]
     doc = yaml.safe_load(fake_run.stdins[0] or "")
@@ -84,13 +83,13 @@ def test_record_writes_the_configmap(fake_run: FakeRun, monkeypatch: pytest.Monk
         "podiumd 1.0",
         "monitoringLogging 1.0",
     )
-    assert data["podiumd-minikube"] == "main abc1234"
+    assert "podiumd-minikube" not in data
     assert json.loads(data["charts"]) == CHARTS
 
 
 def test_lines_show_the_record_a_changed_selection_and_the_containers(owners: FakeRun, monkeypatch: pytest.MonkeyPatch):
     record = {
-        "time": "2026-10-26T08:35:00+00:00", "command": "deploy --full", "podiumd-minikube": "main abc1234",
+        "time": "2026-10-26T08:35:00+00:00", "command": "deploy --full",
         "podiumd": "checkout /src/charts/podiumd (main f054876)", "monitoring-logging": "1.0.19",
         "charts": json.dumps(CHARTS),
     }  # fmt: skip
@@ -98,7 +97,7 @@ def test_lines_show_the_record_a_changed_selection_and_the_containers(owners: Fa
     monkeypatch.setattr(deployed, "selected", {"podiumd": "4.10.0", "monitoringLogging": "1.0.19"}.get)
     lines = deployed.lines(PODS)
     assert lines[0].startswith("Deployed    2026-10-26 ")
-    assert lines[0].endswith(": deploy --full (podiumd-minikube main abc1234)")
+    assert lines[0].endswith(": deploy --full")
     assert lines[1:3] == [
         "            podiumd checkout /src/charts/podiumd (main f054876); selected now: 4.10.0",
         "            monitoring-logging 1.0.19",
