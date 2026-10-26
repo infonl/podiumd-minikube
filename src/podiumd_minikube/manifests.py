@@ -24,6 +24,14 @@ from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
 
 Doc = dict[str, Any]
+# libyaml: a --full render loads in 0.3 s instead of 3.1 s, dumps in 0.06 s instead of 0.5 s.
+_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
+
+
+def _load(text: str) -> Any:
+    return yaml.load(text, _LOADER)  # nosec B506  # noqa: S506 - a safe loader
+
 
 # The apps' BRP/KvK/BAG base URL (values.yaml), and Frank!Gateway's outway, which
 # serves the same paths (podiumd.frankgateway.instances.outway.routes).
@@ -561,12 +569,12 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
 
 
 def _is_large_configmap(doc: Doc) -> bool:
-    return doc.get("kind") == "ConfigMap" and len(yaml.safe_dump(doc)) > LARGE_CONFIGMAP_BYTES
+    return doc.get("kind") == "ConfigMap" and len(yaml.dump(doc, Dumper=_DUMPER)) > LARGE_CONFIGMAP_BYTES
 
 
 def dump(docs: list[Doc]) -> str:
     """docs as a multi-document YAML stream."""
-    return yaml.safe_dump_all(docs, default_flow_style=False, sort_keys=False)
+    return yaml.dump_all(docs, Dumper=_DUMPER, default_flow_style=False, sort_keys=False)
 
 
 @dataclass(frozen=True)
@@ -593,7 +601,7 @@ class Render:
 def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
     chunks = re.split(r"^---$", strip_image_digests(text), flags=re.MULTILINE)
-    loaded: list[tuple[Doc | None, re.Match[str] | None]] = [(yaml.safe_load(c), _SOURCE.search(c)) for c in chunks]
+    loaded: list[tuple[Doc | None, re.Match[str] | None]] = [(_load(c), _SOURCE.search(c)) for c in chunks]
     charts = {f"{doc.get('kind')}/{name_of(doc)}": source[2] or source[1] for doc, source in loaded if doc and source}
     docs = [doc for doc, _ in loaded if doc and not _is_test_or_delete_hook(doc) and not is_unused_zac_collector(doc)]
     disable_service_links(docs)
