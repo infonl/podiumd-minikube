@@ -8200,3 +8200,9 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   gone, or at once when `/live_nodes` does not exist (a fresh ZooKeeper),
   after at most 45 tries 2 s apart. Tested in the Solr container: entry
   present (waits, then gives up), entry absent (0 s), no `/live_nodes` (0 s).
+- Three `start-cluster` runs with the wait (deploy 142 s): 177, 228 and
+  188 s (median 188 s; before the start-up fixups 206 s, one run; with the
+  probe changes but without the wait 177/320/371 s). No Solr or ZooKeeper
+  restart in any run; the wait took 16, 33 and 4 s. Last Ready: Open Inwoner
+  144-152 s (its search-index init fails once while Elasticsearch starts) and
+  ZAC 137-193 s; in run 2 Solr was Ready at 122 s and ZAC at 193 s.
