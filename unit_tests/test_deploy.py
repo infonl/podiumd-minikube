@@ -1,6 +1,7 @@
 """podiumd_minikube.deploy: helm options, apply error counting and argument parsing."""
 
 import argparse
+import json
 
 from pathlib import Path
 from typing import Any
@@ -319,3 +320,33 @@ def test_deploy_names_a_workload_not_created_yet_as_stuck(called: list[str], liv
     live["deployment"]["items"] = []
     with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac;"):
         _deploy()
+
+
+@pytest.mark.parametrize(
+    ("ready", "log", "state"),
+    [(1, "", "ready"), (0, "WFLYCTL0080: Failed services", "failed"), (0, "WFLYSRV0049: starting", None)],
+)
+def test_zac_state(fake_run: FakeRun, ready: int, log: str, state: str | None):
+    status = {"observedGeneration": 1, "replicas": 1, "updatedReplicas": 1, "readyReplicas": ready}
+    zac = {"kind": "Deployment", "metadata": {"name": "zac", "generation": 1}, "status": status}
+    fake_run.on("kubectl", "get", "deployment/zac", stdout=json.dumps(zac))
+    fake_run.on("kubectl", "logs", stdout=log)
+    assert deploy.zac_state() == state
+
+
+def test_deploy_restarts_zac_once_when_its_boot_failed(
+    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+):
+    zac = live["deployment"]["items"][0]
+    zac["status"]["readyReplicas"] = 0
+    restarts: list[str] = []
+
+    def restart_zac() -> None:
+        restarts.append("zac")
+        zac["status"]["readyReplicas"] = 1
+
+    monkeypatch.setattr(deploy, "zac_boot_failed", lambda: True)
+    monkeypatch.setattr(deploy, "restart_zac", restart_zac)
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    _deploy()
+    assert restarts == ["zac"]

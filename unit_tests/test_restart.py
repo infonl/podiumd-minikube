@@ -21,20 +21,6 @@ def _workload(name: str, ready: int) -> dict[str, Any]:
     return {"kind": "Deployment", "metadata": {"name": name, "generation": 1}, "status": status}
 
 
-def _zac(ready: int) -> str:
-    return json.dumps({"items": [_workload("zac", ready)]})
-
-
-@pytest.mark.parametrize(
-    ("ready", "log", "state"),
-    [(1, "", "ready"), (0, "WFLYCTL0080: Failed services", "failed"), (0, "WFLYSRV0049: starting", None)],
-)
-def testzac_state(fake_run: FakeRun, ready: int, log: str, state: str | None):
-    fake_run.on("kubectl", "get", "deployment,statefulset", stdout=_zac(ready))
-    fake_run.on("kubectl", "logs", stdout=log)
-    assert restart.zac_state() == state
-
-
 def _pod(name: str, ready_since: str, owner: str = "ReplicaSet") -> dict[str, Any]:
     return {
         "metadata": {"name": name, "ownerReferences": [{"kind": owner}]},
@@ -73,6 +59,7 @@ def started(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     fake_run.on("kubectl", "get", "pods", stdout=json.dumps({"items": [_pod("zac", "2026-10-08T16:00:00Z")]}))
     workloads = [_workload("openzaak", 1), _workload("zac", 1)]
     fake_run.on("kubectl", "get", "deployment,statefulset", stdout=json.dumps({"items": workloads}))
+    fake_run.on("kubectl", "get", "deployment/zac", stdout=json.dumps(_workload("zac", 1)))
     return calls
 
 
@@ -103,7 +90,7 @@ def test_start_restarts_zac_once_after_a_failed_boot(
     fake_run: FakeRun, started: list[str], monkeypatch: pytest.MonkeyPatch, *, states: list[str], recovered: bool
 ):
     answers = iter(states)
-    monkeypatch.setattr(restart, "zac_state", lambda: next(answers))
+    monkeypatch.setattr(deploy, "zac_state", lambda: next(answers))
     if recovered:
         restart.start()
     else:

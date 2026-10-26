@@ -8219,3 +8219,27 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   CRD apply 6 s (12); all 37 rendered Jobs were re-created by this deploy
   (creation times checked). Our client-scope repair step skipped itself. The
   ready wait (61 s) is still the chart's repair Job.
+
+### Fresh provision time (user: "how about cluster bootstrap speed?")
+
+Teardown, `provision-cluster` and a first `deploy --full` on 2026-10-26
+21:01 (podiumd-tests agreed; it bootstrapped again afterwards: 49 steps,
+smoke 176 passed): teardown 22 s, provision 671 s, deploy 845 s.
+
+- The node no longer lacks registry access: `crictl pull` in the node
+  pulled from Docker Hub (2 s). The early rule (plan.md, step 4: "Minikube's
+  inner Docker has zero network access") dates from the Docker runtime.
+- Provision: `minikube start` 13 s; then 50 s until the control-plane
+  tuning, which restarted the four static pods in 103 s; NGINX Gateway Fabric
+  22 s; cert-manager and the issuer 26 s; images 450 s: 60 images, 17.8 GB in
+  the host's Docker, host `docker pull` per batch 212 s in all, `docker save`
+  plus `minikube image load` one at a time 238 s (Open Zaak, 701 MB: save 6
+  s, load 4 s).
+- Deploy: OpenBao bootstrap 286 s (it runs while the other pods start), the
+  wait 506 s. Everything but ZAC was Ready 384 s after the apply. ZAC booted at
+  21:17, got 403 from Open Zaak (its authorisations were not there yet:
+  `WFLYCTL0080`), WildFly stayed up "started (with errors)", and only its
+  liveness probe restarted it 8 minutes later.
+- Fix: deploy's ready wait restarts ZAC once when its log shows the failed
+  boot, as start-cluster did. `ZAC`, `BOOT_FAILED`, `zac_state` moved from
+  `restart` to `deploy`, with `deploy.restart_zac` for both.

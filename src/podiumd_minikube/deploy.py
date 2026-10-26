@@ -246,6 +246,31 @@ def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[
     return running, failed
 
 
+ZAC = "zac"
+# WildFly gives up on ZAC's deployment when Open Zaak answers 502 (still starting) or 403 (a fresh
+# install, before openzaak-config) during its boot, and the liveness probe restarts it only after 16 x 30 s.
+BOOT_FAILED = "WFLYCTL0080"
+
+
+def zac_boot_failed() -> bool:
+    """Whether ZAC's log shows WildFly gave up on its deployment."""
+    result = process.run(["kubectl", "logs", "-n", NAMESPACE, f"deployment/{ZAC}", "-c", ZAC], check=False)
+    return BOOT_FAILED in result.stdout
+
+
+def zac_state() -> str | None:
+    """ "ready", "failed" (its last boot failed) or None while it boots."""
+    if rolled_out(kube.get_json(f"deployment/{ZAC}", "-n", NAMESPACE)):
+        return "ready"
+    return "failed" if zac_boot_failed() else None
+
+
+def restart_zac() -> None:
+    """Restarts ZAC after a failed boot."""
+    print("ZAC's boot failed while Open Zaak was not ready for it; restarting it.")
+    kube.kubectl_shown("rollout", "restart", f"deployment/{ZAC}", "-n", NAMESPACE)
+
+
 def _wait_ready(render: manifests.Render) -> None:
     """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs."""
     print("\nWaiting until every rendered workload has rolled out and every Job has completed...")
@@ -268,9 +293,15 @@ def _wait_ready(render: manifests.Render) -> None:
 
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
+    restarted: list[str] = []
+
     def settled() -> tuple[list[str]] | None:
         running, failed = job_state()
-        return None if running or stuck() else (failed,)
+        waiting = stuck()
+        if f"deployment/{ZAC}" in waiting and not restarted and zac_boot_failed():
+            restart_zac()
+            restarted.append(ZAC)
+        return None if running or waiting else (failed,)
 
     result = polling.wait_until(settled, timeout=READY_TIMEOUT, interval=10)
     if result is None:
