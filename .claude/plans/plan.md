@@ -8122,3 +8122,6 @@ combined-4 monitoring-logging checkout), from timestamped deploy output:
   OpenBao and prune 12 s (15), ready wait 41 s (61). The repair Job ran 86 s
   (115 s), pabc-keycloak-groups-job 50 s; the realm imports 24-25 s. The
   repair Job is still the last to finish.
+- The repair Job's per-client kcadm.sh calls are registered as known issue
+  podiumd-chart-26 (podiumd-known-issues 470a014, Low): one listing of all
+  clients' scopes would replace about 4 calls per client.
