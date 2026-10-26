@@ -8161,3 +8161,15 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   once and retried by itself. Since podiumd 4.10 that Job does the repair, so
   our step now returns when the render has it (`CHART_REPAIR_JOB_PREFIX`); it
   stays for podiumd<4.10. `deploy.jobs` moved to `Render.jobs`, which both use.
+- With these fixups (deploy 19:16, 127 s), `minikube stop` and `start-cluster`
+  at 19:20: 299 s, exit 0 (206 s before). Keycloak improved: builder 35 s
+  (40), Ready 23 s after its server container started (55 s), 60 s after
+  the node was up (135 s). ZAC's init container now retried in place and
+  ended the second Solr was Ready (no back-off). But ZooKeeper and Solr were
+  each killed by their liveness probes during the start: ZooKeeper (500m,
+  liveness after 10 s) exited 143 after 67 s and was Ready 100 s after the
+  node (27 s at 19:04); Solr's startup probe timed out and its liveness probe
+  restarted it after 147 s, Ready 3.5 minutes after the node (70 s at 19:04).
+  ZAC, waiting for Solr, was Ready 4.2 minutes after the node. The 19:04 run
+  had no probe kills, so this depends on the CPU contention while all pods
+  start; one run per change is not enough to compare.
