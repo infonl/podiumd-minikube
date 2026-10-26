@@ -62,10 +62,13 @@ def test_running_containers_follow_owners_to_the_rendered_object(owners: FakeRun
 def test_selected_names_a_version_or_a_checkout_with_its_commit(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     choices = {"podiumd": dependency.Selection("path", "/src/charts/podiumd"), "monitoringLogging": None}
     monkeypatch.setattr(dependency, "selection", lambda key: choices[key])
+    fake_run.on("git", "-C", "/src/charts/podiumd", "rev-parse", "--show-toplevel", stdout="/src\n")
     fake_run.on("git", "-C", "/src/charts/podiumd", "rev-parse", "--abbrev-ref", stdout="main\n")
     fake_run.on("git", "-C", "/src/charts/podiumd", "rev-parse", "--short", stdout="abc1234\n")
     fake_run.on("git", "-C", "/src/charts/podiumd", "status", stdout=" M Chart.yaml\n")
-    assert deployed.selected("podiumd") == "checkout /src/charts/podiumd (main abc1234, uncommitted changes)"
+    assert deployed.selected("podiumd") == "checkout src (main abc1234, uncommitted changes)"
+    fake_run.on("git", "-C", "/src/charts/podiumd", "rev-parse", "--show-toplevel", returncode=128)
+    assert deployed.selected("podiumd") == "checkout /src/charts/podiumd"
     assert deployed.selected("monitoringLogging") == "none"
     choices["podiumd"] = dependency.Selection("version", "4.10.0")
     assert deployed.selected("podiumd") == "4.10.0"
@@ -90,7 +93,7 @@ def test_record_writes_the_configmap(fake_run: FakeRun, monkeypatch: pytest.Monk
 def test_lines_show_the_record_a_changed_selection_and_the_containers(owners: FakeRun, monkeypatch: pytest.MonkeyPatch):
     record = {
         "time": "2026-10-26T08:35:00+00:00", "command": "deploy --full",
-        "podiumd": "checkout /src/charts/podiumd (main f054876)", "monitoring-logging": "1.0.19",
+        "podiumd": "checkout helm-charts (main f054876)", "monitoring-logging": "1.0.19",
         "charts": json.dumps(CHARTS),
     }  # fmt: skip
     owners.on("kubectl", "get", f"configmap/{deployed.CONFIGMAP}", stdout=json.dumps({"data": record}))
@@ -99,7 +102,7 @@ def test_lines_show_the_record_a_changed_selection_and_the_containers(owners: Fa
     assert lines[0].startswith("Deployed    2026-10-26 ")
     assert lines[0].endswith(": deploy --full")
     assert lines[1:3] == [
-        "            podiumd checkout /src/charts/podiumd (main f054876); selected now: 4.10.0",
+        "            podiumd checkout helm-charts (main f054876); selected now: 4.10.0",
         "            monitoring-logging 1.0.19",
     ]
     assert lines[3] == "Running     containers: podiumd 2, monitoring-logging 1, podiumd-minikube 0, other 1"

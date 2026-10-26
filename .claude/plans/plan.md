@@ -8007,8 +8007,9 @@ release.
 
 - `deploy` writes ConfigMap `podiumd-minikube-deployed` (`deployed.record`)
   right after the full apply: time, command line, each dependency's selection
-  (a checkout with its branch and commit, and "uncommitted changes" when
-  dirty), and `Render.charts`. Not this repo's commit (the user: not
+  (a checkout as its repository directory's name with branch and commit,
+  and "uncommitted changes" when dirty; the full path was too long, the
+  user), and `Render.charts`. Not this repo's commit (the user: not
   relevant). It carries no
   chart labels, so prune leaves it; server-side apply, as the map is 24 KB
   (483 objects with `--full`).

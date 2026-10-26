@@ -24,26 +24,26 @@ CONFIGMAP = "podiumd-minikube-deployed"
 OTHER = "other"
 
 
-def checkout(directory: Path | str) -> str:
-    """'<branch> <commit>' of the git checkout at directory, '' when it is none."""
-    git = ["git", "-C", str(directory)]
-    if not process.succeeds([*git, "rev-parse", "--git-dir"]):
-        return ""
+def checkout(directory: str) -> str:
+    """'<repository directory> (<branch> <commit>)' of the git checkout at directory, else directory."""
+    git = ["git", "-C", directory]
+    top = process.run([*git, "rev-parse", "--show-toplevel"], check=False)
+    if top.returncode != 0:
+        return directory.replace(str(Path.home()), "~", 1)
     branch = process.output([*git, "rev-parse", "--abbrev-ref", "HEAD"]).strip()
     commit = process.output([*git, "rev-parse", "--short", "HEAD"]).strip()
     changed = ", uncommitted changes" if process.output([*git, "status", "--porcelain"]).strip() else ""
-    return f"{branch} {commit}{changed}"
+    return f"{Path(top.stdout.strip()).name} ({branch} {commit}{changed})"
 
 
 def selected(key: str) -> str:
-    """key's selection: a version, or a checkout with its branch and commit."""
+    """key's selection: a version, or a checkout with its repository, branch and commit."""
     selection = dependency.selection(key)
     if selection is None:
         return "none"
     if selection.mode == "version":
         return selection.value
-    shown = selection.value.replace(str(Path.home()), "~", 1)
-    return f"checkout {shown} ({checkout(selection.value) or 'no git checkout'})"
+    return f"checkout {checkout(selection.value)}"
 
 
 def record(command: str, render: manifests.Render) -> None:
