@@ -8144,3 +8144,12 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   `initialDelaySeconds: 60` (startup probe 30 s, period 10 s).
 - Open Inwoner: init `openinwoner-search-index` failed once while its
   Elasticsearch was starting; retried after 11 s.
+- Fixups (user's go): `manifests.speed_up_keycloak_start` sets the Keycloak
+  container's readiness probe `initialDelaySeconds` 0 (chart 60) and its
+  startup probe 0 s delay, every 5 s, 60 failures (chart 30 s, every 10 s,
+  30: the same 300 s budget), and `keycloak-builder`'s CPU limit 2 (chart 1;
+  request 250m unchanged). `manifests.retry_zac_solr_init` wraps the script of
+  ZAC's `init-solr-zac-core` in a retry every 2 s, at most 150 times, then
+  exit 1 (tested in sh: success, success on a later attempt, give-up). Start-up
+  timing only; ExternalsPodiumD and podiumd-infra keep the chart's probes,
+  CPU limit and failing init container.

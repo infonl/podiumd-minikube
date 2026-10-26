@@ -352,6 +352,36 @@ def test_tune_kcadm_sets_kc_opts_only_in_jobs_on_the_keycloak_image():
     assert "env" not in config_cli
 
 
+def test_speed_up_keycloak_start_sets_probes_and_the_builder_cpu():
+    builder: manifests.Doc = {"name": "keycloak-builder", "resources": {"limits": {"cpu": "1000m", "memory": "1Gi"}}}
+    server: manifests.Doc = {
+        "name": "keycloak",
+        "readinessProbe": {"initialDelaySeconds": 60, "periodSeconds": 10},
+        "startupProbe": {"initialDelaySeconds": 30, "periodSeconds": 10, "failureThreshold": 30},
+        "livenessProbe": {"initialDelaySeconds": 120},
+    }
+    template: manifests.Doc = {"spec": {"initContainers": [builder], "containers": [server]}}
+    manifests.speed_up_keycloak_start([{"kind": "Keycloak", "spec": {"unsupported": {"podTemplate": template}}}])
+    assert builder["resources"]["limits"] == {"cpu": "2", "memory": "1Gi"}
+    assert server["readinessProbe"] == {"initialDelaySeconds": 0, "periodSeconds": 10}
+    assert server["startupProbe"] == {"initialDelaySeconds": 0, "periodSeconds": 5, "failureThreshold": 60}
+    assert server["livenessProbe"] == {"initialDelaySeconds": 120}
+
+
+def test_retry_zac_solr_init_wraps_the_script_in_a_bounded_retry():
+    init: manifests.Doc = {"name": manifests.ZAC_SOLR_INIT, "command": ["sh", "-c", "curl a | grep -q zac || curl b"]}
+    zac: manifests.Doc = {
+        "kind": "Deployment",
+        "metadata": {"name": "zac"},
+        "spec": {"template": {"spec": {"initContainers": [init]}}},
+    }
+    manifests.retry_zac_solr_init([zac])
+    assert init["command"][2] == (
+        f"i=0; until (curl a | grep -q zac || curl b); do i=$((i + 1));"
+        f' [ "$i" -ge {manifests.SOLR_INIT_ATTEMPTS} ] && exit 1; sleep 2; done'
+    )
+
+
 def test_fix_up_separates_crds_for_server_side_apply():
     crd = {"kind": "CustomResourceDefinition", "metadata": {"name": "elasticsearches.elasticsearch.k8s.elastic.co"}}
     other = {"kind": "Service", "metadata": {"name": "zac"}}

@@ -417,6 +417,50 @@ def tune_kcadm(docs: list[Doc]) -> None:
                     add_env(container, KCADM_ENV)
 
 
+# Start-up timing only; start-cluster waited for each. Keycloak's startup probe already holds readiness
+# back, so readiness is probed from the start (chart: 60 s after the container started, Keycloak needs
+# 11 s), the startup probe every 5 s with the chart's 300 s budget. kc.sh build in keycloak-builder,
+# run on every start: 40 s at the chart's 1 CPU.
+KEYCLOAK_PROBES = {
+    "readinessProbe": {"initialDelaySeconds": 0},
+    "startupProbe": {"initialDelaySeconds": 0, "periodSeconds": 5, "failureThreshold": 60},
+}
+KEYCLOAK_BUILDER_CPU = "2"
+
+
+def speed_up_keycloak_start(docs: list[Doc]) -> None:
+    """Sets KEYCLOAK_PROBES on the Keycloak container and KEYCLOAK_BUILDER_CPU on keycloak-builder."""
+    for doc in docs:
+        if doc.get("kind") != "Keycloak":
+            continue
+        for spec in _runtime_pod_specs(doc):
+            for container in _containers(spec):
+                for probe, settings in KEYCLOAK_PROBES.items():
+                    if isinstance(container.get(probe), dict):
+                        container[probe].update(settings)
+                if container.get("name") == "keycloak-builder":
+                    _mapping(container, "resources", "limits")["cpu"] = KEYCLOAK_BUILDER_CPU
+
+
+ZAC_SOLR_INIT = "init-solr-zac-core"
+# ZAC's init container fails while Solr is still starting, and kubelet's back-off retried it 52 s later.
+SOLR_INIT_ATTEMPTS = 150
+
+
+def retry_zac_solr_init(docs: list[Doc]) -> None:
+    """Makes ZAC_SOLR_INIT retry its script every 2 s, SOLR_INIT_ATTEMPTS times, instead of failing at once."""
+    for doc in docs:
+        if doc.get("kind") != "Deployment" or name_of(doc) != "zac":
+            continue
+        for container in _containers(_pod_spec(doc) or {}):
+            command: list[str] = container.get("command") or []
+            if container.get("name") == ZAC_SOLR_INIT and command[:2] == ["sh", "-c"] and len(command) == 3:
+                command[2] = (
+                    f"i=0; until ({command[2]}); do i=$((i + 1));"
+                    f' [ "$i" -ge {SOLR_INIT_ATTEMPTS} ] && exit 1; sleep 2; done'
+                )
+
+
 def tune_solr(docs: list[Doc]) -> None:
     """Sets the JVM settings and CAPACITY_ENV of the pods the solr-operator builds from ZAC's SolrCloud."""
     for doc in docs:
@@ -628,6 +672,8 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     mark_release_owner(docs)
     tune_keycloak(docs)
     tune_kcadm(docs)
+    speed_up_keycloak_start(docs)
+    retry_zac_solr_init(docs)
     tune_solr(docs)
     mount_zaakbrug_role_mapping(docs)
     scrape_only_from_prometheus(docs)
