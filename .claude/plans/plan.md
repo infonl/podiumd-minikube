@@ -8115,3 +8115,10 @@ combined-4 monitoring-logging checkout), from timestamped deploy output:
   the Job's /tmp). `manifests.tune_kcadm` sets it on every Job container on
   the Keycloak image: the repair Job and `pabc-keycloak-groups-job`. A copy
   of the rendered repair Job on the idle cluster: 66 -> 44 s.
+- 18:45 deploy, with the lookup-free storage render and KC_OPTS: 139 s, exit
+  0 (165 s at 18:06), Keycloak not restarted. Phases: sync and namespace
+  1 s, storage hooks 10 s (11), CRDs and Job deletion 21 s (20), apply,
+  ConfigMaps, Gateway and DNS 25 s (25), client-scope repair 29 s (32),
+  OpenBao and prune 12 s (15), ready wait 41 s (61). The repair Job ran 86 s
+  (115 s), pabc-keycloak-groups-job 50 s; the realm imports 24-25 s. The
+  repair Job is still the last to finish.
