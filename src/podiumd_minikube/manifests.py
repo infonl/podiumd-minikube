@@ -481,16 +481,48 @@ ZOOKEEPER_PROBES = {
     "readinessProbe": {**_ZOOKEEPER_PROBE, "initialDelaySeconds": 10},
 }
 SOLR_STARTUP_PROBE = {"timeoutSeconds": 15, "failureThreshold": 60}
+# Solr fails to start ("NodeExistsException", CoreContainer shut down; its liveness probe restarts it
+# 3 minutes later) while its live_nodes entry from before a node stop still exists: ZooKeeper expires
+# that session about 30 s after it is up. This init container waits up to 90 s for the entry to go.
+SOLR_LIVE_NODE_WAIT = """\
+node="$POD_NAME.{headless}:8983_solr"
+i=0
+while [ "$i" -lt 45 ]; do
+  nodes=$(solr zk ls /live_nodes -z "$ZK_HOST" 2>&1) && ! printf '%s\\n' "$nodes" | grep -qx "$node" && exit 0
+  printf '%s\\n' "$nodes" | grep -q NoNode && exit 0
+  i=$((i + 1)); sleep 2
+done
+echo "$node is still in live_nodes; starting Solr anyway"
+"""
+
+
+def _solr_live_node_wait(solr_cloud: str, body: Doc) -> Doc:
+    image = section(body, "solrImage")
+    return {
+        "name": "wait-for-stale-live-node",
+        "image": f"{image.get('repository')}:{image.get('tag')}",
+        "command": ["sh", "-c", SOLR_LIVE_NODE_WAIT.format(headless=f"{solr_cloud}-solrcloud-headless.{NAMESPACE}")],
+        "env": [
+            {"name": "POD_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}}},
+            {"name": "ZK_HOST", "value": f"{solr_cloud}-solrcloud-zookeeper-client:2181"},
+        ],
+        "resources": {"requests": {"cpu": "10m", "memory": "64Mi"}, "limits": {"memory": "256Mi"}},
+    }
 
 
 def ease_solr_start(docs: list[Doc]) -> None:
-    """Sets ZOOKEEPER_PROBES and SOLR_STARTUP_PROBE in ZAC's SolrCloud."""
+    """Sets ZOOKEEPER_PROBES, SOLR_STARTUP_PROBE and the SOLR_LIVE_NODE_WAIT init container in ZAC's SolrCloud."""
     for doc in docs:
         if doc.get("kind") != "SolrCloud":
             continue
         body = section(doc, "spec")
         _mapping(body, "zookeeperRef", "provided")["probes"] = ZOOKEEPER_PROBES
-        _mapping(body, "customSolrKubeOptions", "podOptions", "startupProbe").update(SOLR_STARTUP_PROBE)
+        pod_options = _mapping(body, "customSolrKubeOptions", "podOptions")
+        _mapping(pod_options, "startupProbe").update(SOLR_STARTUP_PROBE)
+        pod_options["initContainers"] = [
+            *(pod_options.get("initContainers") or []),
+            _solr_live_node_wait(name_of(doc), body),
+        ]
 
 
 ZAAKBRUG_ROLE_MAPPING = "zaakbrug-oauth-role-mapping"

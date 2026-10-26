@@ -383,11 +383,28 @@ def test_retry_zac_solr_init_wraps_the_script_in_a_bounded_retry():
 
 
 def test_ease_solr_start_sets_zookeeper_probes_and_the_solr_startup_probe():
-    solr: manifests.Doc = {"kind": "SolrCloud", "spec": {"zookeeperRef": {"provided": {"replicas": 1}}}}
+    solr: manifests.Doc = {
+        "kind": "SolrCloud",
+        "metadata": {"name": "zac-solr"},
+        "spec": {"zookeeperRef": {"provided": {"replicas": 1}}},
+    }
     manifests.ease_solr_start([solr])
     assert solr["spec"]["zookeeperRef"]["provided"]["probes"]["livenessProbe"]["initialDelaySeconds"] == 120
     assert solr["spec"]["zookeeperRef"]["provided"]["replicas"] == 1
     assert solr["spec"]["customSolrKubeOptions"]["podOptions"]["startupProbe"] == manifests.SOLR_STARTUP_PROBE
+
+
+def test_ease_solr_start_adds_the_live_node_wait_with_solrs_image():
+    solr: manifests.Doc = {
+        "kind": "SolrCloud",
+        "metadata": {"name": "zac-solr"},
+        "spec": {"solrImage": {"repository": "library/solr", "tag": "9.11.0-slim"}},
+    }
+    manifests.ease_solr_start([solr])
+    (wait,) = solr["spec"]["customSolrKubeOptions"]["podOptions"]["initContainers"]
+    assert wait["image"] == "library/solr:9.11.0-slim"
+    assert 'node="$POD_NAME.zac-solr-solrcloud-headless.podiumd-minikube:8983_solr"' in wait["command"][2]
+    assert {"name": "ZK_HOST", "value": "zac-solr-solrcloud-zookeeper-client:2181"} in wait["env"]
 
 
 def test_fix_up_separates_crds_for_server_side_apply():

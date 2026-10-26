@@ -8193,3 +8193,10 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   liveness kill) makes the collision likelier. The other restarts in run 3
   (nginx and api-proxy exit 1, KISS and ITA exit 139, Keycloak, OpenBao,
   Open Inwoner's search-index init) did not delay the end.
+- Fix (user's go, option 1 of three): `ease_solr_start` adds the init
+  container `wait-for-stale-live-node` (Solr's image, `solr zk ls
+  /live_nodes` against `<solrcloud>-solrcloud-zookeeper-client:2181`) after
+  the operator's own. It starts Solr once the pod's own live_nodes entry is
+  gone, or at once when `/live_nodes` does not exist (a fresh ZooKeeper),
+  after at most 45 tries 2 s apart. Tested in the Solr container: entry
+  present (waits, then gives up), entry absent (0 s), no `/live_nodes` (0 s).
