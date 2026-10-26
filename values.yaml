@@ -37,6 +37,13 @@ podiumd:
     jobs:
       ensureOperatorSa:
         clientSecret: keycloakOperatorClientSecret
+      # Deploy time: chart 500m, which ExternalsPodiumD and podiumd-infra keep. About 60
+      # kcadm.sh calls, each a JVM start: 283 s at 500m, 66 s at 2 on an idle node; the
+      # deploy waits for it. Requests and memory as the chart.
+      repairClientScopes:
+        resources:
+          limits:
+            cpu: "2"
   keycloak:
     instances: "1" # chart 2; `podiumd-minikube replicas on` for tests that need 2
     auth:

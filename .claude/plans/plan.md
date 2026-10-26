@@ -8054,5 +8054,10 @@ Measured on combined-4 with `--full` (2026-10-26):
   of the 09:35 deploy (the other Jobs at most 100 s): about 60 `kcadm.sh`
   calls, each a JVM start, 4-5 s at the chart's `cpu: 500m` limit against
   1.2 s in keycloak-0.
+- The repair Job's CPU limit is `keycloak-operator.jobs.repairClientScopes.resources`
+  in podiumd's values; ExternalsPodiumD and podiumd-infra keep the chart's
+  500m. Copies of the Job on the idle cluster: 283 s at 500m, 66 s at 2. Set
+  to 2 in values.yaml (requests 50m and memory as the chart): capacity only,
+  the Job does the same calls. Recorded as a deviation there.
 - Two consecutive renders differ anyway (CRD order, a random Grafana admin
   password without the lookup), so a render hash cannot compare them.
