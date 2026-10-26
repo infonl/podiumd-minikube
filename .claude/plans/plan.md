@@ -8215,3 +8215,7 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   finalizer, so each is gone at once: 3 throwaway Jobs took 54 ms), and the 4
   upstream Keycloak CRD downloads, one after another (1.5 s now, about 7 s
   then). Now `--wait=false` and the downloads in parallel (0.81 s).
+- 20:49 deploy with both: 133 s, exit 0 (139 s at 18:45). Job deletion to
+  CRD apply 6 s (12); all 37 rendered Jobs were re-created by this deploy
+  (creation times checked). Our client-scope repair step skipped itself. The
+  ready wait (61 s) is still the chart's repair Job.
