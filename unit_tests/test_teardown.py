@@ -9,6 +9,7 @@ import pytest
 from conftest import FakeRun
 
 from podiumd_minikube import openbao
+from podiumd_minikube import provision
 from podiumd_minikube import teardown
 from podiumd_minikube import tunnel
 from podiumd_minikube.paths import NAMESPACE
@@ -79,6 +80,8 @@ def test_teardown_cluster_stops_the_tunnel_and_deletes_the_profile_once_confirme
 ):
     monkeypatch.setattr("builtins.input", lambda _prompt: answer)
     monkeypatch.setattr(tunnel, "stop_tunnel", lambda: forgotten.append("stop_tunnel"))
+    monkeypatch.setattr(provision, "chart_images", lambda: ["a/app:1.0"])
+    monkeypatch.setattr(provision, "remove_old_tags", lambda images: forgotten.append(f"remove old {images[0]}"))
     assert teardown.teardown_cluster(yes=False) == code
     assert fake_run.calls == ([["minikube", "delete", "-p", PROFILE]] if code == 0 else [])
-    assert forgotten == (["stop_tunnel", "forget_vault"] if code == 0 else [])
+    assert forgotten == (["stop_tunnel", "forget_vault", "remove old a/app:1.0"] if code == 0 else [])

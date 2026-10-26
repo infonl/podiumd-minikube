@@ -8,6 +8,7 @@ from podiumd_minikube import kube
 from podiumd_minikube import lock
 from podiumd_minikube import openbao
 from podiumd_minikube import process
+from podiumd_minikube import provision
 from podiumd_minikube import tunnel
 from podiumd_minikube.manifests import name_of
 from podiumd_minikube.manifests import section
@@ -80,7 +81,8 @@ def reset_namespace(*, yes: bool) -> int:
 TEARDOWN_SUMMARY = f"""This permanently deletes the '{PROFILE}' minikube cluster:
   - every object and all hostPath data (Postgres, Solr, every app's media)
   - the minikube container itself
-Docker images on the host survive, so a new cluster loads them without downloading.
+Docker images on the host survive, so a new cluster loads them without downloading;
+only older tags of this chart's image repositories are removed.
 """
 
 
@@ -93,5 +95,6 @@ def teardown_cluster(*, yes: bool) -> int:
     print(f"Deleting minikube profile '{PROFILE}'...")
     process.run(["minikube", "delete", "-p", PROFILE], capture=False)
     openbao.forget_vault()
+    provision.remove_old_tags(provision.chart_images())
     print("\nDone. After provision-cluster and deploy, run setup-tunnel; /etc/hosts stays valid (fixed edge IP).")
     return 0

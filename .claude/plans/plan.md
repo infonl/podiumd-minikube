@@ -8270,3 +8270,19 @@ smoke 176 passed): teardown 22 s, provision 671 s, deploy 845 s.
   GB, of which the active minikube volume about 67 GB. Not pruned: the user
   decides. Cause of the larger node volume not found yet. The ZAC fix with
   the `openzaak-config` gate (5556ba9) is untested on a fresh install.
+
+### Disk space (user: "what can be done to clean the disk further? and can this be put in the cluster teardown?")
+
+After the user extended `/var/lib/docker` to 148 GB, a second `deploy --full`
+completed the fresh install (298 s). On the fresh node 17.8 GB of images took
+about 66 GB: containerd snapshots 24 GB, containerd content (packed layers)
+19 GB, and 21 GB of tarballs `minikube image load` leaves in
+`/var/lib/minikube/images`. Deleted those by hand (82% -> 68%, 82 images
+still in the node); provision now deletes them after each batch
+(`NODE_IMAGE_TARBALLS`). Host: 39 older tags of the chart's own image
+repositories (up to 18 GB before shared layers); provision and teardown now
+remove them (`provision.remove_old_tags`, one `docker rmi`, which refuses an
+image a container uses). Other repositories' images (19, 9.9 GB, e.g. other
+projects), dangling volumes (3.2 GB) and the build cache stay. Not done:
+containerd `discard_unpacked_layers` (up to 19 GB; untested for imported
+images).

@@ -201,6 +201,7 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
     monkeypatch.setattr(disk, "check", lambda need: calls.append(f"disk {need.fail_gib}"))
     monkeypatch.setattr(provision, "chart_images", lambda: ["a/app:1.0"])
     monkeypatch.setattr(provision, "load_images", lambda images: calls.append(f"load {' '.join(images)}"))
+    monkeypatch.setattr(provision, "remove_old_tags", lambda images: calls.append(f"remove old {' '.join(images)}"))
     for module, name in [
         (provision, "start_node"),
         (gateway, "install"),
@@ -218,7 +219,32 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
         "install_issuer",
         "sync",
         "load a/app:1.0",
+        "remove old a/app:1.0",
     ]
     assert fake_run.calls == [
         ["kubectl", "label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite"]
     ]
+
+
+def test_old_tags_are_other_tags_of_the_charts_repositories():
+    images = ["docker.io/library/busybox:1.37", "quay.io/keycloak/keycloak:26.8.1", "registry:5000/app:2"]
+    local = [
+        "busybox:1.36", "busybox:1.37", "quay.io/keycloak/keycloak:26.7.3", "quay.io/keycloak/keycloak:26.8.1",
+        "registry:5000/app:1", "postgres:15", "busybox:<none>",
+    ]  # fmt: skip
+    assert provision.old_tags(images, local) == [
+        "busybox:1.36",
+        "quay.io/keycloak/keycloak:26.7.3",
+        "registry:5000/app:1",
+    ]
+
+
+def test_remove_old_tags_runs_one_docker_rmi(fake_run: FakeRun):
+    fake_run.on("docker", "images", stdout="busybox:1.36\nbusybox:1.37\npostgres:15\n")
+    provision.remove_old_tags(["busybox:1.37"])
+    assert fake_run.ran("docker", "rmi") == [["docker", "rmi", "busybox:1.36"]]
+
+
+def test_load_images_removes_the_nodes_tarballs_after_each_batch(fake_run: FakeRun):
+    provision.load_images(["a/app:1.0"])
+    assert fake_run.ran("minikube", "ssh")[-1][-1] == f"sudo rm -rf {provision.NODE_IMAGE_TARBALLS}/*"

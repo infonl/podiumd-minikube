@@ -221,6 +221,37 @@ def tune_control_plane() -> None:
             raise process.UserError(msg)
 
 
+# Where `minikube image load` copies each tarball in the node; it keeps them (21 GB for --full).
+NODE_IMAGE_TARBALLS = "/var/lib/minikube/images"
+
+
+def _repository(image: str) -> str:
+    """image's repository without its tag and Docker Hub's implicit prefixes."""
+    name = image.rpartition(":")[0] if ":" in image.rpartition("/")[2] else image
+    return name.removeprefix("docker.io/").removeprefix("library/")
+
+
+def old_tags(images: list[str], local: list[str]) -> list[str]:
+    """The local images (repository:tag) of images' repositories with a tag images do not use."""
+    wanted = {f"{_repository(image)}:{image.rpartition(':')[2]}" for image in images}
+    repositories = {_repository(image) for image in images}
+    return [
+        image
+        for image in local
+        if not image.endswith(":<none>")
+        and _repository(image) in repositories
+        and f"{_repository(image)}:{image.rpartition(':')[2]}" not in wanted
+    ]
+
+
+def remove_old_tags(images: list[str]) -> None:
+    """Removes the host's older tags of images' repositories; an image a container uses stays (docker rmi refuses)."""
+    local = process.output(["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"]).split()
+    if old := old_tags(images, local):
+        print(f"Removing {len(old)} older image tag(s) of this chart's repositories from the host: {' '.join(old)}")
+        process.run(["docker", "rmi", *old], check=False)
+
+
 def chart_images() -> list[str]:
     """Images of a render with every profile and monitoring-logging on, digests stripped."""
     text = manifests.helm_template(*chart.everything_args())
@@ -298,6 +329,7 @@ def load_images(images: list[str]) -> None:
             # containerd lose images without an error.
             saved = _in_batches(batch, "saving", functools.partial(_save, directory))
             _in_batches(saved, "loading", functools.partial(_load, directory), workers=1)
+        kube.node(f"sudo rm -rf {NODE_IMAGE_TARBALLS}/*")
     still_missing = missing_images(images, process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines())
     if still_missing:
         print(f"WARNING: not in minikube after loading: {' '.join(still_missing)}", file=sys.stderr)
@@ -320,6 +352,7 @@ def provision() -> None:
     print(f"{len(images)} image(s) referenced by this chart's fully-enabled render.")
     print("Checking which are already loaded in minikube...")
     load_images(images)
+    remove_old_tags(images)
     print("\nCluster provisioned. Next steps:")
     print("  1. podiumd-minikube deploy (or podiumd-minikube deploy --full for every optional profile).")
     print("  2. podiumd-minikube setup-tunnel for external reachability.")
