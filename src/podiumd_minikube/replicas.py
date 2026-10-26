@@ -96,6 +96,11 @@ def switch(*, on: bool) -> None:
     if polling.wait_until(lambda: _counted(counts), timeout=READY_TIMEOUT, interval=5) is None:
         msg = f"after {READY_TIMEOUT}s: not at their pod count: check `kubectl get statefulset -n {NAMESPACE}`"
         raise process.UserError(msg)
-    # Scaling down removes the highest pods; when one was the master, the label CronJob moves the label.
+    if not on:
+        # The operator promotes no replica: when the master was a removed pod, redis-ha-0 stays a read-only replica.
+        kube.kubectl_shown(
+            "exec", "-n", NAMESPACE, "redis-ha-0", "-c", "redis-ha", "--", "redis-cli", "REPLICAOF", "NO", "ONE"
+        )
+    # The operator then records the master in the RedisReplication's status, and the label CronJob labels it.
     kube.first_pod(services.REDIS_MASTER)
     print("Done.")

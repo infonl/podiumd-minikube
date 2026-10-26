@@ -6498,6 +6498,16 @@ same DB numbers. `flush-redis` finds the master by `app=redis-ha,redis-role=mast
   redis-operator 0.27 promoted no replica; the recreated redis-ha-0 was master
   again with its PVC's data within 25 s, so the master stays on redis-ha-0
   unless it is down longer.
+- `off` with the master on redis-ha-1 (2026-10-26, promoted by hand with
+  `REPLICAOF NO ONE`; the operator moved `status.masterNode` and the label
+  within 30 s): scaling down left redis-ha-0 a replica of the removed pod,
+  read-only (`READONLY You can't write against a read only replica`); the
+  operator cleared `masterNode`, the label CronJob failed on it,
+  `redis-ha-master` had no endpoints, and `off` failed after 5 minutes.
+  redis-operator 0.27 promotes no replica. Fix: `off` runs `REPLICAOF NO ONE`
+  on redis-ha-0 after the scale-down (no effect on a master); the operator
+  then sets `masterNode` and the label follows. Live: `off` 30 s, exit 0,
+  redis-ha-0 master and writable.
 - The chart's `redis-ha-pre-delete` Job is a Helm pre-delete hook that deletes
   the RedisReplication; `kubectl apply` would run it on every deploy.
   `manifests.fix_up` now drops delete hooks along with test hooks.
