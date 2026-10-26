@@ -8248,3 +8248,10 @@ smoke 176 passed): teardown 22 s, provision 671 s, deploy 845 s.
   an arm64 copy on Apple Silicon is pulled again). A `docker pull` of a cached
   image still asks the registry: 212 s for 60 images; the check takes 0.9 s,
   and all 60 were cached here.
+- Image loading: per batch the `docker save`s now run in parallel and only
+  the `minikube image load`s one at a time (6 images: 7.8 -> 3.2 s to save).
+- Not changed: the control-plane tuning (103 s). `tune_control_plane`
+  already writes the four static pod manifests before waiting once, so they
+  restart in parallel; the time is kube-apiserver and etcd restarting.
+  minikube passes component flags at start (`--extra-config`), not the
+  environment variables GOGC and GOMEMLIMIT.

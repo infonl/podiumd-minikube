@@ -243,25 +243,39 @@ def _pull(image: str) -> process.ProcessError | None:
     return None if result.returncode == 0 else process.ProcessError(["docker", "pull", image], result.returncode, "")
 
 
-def _load(image: str) -> process.ProcessError | None:
-    """Saves image to a tarball and loads that: loading by reference looks up the node's arch and fails."""
-    with tempfile.TemporaryDirectory() as directory:
-        tar = str(Path(directory) / "image.tar")
-        try:
-            process.run(["docker", "save", "--platform", PLATFORM, image, "-o", tar])
-            process.run(["minikube", "image", "load", "-p", PROFILE, tar])
-        except process.ProcessError as error:
-            return error
+def _tarball(directory: str, image: str) -> str:
+    return str(Path(directory) / (image.replace("/", "_").replace(":", "_") + ".tar"))
+
+
+def _save(directory: str, image: str) -> process.ProcessError | None:
+    """Saves image to its tarball in directory: loading by reference looks up the node's arch and fails."""
+    try:
+        process.run(["docker", "save", "--platform", PLATFORM, image, "-o", _tarball(directory, image)])
+    except process.ProcessError as error:
+        return error
+    return None
+
+
+def _load(directory: str, image: str) -> process.ProcessError | None:
+    try:
+        process.run(["minikube", "image", "load", "-p", PROFILE, _tarball(directory, image)])
+    except process.ProcessError as error:
+        return error
     return None
 
 
 def _in_batches(
     images: list[str], label: str, action: Callable[[str], process.ProcessError | None], workers: int = BATCH_SIZE
-) -> None:
+) -> list[str]:
+    """Runs action on images; returns those it succeeded for."""
+    done: list[str] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for image, error in zip(images, pool.map(action, images), strict=True):
             if error:
                 print(f"WARNING: {label} {image} failed: {error}", file=sys.stderr)
+            else:
+                done.append(image)
+    return done
 
 
 def load_images(images: list[str]) -> None:
@@ -279,8 +293,11 @@ def load_images(images: list[str]) -> None:
             print(f"Pulling batch: {' '.join(to_pull)}")
             _in_batches(to_pull, "pulling", _pull)
         print(f"Loading batch into minikube: {' '.join(batch)}")
-        # One at a time: parallel loads into containerd lose images without an error.
-        _in_batches(batch, "loading", _load, workers=1)
+        with tempfile.TemporaryDirectory() as directory:
+            # Saves in parallel (6 s for 701 MB each), loads one at a time: parallel loads into
+            # containerd lose images without an error.
+            saved = _in_batches(batch, "saving", functools.partial(_save, directory))
+            _in_batches(saved, "loading", functools.partial(_load, directory), workers=1)
     still_missing = missing_images(images, process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines())
     if still_missing:
         print(f"WARNING: not in minikube after loading: {' '.join(still_missing)}", file=sys.stderr)

@@ -178,12 +178,12 @@ def test_load_images_pulls_saves_and_loads_and_warns_on_failures(fake_run: FakeR
     fake_run.on("docker", "save", "--platform", provision.PLATFORM, "c/bad:3", returncode=1, stderr="no such image")
     provision.load_images(["a/app:1.0", "b/db:2", "c/bad:3"])
     assert [call[-1] for call in fake_run.ran("docker", "pull")] == ["b/db:2", "c/bad:3"]
-    assert [call[4] for call in fake_run.ran("docker", "save")] == ["b/db:2", "c/bad:3"]
+    assert sorted(call[4] for call in fake_run.ran("docker", "save")) == ["b/db:2", "c/bad:3"]
     loads = fake_run.ran("minikube", "image", "load")
-    assert len(loads) == 1 and loads[0][-1].endswith("image.tar")
+    assert len(loads) == 1 and loads[0][-1].endswith("b_db_2.tar")
     err = capsys.readouterr().err
     assert "pulling c/bad:3 failed" in err
-    assert "loading c/bad:3 failed" in err and "no such image" in err
+    assert "saving c/bad:3 failed" in err and "no such image" in err
     assert "not in minikube after loading: b/db:2 c/bad:3" in err
 
 
@@ -193,7 +193,7 @@ def test_load_images_pulls_only_what_the_host_lacks_for_the_platform(fake_run: F
     fake_run.on("docker", "image", "inspect", "c/new:3", returncode=1)
     provision.load_images(["a/app:1.0", "b/db:2", "c/new:3"])
     assert [call[-1] for call in fake_run.ran("docker", "pull")] == ["b/db:2", "c/new:3"]
-    assert [call[4] for call in fake_run.ran("docker", "save")] == ["a/app:1.0", "b/db:2", "c/new:3"]
+    assert sorted(call[4] for call in fake_run.ran("docker", "save")) == ["a/app:1.0", "b/db:2", "c/new:3"]
 
 
 def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
