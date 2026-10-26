@@ -343,6 +343,15 @@ def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
     ]
 
 
+def test_tune_kcadm_sets_kc_opts_only_in_jobs_on_the_keycloak_image():
+    kcadm: manifests.Doc = {"name": "repair", "image": "quay.io/keycloak/keycloak:26.8.1"}
+    config_cli: manifests.Doc = {"name": "kc-config-cli", "image": "adorsys/keycloak-config-cli:6.5.1-26.5.5"}
+    job: manifests.Doc = {"kind": "Job", "spec": {"template": {"spec": {"containers": [kcadm, config_cli]}}}}
+    manifests.tune_kcadm([job])
+    assert kcadm["env"] == [{"name": "KC_OPTS", "value": manifests.KCADM_ENV["KC_OPTS"]}]
+    assert "env" not in config_cli
+
+
 def test_fix_up_separates_crds_for_server_side_apply():
     crd = {"kind": "CustomResourceDefinition", "metadata": {"name": "elasticsearches.elasticsearch.k8s.elastic.co"}}
     other = {"kind": "Service", "metadata": {"name": "zac"}}

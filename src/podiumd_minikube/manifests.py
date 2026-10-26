@@ -65,6 +65,12 @@ KEYCLOAK_JAVA_OPTS = (
 KEYCLOAK_OPERATOR = "keycloak-operator"
 # Heap in use about 55 MiB. The operator SDK starts 50 reconciliation and 50 workflow
 # threads; one Keycloak resource needs 2 of each.
+# kcadm.sh reads KC_OPTS; Jobs on the Keycloak image start one JVM per call. C1 only, the serial
+# GC and an archive of the loaded classes (written on the first call): 1040 -> 530 ms a call.
+KCADM_ENV = {
+    "KC_OPTS": "-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -XX:+AutoCreateSharedArchive"
+    " -XX:SharedArchiveFile=/tmp/kcadm.jsa"
+}
 KEYCLOAK_OPERATOR_ENV = {
     "JDK_JAVA_OPTIONS": "-Xms32m -Xmx128m -XX:ActiveProcessorCount=1 -XX:+UseSerialGC -XX:TieredStopAtLevel=1",
     "QUARKUS_OPERATOR_SDK_CONCURRENT_RECONCILIATION_THREADS": "2",
@@ -402,6 +408,15 @@ def tune_keycloak(docs: list[Doc]) -> None:
                 add_env(container, KEYCLOAK_OPERATOR_ENV)
 
 
+def tune_kcadm(docs: list[Doc]) -> None:
+    """Sets KCADM_ENV on the containers of Jobs that run the Keycloak image (kcadm.sh)."""
+    for doc in docs:
+        if doc.get("kind") == "Job":
+            for container in _containers(_pod_spec(doc) or {}):
+                if "/keycloak/keycloak:" in str(container.get("image")):
+                    add_env(container, KCADM_ENV)
+
+
 def tune_solr(docs: list[Doc]) -> None:
     """Sets the JVM settings and CAPACITY_ENV of the pods the solr-operator builds from ZAC's SolrCloud."""
     for doc in docs:
@@ -612,6 +627,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     keep_finished_jobs(docs)
     mark_release_owner(docs)
     tune_keycloak(docs)
+    tune_kcadm(docs)
     tune_solr(docs)
     mount_zaakbrug_role_mapping(docs)
     scrape_only_from_prometheus(docs)

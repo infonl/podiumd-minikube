@@ -8100,3 +8100,18 @@ combined-4 monitoring-logging checkout), from timestamped deploy output:
 - What remains is the repair Job's one JVM start per kcadm.sh call, which
   only podiumd's chart can change, and about 1 minute before the Keycloak
   steps; the storage-hooks render (about 3 s) is the next small item there.
+- Storage-hooks render (user: "reuse the full render for the storage
+  hooks"): not reused. podiumd's `<app>-storage.yaml` look up our hostPath
+  PV/PVC (`lookup` in podiumd's `_helpers.tpl`), so the full render must come
+  after the storage apply: rendered first on a fresh cluster, it would carry
+  podiumd's Azure-CSI PV/PVC too. storage-hooks.yaml itself has no lookup, so
+  it now renders without `--dry-run=server`: 2.9 -> 1.0 s, the same 21
+  documents.
+- The repair Job's JVM starts (user: "fix the repair jobs java start"):
+  kcadm.sh passes `KC_OPTS` to java (JDK 21). Per call in keycloak-0:
+  1040 ms default, 690 ms with `-XX:TieredStopAtLevel=1 -XX:+UseSerialGC`,
+  530 ms with an AppCDS archive as well (`-XX:+AutoCreateSharedArchive
+  -XX:SharedArchiveFile=/tmp/kcadm.jsa`, written by the first call, 14 MB in
+  the Job's /tmp). `manifests.tune_kcadm` sets it on every Job container on
+  the Keycloak image: the repair Job and `pabc-keycloak-groups-job`. A copy
+  of the rendered repair Job on the idle cluster: 66 -> 44 s.
