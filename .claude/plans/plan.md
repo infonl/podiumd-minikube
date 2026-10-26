@@ -7955,3 +7955,15 @@ kube-apiserver 545 -> 705 MiB (GOGC 25 and GOMEMLIMIT still set; 575 MiB heap
 in use, against 325 MiB live heap right after the 2026-10-22 restart that set
 the old value), office-converter 36 -> 92 MiB (it converted documents during
 the tier), Grafana 109 -> 148 MiB.
+
+### Keycloak heap free ratios (user: "try the keycloak flag")
+
+Keycloak's serial GC kept the old gen committed at 147 MiB with 88 MiB in use
+(heap committed 230 MiB, in use 107). Added `-XX:MinHeapFreeRatio=10
+-XX:MaxHeapFreeRatio=30` to `KEYCLOAK_JAVA_OPTS`; the serial GC applies them at
+a full GC. Trial by patching the Keycloak resource at 11:39 CET, then
+podiumd-tests' full tier (20261026-104152, 591 passed, 0 failed, 11:28).
+Measured 5 minutes after it: working set 467 -> 427 MiB, old gen committed
+147 -> 99 MiB (85 MiB in use), 3 full GCs for allocation failure and 6 for the
+code cache since the start. Part of the drop may be the restart (one tier of
+history instead of two plus chaos); the committed old gen is the flag's.

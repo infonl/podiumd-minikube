@@ -50,7 +50,10 @@ CAPACITY_ENV = {
 GO_MEMORY_LIMIT = "GOMEMLIMIT"
 # Laptop budget, Keycloak: kc.sh sets -XX:+UseG1GC, which -XX:-UseG1GC switches off for the
 # serial GC; TieredStopAtLevel=1: only the C1 compiler. Its operator runs plain `java -jar`.
-KEYCLOAK_JAVA_OPTS = "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2 -XX:-UseG1GC -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+KEYCLOAK_JAVA_OPTS = (
+    "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2 -XX:-UseG1GC -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+    " -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30"
+)
 KEYCLOAK_OPERATOR = "keycloak-operator"
 # Heap in use about 55 MiB. The operator SDK starts 50 reconciliation and 50 workflow
 # threads; one Keycloak resource needs 2 of each.
