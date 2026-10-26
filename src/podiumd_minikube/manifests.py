@@ -471,6 +471,28 @@ def tune_solr(docs: list[Doc]) -> None:
         add_env(_mapping(body, "zookeeperRef", "provided", "zookeeperPodPolicy"), ZOOKEEPER_ENV | CAPACITY_ENV)
 
 
+# Start-up only: while every pod starts after a node start, the probes killed ZooKeeper (liveness
+# from 10 s, 500m) and Solr (startup probe `solr api`, a JVM, 5 s timeout, 60 s budget). ZooKeeper:
+# the operator's probes, liveness from 120 s; set together, as the operator takes 0 for an unset
+# field. Solr: the operator's startup probe with a 15 s timeout and a 300 s budget.
+_ZOOKEEPER_PROBE = {"periodSeconds": 10, "failureThreshold": 3, "successThreshold": 1, "timeoutSeconds": 10}
+ZOOKEEPER_PROBES = {
+    "livenessProbe": {**_ZOOKEEPER_PROBE, "initialDelaySeconds": 120},
+    "readinessProbe": {**_ZOOKEEPER_PROBE, "initialDelaySeconds": 10},
+}
+SOLR_STARTUP_PROBE = {"timeoutSeconds": 15, "failureThreshold": 60}
+
+
+def ease_solr_start(docs: list[Doc]) -> None:
+    """Sets ZOOKEEPER_PROBES and SOLR_STARTUP_PROBE in ZAC's SolrCloud."""
+    for doc in docs:
+        if doc.get("kind") != "SolrCloud":
+            continue
+        body = section(doc, "spec")
+        _mapping(body, "zookeeperRef", "provided")["probes"] = ZOOKEEPER_PROBES
+        _mapping(body, "customSolrKubeOptions", "podOptions", "startupProbe").update(SOLR_STARTUP_PROBE)
+
+
 ZAAKBRUG_ROLE_MAPPING = "zaakbrug-oauth-role-mapping"
 _ZAAKBRUG_RESOURCES = "/opt/frank/resources"
 
@@ -680,6 +702,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     speed_up_keycloak_start(docs)
     retry_zac_solr_init(docs)
     tune_solr(docs)
+    ease_solr_start(docs)
     mount_zaakbrug_role_mapping(docs)
     scrape_only_from_prometheus(docs)
     limit_runtimes(docs)

@@ -8173,3 +8173,9 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   ZAC, waiting for Solr, was Ready 4.2 minutes after the node. The 19:04 run
   had no probe kills, so this depends on the CPU contention while all pods
   start; one run per change is not enough to compare.
+- `manifests.ease_solr_start` (user's go): ZooKeeper's probes through the
+  SolrCloud's `zookeeperRef.provided.probes` (the operator's values, liveness
+  from 120 s instead of 10 s; all fields set, as the operator takes 0 for an
+  unset one), and Solr's startup probe (the operator's `solr api` handler)
+  with a 15 s timeout and 60 failures every 5 s (operator: 5 s, 10). Start-up
+  only; ExternalsPodiumD and podiumd-infra keep the operators' probes.

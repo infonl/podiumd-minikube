@@ -382,6 +382,14 @@ def test_retry_zac_solr_init_wraps_the_script_in_a_bounded_retry():
     )
 
 
+def test_ease_solr_start_sets_zookeeper_probes_and_the_solr_startup_probe():
+    solr: manifests.Doc = {"kind": "SolrCloud", "spec": {"zookeeperRef": {"provided": {"replicas": 1}}}}
+    manifests.ease_solr_start([solr])
+    assert solr["spec"]["zookeeperRef"]["provided"]["probes"]["livenessProbe"]["initialDelaySeconds"] == 120
+    assert solr["spec"]["zookeeperRef"]["provided"]["replicas"] == 1
+    assert solr["spec"]["customSolrKubeOptions"]["podOptions"]["startupProbe"] == manifests.SOLR_STARTUP_PROBE
+
+
 def test_fix_up_separates_crds_for_server_side_apply():
     crd = {"kind": "CustomResourceDefinition", "metadata": {"name": "elasticsearches.elasticsearch.k8s.elastic.co"}}
     other = {"kind": "Service", "metadata": {"name": "zac"}}
