@@ -143,7 +143,7 @@ class ObjectenShape:
 
 
 def objecten_shape(charts_dir: Path = CHARTS_DIR) -> ObjectenShape:
-    """Detected from the podiumd tarball's contents, not its version (a --path checkout has none)."""
+    """Detected from the podiumd tarball's contents, not its version (a chart checkout has none)."""
     tgz = tarball("podiumd", charts_dir)
     names = member_names(tgz) if tgz else []
     if any(name.startswith("podiumd/charts/openobject/") for name in names):

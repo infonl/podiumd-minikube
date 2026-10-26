@@ -4,7 +4,6 @@ import argparse
 import sys
 
 from collections.abc import Callable
-from pathlib import Path
 
 from podiumd_minikube import chart
 from podiumd_minikube import deploy as deployment
@@ -155,27 +154,21 @@ def reset_namespace(argv: list[str]) -> int:
 
 
 def set_podiumd_version(argv: list[str]) -> None:
-    """Selects the podiumd and monitoring-logging dependency versions and fetches them.
+    """Selects podiumd and monitoring-logging, each a published version or a local chart checkout, and fetches them.
 
     The selection lives in .podiumd-versions.yaml (gitignored); Chart.yaml keeps placeholders.
     After a podiumd change, re-check the image.tag pins in values.yaml (openzaak, objecten,
     opennotificaties, openformulieren). Published versions: helm search repo dimpact/podiumd -l
     """
     parser = _parser(set_podiumd_version)
+    parser.add_argument("podiumd", help="published podiumd version, or a local chart checkout directory")
     parser.add_argument(
-        "--path", type=Path, help="local podiumd chart checkout; monitoring-logging follows its sibling"
+        "monitoring_logging",
+        nargs="?",
+        help="monitoring-logging version or checkout; default: the podiumd checkout's sibling, else unchanged",
     )
-    parser.add_argument("version", nargs="?", help="published podiumd version")
-    parser.add_argument("monitoring_logging", nargs="?", help="published monitoring-logging version")
     args = parser.parse_args(argv)
-    if args.path:
-        if args.version:
-            parser.error("--path takes no version")
-        versions.set_path(args.path)
-        return
-    if not args.version or not args.monitoring_logging:
-        parser.error("give <version> <monitoring-logging-version>, or --path <dir>")
-    versions.set_version(args.version, args.monitoring_logging)
+    versions.select(args.podiumd, args.monitoring_logging)
 
 
 def setup_tunnel(argv: list[str]) -> None:

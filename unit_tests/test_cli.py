@@ -64,7 +64,7 @@ def test_stub_runs_its_command():
 
 @pytest.mark.parametrize(
     "args",
-    [[], ["4.9.3"], ["--path", "/x", "4.9.3"]],
+    [[], ["4.9.3", "1.2.0", "extra"]],
 )
 def test_set_podiumd_version_rejects_ambiguous_arguments(args: list[str], capsys: pytest.CaptureFixture[str]):
     with pytest.raises(SystemExit) as exited:
@@ -106,8 +106,8 @@ def test_cluster_lock_run_keeps_the_commands_own_double_dash(tmp_path: Path):
         (["provision-cluster"], provision, "provision", ((), {})),
         (["reset-namespace", "--yes"], teardown, "reset_namespace", ((), {"yes": True})),
         (["teardown-cluster"], teardown, "teardown_cluster", ((), {"yes": False})),
-        (["set-podiumd-version", "4.9.3", "1.2.0"], versions, "set_version", (("4.9.3", "1.2.0"), {})),
-        (["set-podiumd-version", "--path", "/x"], versions, "set_path", ((Path("/x"),), {})),
+        (["set-podiumd-version", "4.9.3", "1.2.0"], versions, "select", (("4.9.3", "1.2.0"), {})),
+        (["set-podiumd-version", "/x"], versions, "select", (("/x", None), {})),
         (["setup-tunnel"], tunnel, "setup_tunnel", ((), {})),
         (["setup-tunnel", "stop"], tunnel, "stop_tunnel", ((), {})),
         (["show-podiumd-version"], versions, "show", ((), {})),

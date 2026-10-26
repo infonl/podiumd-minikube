@@ -9,37 +9,39 @@ from podiumd_minikube.paths import VERSIONS_FILE
 from podiumd_minikube.process import UserError
 
 
-def set_version(podiumd_version: str, monitoring_logging: str, *, versions_file: Path = VERSIONS_FILE) -> None:
-    """Selects published podiumd and monitoring-logging versions and fetches them."""
-    dependency.write("podiumd", "version", podiumd_version, versions_file)
-    dependency.write("monitoringLogging", "version", monitoring_logging, versions_file)
-    dependency.sync(versions_file)
-    print(f"podiumd {podiumd_version} and monitoring-logging {monitoring_logging} selected; charts/*.tgz synced.")
-
-
-def set_path(checkout: Path, *, versions_file: Path = VERSIONS_FILE) -> None:
-    """Selects a local podiumd checkout; monitoring-logging follows its sibling directory when there is one."""
-    if not checkout.is_dir():
-        msg = f"not a directory: {checkout}"
-        raise UserError(msg)
+def _selection(argument: str) -> dependency.Selection:
+    """A local chart checkout when argument is a directory or contains a slash, else a published version."""
+    checkout = Path(argument)
+    if "/" not in argument and not checkout.is_dir():
+        return dependency.Selection("version", argument)
     if not (checkout / "Chart.yaml").is_file():
-        msg = f"no Chart.yaml in {checkout}"
+        msg = f"no Chart.yaml in {checkout}: give a published version or a chart checkout"
         raise UserError(msg)
-    absolute = checkout.resolve()
-    sibling = absolute.parent / "monitoring-logging"
-    has_sibling = (sibling / "Chart.yaml").is_file()
-    if not has_sibling and dependency.selection("monitoringLogging", versions_file) is None:
-        msg = (
-            f"no monitoring-logging/ next to {absolute} and no monitoring-logging version recorded: "
-            "run podiumd-minikube set-podiumd-version <version> <monitoring-logging-version> once first"
-        )
+    return dependency.Selection("path", str(checkout.resolve()))
+
+
+def select(podiumd: str, monitoring_logging: str | None = None, *, versions_file: Path = VERSIONS_FILE) -> None:
+    """Selects each dependency as a published version or a local chart checkout and fetches them.
+
+    Without monitoring_logging: a podiumd checkout's sibling monitoring-logging/, else the recorded selection.
+    """
+    chosen = {"podiumd": _selection(podiumd)}
+    sibling = Path(chosen["podiumd"].value).parent / "monitoring-logging"
+    if monitoring_logging:
+        chosen["monitoringLogging"] = _selection(monitoring_logging)
+    elif chosen["podiumd"].mode == "path" and (sibling / "Chart.yaml").is_file():
+        chosen["monitoringLogging"] = dependency.Selection("path", str(sibling))
+    elif dependency.selection("monitoringLogging", versions_file) is None:
+        msg = f"no monitoring-logging selection recorded: {dependency.USAGE_HINT}"
         raise UserError(msg)
-    dependency.write("podiumd", "path", str(absolute), versions_file)
-    if has_sibling:
-        dependency.write("monitoringLogging", "path", str(sibling), versions_file)
+    for key, selected in chosen.items():
+        dependency.write(key, selected.mode, selected.value, versions_file)
     dependency.sync(versions_file)
-    kept = f"local path {sibling}" if has_sibling else "its recorded selection"
-    print(f"podiumd set to local path {absolute}, monitoring-logging to {kept}; charts/*.tgz synced.")
+    for key, selected in chosen.items():
+        print(f"{DEPENDENCIES[key]}: {'local checkout ' if selected.mode == 'path' else ''}{selected.value}")
+    if "monitoringLogging" not in chosen:
+        print("monitoring-logging: recorded selection kept")
+    print("charts/*.tgz synced.")
 
 
 def describe(key: str, charts_dir: Path = CHARTS_DIR, versions_file: Path = VERSIONS_FILE) -> list[str]:

@@ -7967,3 +7967,21 @@ Measured 5 minutes after it: working set 467 -> 427 MiB, old gen committed
 147 -> 99 MiB (85 MiB in use), 3 full GCs for allocation failure and 6 for the
 code cache since the start. Part of the drop may be the restart (one tier of
 history instead of two plus chaos); the committed old gen is the flag's.
+
+### A release for one dependency, a branch for the other (user: "use a release for one item and a branch for the other")
+
+monitoring-logging 1.0.19 (#481) will not be published soon, while podiumd
+4.10.0 is. `set-podiumd-version` took either two published versions or
+`--path <podiumd checkout>`, so a published podiumd with a monitoring-logging
+checkout needed a hand-edited `.podiumd-versions.yaml`, although
+`dependency.sync` already handled a mixed selection. Each argument of
+`set-podiumd-version <podiumd> [<monitoring-logging>]` is now a published
+version or a chart checkout (a directory, or an argument with a slash);
+`versions.select` replaces `set_version` and `set_path`, and `--path` is gone.
+Without `<monitoring-logging>`, a podiumd checkout's sibling
+`monitoring-logging/` is taken, else the recorded selection is kept.
+
+Switched to `set-podiumd-version 4.10.0 <verify worktree>/charts/monitoring-logging`.
+The published `podiumd-4.10.0.tgz` matches the verify worktree's
+`charts/podiumd` (f0548763): same templates and values, same dependency
+versions, Chart.yaml differs in formatting only. No redeploy needed.

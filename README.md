@@ -28,8 +28,8 @@ Archiefbeheer, Open Formulieren) for local development on minikube.
 ## Quick start
 
 ```bash
-podiumd-minikube set-podiumd-version <version> <monitoring-logging-version>  # required — see below
-                                     # (or --path <dir> for a local podiumd chart checkout)
+podiumd-minikube set-podiumd-version <podiumd> <monitoring-logging>  # required — see below
+                                     # (each a published version or a local chart checkout)
 podiumd-minikube provision-cluster      # starts minikube with Cilium, installs NGINX Gateway Fabric, pre-loads every image
 podiumd-minikube deploy --full          # renders and applies the chart (every optional profile on)
 podiumd-minikube setup-tunnel           # asks sudo for the route, then runs `minikube tunnel` in the background
@@ -168,7 +168,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | `podiumd-minikube setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
 | `podiumd-minikube teardown-cluster` | Deletes the entire minikube cluster (asks for confirmation; `--yes` to skip) |
 | `podiumd-minikube reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
-| `podiumd-minikube set-podiumd-version <version> <monitoring-logging-version>` | Sets both Helm dependency versions in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. `--path <dir>` points `podiumd` at a local checkout instead, auto-detecting a sibling `monitoring-logging/` directory |
+| `podiumd-minikube set-podiumd-version <podiumd> [<monitoring-logging>]` | Selects each Helm dependency in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. Each argument is a published version or a local chart checkout directory, so one can be a release and the other a branch. Without `<monitoring-logging>`: a podiumd checkout's sibling `monitoring-logging/`, else the recorded selection |
 | `podiumd-minikube show-podiumd-version` | Prints the current version selection and fetch status per dependency |
 | `podiumd-minikube show-port-mappings` | Prints how host traffic reaches each deployed app (Ingress hostname → backend Service:port) |
 | `podiumd-minikube expose-postgres [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |
