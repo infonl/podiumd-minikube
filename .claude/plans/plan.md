@@ -7902,3 +7902,30 @@ cert-manager GOGC 50 in place: node 16128 -> 15503 MiB, containers 14150 ->
 13450 MiB. Down: kube-apiserver 1047 -> 545, ZaakBrug 953 -> 664, cainjector
 98 -> 44, webhook 38 -> 12 MiB. Up by 30-40 MiB, tier variation with no change
 made there: Open Formulieren worker, Open Inwoner, Loki, Postgres, Solr.
+
+## podiumd 4.10.0, 2026-10-26 (user: "use podiumd-4.10.0 branch + pr #481")
+
+minikube runs helm-charts `verify/podiumd-4.10.0-combined-4` f0548763:
+feature/podiumd-4.10.0 9925133b (force-pushed 2026-10-23) + PR #481
+f4b7e40f (monitoring-logging 1.0.19). The released `podiumd-4.10.0` tag has
+the same `charts/podiumd` tree, so no separate deploy (user). monitoring-logging
+1.0.19 is unpublished (latest 1.0.18); the local path stays until it is.
+podiumd-tests: full tier 591 passed, 1 failed (ZAC logout test, passed on a
+rerun), xpass podiumd-chart-1 (#481); chaos runxfail: 6 known defects.
+
+### start-cluster after a reboot
+
+minikube had been stopped since the host rebooted on 2026-10-23; the first
+deploy failed on `dial tcp 192.168.49.2:8443: connect: no route to host`.
+`start-cluster` (09:20-09:27 CET) brought every workload back, then its
+tunnel step failed in a shell without a terminal: `sudo: a terminal is
+required to read the password`. `tunnel.require_sudo` (shared with
+update-hosts) now refuses up front with the command to run in a terminal.
+
+Jobs that failed while the node started, each completed on a retry:
+- `frankgateway-outway-seed`: APISIX answered 503 `has no healthy etcd
+  endpoint available` until its etcd was ready; completed after 99 s.
+- `zac-sig-del` (CronJob), `openbao-token-renewal` (CronJob): missed
+  schedules ran at once, before ZAC and OpenBao were ready; completed after
+  11 min and 77 s.
+The Job backoff covers this; nothing to change.

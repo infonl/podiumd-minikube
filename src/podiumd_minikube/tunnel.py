@@ -32,6 +32,13 @@ def routed_via() -> str | None:
     return shown[2] if shown[1:2] == ["via"] else None
 
 
+def require_sudo(command: str) -> None:
+    """Refuses when sudo would ask for a password and no terminal can answer it."""
+    if not sys.stdin.isatty() and not process.succeeds(["sudo", "-n", "true"]):
+        msg = f"sudo needs a terminal for its password: run `podiumd-minikube {command}` in a terminal"
+        raise UserError(msg)
+
+
 def setup_tunnel() -> None:
     """Adds the route in the foreground (sudo asks here), then runs minikube tunnel in the background.
 
@@ -52,6 +59,7 @@ def setup_tunnel() -> None:
     if routed_via() == node_ip:
         print(f"{SERVICE_CIDR} is already routed via the minikube node {node_ip}.")
     else:
+        require_sudo("setup-tunnel")
         print(f"Routing {SERVICE_CIDR} via the minikube node {node_ip} (sudo may ask for your password)...")
         process.run(route_args("replace", node_ip), capture=False)
     if not pid:
@@ -116,9 +124,7 @@ def update_hosts() -> None:
     if replace_hosts_line(current, line) == current:
         print(f"/etc/hosts is up to date:\n{line}")
         return
-    if not sys.stdin.isatty() and not process.succeeds(["sudo", "-n", "true"]):
-        msg = "sudo needs a terminal for its password: run `podiumd-minikube update-hosts` in a terminal"
-        raise UserError(msg)
+    require_sudo("update-hosts")
     print("Caching sudo credentials up front...")
     process.run(["sudo", "-v"], capture=False)
     process.run(["sudo", "cp", str(ETC_HOSTS), f"{ETC_HOSTS}.bak"])

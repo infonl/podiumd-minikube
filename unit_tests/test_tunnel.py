@@ -51,7 +51,7 @@ def test_setup_tunnel_routes_and_starts_the_tunnel(
     machine: FakeRun, spawned: list[tuple[list[str], Path]], capsys: pytest.CaptureFixture[str]
 ):
     tunnel.setup_tunnel()
-    assert machine.ran("sudo") == [tunnel.route_args("replace", NODE_IP)]
+    assert machine.ran("sudo", "ip") == [tunnel.route_args("replace", NODE_IP)]
     assert spawned == [(["minikube", "tunnel", "-p", "minikube"], tunnel.TUNNEL_LOG)]
     out = capsys.readouterr().out
     assert f"Edge external IP: {EDGE_IP}" in out
@@ -139,3 +139,11 @@ def test_update_hosts_refuses(machine: FakeRun, absent: tuple[str, ...], message
     with pytest.raises(UserError, match=message):
         tunnel.update_hosts()
     assert not machine.ran("sudo", "tee")
+
+
+def test_setup_tunnel_refuses_a_route_sudo_cannot_ask_for(machine: FakeRun, spawned: list[tuple[list[str], Path]]):
+    machine.on("sudo", "-n", returncode=1)
+    with pytest.raises(UserError, match="run `podiumd-minikube setup-tunnel` in a terminal"):
+        tunnel.setup_tunnel()
+    assert not machine.ran("sudo", "ip")
+    assert not spawned
