@@ -203,7 +203,7 @@ def called(
     for module, name in STEPS:
         monkeypatch.setattr(module, name, lambda *_a, _name=name, **_k: steps.append(_name))
     monkeypatch.setattr(kube, "kubectl_shown", lambda *args, stdin=None: steps.append(" ".join(args)))
-    monkeypatch.setattr(deploy.Options, "render", lambda _self, *args: STORAGE if args else RENDER)
+    monkeypatch.setattr(deploy.Options, "render", lambda _self, *args, **_kwargs: STORAGE if args else RENDER)
     monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
     monkeypatch.setattr(pki, "CA_CERT", tmp_path / "ca.crt")
     monkeypatch.setattr(crds, "keycloak_version", lambda: None)
@@ -305,6 +305,14 @@ def test_render_falls_back_to_plain_helm_template_without_the_crds(fake_run: Fak
     calls = fake_run.ran("helm", "template")
     assert "--dry-run=server" in calls[0]
     assert "--dry-run=server" not in calls[-1]
+
+
+def test_render_without_lookup_runs_one_plain_helm_template(fake_run: FakeRun):
+    fake_run.on("helm", "template", stdout=manifests.dump([_doc("ConfigMap", "c")]))
+    deploy.Options().render("-s", deploy.STORAGE_HOOKS, lookup=False)
+    calls = fake_run.ran("helm", "template")
+    assert len(calls) == 1
+    assert "--dry-run=server" not in calls[0]
 
 
 def test_deploy_names_a_workload_not_created_yet_as_stuck(called: list[str], live: dict[str, Any], poll_once: None):

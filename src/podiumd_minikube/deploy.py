@@ -57,13 +57,16 @@ class Options:
     helm_args: list[str] = field(default_factory=list[str])
     objecten_merged: bool = False
 
-    def render(self, *args: str) -> manifests.Render:
-        """`helm template` with these options and args, fixed up."""
-        try:
-            text = manifests.helm_template(*LOOKUP_ARGS, *self.helm_args, *args)
-        except process.ProcessError as error:
-            if _CRDS_MISSING not in error.stderr:
-                raise
+    def render(self, *args: str, lookup: bool = True) -> manifests.Render:
+        """`helm template` with these options and args, fixed up; lookup: against the live cluster."""
+        text = None
+        if lookup:
+            try:
+                text = manifests.helm_template(*LOOKUP_ARGS, *self.helm_args, *args)
+            except process.ProcessError as error:
+                if _CRDS_MISSING not in error.stderr:
+                    raise
+        if text is None:
             text = manifests.helm_template(*self.helm_args, *args)
         return manifests.fix_up(text, objecten_merged=self.objecten_merged, ca_trust=True)
 
@@ -115,7 +118,8 @@ def _apply_storage_hooks(selected: Options) -> manifests.Render:
     # Its volume list follows the enabled profiles, and Jobs are immutable.
     kube.kubectl_shown("delete", "job", STORAGE_PERMISSIONS_JOB, "-n", NAMESPACE, "--ignore-not-found")
     print("Applying storage-hook PV/PVC pairs first...")
-    storage = selected.render("-s", STORAGE_HOOKS)
+    # Before the full render: podiumd's storage templates look these up. They have no lookup themselves.
+    storage = selected.render("-s", STORAGE_HOOKS, lookup=False)
     kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=storage.manifest)
     if kube.exists(f"job/{STORAGE_PERMISSIONS_JOB}"):
         print(f"Waiting for the {STORAGE_PERMISSIONS_JOB} Job to complete...")
