@@ -232,6 +232,12 @@ def missing_images(images: list[str], loaded: list[str]) -> list[str]:
     return [image for image in images if not any(line.endswith(image) for line in loaded)]
 
 
+def cached(image: str) -> bool:
+    """Whether the host's Docker has image for PLATFORM: its tags are pinned, so no pull is needed."""
+    result = process.run(["docker", "image", "inspect", image, "--format", "{{.Os}}/{{.Architecture}}"], check=False)
+    return result.returncode == 0 and result.stdout.strip() == PLATFORM
+
+
 def _pull(image: str) -> process.ProcessError | None:
     result = process.run(["docker", "pull", "--platform", PLATFORM, image], check=False, capture=False)
     return None if result.returncode == 0 else process.ProcessError(["docker", "pull", image], result.returncode, "")
@@ -268,8 +274,10 @@ def load_images(images: list[str]) -> None:
     print(f"{len(to_fetch)} image(s) need pulling + loading: {' '.join(to_fetch)}")
     for start in range(0, len(to_fetch), BATCH_SIZE):
         batch = to_fetch[start : start + BATCH_SIZE]
-        print(f"Pulling batch: {' '.join(batch)}")
-        _in_batches(batch, "pulling", _pull)
+        if to_pull := [image for image in batch if not cached(image)]:
+            # A docker pull of a cached image still asks the registry: 212 s for 60 images.
+            print(f"Pulling batch: {' '.join(to_pull)}")
+            _in_batches(to_pull, "pulling", _pull)
         print(f"Loading batch into minikube: {' '.join(batch)}")
         # One at a time: parallel loads into containerd lose images without an error.
         _in_batches(batch, "loading", _load, workers=1)

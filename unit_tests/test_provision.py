@@ -187,6 +187,15 @@ def test_load_images_pulls_saves_and_loads_and_warns_on_failures(fake_run: FakeR
     assert "not in minikube after loading: b/db:2 c/bad:3" in err
 
 
+def test_load_images_pulls_only_what_the_host_lacks_for_the_platform(fake_run: FakeRun):
+    fake_run.on("docker", "image", "inspect", "a/app:1.0", stdout=f"{provision.PLATFORM}\n")
+    fake_run.on("docker", "image", "inspect", "b/db:2", stdout="linux/arm64\n")
+    fake_run.on("docker", "image", "inspect", "c/new:3", returncode=1)
+    provision.load_images(["a/app:1.0", "b/db:2", "c/new:3"])
+    assert [call[-1] for call in fake_run.ran("docker", "pull")] == ["b/db:2", "c/new:3"]
+    assert [call[4] for call in fake_run.ran("docker", "save")] == ["a/app:1.0", "b/db:2", "c/new:3"]
+
+
 def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     calls: list[str] = []
     monkeypatch.setattr(disk, "check", lambda need: calls.append(f"disk {need.fail_gib}"))

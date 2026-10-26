@@ -8243,3 +8243,8 @@ smoke 176 passed): teardown 22 s, provision 671 s, deploy 845 s.
 - Fix: deploy's ready wait restarts ZAC once when its log shows the failed
   boot, as start-cluster did. `ZAC`, `BOOT_FAILED`, `zac_state` moved from
   `restart` to `deploy`, with `deploy.restart_zac` for both.
+- Provision pulls only images the host's Docker lacks for linux/amd64
+  (`provision.cached`: `docker image inspect` of `{{.Os}}/{{.Architecture}}`;
+  an arm64 copy on Apple Silicon is pulled again). A `docker pull` of a cached
+  image still asks the registry: 212 s for 60 images; the check takes 0.9 s,
+  and all 60 were cached here.
