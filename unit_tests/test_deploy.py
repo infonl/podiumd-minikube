@@ -182,7 +182,9 @@ def live(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """`kubectl get -o json` answers by resource: zac rolled out, the Job complete."""
     status = {"observedGeneration": 1, "replicas": 1, "updatedReplicas": 1, "readyReplicas": 1}
     answers: dict[str, Any] = {
-        "deployment/zac": {"metadata": {"generation": 1}, "status": status},
+        "deployment": {
+            "items": [{"kind": "Deployment", "metadata": {"name": "zac", "generation": 1}, "status": status}]
+        },
         "job": {"items": [_job_status("Complete")]},
     }
     monkeypatch.setattr(kube, "get_json", lambda resource, *_args: answers[resource])
@@ -282,7 +284,7 @@ def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(
     called: list[str], live: dict[str, Any], poll_once: None
 ):
     live["job"]["items"] = []
-    live["deployment/zac"]["status"]["readyReplicas"] = 0
+    live["deployment"]["items"][0]["status"]["readyReplicas"] = 0
     with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac; running: openzaak-config$"):
         _deploy()
 
@@ -303,3 +305,9 @@ def test_render_falls_back_to_plain_helm_template_without_the_crds(fake_run: Fak
     calls = fake_run.ran("helm", "template")
     assert "--dry-run=server" in calls[0]
     assert "--dry-run=server" not in calls[-1]
+
+
+def test_deploy_names_a_workload_not_created_yet_as_stuck(called: list[str], live: dict[str, Any], poll_once: None):
+    live["deployment"]["items"] = []
+    with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac;"):
+        _deploy()

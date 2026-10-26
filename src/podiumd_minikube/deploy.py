@@ -254,13 +254,17 @@ def _wait_ready(render: manifests.Render) -> None:
         for doc in render.docs
         if doc.get("kind") in ("Deployment", "StatefulSet", *manifests.ECK_KINDS)
     ]
+    kinds = ",".join(sorted({workload.split("/")[0] for workload in workloads}))
     names = jobs(render)
 
     def job_state() -> tuple[list[str], list[str]]:
         return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
 
     def stuck() -> list[str]:
-        return [w for w in workloads if not rolled_out(kube.get_json(w, "-n", NAMESPACE))]
+        # One kubectl call per poll: one per workload took 2.4 s with --full.
+        found: list[dict[str, Any]] = kube.get_json(kinds, "-n", NAMESPACE)["items"] if kinds else []
+        live = {f"{item['kind'].lower()}/{manifests.name_of(item)}": item for item in found}
+        return [w for w in workloads if w not in live or not rolled_out(live[w])]
 
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
