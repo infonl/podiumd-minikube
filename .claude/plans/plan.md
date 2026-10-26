@@ -8179,3 +8179,17 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   unset one), and Solr's startup probe (the operator's `solr api` handler)
   with a 15 s timeout and 60 failures every 5 s (operator: 5 s, 10). Start-up
   only; ExternalsPodiumD and podiumd-infra keep the operators' probes.
+- Three `start-cluster` runs after `ease_solr_start` (deploy 139 s; live
+  probes checked): 177, 320 and 371 s. In run 3 (log kept for that run only)
+  ZooKeeper was not killed, but Solr failed to start:
+  `KeeperException$NodeExistsException` in ZkController, "Could not start
+  Solr", CoreContainer shut down while Jetty kept running. Its live_nodes
+  registration from before the stop still existed: an ephemeral node lives
+  until ZooKeeper expires the old session, about Solr's zkClientTimeout
+  (30 s) after ZooKeeper is up. Solr's liveness probe (every 20 s, 6
+  failures) restarted it 3 minutes later; the second start worked. Solr was
+  Ready 275 s after the node, ZAC 340 s. So the start time depends on whether
+  Solr connects before the old session expires; a faster ZooKeeper (no
+  liveness kill) makes the collision likelier. The other restarts in run 3
+  (nginx and api-proxy exit 1, KISS and ITA exit 139, Keycloak, OpenBao,
+  Open Inwoner's search-index init) did not delay the end.
