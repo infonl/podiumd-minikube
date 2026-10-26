@@ -7943,3 +7943,15 @@ previously removed cache entry` (the logout had removed the session) and
 answered ZAC's token request `CODE_TO_TOKEN_ERROR invalid_code`; ZAC answered
 403. Keycloak and ZAC behaviour, one Keycloak instance: nothing in
 start-cluster or this chart's wiring. Handed to podiumd-tests.
+
+### Memory baseline on combined-4, 2026-10-26
+
+Refreshed at 11:35 CET, 5 minutes after podiumd-tests' full tier
+(20261026-101756, 592 passed), 2 hours 15 minutes after start-cluster: node
+15503 -> 14193 MiB, containers 13450 -> 12990 MiB. Down 50-76 MiB each: the
+Open Zaak web and worker, and the Open Notificaties, Open Klant and Open
+Archiefbeheer workers (restarted 3 days ago, no long-lived growth yet). Up:
+kube-apiserver 545 -> 705 MiB (GOGC 25 and GOMEMLIMIT still set; 575 MiB heap
+in use, against 325 MiB live heap right after the 2026-10-22 restart that set
+the old value), office-converter 36 -> 92 MiB (it converted documents during
+the tier), Grafana 109 -> 148 MiB.
