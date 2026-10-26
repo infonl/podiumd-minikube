@@ -105,7 +105,8 @@ def _rerun_jobs(render: manifests.Render) -> None:
     names = render.jobs
     if names:
         print(f"Deleting {len(names)} Job(s) so this deploy re-runs them...")
-        kube.kubectl_shown("delete", "job", *names, "-n", NAMESPACE, "--ignore-not-found")
+        # No wait: Jobs carry no finalizers, so each is gone before the apply (waiting took 5 s for 37).
+        kube.kubectl_shown("delete", "job", *names, "-n", NAMESPACE, "--ignore-not-found", "--wait=false")
 
 
 def _apply_storage_hooks(selected: Options) -> manifests.Render:

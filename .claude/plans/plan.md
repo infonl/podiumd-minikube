@@ -8210,3 +8210,8 @@ Keycloak 135 s, ZaakBrug 117 s, both Elasticsearch 103 s, the rest by 88 s.
   passed, 9 xfailed, 1 xpassed) and full tier 20261026-192243 (591 passed,
   0 failed, 22 skipped, 30 xfailed, 2 xpassed: podiumd-chart-1 from #481,
   zac-7; 11:45, the same as the 11:53 run before the changes).
+- The "Job deletion" phase (12 s at 18:45) was two things: `kubectl delete
+  job` of 37 Jobs, 5 s (it waits for each; no Job or Job pod has a
+  finalizer, so each is gone at once: 3 throwaway Jobs took 54 ms), and the 4
+  upstream Keycloak CRD downloads, one after another (1.5 s now, about 7 s
+  then). Now `--wait=false` and the downloads in parallel (0.81 s).

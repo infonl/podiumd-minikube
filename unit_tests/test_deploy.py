@@ -235,7 +235,7 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         "align_with_azure",
         "rename_rows",
         "apply_monitoring_logging_crds",
-        f"delete job openzaak-config -n {NAMESPACE} --ignore-not-found",
+        f"delete job openzaak-config -n {NAMESPACE} --ignore-not-found --wait=false",
         "apply --server-side --force-conflicts -f -",
         "wait --for=condition=Established crd/a.x --timeout=60s",
         f"apply --server-side -n {NAMESPACE} -f -",

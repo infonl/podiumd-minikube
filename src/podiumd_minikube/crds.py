@@ -9,6 +9,7 @@ import tarfile
 import urllib.error
 import urllib.request
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
@@ -134,10 +135,11 @@ def with_upstream_keycloak(crds: list[Doc], version: str | None) -> list[Doc]:
     """crds with the Keycloak operator's replaced by upstream's for version (unchanged without a version)."""
     if not version:
         return crds
-    upstream: list[Doc] = []
-    for name in KEYCLOAK_CRDS:
-        text = _fetch(KEYCLOAK_CRD_URL.format(version=version, name=name + KEYCLOAK_CRD_GROUP))
-        upstream += [doc for doc in yaml.load_all(text or "", Loader=_CrdLoader) if doc]
+    urls = [KEYCLOAK_CRD_URL.format(version=version, name=name + KEYCLOAK_CRD_GROUP) for name in KEYCLOAK_CRDS]
+    # In parallel: one after another took 1.5-7 s per deploy.
+    with ThreadPoolExecutor(max_workers=len(urls)) as pool:
+        texts = list(pool.map(_fetch, urls))
+    upstream: list[Doc] = [doc for text in texts for doc in yaml.load_all(text or "", Loader=_CrdLoader) if doc]
     if not upstream:
         msg = f"no Keycloak CRDs upstream for Keycloak {version}: check {KEYCLOAK_CRD_URL}"
         raise UserError(msg)
