@@ -350,3 +350,32 @@ def test_deploy_restarts_zac_once_when_its_boot_failed(
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     _deploy()
     assert restarts == ["zac"]
+
+
+def test_deploy_restarts_zac_only_after_openzaak_config_completed(
+    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+):
+    zac = live["deployment"]["items"][0]
+    zac["status"]["readyReplicas"] = 0
+    job = live["job"]["items"][0]
+    complete, job["status"] = job["status"], {}
+    events: list[str] = []
+    answer = kube.get_json
+
+    def get_json(resource: str, *args: str) -> Any:
+        if resource == "job":
+            events.append("poll")
+            if events.count("poll") == 3:
+                job["status"] = complete
+        return answer(resource, *args)
+
+    def restart_zac() -> None:
+        events.append("restart")
+        zac["status"]["readyReplicas"] = 1
+
+    monkeypatch.setattr(kube, "get_json", get_json)
+    monkeypatch.setattr(deploy, "zac_boot_failed", lambda: True)
+    monkeypatch.setattr(deploy, "restart_zac", restart_zac)
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    _deploy()
+    assert events.index("restart") == 3

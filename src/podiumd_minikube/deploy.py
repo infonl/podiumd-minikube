@@ -250,6 +250,8 @@ ZAC = "zac"
 # WildFly gives up on ZAC's deployment when Open Zaak answers 502 (still starting) or 403 (a fresh
 # install, before openzaak-config) during its boot, and the liveness probe restarts it only after 16 x 30 s.
 BOOT_FAILED = "WFLYCTL0080"
+# The Job that gives ZAC its Open Zaak authorisations; a restart before it completed failed again.
+OPENZAAK_CONFIG = "openzaak-config"
 
 
 def zac_boot_failed() -> bool:
@@ -298,7 +300,8 @@ def _wait_ready(render: manifests.Render) -> None:
     def settled() -> tuple[list[str]] | None:
         running, failed = job_state()
         waiting = stuck()
-        if f"deployment/{ZAC}" in waiting and not restarted and zac_boot_failed():
+        authorised = OPENZAAK_CONFIG not in running
+        if f"deployment/{ZAC}" in waiting and authorised and not restarted and zac_boot_failed():
             restart_zac()
             restarted.append(ZAC)
         return None if running or waiting else (failed,)

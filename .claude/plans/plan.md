@@ -8255,3 +8255,9 @@ smoke 176 passed): teardown 22 s, provision 671 s, deploy 845 s.
   restart in parallel; the time is kube-apiserver and etcd restarting.
   minikube passes component flags at start (`--extra-config`), not the
   environment variables GOGC and GOMEMLIMIT.
+- Second fresh provision (22:00, podiumd-tests agreed): teardown 23 s,
+  provision 391 s (671). The ZAC restart fired at 22:06:37, but
+  `openzaak-config` (ZAC's Open Zaak authorisations) completed only at
+  22:07:42: the new pod booted at 22:06:54 into the same 403 and failed
+  again, and its liveness probe had to restart it. Deploy now restarts ZAC
+  only once `openzaak-config` is no longer running (`deploy.OPENZAAK_CONFIG`).
