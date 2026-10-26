@@ -93,6 +93,27 @@ metadata: {name: zac}
     assert [manifests.name_of(doc) for doc in render.docs] == ["migrate", "zac"]
 
 
+def test_fix_up_maps_each_object_to_the_chart_that_renders_it():
+    text = """---
+# Source: podiumd-minikube/charts/podiumd/charts/openzaak/templates/deployment.yaml
+kind: Deployment
+metadata: {name: openzaak}
+---
+# Source: podiumd-minikube/charts/monitoring-logging/charts/loki/templates/statefulset.yaml
+kind: StatefulSet
+metadata: {name: loki}
+---
+# Source: podiumd-minikube/templates/postgres/deployment.yaml
+kind: Deployment
+metadata: {name: postgres}
+"""
+    assert manifests.fix_up(text, objecten_merged=False).charts == {
+        "Deployment/openzaak": "podiumd",
+        "StatefulSet/loki": "monitoring-logging",
+        "Deployment/postgres": "podiumd-minikube",
+    }
+
+
 def _configmap(name: str, configuration: object) -> manifests.Doc:
     return {
         "kind": "ConfigMap",

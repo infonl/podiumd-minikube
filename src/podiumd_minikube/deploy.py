@@ -10,6 +10,7 @@ from typing import Any
 from podiumd_minikube import chart
 from podiumd_minikube import crds
 from podiumd_minikube import dependency
+from podiumd_minikube import deployed
 from podiumd_minikube import disk
 from podiumd_minikube import dns
 from podiumd_minikube import gateway
@@ -163,7 +164,7 @@ def _apply_full_manifest(render: manifests.Render, expected: int) -> None:
 
 
 @lock.holding("deploy")
-def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
+def deploy(*, full: bool, force_prune: bool, extra: list[str], command: str = "deploy") -> None:
     """Syncs dependencies, applies the render, then the guarded and post-apply steps."""
     kube.require_minikube_context()
     disk.check(disk.DEPLOY)
@@ -193,6 +194,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str]) -> None:
     _rerun_jobs(render)
     _apply_crds(render)
     _apply_full_manifest(render, expected_storage_errors(storage))
+    deployed.record(command, render)
     print()
     chart_hosts = hosts.chart_hosts()
     # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.

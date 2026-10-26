@@ -62,12 +62,6 @@ def changes(source: list[Doc], target: list[Doc]) -> tuple[list[Doc], dict[Key, 
     return created, patches, deleted
 
 
-def _resource(key: Key) -> str:
-    api_version, kind, name = key
-    group = api_version.rpartition("/")[0]
-    return f"{kind}.{group}/{name}" if group else f"{kind}/{name}"
-
-
 def _counted(counts: dict[str, int]) -> list[str] | None:
     """None while a StatefulSet in counts lacks its pod count or has not rolled out; else its names."""
     for name, count in counts.items():
@@ -88,9 +82,9 @@ def switch(*, on: bool) -> None:
     if created:
         kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(created))
     for key, patch in patches.items():
-        kube.kubectl_shown("patch", _resource(key), "-n", NAMESPACE, "--type", "merge", "-p", json.dumps(patch))
+        kube.kubectl_shown("patch", kube.reference(*key), "-n", NAMESPACE, "--type", "merge", "-p", json.dumps(patch))
     for key in deleted:
-        kube.kubectl_shown("delete", _resource(key), "-n", NAMESPACE, "--ignore-not-found")
+        kube.kubectl_shown("delete", kube.reference(*key), "-n", NAMESPACE, "--ignore-not-found")
     counts = {name: count if on else 1 for name, (_, count) in MULTI_POD.items()}
     print(f"Waiting for {', '.join(f'{name} at {count}' for name, count in counts.items())}...")
     if polling.wait_until(lambda: _counted(counts), timeout=READY_TIMEOUT, interval=5) is None:

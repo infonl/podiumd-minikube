@@ -96,6 +96,10 @@ def strip_image_digests(text: str) -> str:
     return _DIGEST_SUFFIX.sub(r"\1", text)
 
 
+# helm template's comment before each document: "# Source: <chart>/[charts/<dependency>/]<path>".
+_SOURCE = re.compile(r"^# Source: ([^/]+)/(?:charts/([^/]+)/)?", re.MULTILINE)
+
+
 def images(text: str) -> list[str]:
     """Sorted unique `image:` values in rendered text."""
     return sorted(set(_IMAGE_LINE.findall(text)))
@@ -577,6 +581,8 @@ class Render:
     docs: list[Doc]
     large_configmaps: list[Doc]
     crds: list[Doc] = field(default_factory=list[Doc])
+    # "Kind/name" -> the dependency that renders it, or this chart.
+    charts: dict[str, str] = field(default_factory=dict[str, str])
 
     @property
     def manifest(self) -> str:
@@ -586,8 +592,10 @@ class Render:
 
 def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
-    loaded: list[Doc | None] = list(yaml.safe_load_all(strip_image_digests(text)))
-    docs = [doc for doc in loaded if doc and not _is_test_or_delete_hook(doc) and not is_unused_zac_collector(doc)]
+    chunks = re.split(r"^---$", strip_image_digests(text), flags=re.MULTILINE)
+    loaded: list[tuple[Doc | None, re.Match[str] | None]] = [(yaml.safe_load(c), _SOURCE.search(c)) for c in chunks]
+    charts = {f"{doc.get('kind')}/{name_of(doc)}": source[2] or source[1] for doc, source in loaded if doc and source}
+    docs = [doc for doc, _ in loaded if doc and not _is_test_or_delete_hook(doc) and not is_unused_zac_collector(doc)]
     disable_service_links(docs)
     allow_rolling_updates(docs)
     drop_duplicate_env(docs)
@@ -609,6 +617,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
         docs=[doc for doc in docs if not _is_large_configmap(doc) and doc.get("kind") != "CustomResourceDefinition"],
         large_configmaps=[doc for doc in docs if _is_large_configmap(doc)],
         crds=[doc for doc in docs if doc.get("kind") == "CustomResourceDefinition"],
+        charts=charts,
     )
 
 

@@ -12,6 +12,7 @@ import pytest
 
 from conftest import FakeRun
 
+from podiumd_minikube import deployed
 from podiumd_minikube import hosts
 from podiumd_minikube import memory
 from podiumd_minikube import status
@@ -197,6 +198,7 @@ def cluster(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         "ns/fresh/app": status.Usage(10, 0.0),
     }
     monkeypatch.setattr(status, "container_usage", lambda _items: usage)
+    monkeypatch.setattr(deployed, "lines", lambda _items: ["Deployed    by deploy --full"])
     fake_run.on("kubectl", "get", "pods", "-A", stdout=json.dumps({"items": [pod]}))
     fake_run.on("kubectl", "get", "jobs", "-A", stdout=json.dumps({"items": []}))
     fake_run.on("docker", "stats", stdout="4GiB / 16GiB|150%")
@@ -215,7 +217,7 @@ def test_report_shows_node_profiles_access_and_containers_against_the_baseline(
     out = capsys.readouterr().out
     assert "Node        memory 4.0 / 16.0 GiB cap, budget 17.0 GiB, containers 0.3 GiB" in out
     assert "CPU 1.5 / 6 cores" in out
-    assert "Profiles    kiss\n" in out
+    assert "Deployed    by deploy --full\nProfiles    kiss\n" in out
     assert "youngest container 60 min ago (settled)" in out
     assert "Access      tunnel PID 4242, edge 10.96.0.200; Run podiumd-minikube update-hosts" in out
     assert "Lock        free" in out

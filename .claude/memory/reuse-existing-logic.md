@@ -43,7 +43,8 @@ live: the tunnel script's own host list went stale, which is why
    | the rendered manifest, with all local fixups | `deploy.Options.render`; a new fixup is one more step in `manifests.fix_up` |
    | YAML sections that may be null, a resource's name | `manifests.section`, `manifests.name_of` |
    | the `*.local` hosts of all Ingresses | `podiumd_minikube.hosts` |
-   | podiumd chart version and `charts/*.tgz` sync | `podiumd_minikube.dependency` (`selection`, `write`, `sync`) |
+   | what the last deploy applied, running containers per chart | `podiumd_minikube.deployed` (ConfigMap `podiumd-minikube-deployed`) |
+| podiumd chart version and `charts/*.tgz` sync | `podiumd_minikube.dependency` (`selection`, `write`, `sync`) |
    | a single setting from `values.yaml` | `podiumd_minikube.values` |
    | facts from the vendored tarballs (objecten shape) | `podiumd_minikube.chart` |
    | the monitoring-logging CRDs | `crds.apply_monitoring_logging_crds` |

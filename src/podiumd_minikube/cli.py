@@ -115,7 +115,12 @@ def deploy_extended(argv: list[str]) -> None:
 def _deploy(command: Command, argv: list[str]) -> None:
     args, extra = deployment.add_arguments(_parser(command)).parse_known_args(argv)
     options = [*(chart.SKIP_ROLES_SETS if args.skip_roles else []), *(chart.OTEL_SETS if args.otel else [])]
-    deployment.deploy(full=args.full, force_prune=args.force_prune, extra=[*options, *extra])
+    deployment.deploy(
+        full=args.full,
+        force_prune=args.force_prune,
+        extra=[*options, *extra],
+        command=" ".join([_name(command), *argv]),
+    )
 
 
 def expose_postgres(argv: list[str]) -> None:
@@ -185,7 +190,7 @@ def setup_tunnel(argv: list[str]) -> None:
 
 
 def show_cluster_status(argv: list[str]) -> None:
-    """Shows the cluster's state: node and container memory and CPU, profiles, problems, tunnel, lock and disk.
+    """Shows memory, CPU, disk, the last deploy, containers per chart, profiles, problems, access and lock.
 
     Reads only; containers are compared with tests/memory-baseline.json.
     """

@@ -7995,3 +7995,35 @@ Switched to `set-podiumd-version 4.10.0 <verify worktree>/charts/monitoring-logg
 The published `podiumd-4.10.0.tgz` matches the verify worktree's
 `charts/podiumd` (f0548763): same templates and values, same dependency
 versions, Chart.yaml differs in formatting only. No redeploy needed.
+
+### What was deployed, and the containers per chart (user: "can show-cluster-status also show what was deployed")
+
+`deploy` renders with `helm template | kubectl apply`, so there is no Helm
+release record, and `.podiumd-versions.yaml` holds the selection, which can
+differ from what runs (it did: published 4.10.0 selected, the combined-4
+checkout deployed). Pod labels cannot tell the charts apart: most pods carry
+no `helm.sh/chart`, and a checkout has the same Chart.yaml version as the
+release.
+
+- `deploy` writes ConfigMap `podiumd-minikube-deployed` (`deployed.record`)
+  right after the full apply: time, command line, each dependency's selection
+  (a checkout with its branch and commit, and "uncommitted changes" when
+  dirty), this repo's branch and commit, and `Render.charts`. It carries no
+  chart labels, so prune leaves it; server-side apply, as the map is 24 KB
+  (483 objects with `--full`).
+- `Render.charts` maps "Kind/name" to the chart that renders it, from helm
+  template's `# Source:` comment per document; `fix_up` now loads the
+  documents one by one to keep it (same parse cost).
+- `show-cluster-status` shows the record, adds "selected now: ..." where the
+  selection differs, and counts running containers per chart: each pod's
+  owners are followed (one `kubectl get` per owner kind) to the first rendered
+  object, so operator-built pods (Keycloak, Prometheus, Elasticsearch, Solr)
+  count for the chart that renders their resource. Pods no rendered object
+  owns (podiumd-tests' mock server) count as "other".
+- Live, `--full` on combined-4: podiumd 61, monitoring-logging 12 (Alloy 2,
+  Grafana 3, Loki 2 + gateway, Prometheus 2, its operator, otel-collector),
+  podiumd-minikube 3 (Postgres, Mailpit, bag-mock), other 1. The record for
+  the 09:35 deploy was written by hand from the known facts (`deploy --full`,
+  combined-4 f0548763 for both charts, podiumd-minikube 5671897).
+- `kube.reference` builds kubectl's "Kind.group/name"; it was
+  `replicas._resource`.

@@ -56,6 +56,13 @@ def get_json(*args: str) -> Any:
     return json.loads(kubectl("get", *args, "-o", "json"))
 
 
+def reference(api_version: str, kind: str, name: str = "") -> str:
+    """kubectl's "Kind.group/name" for an object, or "Kind.group" for all of a kind."""
+    group = api_version.rpartition("/")[0]
+    kinds = f"{kind}.{group}" if group else kind
+    return f"{kinds}/{name}" if name else kinds
+
+
 def exists(resource: str, namespace: str = NAMESPACE) -> bool:
     """Whether resource ("deployment/x", "job/y") exists in namespace."""
     return kubectl_ok("get", resource, "-n", namespace)

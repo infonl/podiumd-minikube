@@ -13,6 +13,7 @@ from podiumd_minikube import chart
 from podiumd_minikube import crds
 from podiumd_minikube import dependency
 from podiumd_minikube import deploy
+from podiumd_minikube import deployed
 from podiumd_minikube import disk
 from podiumd_minikube import dns
 from podiumd_minikube import gateway
@@ -163,6 +164,7 @@ STEPS = [
     (postgres, "align_with_azure"),
     (postgres, "rename_rows"),
     (crds, "apply_monitoring_logging_crds"),
+    (deployed, "record"),
     (gateway, "apply"),
     (dns, "apply_hosts"),
     (keycloak, "repair_default_client_scopes"),
@@ -235,6 +237,7 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         "apply --server-side --force-conflicts -f -",
         "wait --for=condition=Established crd/a.x --timeout=60s",
         f"apply --server-side -n {NAMESPACE} -f -",
+        "record",
         "apply",
         "apply_hosts",
         "repair_default_client_scopes",

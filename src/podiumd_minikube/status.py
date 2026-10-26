@@ -12,6 +12,7 @@ from datetime import UTC
 from datetime import datetime
 from typing import Any
 
+from podiumd_minikube import deployed
 from podiumd_minikube import disk
 from podiumd_minikube import kube
 from podiumd_minikube import lock
@@ -254,6 +255,7 @@ def report(top: int) -> None:
     lines = [
         f"podiumd-minikube cluster status {datetime.now(UTC):%Y-%m-%d %H:%M} UTC",
         *_node_lines(profiles, node_usage(), usage),
+        *deployed.lines(items),
         f"Profiles    {' '.join(p for p, on in profiles.items() if on) or 'none (default)'}",
         f"Started     youngest container {age / 60:.0f} min ago ({settled})",
         _access_line(),
