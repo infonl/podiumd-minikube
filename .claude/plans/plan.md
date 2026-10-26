@@ -8261,3 +8261,12 @@ smoke 176 passed): teardown 22 s, provision 671 s, deploy 845 s.
   22:07:42: the new pod booted at 22:06:54 into the same 403 and failed
   again, and its liveness probe had to restart it. Deploy now restarts ZAC
   only once `openzaak-config` is no longer running (`deploy.OPENZAAK_CONFIG`).
+- That deploy then failed after 1241 s: after 900 s Open Inwoner (init
+  container in CrashLoopBackOff) and both Elasticsearch clusters (health red,
+  primaries unassigned: "isn't allowed to allocate") were not ready.
+  `/var/lib/docker` was 95% full (7 GB free; 77% after the first fresh
+  provision): Elasticsearch places no shards above its disk watermarks.
+  `docker system df`: images 48.6 GB (42.9 reclaimable), local volumes 70.2
+  GB, of which the active minikube volume about 67 GB. Not pruned: the user
+  decides. Cause of the larger node volume not found yet. The ZAC fix with
+  the `openzaak-config` gate (5556ba9) is untested on a fresh install.
