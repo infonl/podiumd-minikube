@@ -8409,3 +8409,17 @@ the start, the apps 154 s later. The single kubelet restart pays off on
 `provision-cluster` only; it awaits the next fresh provision.
 `minikube cache delete` leaves `"cache": {}` in ~/.minikube/config/config.json:
 harmless.
+
+### Cilium from the minikube cache: reverted
+
+The fourth fresh provision (11:29) failed at once: `minikube cache add`
+refuses while the profile does not exist ("minikube profile is not valid:
+cluster \"minikube\" does not exist"). The throwaway-profile test passed only
+because the main profile existed then. A node started with
+`--no-kubernetes` to load the images first keeps that setting: a later
+`minikube start` with the CNI stays without Kubernetes. After `minikube
+stop` the node keeps its images, so the cache never helped start-cluster
+either. Removed: the cache add/delete, the host pull of the Cilium images and
+`useDigest: false` (back to the chart's digests). The node pulls Cilium from
+quay.io again (75 s on the third fresh provision). Kept from 5db06e9: the
+single kubelet restart after the tuning.

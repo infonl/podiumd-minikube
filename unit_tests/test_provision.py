@@ -40,31 +40,19 @@ def _record(calls: list[str], name: str):
 
 @pytest.mark.parametrize(("status", "started"), [(0, False), (1, True)])
 def test_start_minikube_starts_only_a_stopped_profile(
-    fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, status: int, started: bool
+    fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, *, status: int, started: bool
 ):
     checked: list[str] = []
-    manifest = tmp_path / "cilium.yaml"
-    manifest.write_text("image: quay.io/cilium/cilium:v1\nimage: quay.io/cilium/operator-generic:v1\n")
-    monkeypatch.setattr(cni, "write_manifest", lambda: str(manifest))
+    monkeypatch.setattr(cni, "write_manifest", lambda: "/c/cilium.yaml")
     monkeypatch.setattr(memory, "check", _record(checked, "memory"))
     fake_run.on("minikube", "status", returncode=status)
-    fake_run.on("docker", "image", "inspect", "quay.io/cilium/cilium:v1", stdout=provision.PLATFORM)
-    fake_run.on("minikube", "start", returncode=1)
-    images = ["quay.io/cilium/cilium:v1", "quay.io/cilium/operator-generic:v1"]
-    if started:
-        with pytest.raises(UserError):
-            provision.start_minikube(4, 8192)
-    else:
-        provision.start_minikube(4, 8192)
+    provision.start_minikube(4, 8192)
     starts = fake_run.ran("minikube", "start")
     assert bool(starts) == started
     assert checked == ([] if started else ["memory"])
     if started:
         assert starts[0][:7] == ["minikube", "start", "-p", PROFILE, "--driver=docker", "--cpus=4", "--memory=8192"]
-        assert f"--cni={manifest}" in starts[0]
-        assert fake_run.ran("docker", "pull") == [["docker", "pull", "--platform", provision.PLATFORM, images[1]]]
-        # The cache entries go again, also after a failed start.
-        assert fake_run.ran("minikube", "cache") == [["minikube", "cache", verb, *images] for verb in ("add", "delete")]
+        assert "--cni=/c/cilium.yaml" in starts[0]
 
 
 @pytest.mark.parametrize(

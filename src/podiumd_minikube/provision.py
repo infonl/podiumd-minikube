@@ -76,23 +76,12 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
         memory.check(full=True)
         return
     print(f"Starting minikube (cpus={cpus}, memory={memory_mb}MB)...")
-    # minikube start loads its cache into the node before the CNI: the node pulled
-    # Cilium's 718 MB agent from quay.io in 75 s. The cache list is global, so only for this start.
-    cni_images = manifests.images(Path(cni_manifest).read_text(encoding="utf-8"))
-    # From the host's Docker, so the next provision finds them there too.
-    for error in (_pull(image) for image in cni_images if not cached(image)):
-        if error:
-            raise error
-    process.run(["minikube", "cache", "add", *cni_images], capture=False)
-    try:
-        # Without --driver=docker minikube silently falls back to qemu2.
-        process.run(
-            ["minikube", "start", "-p", PROFILE, "--driver=docker", f"--cpus={cpus}", f"--memory={memory_mb}",
-             f"--cni={cni_manifest}", *cni.START_ARGS],
-            capture=False,
-        )  # fmt: skip
-    finally:
-        process.run(["minikube", "cache", "delete", *cni_images], check=False)
+    # Without --driver=docker minikube silently falls back to qemu2.
+    process.run(
+        ["minikube", "start", "-p", PROFILE, "--driver=docker", f"--cpus={cpus}", f"--memory={memory_mb}",
+         f"--cni={cni_manifest}", *cni.START_ARGS],
+        capture=False,
+    )  # fmt: skip
 
 
 def cpuset_args(cpus: int, host_cpus: int) -> list[str]:
