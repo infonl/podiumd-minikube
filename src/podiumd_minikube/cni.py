@@ -62,7 +62,14 @@ def values() -> dict[str, Any]:
         "extraConfig": {"bpf-sock-rev-map-max": "16384"},
         # A cilium-config change alone does not restart the agent; the checksum annotation does.
         "rollOutCiliumPods": True,
-        "operator": {"replicas": 1, "resources": OPERATOR_RESOURCES, "rollOutPods": True},
+        # By tag: an image minikube loads from the host's cache does not match a registry digest.
+        "image": {"useDigest": False},
+        "operator": {
+            "replicas": 1,
+            "resources": OPERATOR_RESOURCES,
+            "rollOutPods": True,
+            "image": {"useDigest": False},
+        },
         "identityAllocationMode": "crd",
         "policyEnforcementMode": "default",
         "resources": AGENT_RESOURCES,

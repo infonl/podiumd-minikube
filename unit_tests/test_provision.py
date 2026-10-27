@@ -40,43 +40,70 @@ def _record(calls: list[str], name: str):
 
 @pytest.mark.parametrize(("status", "started"), [(0, False), (1, True)])
 def test_start_minikube_starts_only_a_stopped_profile(
-    fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, *, status: int, started: bool
+    fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, status: int, started: bool
 ):
     checked: list[str] = []
-    monkeypatch.setattr(cni, "write_manifest", lambda: "/c/cilium.yaml")
+    manifest = tmp_path / "cilium.yaml"
+    manifest.write_text("image: quay.io/cilium/cilium:v1\nimage: quay.io/cilium/operator-generic:v1\n")
+    monkeypatch.setattr(cni, "write_manifest", lambda: str(manifest))
     monkeypatch.setattr(memory, "check", _record(checked, "memory"))
     fake_run.on("minikube", "status", returncode=status)
-    provision.start_minikube(4, 8192)
+    fake_run.on("docker", "image", "inspect", "quay.io/cilium/cilium:v1", stdout=provision.PLATFORM)
+    fake_run.on("minikube", "start", returncode=1)
+    images = ["quay.io/cilium/cilium:v1", "quay.io/cilium/operator-generic:v1"]
+    if started:
+        with pytest.raises(UserError):
+            provision.start_minikube(4, 8192)
+    else:
+        provision.start_minikube(4, 8192)
     starts = fake_run.ran("minikube", "start")
     assert bool(starts) == started
     assert checked == ([] if started else ["memory"])
     if started:
         assert starts[0][:7] == ["minikube", "start", "-p", PROFILE, "--driver=docker", "--cpus=4", "--memory=8192"]
-        assert "--cni=/c/cilium.yaml" in starts[0]
+        assert f"--cni={manifest}" in starts[0]
+        assert fake_run.ran("docker", "pull") == [["docker", "pull", "--platform", provision.PLATFORM, images[1]]]
+        # The cache entries go again, also after a failed start.
+        assert fake_run.ran("minikube", "cache") == [["minikube", "cache", verb, *images] for verb in ("add", "delete")]
 
 
-def test_start_node_sizes_the_node_then_tunes_it_in_order(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize(
+    ("control_plane", "services", "kubelet_config", "restarted"),
+    [
+        (["etcd"], ["containerd"], False, ["containerd", "kubelet"]),
+        ([], [], True, ["kubelet"]),
+        ([], ["kubelet"], True, ["kubelet"]),
+        ([], [], False, []),
+    ],
+)
+def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
+    fake_run: FakeRun,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    control_plane: list[str],
+    services: list[str],
+    kubelet_config: bool,
+    restarted: list[str],
+):
     calls: list[str] = []
     monkeypatch.setenv("MINIKUBE_CPUS", "4")
     monkeypatch.setattr("os.cpu_count", lambda: 16)
     monkeypatch.setattr(memory, "wanted", lambda: 8192)
     monkeypatch.setattr(provision, "start_minikube", lambda cpus, mb: calls.append(f"start {cpus} {mb}"))
-    for module, name in [
-        (kube, "require_minikube_context"),
-        (cni, "apply"),
-        (provision, "tune_control_plane"),
-        (provision, "tune_node_services"),
-        (provision, "isolate_pod_dns"),
-    ]:
+    for module, name in [(kube, "require_minikube_context"), (cni, "apply")]:
         monkeypatch.setattr(module, name, _record(calls, name))
+    monkeypatch.setattr(provision, "tune_control_plane", lambda: [*control_plane])
+    monkeypatch.setattr(provision, "tune_node_services", lambda: [*services])
+    monkeypatch.setattr(provision, "isolate_pod_dns", lambda: kubelet_config)
+    monkeypatch.setattr(provision, "restart_node_services", lambda names: calls.append(f"restart {names}"))
+    monkeypatch.setattr(provision, "wait_for_control_plane", lambda names: calls.append(f"wait {names}"))
     provision.start_node()
     assert calls == [
         "start 4 8192",
         "require_minikube_context",
         "apply",
-        "tune_control_plane",
-        "tune_node_services",
-        "isolate_pod_dns",
+        f"restart {restarted}",
+        f"wait {control_plane}",
     ]
     assert fake_run.ran("docker", "update") == [["docker", "update", "--cpus=4", "--cpuset-cpus=0-3", PROFILE]]
 
@@ -114,11 +141,13 @@ def test_tune_control_plane_writes_untuned_pods_and_waits_until_tuned_and_ready(
         "kubectl", "get", "pod", "-n", "kube-system", f"kube-apiserver-{PROFILE}", returncode=returncode, stdout=pod
     )
     monkeypatch.setattr(provision, "CONTROL_PLANE_TIMEOUT", 0)
+    changed = provision.tune_control_plane()
+    assert changed == ["kube-apiserver"]
     if ready:
-        provision.tune_control_plane()
+        provision.wait_for_control_plane(changed)
     else:
         with pytest.raises(UserError, match="kube-apiserver not ready 0s after its env change"):
-            provision.tune_control_plane()
+            provision.wait_for_control_plane(changed)
     assert [call[-1] for call in fake_run.ran("minikube", "cp")] == ["/etc/kubernetes/.kube-apiserver.yaml"]
     moved = [call[-1] for call in fake_run.ran(*SSH) if "sudo mv" in call[-1]]
     assert len(moved) == 1 and "sudo chmod 600 /etc/kubernetes/.kube-apiserver.yaml" in moved[0]
@@ -127,14 +156,18 @@ def test_tune_control_plane_writes_untuned_pods_and_waits_until_tuned_and_ready(
     )
 
 
-def test_tune_node_services_writes_and_restarts_only_what_differs(fake_run: FakeRun):
+def test_tune_node_services_writes_only_what_differs(fake_run: FakeRun):
     (path, content) = provision.node_drop_ins()["kubelet"]
     fake_run.on(*SSH, f"cat {path} 2>/dev/null || true", stdout=content)
-    provision.tune_node_services()
+    assert provision.tune_node_services() == ["containerd", "systemd-journald"]
     assert len(fake_run.ran("minikube", "cp")) == 2
-    assert (
-        fake_run.calls[-1][-1] == "sudo systemctl daemon-reload && sudo systemctl restart containerd systemd-journald"
-    )
+    assert not [call for call in fake_run.ran(*SSH) if "systemctl" in call[-1]]
+
+
+def test_restart_node_services_restarts_them_in_one_command(fake_run: FakeRun):
+    provision.restart_node_services([])
+    provision.restart_node_services(["containerd", "kubelet"])
+    assert fake_run.calls == [[*SSH, "sudo systemctl daemon-reload && sudo systemctl restart containerd kubelet"]]
 
 
 RESOLV = "nameserver 192.168.49.1\nsearch home\n"
@@ -152,10 +185,11 @@ def test_isolate_pod_dns_writes_only_what_differs(fake_run: FakeRun, pod_resolv:
     fake_run.on(*SSH, "cat /etc/resolv.conf", stdout=RESOLV)
     fake_run.on(*SSH, f"cat {provision.POD_RESOLV_CONF} 2>/dev/null || true", stdout=pod_resolv)
     fake_run.on(*SSH, f"sudo cat {provision.KUBELET_CONFIG}", stdout=kubelet)
-    provision.isolate_pod_dns()
+    changed = provision.isolate_pod_dns()
     commands = [call[-1] for call in fake_run.ran(*SSH)]
     assert [command.rsplit(" ", 1)[-1] for command in commands if "sudo mv" in command] == written
-    assert ("sudo systemctl restart kubelet" in commands) == bool(written)
+    assert changed == bool(written)
+    assert not [command for command in commands if "systemctl" in command]
 
 
 def test_chart_images_render_everything_without_digests(monkeypatch: pytest.MonkeyPatch):

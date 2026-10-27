@@ -76,12 +76,23 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
         memory.check(full=True)
         return
     print(f"Starting minikube (cpus={cpus}, memory={memory_mb}MB)...")
-    # Without --driver=docker minikube silently falls back to qemu2.
-    process.run(
-        ["minikube", "start", "-p", PROFILE, "--driver=docker", f"--cpus={cpus}", f"--memory={memory_mb}",
-         f"--cni={cni_manifest}", *cni.START_ARGS],
-        capture=False,
-    )  # fmt: skip
+    # minikube start loads its cache into the node before the CNI: the node pulled
+    # Cilium's 718 MB agent from quay.io in 75 s. The cache list is global, so only for this start.
+    cni_images = manifests.images(Path(cni_manifest).read_text(encoding="utf-8"))
+    # From the host's Docker, so the next provision finds them there too.
+    for error in (_pull(image) for image in cni_images if not cached(image)):
+        if error:
+            raise error
+    process.run(["minikube", "cache", "add", *cni_images], capture=False)
+    try:
+        # Without --driver=docker minikube silently falls back to qemu2.
+        process.run(
+            ["minikube", "start", "-p", PROFILE, "--driver=docker", f"--cpus={cpus}", f"--memory={memory_mb}",
+             f"--cni={cni_manifest}", *cni.START_ARGS],
+            capture=False,
+        )  # fmt: skip
+    finally:
+        process.run(["minikube", "cache", "delete", *cni_images], check=False)
 
 
 def cpuset_args(cpus: int, host_cpus: int) -> list[str]:
@@ -99,9 +110,13 @@ def start_node() -> None:
     process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, os.cpu_count() or cpus), PROFILE])
     kube.require_minikube_context()
     cni.apply()
-    tune_control_plane()
-    tune_node_services()
-    isolate_pod_dns()
+    control_plane = tune_control_plane()
+    services = tune_node_services()
+    # The kubelet reported restarted static pods up to 100 s late (etcd); a restarted one at once.
+    if (isolate_pod_dns() or control_plane) and "kubelet" not in services:
+        services.append("kubelet")
+    restart_node_services(services)
+    wait_for_control_plane(control_plane)
 
 
 def with_control_plane_env(manifest: str) -> str | None:
@@ -158,8 +173,8 @@ def with_pod_resolv_conf(config: str) -> str | None:
     return yaml.safe_dump(parsed, sort_keys=False)
 
 
-def isolate_pod_dns() -> None:
-    """Points the kubelet at POD_RESOLV_CONF; minikube start rewrites its configuration, so every start does this.
+def isolate_pod_dns() -> bool:
+    """Points the kubelet at POD_RESOLV_CONF; whether its configuration changed (minikube start rewrites it).
 
     Pods started before keep their search domains until they restart.
     """
@@ -168,10 +183,10 @@ def isolate_pod_dns() -> None:
         _write_node_file(POD_RESOLV_CONF, wanted, mode="644")
     config = with_pod_resolv_conf(kube.node(f"sudo cat {KUBELET_CONFIG}"))
     if config is None:
-        return
+        return False
     _write_node_file(KUBELET_CONFIG, config, mode="644")
-    print(f"Restarting the kubelet with resolvConf {POD_RESOLV_CONF} (no search domains of the laptop)...")
-    kube.node("sudo systemctl restart kubelet")
+    print(f"The kubelet gets resolvConf {POD_RESOLV_CONF} (no search domains of the laptop).")
+    return True
 
 
 def service_drop_in(env: dict[str, str]) -> str:
@@ -188,22 +203,27 @@ def node_drop_ins() -> dict[str, tuple[str, str]]:
     }
 
 
-def tune_node_services() -> None:
-    """Writes node_drop_ins(); restarts the services it changed (containers outlive containerd)."""
+def tune_node_services() -> list[str]:
+    """Writes node_drop_ins(); returns the services whose drop-in changed."""
     changed: list[str] = []
     for service, (path, wanted) in node_drop_ins().items():
         if kube.node(f"cat {path} 2>/dev/null || true").strip() == wanted.strip():
             continue
         _write_node_file(path, wanted, mode="644")
         changed.append(service)
-    if not changed:
+    return changed
+
+
+def restart_node_services(services: list[str]) -> None:
+    """Restarts services on the node (containers outlive containerd)."""
+    if not services:
         return
-    print(f"Restarting {', '.join(changed)}...")
-    kube.node(f"sudo systemctl daemon-reload && sudo systemctl restart {' '.join(changed)}")
+    print(f"Restarting {', '.join(services)}...")
+    kube.node(f"sudo systemctl daemon-reload && sudo systemctl restart {' '.join(services)}")
 
 
-def tune_control_plane() -> None:
-    """Adds CONTROL_PLANE_ENV to the static pods; minikube start rewrites their files, so every start does this."""
+def tune_control_plane() -> list[str]:
+    """Adds CONTROL_PLANE_ENV to the static pods; returns the changed ones (minikube start rewrites their files)."""
     changed: list[str] = []
     for name in CONTROL_PLANE_ENV:
         path = f"{STATIC_PODS}/{name}.yaml"
@@ -212,9 +232,13 @@ def tune_control_plane() -> None:
             continue
         _write_node_file(path, tuned, mode="600")
         changed.append(name)
-    if not changed:
-        return
-    print(f"Restarting {', '.join(changed)} with {[CONTROL_PLANE_ENV[name] for name in changed]}...")
+    if changed:
+        print(f"Restarting {', '.join(changed)} with {[CONTROL_PLANE_ENV[name] for name in changed]}...")
+    return changed
+
+
+def wait_for_control_plane(changed: list[str]) -> None:
+    """Waits until the static pods changed run with CONTROL_PLANE_ENV and are ready."""
     for name in changed:
         if not polling.wait_until(functools.partial(_tuned_and_ready, name), timeout=CONTROL_PLANE_TIMEOUT, interval=5):
             msg = f"{name} not ready {CONTROL_PLANE_TIMEOUT}s after its env change: see `minikube logs -p {PROFILE}`"

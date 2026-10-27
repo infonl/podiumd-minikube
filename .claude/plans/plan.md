@@ -8352,3 +8352,39 @@ OpenBao no longer in front of it, but failed after 1078 s:
   restart it. The restart now waits for both (`deploy.ZAC_JOBS`).
 
 A second `deploy --full` (10:01) passed in 135 s.
+
+### Provision: Cilium from the host, one kubelet restart
+
+The third fresh provision spent 106 s between `minikube start` and the
+control-plane tuning, and 118 s in the tuning. Found from the kube-system
+events and the node's container start times:
+
+- 106 s: the node pulled Cilium's agent (718 MB) from quay.io itself,
+  09:35:47-09:37:02, then the agent took about 25 s to become ready. A host
+  `docker pull` of the same image took 270 s an hour later: quay.io's speed
+  decides. Now `start_minikube` pulls the Cilium images into the host's Docker
+  when it lacks them, and passes them to `minikube cache add` for the start:
+  minikube loads its cache into the node before it applies the CNI. The cache
+  list is global, so `minikube cache delete` follows, also after a failed
+  start. The Cilium chart names its images by tag (`image.useDigest: false`,
+  same for the operator): a loaded image does not match the registry digest,
+  so the kubelet would pull anyway. Throwaway profile (2 CPUs, 4 GB):
+  `cache add` 34 s (from the host's Docker), events "already present on
+  machine", Cilium ready 13 s after `minikube start` returned.
+- 118 s: the static pods ran with the new env 11-45 s after the write (etcd
+  09:37:38, kube-apiserver 09:38:06, controller-manager 09:38:12 after one
+  crash), but the kubelet published etcd's mirror pod only at 09:39:18, so
+  `_tuned_and_ready` waited for it. On a throwaway profile, two rounds each:
+  waiting as before 113 and 100 s (etcd last both times); restarting the
+  kubelet right after the write 30 and 33 s. `start_node` now writes the
+  static pods, the drop-ins and the kubelet's resolvConf first, restarts the
+  changed services once (the kubelet whenever a static pod or its config
+  changed), then waits for the control plane. `tune_node_services` and
+  `isolate_pod_dns` only write and report what changed;
+  `restart_node_services` and `wait_for_control_plane` are new.
+
+Expected on a fresh provision: about 90 s less for Cilium (more on a slow
+quay.io day) and about 70 s less for the tuning. start-cluster runs the same
+`start_node`: a stopped node loads Cilium from the cache too, and its tuning
+restarts the kubelet once instead of twice. The first start-cluster after
+this change rolls the Cilium pods once (their image reference changes).
