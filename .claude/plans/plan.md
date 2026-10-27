@@ -8503,3 +8503,16 @@ Live: deploy --full 141 s; with the Elasticsearch and Open Inwoner pods deleted
 together, Open Inwoner was Ready in 55 s with no init restart, but
 Elasticsearch answered before the rebuild ran, so the retry itself did not run.
 The next start-cluster or fresh install shows it.
+
+### Sixth fresh install: preloads verified
+
+Teardown 27 s (14:44), provision-cluster 406 s, deploy --full 471 s (exit 0
+at 14:59, first try). Only Cilium's two images came from the network; the
+Keycloak and redis-operator "Pulling" events took 1.2-1.5 s (their pull
+policy asks the registry; the layers were on the node). So 3a168a2 and
+cd1678f hold. The search-index retry (7cb0c4a) did not run: Elasticsearch
+was ready before the rebuild, no init restart. Why deploy took 471 s and not
+the 298 s of the second install is not investigated. podiumd-tests: bootstrap
+exit 0, smoke 20261027-140429 176 passed, 1 skipped, 9 xfailed, 1 xpassed,
+0 failed; its f461856 (scrape targets right after a Prometheus start) and
+5654674 (Keycloak serverinfo) passed on this fresh install.
