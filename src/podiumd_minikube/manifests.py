@@ -466,8 +466,9 @@ OPEN_INWONER_SEARCH_INDEX = "openinwoner-search-index"
 # Keycloak's admin user: its SQL needs the realm table Keycloak creates on its first start.
 # Open Inwoner's index rebuild: its Elasticsearch still starting. The catalogus and
 # objecttypen Jobs: Open Zaak and Objecttypen still being configured; ZAC waits for the first.
-# OpenBao's schema and config, Open VTB's config: Postgres or OpenBao still starting.
+# OpenBao's schema and config, Open VTB's and Open Beheer's config: Postgres or OpenBao still starting.
 RETRIED_CONTAINERS = {
+    ("Job", "openbeheer-config", "openbeheer"),
     ("Job", "openbao-db-schema", "schema"),
     ("Job", "openbao-config", "config"),
     ("Job", "openvtb-config", "openvtb"),
