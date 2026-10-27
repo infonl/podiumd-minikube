@@ -8388,3 +8388,14 @@ quay.io day) and about 70 s less for the tuning. start-cluster runs the same
 `start_node`: a stopped node loads Cilium from the cache too, and its tuning
 restarts the kubelet once instead of twice. The first start-cluster after
 this change rolls the Cilium pods once (their image reference changes).
+
+### start-cluster needed helm.cilium.io
+
+The first start-cluster test of 5db06e9 (10:31) failed before `minikube
+start`: every start renders the Cilium manifest, and `helm template --repo
+https://helm.cilium.io` got "dial tcp 185.199.109.153:443: connect: no route
+to host" from the laptop's wifi. That one attempt took 90 s, past
+`process.fetch`'s 60 s window, so it was not retried. Now `cni.render`
+pulls the chart once into `.cni/cilium-<version>.tgz` (through `fetch`) and
+renders that file: a start needs no network for Cilium. `FETCH_TIMEOUT` is
+300 s. A second start-cluster at 10:33 went through.

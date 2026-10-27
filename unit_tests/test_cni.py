@@ -13,9 +13,16 @@ def test_write_manifest_writes_the_render_for_minikube_start(
     fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     monkeypatch.setattr(cni, "MANIFEST", tmp_path / ".cni" / "cilium.yaml")
+    monkeypatch.setattr(cni, "CHART", tmp_path / ".cni" / "cilium.tgz")
     fake_run.on("helm", "template", stdout="kind: ConfigMap\nmetadata:\n  name: cilium-config\n")
     assert cni.write_manifest() == str(cni.MANIFEST)
     assert "name: cilium-config" in cni.MANIFEST.read_text(encoding="utf-8")
+    assert fake_run.ran("helm", "pull", "cilium")
+    cni.CHART.write_text("")
+    cni.write_manifest()
+    assert len(fake_run.ran("helm", "pull")) == 1
+    assert fake_run.ran("helm", "template")[-1][:3] == ["helm", "template", "cilium"]
+    assert fake_run.ran("helm", "template")[-1][3] == str(cni.CHART)
 
 
 def test_apply_applies_the_manifest_and_waits_for_the_agent(fake_run: FakeRun):

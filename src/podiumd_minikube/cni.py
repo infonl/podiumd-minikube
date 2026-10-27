@@ -17,6 +17,8 @@ from podiumd_minikube.paths import CHART_DIR
 CILIUM_REPO = "https://helm.cilium.io"
 CILIUM_VERSION = "1.19.8"
 MANIFEST = CHART_DIR / ".cni" / "cilium.yaml"
+# Pulled once: every start renders the manifest, and a laptop start may have no network.
+CHART = MANIFEST.parent / f"cilium-{CILIUM_VERSION}.tgz"
 POD_CIDR = "10.244.0.0/16"
 # Without kube-proxy, kubeadm leaves it out and Cilium serves every Service.
 START_ARGS = [
@@ -80,11 +82,14 @@ def values() -> dict[str, Any]:
 
 def render() -> str:
     """The Cilium chart rendered with values(), CAPACITY_ENV and GOMEMLIMIT added."""
-    text = process.fetch(
-        ["helm", "template", "cilium", "cilium", "--repo", CILIUM_REPO, "--version", CILIUM_VERSION,
-         "-n", "kube-system", "-f", "-"],
-        stdin=yaml.safe_dump(values()),
-    )  # fmt: skip
+    if not CHART.is_file():
+        CHART.parent.mkdir(exist_ok=True)
+        process.fetch(
+            ["helm", "pull", "cilium", "--repo", CILIUM_REPO, "--version", CILIUM_VERSION, "-d", str(CHART.parent)]
+        )
+    text = process.output(
+        ["helm", "template", "cilium", str(CHART), "-n", "kube-system", "-f", "-"], stdin=yaml.safe_dump(values())
+    )
     docs = [doc for doc in yaml.safe_load_all(text) if doc]
     manifests.limit_runtimes(docs)
     return yaml.safe_dump_all(docs, sort_keys=False)

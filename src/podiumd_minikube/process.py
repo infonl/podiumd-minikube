@@ -57,7 +57,8 @@ def output(args: Sequence[str], *, stdin: str | None = None) -> str:
 
 # Go's resolver and dialer errors (helm): a DNS lookup that timed out once failed provision.
 NETWORK_ERROR = re.compile(r"dial tcp|i/o timeout|no such host|TLS handshake timeout|connection reset by peer")
-FETCH_TIMEOUT = 60
+# One failed attempt took 90 s (connect: no route to host).
+FETCH_TIMEOUT = 300
 
 
 def fetch(args: Sequence[str], *, stdin: str | None = None, shown: bool = False) -> str:

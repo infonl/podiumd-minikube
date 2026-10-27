@@ -1,5 +1,7 @@
 """Context guard, /etc/hosts, port mappings, teardown, provision and polling helpers."""
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -165,7 +167,11 @@ def test_confirmed_aborts_without_input(monkeypatch: pytest.MonkeyPatch):
     assert not teardown.confirmed("summary", yes=False)
 
 
-def test_cilium_render_gets_capacity_env_and_a_memory_limit(fake_run: FakeRun):
+def test_cilium_render_gets_capacity_env_and_a_memory_limit(
+    fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setattr(cni, "CHART", tmp_path / "cilium.tgz")
+    cni.CHART.write_text("")
     agent = {
         "kind": "DaemonSet",
         "metadata": {"name": "cilium"},
