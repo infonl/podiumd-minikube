@@ -83,7 +83,7 @@ def install() -> None:
         f"https://github.com/kubernetes-sigs/gateway-api/releases/download/{GATEWAY_API_VERSION}/standard-install.yaml"
     )
     kube.kubectl_shown("apply", "-f", crds)
-    ngf_crds = process.output(["helm", "show", "crds", NGF_CHART, "--version", NGF_VERSION])
+    ngf_crds = process.fetch(["helm", "show", "crds", NGF_CHART, "--version", NGF_VERSION])
     kube.kubectl("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=ngf_crds)
     dns_ip = kube.kubectl("get", "svc", "kube-dns", "-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")
     process.run(

@@ -73,7 +73,7 @@ def values() -> dict[str, Any]:
 
 def render() -> str:
     """The Cilium chart rendered with values(), CAPACITY_ENV and GOMEMLIMIT added."""
-    text = process.output(
+    text = process.fetch(
         ["helm", "template", "cilium", "cilium", "--repo", CILIUM_REPO, "--version", CILIUM_VERSION,
          "-n", "kube-system", "-f", "-"],
         stdin=yaml.safe_dump(values()),

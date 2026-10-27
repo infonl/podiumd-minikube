@@ -8301,3 +8301,18 @@ gate), `polling.wait_until`; no separate thread or wait. Verified on the
 running cluster: `deploy --full` 128 s, exit 0, the outway's KV entry written
 after the Job completed. The gain on a fresh install (estimated up to the
 Job's 286 s) is measured at the next fresh provision.
+
+### Third fresh provision: helm fetch retried on network errors
+
+2026-10-27 09:32: teardown 28 s, then `provision-cluster` failed after 20 s:
+`helm template cilium --repo https://helm.cilium.io` got "lookup
+helm.cilium.io on 127.0.0.1:53: i/o timeout" from the host's dnsmasq; seconds
+later every lookup resolved again. `process.fetch` now retries a command for
+60 s while its stderr shows a Go network error (dial tcp, i/o timeout, no
+such host, TLS handshake timeout, connection reset), and raises any other
+error at once. Used where helm downloads with captured output: the Cilium
+render, jetstack's `helm repo update`, NGF's `helm show crds`. The
+`helm upgrade --install` and `helm dependency update` calls stream their
+output (capture=False), so their errors cannot be told apart; not retried.
+Checked helpers: `process.output` (wrapped), `polling.wait_until` (the retry
+loop); no retry existed before.

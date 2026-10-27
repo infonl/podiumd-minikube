@@ -1,11 +1,14 @@
 """The one place that starts external processes (kubectl, helm, minikube, docker)."""
 
+import re
 import subprocess  # nosec B404
 import sys
 
 from collections.abc import Callable
 from collections.abc import Sequence
 from pathlib import Path
+
+from podiumd_minikube import polling
 
 
 class UserError(Exception):
@@ -50,6 +53,30 @@ def run(
 def output(args: Sequence[str], *, stdin: str | None = None) -> str:
     """Stdout of args; raises ProcessError on a non-zero exit."""
     return run(args, stdin=stdin).stdout
+
+
+# Go's resolver and dialer errors (helm): a DNS lookup that timed out once failed provision.
+NETWORK_ERROR = re.compile(r"dial tcp|i/o timeout|no such host|TLS handshake timeout|connection reset by peer")
+FETCH_TIMEOUT = 60
+
+
+def fetch(args: Sequence[str], *, stdin: str | None = None) -> str:
+    """output(args), retried for FETCH_TIMEOUT seconds while it fails with a network error."""
+    errors: list[ProcessError] = []
+
+    def attempt() -> tuple[str] | None:
+        try:
+            return (output(args, stdin=stdin),)
+        except ProcessError as error:
+            if not NETWORK_ERROR.search(error.stderr):
+                raise
+            print(f"Network error, retrying: {error.stderr.strip()}")
+            errors.append(error)
+            return None
+
+    if result := polling.wait_until(attempt, timeout=FETCH_TIMEOUT, interval=5):
+        return result[0]
+    raise errors[-1]
 
 
 def succeeds(args: Sequence[str]) -> bool:

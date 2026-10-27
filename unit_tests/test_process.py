@@ -72,3 +72,29 @@ def test_main_exits_with_the_entrys_code(entry, code: int, stderr: str, capsys: 
         process.main(entry)
     assert exited.value.code == code
     assert capsys.readouterr().err == stderr
+
+
+def test_fetch_retries_a_network_error_until_it_answers(monkeypatch: pytest.MonkeyPatch):
+    answers = iter([ProcessError(["helm"], 1, "lookup helm.cilium.io: i/o timeout"), "index"])
+
+    def output(_args: list[str], *, stdin: str | None = None) -> str:
+        answer = next(answers)
+        if isinstance(answer, ProcessError):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(process, "output", output)
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    assert process.fetch(["helm"]) == "index"
+
+
+def test_fetch_raises_other_errors_at_once_and_the_last_network_error_at_the_deadline(
+    fake_run: FakeRun, poll_once: None
+):
+    fake_run.on("helm", "template", returncode=1, stderr="Error: chart not found")
+    with pytest.raises(ProcessError, match="chart not found"):
+        process.fetch(["helm", "template"])
+    fake_run.on("helm", "show", returncode=1, stderr="dial tcp: no such host")
+    with pytest.raises(ProcessError, match="no such host"):
+        process.fetch(["helm", "show"])
+    assert fake_run.calls == [["helm", "template"], ["helm", "show"]]

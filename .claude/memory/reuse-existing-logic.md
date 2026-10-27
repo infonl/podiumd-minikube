@@ -33,7 +33,7 @@ live: the tunnel script's own host list went stale, which is why
 
    | Concept | Use |
    | --- | --- |
-   | starting any external process (kubectl, helm, minikube, docker) | `podiumd_minikube.process` (`run`, `output`, `succeeds`, `spawn`; errors are `ProcessError`/`UserError`) |
+   | starting any external process (kubectl, helm, minikube, docker) | `podiumd_minikube.process` (`run`, `output`, `succeeds`, `spawn`; `fetch` for helm downloads, retried on network errors; errors are `ProcessError`/`UserError`) |
    | a command | a function in `cli.py`, listed in `COMMANDS`; logic in its own module. `bin/` holds only symlinks to `bin/.stub` |
    | refuse to run against a non-minikube kubectl context | `kube.require_minikube_context` |
    | kubectl calls, the edge IP, a pod | `podiumd_minikube.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `edge_ip`, `first_pod`) |
