@@ -460,12 +460,15 @@ def speed_up_keycloak_start(docs: list[Doc]) -> None:
 
 ZAC_SOLR_INIT = "init-solr-zac-core"
 KEYCLOAK_ADMIN_USER = "ensure-podiumd-admin-user"
+OPEN_INWONER_SEARCH_INDEX = "openinwoner-search-index"
 # (kind, name, container) whose script fails while a dependency starts, and the Job or kubelet
-# back-off retried it up to 160 s later. ZAC's init container: Solr still starting.
+# back-off retried it up to 5 minutes later. ZAC's init container: Solr still starting.
 # Keycloak's admin user: its SQL needs the realm table Keycloak creates on its first start.
+# Open Inwoner's index rebuild: its Elasticsearch still starting.
 RETRIED_CONTAINERS = {
     ("Deployment", "zac", ZAC_SOLR_INIT),
     ("Job", KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_USER),
+    ("Deployment", "openinwoner", OPEN_INWONER_SEARCH_INDEX),
 }
 RETRY_ATTEMPTS = 150
 
@@ -476,14 +479,16 @@ def retry_in_container(docs: list[Doc]) -> None:
         for container in _containers(_pod_spec(doc) or {}):
             if (doc.get("kind"), name_of(doc), container.get("name")) not in RETRIED_CONTAINERS:
                 continue
-            command: list[str] = container.get("command") or []
-            if command[:2] in (["sh", "-c"], ["/bin/sh", "-c"]) and len(command) == 3:
+            # The script is the command's third item, or the only arg.
+            command: list[str] = [*(container.get("command") or []), *(container.get("args") or [])]
+            if command[:2] in (["sh", "-c"], ["/bin/sh", "-c"], ["/bin/bash", "-c"]) and len(command) == 3:
                 # A shell of its own: an until condition turns off the script's `set -e`.
                 retry = (
                     f'i=0; until {command[0]} -c "$1"; do i=$((i + 1));'
                     f' [ "$i" -ge {RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
                 )
                 container["command"] = [*command[:2], retry, "retry", command[2]]
+                container.pop("args", None)
 
 
 def tune_solr(docs: list[Doc]) -> None:

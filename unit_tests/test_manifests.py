@@ -418,10 +418,21 @@ def test_speed_up_keycloak_start_sets_probes_and_the_builder_cpu():
     [
         ("Deployment", "zac", manifests.ZAC_SOLR_INIT, "sh"),
         ("Job", manifests.KEYCLOAK_ADMIN_USER, manifests.KEYCLOAK_ADMIN_USER, "/bin/sh"),
+        ("Deployment", "openinwoner", manifests.OPEN_INWONER_SEARCH_INDEX, "/bin/bash"),
     ],
 )
 def test_retry_in_container_wraps_the_script_in_a_bounded_retry(kind: str, name: str, container: str, shell: str):
-    retried: manifests.Doc = {"name": container, "command": [shell, "-c", "curl a || curl b"]}
+    command = [shell, "-c", "curl a || curl b"]
+    # Open Inwoner's chart passes the script as args.
+    split = shell == "/bin/bash"
+    retried: manifests.Doc = (
+        {"name": container, "command": command[:2], "args": command[2:]}
+        if split
+        else {
+            "name": container,
+            "command": command,
+        }
+    )
     other: manifests.Doc = {"name": "other", "command": [shell, "-c", "curl c"]}
     doc: manifests.Doc = {
         "kind": kind,
@@ -436,6 +447,7 @@ def test_retry_in_container_wraps_the_script_in_a_bounded_retry(kind: str, name:
         "retry",
         "curl a || curl b",
     ]
+    assert "args" not in retried
     assert other["command"] == [shell, "-c", "curl c"]
 
 

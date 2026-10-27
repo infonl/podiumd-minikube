@@ -8490,3 +8490,16 @@ tag). On the fifth install cert-manager took 2.5 minutes of a slow network.
 The rendered list matched the five images running in ingress-basic. Cilium
 stays pulled by the node: `minikube start` applies it, and the node does not
 exist before then (01a4373). Not yet measured on a fresh provision.
+
+### Open Inwoner's search-index init retried in its container
+
+`openinwoner-search-index` (`wait_for_db.sh`, `migrate`, `search_index
+--rebuild -f`) fails while its Elasticsearch starts: once per start-cluster
+(144-152 s to Ready), and on the fifth install it waited out the kubelet's
+5-minute back-off. It is now in `manifests.RETRIED_CONTAINERS`;
+`retry_in_container` also takes a script passed as the only arg (this chart:
+`command: [/bin/bash, -c]`, script in `args`). All three steps are idempotent.
+Live: deploy --full 141 s; with the Elasticsearch and Open Inwoner pods deleted
+together, Open Inwoner was Ready in 55 s with no init restart, but
+Elasticsearch answered before the rebuild ran, so the retry itself did not run.
+The next start-cluster or fresh install shows it.
