@@ -379,3 +379,27 @@ def test_deploy_restarts_zac_only_after_openzaak_config_completed(
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     _deploy()
     assert events.index("restart") == 3
+
+
+def test_deploy_wires_the_outway_once_after_openbao_config_completed(
+    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+):
+    config = {"kind": "Job", "metadata": {"name": openbao.CONFIG_JOB}, "status": {}}
+    live["job"]["items"].append(config)
+    render = manifests.Render(docs=[*RENDER.docs, _doc("Job", openbao.CONFIG_JOB)], large_configmaps=[])
+    monkeypatch.setattr(deploy.Options, "render", lambda _self, *args, **_kwargs: STORAGE if args else render)
+    events: list[str] = []
+    answer = kube.get_json
+
+    def get_json(resource: str, *args: str) -> Any:
+        if resource == "job":
+            events.append("poll")
+            if events.count("poll") == 2:
+                config["status"] = _job_status("Complete")["status"]
+        return answer(resource, *args)
+
+    monkeypatch.setattr(kube, "get_json", get_json)
+    monkeypatch.setattr(openbao, "wire_outway", lambda: events.append("wire"))
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    _deploy()
+    assert events == ["poll", "poll", "wire"]

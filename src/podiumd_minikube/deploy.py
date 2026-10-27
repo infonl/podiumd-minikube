@@ -296,9 +296,15 @@ def _wait_ready(render: manifests.Render) -> None:
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
     restarted: list[str] = []
+    # Here, not in openbao.bootstrap: on a fresh install the Job retries until Keycloak
+    # answers through the edge (5.5 min seen), and nothing else needs to wait for it.
+    unwired = [openbao.CONFIG_JOB] if openbao.CONFIG_JOB in names else []
 
     def settled() -> tuple[list[str]] | None:
         running, failed = job_state()
+        if unwired and openbao.CONFIG_JOB not in running + failed:
+            openbao.wire_outway()
+            unwired.clear()
         waiting = stuck()
         authorised = OPENZAAK_CONFIG not in running
         if f"deployment/{ZAC}" in waiting and authorised and not restarted and zac_boot_failed():

@@ -8286,3 +8286,18 @@ image a container uses). Other repositories' images (19, 9.9 GB, e.g. other
 projects), dangling volumes (3.2 GB) and the build cache stay. Not done:
 containerd `discard_unpacked_layers` (up to 19 GB; untested for imported
 images).
+
+### OpenBao bootstrap no longer blocks the deploy
+
+On the first fresh install of 2026-10-26, `openbao.bootstrap` took 286 s,
+nearly all of it `kubectl wait` on the openbao-config Job, which retries until
+Keycloak answers through the edge. Prune, the ready wait and with it the ZAC
+restart check all waited behind it. Bootstrap now only initialises, mints the
+config token and re-runs the Job; `deploy._wait_ready` already waits for every
+rendered Job, and calls `openbao.wire_outway` once the Job is no longer
+running (the KV put needs the mount the Job creates). Checked helpers:
+`_wait_ready`'s Job state (extended, as the ZAC restart's `openzaak-config`
+gate), `polling.wait_until`; no separate thread or wait. Verified on the
+running cluster: `deploy --full` 128 s, exit 0, the outway's KV entry written
+after the Job completed. The gain on a fresh install (estimated up to the
+Job's 286 s) is measured at the next fresh provision.

@@ -81,25 +81,25 @@ def test_bootstrap_skips_a_render_without_openbao_while_its_statefulset_terminat
     assert fake_run.calls == []
 
 
-def test_bootstrap_initialises_mints_runs_the_job_and_wires_the_outway(cluster: FakeRun):
+def _secrets(cluster: FakeRun) -> list[tuple[str, str]]:
+    applied = zip(cluster.calls, cluster.stdins, strict=True)
+    secrets = [json.loads(stdin or "") for call, stdin in applied if call == ["kubectl", "apply", "-f", "-"]]
+    return [(s["metadata"]["name"], s["stringData"]["token"]) for s in secrets]
+
+
+def test_bootstrap_initialises_mints_and_reruns_the_job_without_waiting(cluster: FakeRun):
     cluster.on("kubectl", "get", f"secret/{openbao.BOOTSTRAP_SECRET}", returncode=1)
-    cluster.on("kubectl", "get", f"secret/{openbao.READER_SECRET}", returncode=1)
     openbao.bootstrap(RENDER)
     assert openbao.ROOT_TOKEN.read_text(encoding="utf-8") == "root"
     assert openbao.RECOVERY_KEY.read_text(encoding="utf-8") == "recovery"
     assert not [call for call in cluster.calls if "root" in call]
     stdins = dict(zip(map(tuple, cluster.calls), cluster.stdins, strict=True))
     assert stdins[(*BAO, "policy", "write", openbao.POLICY, "-")] == f"root\n{openbao.POLICY_HCL}"
-    assert stdins[(*BAO, "kv", "put", "-mount=secret", "frankgateway", "kvk_api_key=-")] == "root\nkvk-key"
-    applied = zip(cluster.calls, cluster.stdins, strict=True)
-    secrets = [json.loads(stdin or "") for call, stdin in applied if call == ["kubectl", "apply", "-f", "-"]]
-    assert [(s["metadata"]["name"], s["stringData"]["token"]) for s in secrets] == [
-        (openbao.BOOTSTRAP_SECRET, "minted"),
-        (openbao.READER_SECRET, "minted"),
-    ]
+    assert _secrets(cluster) == [(openbao.BOOTSTRAP_SECRET, "minted")]
     assert cluster.ran("kubectl", "delete", "job", openbao.CONFIG_JOB)
-    assert cluster.ran("kubectl", "wait", "--for=condition=complete", f"job/{openbao.CONFIG_JOB}")
-    assert cluster.ran("kubectl", "rollout", "restart", f"deployment/{openbao.OUTWAY}")
+    assert cluster.ran("kubectl", "apply", "-n", NAMESPACE)
+    assert not cluster.ran("kubectl", "wait")
+    assert not cluster.ran(*BAO, "kv", "put")
 
 
 def test_bootstrap_keeps_an_initialised_vault_and_existing_tokens(cluster: FakeRun):
@@ -109,9 +109,33 @@ def test_bootstrap_keeps_an_initialised_vault_and_existing_tokens(cluster: FakeR
     openbao.bootstrap(RENDER)
     assert not cluster.ran(*BAO, "operator")
     assert not cluster.ran(*BAO, "token")
-    assert not cluster.ran("kubectl", "rollout")
-    assert cluster.ran(*BAO, "kv", "put")
     assert cluster.ran("kubectl", "apply", "-n", NAMESPACE)
+
+
+def test_wire_outway_stores_the_key_and_mints_the_reader_token_once(cluster: FakeRun):
+    openbao.OPENBAO_DIR.mkdir()
+    openbao.ROOT_TOKEN.write_text("root\n", encoding="utf-8")
+    cluster.on("kubectl", "get", f"secret/{openbao.READER_SECRET}", returncode=1)
+    openbao.wire_outway()
+    stdins = dict(zip(map(tuple, cluster.calls), cluster.stdins, strict=True))
+    assert stdins[(*BAO, "kv", "put", "-mount=secret", "frankgateway", "kvk_api_key=-")] == "root\nkvk-key"
+    assert _secrets(cluster) == [(openbao.READER_SECRET, "minted")]
+    assert cluster.ran("kubectl", "rollout", "restart", f"deployment/{openbao.OUTWAY}")
+
+
+def test_wire_outway_keeps_an_existing_reader_token(cluster: FakeRun):
+    openbao.OPENBAO_DIR.mkdir()
+    openbao.ROOT_TOKEN.write_text("root\n", encoding="utf-8")
+    openbao.wire_outway()
+    assert cluster.ran(*BAO, "kv", "put")
+    assert not cluster.ran(*BAO, "token")
+    assert not cluster.ran("kubectl", "rollout")
+
+
+def test_wire_outway_skips_a_render_without_the_outway(cluster: FakeRun):
+    cluster.on("kubectl", "get", f"deployment/{openbao.OUTWAY}", returncode=1)
+    openbao.wire_outway()
+    assert not cluster.ran(*BAO)
 
 
 @pytest.mark.parametrize(

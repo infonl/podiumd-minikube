@@ -128,8 +128,14 @@ def _mint_token(root: str, policy: str, hcl: str, secret_name: str) -> None:
     print(f"  minted a {policy} token into Secret {secret_name}")
 
 
-def _wire_outway(root: str) -> None:
-    """Stores the outway's API keys in OpenBao and gives the outway its reader token (restarting it once)."""
+def wire_outway() -> None:
+    """Stores the outway's API keys in OpenBao and gives the outway its reader token (restarting it once).
+
+    Needs the KV mount the openbao-config Job creates.
+    """
+    if not kube.exists(f"deployment/{OUTWAY}"):
+        return
+    root = ROOT_TOKEN.read_text(encoding="utf-8").strip()
     _bao(
         "kv", "put", f"-mount={KV_MOUNT}", OUTWAY_KV_PATH, "kvk_api_key=-", token=root, stdin=values.kvk_test_api_key()
     )
@@ -141,7 +147,7 @@ def _wire_outway(root: str) -> None:
 
 
 def bootstrap(render: manifests.Render) -> None:
-    """Initialises OpenBao once, mints the config token once, re-runs the openbao-config Job, wires the outway."""
+    """Initialises OpenBao once, mints the config token once and re-runs the openbao-config Job without waiting."""
     jobs = [doc for doc in render.docs if doc.get("kind") == "Job" and manifests.name_of(doc) == CONFIG_JOB]
     # The render, not the cluster: a pruned StatefulSet still exists while it terminates.
     if not jobs:
@@ -165,7 +171,3 @@ def bootstrap(render: manifests.Render) -> None:
         _mint_token(root, POLICY, POLICY_HCL, BOOTSTRAP_SECRET)
     kube.kubectl_shown("delete", "job", CONFIG_JOB, "-n", NAMESPACE, "--ignore-not-found")
     kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(jobs))
-    # On a fresh install the Job retries until Keycloak answers through the edge: 5.5 min seen.
-    kube.kubectl_shown("wait", "--for=condition=complete", f"job/{CONFIG_JOB}", "-n", NAMESPACE, "--timeout=600s")
-    if kube.exists(f"deployment/{OUTWAY}"):
-        _wire_outway(root)
