@@ -222,6 +222,8 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
     calls: list[str] = []
     monkeypatch.setattr(disk, "check", lambda need: calls.append(f"disk {need.fail_gib}"))
     monkeypatch.setattr(provision, "chart_images", lambda: ["a/app:1.0"])
+    monkeypatch.setattr(gateway, "ngf_template", lambda: "image: ngf:1")
+    monkeypatch.setattr(pki, "cert_manager_template", lambda: "image: cert-manager:2")
     monkeypatch.setattr(provision, "load_images", lambda images: calls.append(f"load {' '.join(images)}"))
     monkeypatch.setattr(provision, "remove_old_tags", lambda images: calls.append(f"remove old {' '.join(images)}"))
     for module, name in [
@@ -236,12 +238,12 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
     assert calls == [
         f"disk {disk.PROVISION.fail_gib}",
         "start_node",
+        "sync",
+        "load a/app:1.0 cert-manager:2 ngf:1",
+        "remove old a/app:1.0 cert-manager:2 ngf:1",
         "install",
         "install_cert_manager",
         "install_issuer",
-        "sync",
-        "load a/app:1.0",
-        "remove old a/app:1.0",
     ]
     assert fake_run.calls == [
         ["kubectl", "label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite"]

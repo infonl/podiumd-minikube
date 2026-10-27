@@ -88,6 +88,12 @@ def test_install_cert_manager_installs_another_version_or_values(
     assert installed["webhook"]["image"]["tag"] == pki.CERT_MANAGER_IMAGE_TAG
 
 
+def test_cert_manager_template_renders_the_installed_values(fake_run: FakeRun):
+    pki.cert_manager_template()
+    (template,) = fake_run.ran("helm", "template", *pki.CERT_MANAGER_CHART_ARGS)
+    assert yaml.safe_load(fake_run.stdins[fake_run.calls.index(template)] or "") == pki.cert_manager_values()
+
+
 @pytest.mark.parametrize("returncode", [0, 1])
 def test_install_issuer_creates_the_ca_and_applies_until_the_webhook_answers(
     pki_dir: Path, openssl: FakeRun, poll_once: None, returncode: int

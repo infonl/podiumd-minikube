@@ -34,6 +34,7 @@ OLD_CERT_MANAGER_NAMESPACE = "cert-manager"
 # As ExternalsPodiumD (pipelines/includes/haven/cert-manager.yml): this chart, with the images it pins.
 CERT_MANAGER_VERSION = "v1.20.3"
 CERT_MANAGER_IMAGE_TAG = "v1.19.3"
+CERT_MANAGER_CHART_ARGS = ["cert-manager", "jetstack/cert-manager", "--version", CERT_MANAGER_VERSION]
 ISSUER = "podiumd-local-ca"
 
 
@@ -106,6 +107,19 @@ def _installed() -> bool:
     return json.loads(values) == cert_manager_values()
 
 
+def _add_jetstack_repo() -> None:
+    process.run(["helm", "repo", "add", "jetstack", "https://charts.jetstack.io"], check=False)
+    process.fetch(["helm", "repo", "update", "jetstack"])
+
+
+def cert_manager_template() -> str:
+    """The cert-manager chart rendered as install_cert_manager installs it."""
+    _add_jetstack_repo()
+    return process.fetch(
+        ["helm", "template", *CERT_MANAGER_CHART_ARGS, "-f", "-"], stdin=yaml.safe_dump(cert_manager_values())
+    )
+
+
 def install_cert_manager() -> None:
     """Installs or upgrades cert-manager to CERT_MANAGER_VERSION and its values; skips it when both run."""
     _move_from_old_namespace()
@@ -113,10 +127,9 @@ def install_cert_manager() -> None:
         print(f"cert-manager {CERT_MANAGER_VERSION} already installed in '{CERT_MANAGER_NAMESPACE}' - skipping.")
         return
     print(f"Installing cert-manager {CERT_MANAGER_VERSION}...")
-    process.run(["helm", "repo", "add", "jetstack", "https://charts.jetstack.io"], check=False)
-    process.fetch(["helm", "repo", "update", "jetstack"])
+    _add_jetstack_repo()
     process.fetch(
-        ["helm", "upgrade", "--install", "cert-manager", "jetstack/cert-manager", "--version", CERT_MANAGER_VERSION,
+        ["helm", "upgrade", "--install", *CERT_MANAGER_CHART_ARGS,
          "-n", CERT_MANAGER_NAMESPACE, "--create-namespace", "--reset-values", "--rollback-on-failure",
          "--server-side=false", "--wait", "--timeout=10m", "-f", "-"],
         stdin=yaml.safe_dump(cert_manager_values()),

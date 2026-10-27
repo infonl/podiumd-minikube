@@ -27,6 +27,7 @@ GATEWAY_API_VERSION = "v1.5.1"
 NGF_CHART = "oci://ghcr.io/nginx/charts/nginx-gateway-fabric"
 NGF_VERSION = "2.6.7"
 NGF_RELEASE = "nginx-gateway-fabric"
+NGF_CHART_ARGS = [NGF_RELEASE, NGF_CHART, "--version", NGF_VERSION]
 GATEWAY = "public-gateway"
 GATEWAY_CLASS = "nginx"
 GATEWAY_REF = {"group": "gateway.networking.k8s.io", "kind": "Gateway", "name": GATEWAY}
@@ -87,11 +88,16 @@ def install() -> None:
     kube.kubectl("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=ngf_crds)
     dns_ip = kube.kubectl("get", "svc", "kube-dns", "-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")
     process.fetch(
-        ["helm", "upgrade", "--install", NGF_RELEASE, NGF_CHART, "--version", NGF_VERSION,
+        ["helm", "upgrade", "--install", *NGF_CHART_ARGS,
          "-n", EDGE_NAMESPACE, "--create-namespace", "--wait", "-f", "-"],
         stdin=yaml.safe_dump(ngf_values(dns_ip)),
         shown=True,
     )  # fmt: skip
+
+
+def ngf_template() -> str:
+    """The NGF chart rendered with its defaults; ngf_values() sets no image."""
+    return process.fetch(["helm", "template", *NGF_CHART_ARGS])
 
 
 def gateway_manifest() -> dict[str, Any]:

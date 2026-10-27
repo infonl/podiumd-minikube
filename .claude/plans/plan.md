@@ -8479,3 +8479,14 @@ load to move before the Gateway and cert-manager installs; open.
 After setup-tunnel, podiumd-tests' bootstrap passed and its smoke tier (run
 20261027-121753) gave 176 passed, 1 skipped, 9 xfailed, 1 xpassed, 0 failed,
 the same as after the third install; all 16 Prometheus targets were up.
+
+### Edge and cert-manager images preloaded
+
+provision-cluster now loads the images before it installs NGINX Gateway
+Fabric and cert-manager, and the list includes theirs: `gateway.ngf_template`
+(the chart's defaults; `ngf_values` sets no image) and
+`pki.cert_manager_template` (with `cert_manager_values`, which pins the image
+tag). On the fifth install cert-manager took 2.5 minutes of a slow network.
+The rendered list matched the five images running in ingress-basic. Cilium
+stays pulled by the node: `minikube start` applies it, and the node does not
+exist before then (01a4373). Not yet measured on a fresh provision.
