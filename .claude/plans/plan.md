@@ -8438,3 +8438,40 @@ no podiumd-admin, ensure-keycloak-operator-sa, the realm imports and every
 config Job behind them timed out. `retry_in_container` now runs the script
 in a shell of its own (`until sh -c "$1"`, the script as an argument), where
 `set -e` holds; a unit test runs a `set -e` script through it.
+
+### Fifth fresh install: a slow network, and images the preload list missed
+
+Teardown 27 s (12:03). The first provision failed after 315 s: the node
+could not resolve quay.io for Cilium's image ("Temporary failure in name
+resolution"), and once DNS answered again the agent image took from 12:11 to
+12:24 to download (the host measured 3 B/s to quay.io at one point; the node
+has no IPv6 route, IPv4 works). `minikube start` also warned that
+registry.k8s.io was unreachable. With Cilium running, a second
+`provision-cluster` took 443 s (cert-manager 2.5 min of it, the network
+again). The first `deploy --full` (12:32) failed after 1030 s, the second
+(12:51) passed in 907 s: OpenInwoner's search-index init container hit
+Elasticsearch before it was ready and then waited out the kubelet's 5-minute
+back-off.
+
+Cause of the slow deploys: the kubelet pulls one image at a time, and seven
+images the deploy needs were never preloaded, so the node fetched them over
+the slow network and every pod behind them waited (eck-operator alone 8
+minutes, ZooKeeper 8 minutes, Keycloak queued behind it). `manifests.images`
+read only `image:` lines that are not list items, and missed what operators
+start from their resources:
+
+- `- image: "docker.elastic.co/eck/eck-operator:3.5.0"` (a list item);
+- the Prometheus operator's `--prometheus-config-reloader=...:v0.90.1`
+  argument (the list had the chart's v0.81.0 only);
+- SolrCloud's `repository:` + `tag:` pairs (`library/solr`, `library/busybox`,
+  `pravega/zookeeper`);
+- the Open Inwoner `Elasticsearch` resource, which sets only `version: 9.2.0`
+  (ECK picks `docker.elastic.co/elasticsearch/elasticsearch:<version>`).
+
+`strip_image_digests` also left the digest in a separate `tag:` field, so
+Solr, busybox and ZooKeeper were referenced by digest and pulled even when
+loaded by tag. Both now cover these forms. Checked against the running
+cluster: every running image is in the list, except those provision installs
+before it loads images (Cilium, NGINX Gateway Fabric, cert-manager) and
+minikube's own Kubernetes images. Loading those as well would need the image
+load to move before the Gateway and cert-manager installs; open.

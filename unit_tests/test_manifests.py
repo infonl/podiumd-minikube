@@ -36,6 +36,46 @@ def test_images_skip_an_image_key_without_a_value():
     assert manifests.images(text) == ["c:3"]
 
 
+def test_strip_image_digests_from_a_separate_tag_field():
+    text = f'repository: library/solr\ntag: "9.11.0-slim@sha256:{DIGEST}"\nimage: untagged@sha256:{DIGEST}\n'
+    assert manifests.strip_image_digests(text) == (
+        f'repository: library/solr\ntag: "9.11.0-slim"\nimage: untagged@sha256:{DIGEST}\n'
+    )
+
+
+def test_images_include_those_operators_start():
+    text = """\
+kind: StatefulSet
+spec:
+  containers:
+    - image: "eck/operator:3"
+      args:
+        - --prometheus-config-reloader=reloader:v1
+---
+kind: SolrCloud
+spec:
+  solrImage:
+    repository: library/solr
+    tag: 9-slim
+---
+kind: Elasticsearch
+spec:
+  version: 9.2.0
+---
+kind: Elasticsearch
+spec:
+  version: 8.19.0
+  image: es:8
+"""
+    assert manifests.images(text) == [
+        "docker.elastic.co/elasticsearch/elasticsearch:9.2.0",
+        "eck/operator:3",
+        "es:8",
+        "library/solr:9-slim",
+        "reloader:v1",
+    ]
+
+
 def test_allow_rolling_updates_drops_required_anti_affinity_from_deployments_only():
     affinity = """
       affinity:

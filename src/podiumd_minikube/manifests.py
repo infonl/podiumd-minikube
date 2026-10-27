@@ -90,9 +90,18 @@ ZOOKEEPER_ENV = {
 # Headroom under the 262144-byte last-applied-configuration annotation of client-side apply.
 LARGE_CONFIGMAP_BYTES = 200_000
 
-_DIGEST_SUFFIX = re.compile(r"(:[^\s@]+)@sha256:[0-9a-f]{64}\b")
+# A tag in the reference, or an operator resource's separate `tag:` field.
+_DIGEST_SUFFIX = re.compile(r"""((?::|\btag:[ \t]*"?)[^\s@"]+)@sha256:[0-9a-f]{64}\b""")
 # [ \t], not \s: an `image:` key without a value must not take the next line.
-_IMAGE_LINE = re.compile(r"""^[ \t]*image:[ \t]*"?([^"\s]+)""", re.MULTILINE)
+_IMAGE_LINE = re.compile(r"""^[ \t]*(?:-[ \t]+)?image:[ \t]*"?([^"\s]+)""", re.MULTILINE)
+# Operator resources (SolrCloud, its ZooKeeper) name an image as repository and tag.
+_REPOSITORY_TAG = re.compile(
+    r"""^([ \t]*)repository:[ \t]*"?([^"\s]+)"?[ \t]*\n\1tag:[ \t]*"?([^"\s]+)""", re.MULTILINE
+)
+# The Prometheus operator starts each Prometheus with this sidecar image.
+_RELOADER_ARG = re.compile(r"--prometheus-config-reloader=(\S+)")
+# ECK's image for an Elasticsearch resource without `image`.
+_ELASTICSEARCH_IMAGE = "docker.elastic.co/elasticsearch/elasticsearch"
 _POD_SPEC_PATHS = {
     "Deployment": ("spec", "template", "spec"),
     "StatefulSet": ("spec", "template", "spec"),
@@ -115,8 +124,15 @@ _SOURCE = re.compile(r"^# Source: ([^/]+)/(?:charts/([^/]+)/)?", re.MULTILINE)
 
 
 def images(text: str) -> list[str]:
-    """Sorted unique `image:` values in rendered text."""
-    return sorted(set(_IMAGE_LINE.findall(text)))
+    """Sorted unique images in rendered text, including those operators start from their resources."""
+    found = set(_IMAGE_LINE.findall(text)) | set(_RELOADER_ARG.findall(text))
+    found |= {f"{repository}:{tag}" for _, repository, tag in _REPOSITORY_TAG.findall(text)}
+    for chunk in re.split(r"^---$", text, flags=re.MULTILINE):
+        doc: Doc | None = _load(chunk)
+        spec = section(doc, "spec") if doc and doc.get("kind") == "Elasticsearch" else {}
+        if spec.get("version") and not spec.get("image"):
+            found.add(f"{_ELASTICSEARCH_IMAGE}:{spec['version']}")
+    return sorted(found)
 
 
 def section(node: Doc, key: str) -> Doc:
