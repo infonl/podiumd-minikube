@@ -8646,3 +8646,25 @@ window (sudo asked once), the file checked as root (`-r--r----- root root`,
 `visudo -c` parsed OK). Without a terminal: `sudo -n -l` allows the route,
 `sudo -n true` still asks; `setup-tunnel stop` removed the route and
 `setup-tunnel` added it again in 2 s; keycloak.local answered 302.
+
+### Ninth fresh install: 9 min 22 s
+
+Teardown 24 s, provision-cluster 181 s (images loaded beside the node's
+start-up waits, 8fd62b2 + 56eb874), deploy --full 357 s. No `Too many pods`.
+Failed pods: `import-master-realm-job`, `pabc-migrations` (no command to
+wrap), `import-podiumd-realm-job` and `openzaak-config` once each, one
+`redis-ha-label-master` CronJob run. ZAC restarted once after its Jobs.
+podiumd-tests: bootstrap 5 min 9 s, smoke 20261027-154408 176 passed, 1
+skipped, 9 xfailed, 1 xpassed, 0 failed.
+The in-container retries ran on this install: each retried Job has one pod
+and its log holds the failed attempts (lines with Traceback, `psql: error`,
+`Error writing` or `ERROR:`): create-required-catalogi-job 118 (done
+15:33:34 UTC, 4 s after openzaak-config), create-required-objecttypen-job
+60, ensure-podiumd-admin-user 38, openbao-db-schema 13, openbao-config 12
+(OIDC discovery 502 until Keycloak answered), openbeheer-config 4; Open
+Inwoner's search-index init had none.
+
+`start-cluster` after `minikube stop` (16:55), without a terminal: 183 s
+(median before 188 s), exit 0. The control-plane and kubelet/containerd
+tuning was intact (no restart needed), the tunnel process had survived the
+stop, and keycloak.local answered 302.
