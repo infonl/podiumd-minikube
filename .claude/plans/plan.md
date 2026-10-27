@@ -8318,3 +8318,18 @@ now and print it once they succeed (`shown`); helm prints nothing during
 not retried.
 Checked helpers: `process.output` (wrapped), `polling.wait_until` (the retry
 loop); no retry existed before.
+
+### Keycloak's admin user retried in place on a fresh install
+
+Third fresh `deploy --full` (2026-10-27 09:43): podiumd's
+`ensure-podiumd-admin-user` Job writes podiumd-admin into Keycloak's database
+with SQL, and on a fresh database its `SELECT id FROM realm` failed until
+Keycloak had created its tables. The Job's pod back-off spaced the retries
+41-162 s apart; the 6th pod passed at 09:51:17, 8 min after the apply. The
+Keycloak operator account, the realm imports, the client-scope repair and
+the apps' config Jobs waited behind it. `manifests.retry_in_container`
+(was `retry_zac_solr_init`, same mechanism) now wraps that container's script
+in a retry every 2 s, at most 150 times, as ZAC's Solr init container. Only
+the timing changes: the same script runs until it passes, as the Job's own
+retries do in ExternalsPodiumD. Checked helpers: `retry_zac_solr_init`
+(generalised, no second copy), `_pod_spec`/`_containers`.

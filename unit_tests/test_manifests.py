@@ -1,5 +1,6 @@
 """podiumd_minikube.manifests: the fixups applied to helm template output."""
 
+import pytest
 import yaml
 
 from podiumd_minikube import manifests
@@ -368,18 +369,27 @@ def test_speed_up_keycloak_start_sets_probes_and_the_builder_cpu():
     assert server["livenessProbe"] == {"initialDelaySeconds": 120}
 
 
-def test_retry_zac_solr_init_wraps_the_script_in_a_bounded_retry():
-    init: manifests.Doc = {"name": manifests.ZAC_SOLR_INIT, "command": ["sh", "-c", "curl a | grep -q zac || curl b"]}
-    zac: manifests.Doc = {
-        "kind": "Deployment",
-        "metadata": {"name": "zac"},
-        "spec": {"template": {"spec": {"initContainers": [init]}}},
+@pytest.mark.parametrize(
+    ("kind", "name", "container", "shell"),
+    [
+        ("Deployment", "zac", manifests.ZAC_SOLR_INIT, "sh"),
+        ("Job", manifests.KEYCLOAK_ADMIN_USER, manifests.KEYCLOAK_ADMIN_USER, "/bin/sh"),
+    ],
+)
+def test_retry_in_container_wraps_the_script_in_a_bounded_retry(kind: str, name: str, container: str, shell: str):
+    retried: manifests.Doc = {"name": container, "command": [shell, "-c", "curl a || curl b"]}
+    other: manifests.Doc = {"name": "other", "command": [shell, "-c", "curl c"]}
+    doc: manifests.Doc = {
+        "kind": kind,
+        "metadata": {"name": name},
+        "spec": {"template": {"spec": {"initContainers": [retried], "containers": [other]}}},
     }
-    manifests.retry_zac_solr_init([zac])
-    assert init["command"][2] == (
-        f"i=0; until (curl a | grep -q zac || curl b); do i=$((i + 1));"
-        f' [ "$i" -ge {manifests.SOLR_INIT_ATTEMPTS} ] && exit 1; sleep 2; done'
+    manifests.retry_in_container([doc])
+    assert retried["command"][2] == (
+        f"i=0; until (curl a || curl b); do i=$((i + 1));"
+        f' [ "$i" -ge {manifests.RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
     )
+    assert other["command"][2] == "curl c"
 
 
 def test_ease_solr_start_sets_zookeeper_probes_and_the_solr_startup_probe():

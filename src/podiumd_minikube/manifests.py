@@ -443,21 +443,28 @@ def speed_up_keycloak_start(docs: list[Doc]) -> None:
 
 
 ZAC_SOLR_INIT = "init-solr-zac-core"
-# ZAC's init container fails while Solr is still starting, and kubelet's back-off retried it 52 s later.
-SOLR_INIT_ATTEMPTS = 150
+KEYCLOAK_ADMIN_USER = "ensure-podiumd-admin-user"
+# (kind, name, container) whose script fails while a dependency starts, and the Job or kubelet
+# back-off retried it up to 160 s later. ZAC's init container: Solr still starting.
+# Keycloak's admin user: its SQL needs the realm table Keycloak creates on its first start.
+RETRIED_CONTAINERS = {
+    ("Deployment", "zac", ZAC_SOLR_INIT),
+    ("Job", KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_USER),
+}
+RETRY_ATTEMPTS = 150
 
 
-def retry_zac_solr_init(docs: list[Doc]) -> None:
-    """Makes ZAC_SOLR_INIT retry its script every 2 s, SOLR_INIT_ATTEMPTS times, instead of failing at once."""
+def retry_in_container(docs: list[Doc]) -> None:
+    """Makes RETRIED_CONTAINERS retry their `sh -c` script every 2 s, RETRY_ATTEMPTS times, instead of failing."""
     for doc in docs:
-        if doc.get("kind") != "Deployment" or name_of(doc) != "zac":
-            continue
         for container in _containers(_pod_spec(doc) or {}):
+            if (doc.get("kind"), name_of(doc), container.get("name")) not in RETRIED_CONTAINERS:
+                continue
             command: list[str] = container.get("command") or []
-            if container.get("name") == ZAC_SOLR_INIT and command[:2] == ["sh", "-c"] and len(command) == 3:
+            if command[:2] in (["sh", "-c"], ["/bin/sh", "-c"]) and len(command) == 3:
                 command[2] = (
                     f"i=0; until ({command[2]}); do i=$((i + 1));"
-                    f' [ "$i" -ge {SOLR_INIT_ATTEMPTS} ] && exit 1; sleep 2; done'
+                    f' [ "$i" -ge {RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
                 )
 
 
@@ -732,7 +739,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     tune_keycloak(docs)
     tune_kcadm(docs)
     speed_up_keycloak_start(docs)
-    retry_zac_solr_init(docs)
+    retry_in_container(docs)
     tune_solr(docs)
     ease_solr_start(docs)
     mount_zaakbrug_role_mapping(docs)
