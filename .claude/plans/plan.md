@@ -8641,3 +8641,8 @@ asks only in a terminal. `require_sudo` checks the command itself with
 satisfy. A first README version wrote the rule with a shell redirect; when
 `podiumd-minikube` was not on the PATH that produced an empty file, so the
 command now installs and verifies the rule itself.
+Live on Kees's laptop: `setup-tunnel sudoers` from his own user in a tmux
+window (sudo asked once), the file checked as root (`-r--r----- root root`,
+`visudo -c` parsed OK). Without a terminal: `sudo -n -l` allows the route,
+`sudo -n true` still asks; `setup-tunnel stop` removed the route and
+`setup-tunnel` added it again in 2 s; keycloak.local answered 302.
