@@ -8399,3 +8399,13 @@ to host" from the laptop's wifi. That one attempt took 90 s, past
 pulls the chart once into `.cni/cilium-<version>.tgz` (through `fetch`) and
 renders that file: a start needs no network for Cilium. `FETCH_TIMEOUT` is
 300 s. A second start-cluster at 10:33 went through.
+
+start-cluster after `minikube stop` (10:33:49, still before 38a26ef): 226 s,
+exit 0. `minikube start` 32 s; the node logged Cilium's image "already
+present on machine" (from the cache). Nothing to tune: a restarted node kept
+the tuned static pods (kube-apiserver GOGC 25, GOMEMLIMIT 1200MiB) and the
+kubelet's configuration, so no service restarted. Cilium ready 33 s after
+the start, the apps 154 s later. The single kubelet restart pays off on
+`provision-cluster` only; it awaits the next fresh provision.
+`minikube cache delete` leaves `"cache": {}` in ~/.minikube/config/config.json:
+harmless.
