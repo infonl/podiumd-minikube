@@ -115,12 +115,12 @@ def install_cert_manager() -> None:
     print(f"Installing cert-manager {CERT_MANAGER_VERSION}...")
     process.run(["helm", "repo", "add", "jetstack", "https://charts.jetstack.io"], check=False)
     process.fetch(["helm", "repo", "update", "jetstack"])
-    process.run(
+    process.fetch(
         ["helm", "upgrade", "--install", "cert-manager", "jetstack/cert-manager", "--version", CERT_MANAGER_VERSION,
          "-n", CERT_MANAGER_NAMESPACE, "--create-namespace", "--reset-values", "--rollback-on-failure",
          "--server-side=false", "--wait", "--timeout=10m", "-f", "-"],
         stdin=yaml.safe_dump(cert_manager_values()),
-        capture=False,
+        shown=True,
     )  # fmt: skip
 
 

@@ -8311,8 +8311,10 @@ later every lookup resolved again. `process.fetch` now retries a command for
 60 s while its stderr shows a Go network error (dial tcp, i/o timeout, no
 such host, TLS handshake timeout, connection reset), and raises any other
 error at once. Used where helm downloads with captured output: the Cilium
-render, jetstack's `helm repo update`, NGF's `helm show crds`. The
-`helm upgrade --install` and `helm dependency update` calls stream their
-output (capture=False), so their errors cannot be told apart; not retried.
+render, jetstack's `helm repo update`, NGF's `helm show crds`, and the
+`helm upgrade --install` of cert-manager and NGF: these capture their output
+now and print it once they succeed (`shown`); helm prints nothing during
+`--wait` anyway. `helm dependency update` still streams its output and is
+not retried.
 Checked helpers: `process.output` (wrapped), `polling.wait_until` (the retry
 loop); no retry existed before.

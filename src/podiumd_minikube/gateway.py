@@ -86,11 +86,11 @@ def install() -> None:
     ngf_crds = process.fetch(["helm", "show", "crds", NGF_CHART, "--version", NGF_VERSION])
     kube.kubectl("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=ngf_crds)
     dns_ip = kube.kubectl("get", "svc", "kube-dns", "-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")
-    process.run(
+    process.fetch(
         ["helm", "upgrade", "--install", NGF_RELEASE, NGF_CHART, "--version", NGF_VERSION,
          "-n", EDGE_NAMESPACE, "--create-namespace", "--wait", "-f", "-"],
         stdin=yaml.safe_dump(ngf_values(dns_ip)),
-        capture=False,
+        shown=True,
     )  # fmt: skip
 
 

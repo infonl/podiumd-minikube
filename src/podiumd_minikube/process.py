@@ -60,19 +60,26 @@ NETWORK_ERROR = re.compile(r"dial tcp|i/o timeout|no such host|TLS handshake tim
 FETCH_TIMEOUT = 60
 
 
-def fetch(args: Sequence[str], *, stdin: str | None = None) -> str:
-    """output(args), retried for FETCH_TIMEOUT seconds while it fails with a network error."""
+def fetch(args: Sequence[str], *, stdin: str | None = None, shown: bool = False) -> str:
+    """output(args), retried for FETCH_TIMEOUT seconds while it fails with a network error.
+
+    shown prints its output once it succeeded: the error must be captured to tell a network error.
+    """
     errors: list[ProcessError] = []
 
     def attempt() -> tuple[str] | None:
         try:
-            return (output(args, stdin=stdin),)
+            result = run(args, stdin=stdin)
         except ProcessError as error:
             if not NETWORK_ERROR.search(error.stderr):
                 raise
             print(f"Network error, retrying: {error.stderr.strip()}")
             errors.append(error)
             return None
+        if shown:
+            print(result.stdout, end="")
+            print(result.stderr, end="", file=sys.stderr)
+        return (result.stdout,)
 
     if result := polling.wait_until(attempt, timeout=FETCH_TIMEOUT, interval=5):
         return result[0]

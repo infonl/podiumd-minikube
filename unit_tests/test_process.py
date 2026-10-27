@@ -77,13 +77,13 @@ def test_main_exits_with_the_entrys_code(entry, code: int, stderr: str, capsys: 
 def test_fetch_retries_a_network_error_until_it_answers(monkeypatch: pytest.MonkeyPatch):
     answers = iter([ProcessError(["helm"], 1, "lookup helm.cilium.io: i/o timeout"), "index"])
 
-    def output(_args: list[str], *, stdin: str | None = None) -> str:
+    def run(args: list[str], *, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
         answer = next(answers)
         if isinstance(answer, ProcessError):
             raise answer
-        return answer
+        return subprocess.CompletedProcess(args, 0, answer, "")
 
-    monkeypatch.setattr(process, "output", output)
+    monkeypatch.setattr(process, "run", run)
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     assert process.fetch(["helm"]) == "index"
 
@@ -98,3 +98,9 @@ def test_fetch_raises_other_errors_at_once_and_the_last_network_error_at_the_dea
     with pytest.raises(ProcessError, match="no such host"):
         process.fetch(["helm", "show"])
     assert fake_run.calls == [["helm", "template"], ["helm", "show"]]
+
+
+def test_fetch_shown_prints_its_output_after_success(fake_run: FakeRun, capsys: pytest.CaptureFixture[str]):
+    fake_run.on("helm", "upgrade", stdout="deployed\n", stderr="WARNING: x\n")
+    assert process.fetch(["helm", "upgrade"], shown=True) == "deployed\n"
+    assert capsys.readouterr() == ("deployed\n", "WARNING: x\n")
