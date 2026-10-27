@@ -8578,3 +8578,14 @@ install). Its other speedups do not apply: minikube already polls instead of
 `helm --wait` and preloads images; its Keycloak REST change concerns the
 chart's kcadm.sh Jobs (podiumd-chart-26); a skip of unchanged deploys would
 stop the deliberate Job reruns (Kees's call).
+
+Image import timed under the lock with `dbeaver/cloudbeaver:24.3.0` (712 MB,
+not in the chart): `minikube image load` 7 s, `minikube cp` + `ctr import`
+over ssh (aaeaa5b) 4 s, `docker exec -i minikube ctr images import ... -`
+from the tarball 1 s. So aaeaa5b did not make the seventh provision slower;
+the 190 s were most likely the flaky wifi during the node's Cilium pull and
+the helm downloads (no timestamps per step to prove it). `_load` now streams
+through the docker driver's container (`provision.NODE_IMPORT`); about 3 s
+less per image, 70 images. The layer blob is gone within 10 s of the import
+(containerd's GC), as with the file import. `NODE_IMAGE_TARBALLS` is gone:
+nothing copies tarballs into the node any more.

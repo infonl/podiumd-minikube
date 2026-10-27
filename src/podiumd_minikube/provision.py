@@ -239,10 +239,14 @@ def wait_for_control_plane(changed: list[str]) -> None:
             raise process.UserError(msg)
 
 
-NODE_IMAGE_TARBALLS = "/var/lib/minikube/images"
+# Streamed into the node's containerd through the docker driver's container: no copy and no ssh
+# (1 s for 712 MB, against 4 s with minikube cp + ssh and 7 s with `minikube image load`).
 # --discard-unpacked-layers: without it the node keeps each layer packed beside its snapshot
 # (21 GB for --full); containerd's discard_unpacked_layers covers only what the kubelet pulls.
-NODE_IMPORT = f"sudo ctr -n k8s.io images import --local --discard-unpacked-layers --platform {PLATFORM}"
+NODE_IMPORT = [
+    "docker", "exec", "-i", PROFILE,
+    "ctr", "-n", "k8s.io", "images", "import", "--local", "--discard-unpacked-layers", "--platform", PLATFORM, "-",
+]  # fmt: skip
 
 
 def _repository(image: str) -> str:
@@ -308,11 +312,8 @@ def _save(directory: str, image: str) -> process.ProcessError | None:
 
 
 def _load(directory: str, image: str) -> process.ProcessError | None:
-    tarball = _tarball(directory, image)
-    staged = f"{NODE_IMAGE_TARBALLS}/{Path(tarball).name}"
     try:
-        process.run(["minikube", "cp", "-p", PROFILE, tarball, staged])
-        kube.node(f"{NODE_IMPORT} {staged}; status=$?; sudo rm -f {staged}; exit $status")
+        process.run(["sh", "-c", '"$@" < "$0"', _tarball(directory, image), *NODE_IMPORT])
     except process.ProcessError as error:
         return error
     return None

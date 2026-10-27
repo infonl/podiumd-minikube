@@ -202,11 +202,8 @@ def test_load_images_pulls_saves_and_loads_and_warns_on_failures(fake_run: FakeR
     provision.load_images(["a/app:1.0", "b/db:2", "c/bad:3"])
     assert [call[-1] for call in fake_run.ran("docker", "pull")] == ["b/db:2", "c/bad:3"]
     assert sorted(call[4] for call in fake_run.ran("docker", "save")) == ["b/db:2", "c/bad:3"]
-    (copy,) = fake_run.ran("minikube", "cp")
-    assert copy[-1] == f"{provision.NODE_IMAGE_TARBALLS}/b_db_2.tar"
-    (load,) = [call for call in fake_run.ran("minikube", "ssh") if provision.NODE_IMPORT in call[-1]]
-    assert load[-1].startswith(f"{provision.NODE_IMPORT} {copy[-1]}; ")
-    assert f"sudo rm -f {copy[-1]}" in load[-1]
+    (load,) = fake_run.ran("sh", "-c")
+    assert load[3].endswith("/b_db_2.tar") and load[4:] == provision.NODE_IMPORT
     err = capsys.readouterr().err
     assert "pulling c/bad:3 failed" in err
     assert "saving c/bad:3 failed" in err and "no such image" in err
