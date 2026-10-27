@@ -179,12 +179,19 @@ def set_podiumd_version(argv: list[str]) -> None:
 def setup_tunnel(argv: list[str]) -> None:
     """Starts minikube tunnel in the background and waits for the edge's external IP; `stop` stops it.
 
-    sudo asks for your password in the foreground (for the route). Do not run with sudo.
+    sudo asks for your password in the foreground (for the route), unless `setup-tunnel sudoers` installed
+    a rule for it. Do not run with sudo.
     """
     parser = _parser(setup_tunnel)
-    parser.add_argument("action", nargs="?", choices=["start", "stop"], default="start", help="default: start")
-    if parser.parse_args(argv).action == "stop":
+    parser.add_argument(
+        "action", nargs="?", choices=["start", "stop", "sudoers"], default="start",
+        help="default: start; sudoers: install a sudoers.d rule for the route without a password",
+    )  # fmt: skip
+    action = parser.parse_args(argv).action
+    if action == "stop":
         tunnel.stop_tunnel()
+    elif action == "sudoers":
+        tunnel.install_sudoers()
     else:
         tunnel.setup_tunnel()
 

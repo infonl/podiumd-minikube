@@ -32,6 +32,7 @@ def machine(fake_run: FakeRun, poll_once: None, monkeypatch: pytest.MonkeyPatch,
     tunnel.ETC_HOSTS.write_text("127.0.0.1 localhost\n", encoding="utf-8")
     monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
     monkeypatch.setattr(sys, "stdin", io.StringIO())
+    monkeypatch.setattr(tunnel, "_ip", lambda: "ip")
     fake_run.on("kubectl", "config", "current-context", stdout="minikube\n")
     fake_run.on("pgrep", "-f", tunnel.TUNNEL_PATTERN, returncode=1)
     fake_run.on("minikube", "ip", stdout=f"{NODE_IP}\n")
@@ -139,6 +140,16 @@ def test_update_hosts_refuses(machine: FakeRun, absent: tuple[str, ...], message
     with pytest.raises(UserError, match=message):
         tunnel.update_hosts()
     assert not machine.ran("sudo", "tee")
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_setup_tunnel_without_asking_runs_only_with_a_passwordless_rule(
+    machine: FakeRun, spawned: list[tuple[list[str], Path]], *, allowed: bool
+):
+    machine.on("sudo", "-n", "-l", returncode=0 if allowed else 1)
+    assert tunnel.setup_tunnel(ask=False) == allowed
+    assert machine.ran("sudo", "ip") == ([tunnel.route_args("replace", NODE_IP)] if allowed else [])
+    assert bool(spawned) == allowed
 
 
 def test_setup_tunnel_refuses_a_route_sudo_cannot_ask_for(machine: FakeRun, spawned: list[tuple[list[str], Path]]):

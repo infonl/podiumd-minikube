@@ -28,6 +28,7 @@ from podiumd_minikube import pki
 from podiumd_minikube import postgres
 from podiumd_minikube import process
 from podiumd_minikube import prune
+from podiumd_minikube import tunnel
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -171,6 +172,7 @@ STEPS = [
     (keycloak, "repair_default_client_scopes"),
     (openbao, "bootstrap"),
     (prune, "prune"),
+    (tunnel, "setup_tunnel"),
 ]
 
 
@@ -246,6 +248,7 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         "repair_default_client_scopes",
         "bootstrap",
         "prune",
+        "setup_tunnel",
     ]
     assert fake_run.calls == [
         ["kubectl", "create", "namespace", NAMESPACE, "--dry-run=client", "-o", "yaml"],

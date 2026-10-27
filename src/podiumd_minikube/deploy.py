@@ -26,6 +26,7 @@ from podiumd_minikube import polling
 from podiumd_minikube import postgres
 from podiumd_minikube import process
 from podiumd_minikube import prune
+from podiumd_minikube import tunnel
 from podiumd_minikube import upgrade
 from podiumd_minikube.paths import NAMESPACE
 
@@ -211,9 +212,8 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str], command: str = "d
     print(f"\nPruning {', '.join(prune.PRUNABLE_KINDS)} not part of this render...")
     prune.prune([*render.docs, *render.large_configmaps], force=force_prune)
     _wait_ready(render)
-    print(
-        "\nDone. Next: podiumd-minikube setup-tunnel for external reachability, or run the suite in tests/ to verify."
-    )
+    print("\nDeployed.")
+    tunnel.setup_tunnel(ask=False)
 
 
 def rolled_out(workload: dict[str, Any]) -> bool:

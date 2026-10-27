@@ -8625,3 +8625,19 @@ After the eighth install:
   OpenAPI schema from the restarting kube-apiserver ("connection refused").
   Cilium is now applied after `wait_for_control_plane`; the image loads still
   run beside both. The 70 image loads took 136 s beside the waits.
+
+### setup-tunnel without a password (Kees)
+
+`podiumd-minikube setup-tunnel sudoers` builds a sudoers.d rule from
+`tunnel.SERVICE_CIDR`, the node IP and the resolved `ip` path (sudoers names
+commands by full path; `route_args` uses the same path), checks it with
+`visudo -cf`, installs it as `/etc/sudoers.d/podiumd-minikube-tunnel` (sudo
+asks once) and verifies with `sudo -n -l` that the route needs no password.
+The rule allows only `ip route replace|del 10.96.0.0/12 via <node IP>`.
+`deploy` now starts the tunnel when sudo needs no password for the route
+(`setup_tunnel(ask=False)`), else it prints the manual step; `start-cluster`
+asks only in a terminal. `require_sudo` checks the command itself with
+`sudo -n -l` instead of `sudo -n true`, which a rule for one command does not
+satisfy. A first README version wrote the rule with a shell redirect; when
+`podiumd-minikube` was not on the PATH that produced an empty file, so the
+command now installs and verifies the rule itself.

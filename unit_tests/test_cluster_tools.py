@@ -92,10 +92,54 @@ def test_serving_pod_skips_terminating_and_unready_pods():
     assert kube.serving_pod([pod("old", deleting=True)]) == ""
 
 
-def test_route_args_cover_the_service_network_via_the_node():
+def test_route_args_cover_the_service_network_via_the_node(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(tunnel, "_ip", lambda: "/usr/bin/ip")
     assert tunnel.route_args("replace", "192.168.49.2") == [
-        "sudo", "ip", "route", "replace", "10.96.0.0/12", "via", "192.168.49.2",
+        "sudo", "/usr/bin/ip", "route", "replace", "10.96.0.0/12", "via", "192.168.49.2",
     ]  # fmt: skip
+
+
+def test_sudoers_rule_allows_exactly_the_routes_commands(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(tunnel, "_ip", lambda: "/usr/bin/ip")
+    monkeypatch.setattr("getpass.getuser", lambda: "kees")
+    fake_run.on("minikube", "ip", stdout="192.168.49.2\n")
+    rule = tunnel.sudoers_rule().splitlines()[1]
+    assert rule == (
+        "kees ALL=(root) NOPASSWD: /usr/bin/ip route replace 10.96.0.0/12 via 192.168.49.2,"
+        " /usr/bin/ip route del 10.96.0.0/12 via 192.168.49.2"
+    )
+
+
+@pytest.mark.parametrize("verified", [True, False])
+def test_install_sudoers_checks_installs_and_verifies(
+    fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, *, verified: bool
+):
+    monkeypatch.setattr(tunnel, "_ip", lambda: "/usr/bin/ip")
+    fake_run.on("minikube", "ip", stdout="192.168.49.2\n")
+    fake_run.on("sudo", "-n", "-l", returncode=0 if verified else 1)
+    if verified:
+        tunnel.install_sudoers()
+    else:
+        with pytest.raises(tunnel.UserError, match="sudo still asks"):
+            tunnel.install_sudoers()
+    (check,) = [call for call in fake_run.calls if call[-2] == "-cf"]
+    (install,) = fake_run.ran("sudo", "install")
+    assert install[-2:] == [check[-1], tunnel.SUDOERS_FILE]
+
+
+@pytest.mark.parametrize(
+    ("tty", "allowed", "refused"), [(True, False, False), (False, True, False), (False, False, True)]
+)
+def test_require_sudo_refuses_only_without_a_terminal_or_a_rule(
+    fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, *, tty: bool, allowed: bool, refused: bool
+):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: tty)
+    fake_run.on("sudo", "-n", "-l", "/usr/bin/ip", returncode=0 if allowed else 1)
+    if refused:
+        with pytest.raises(tunnel.UserError, match="setup-tunnel sudoers"):
+            tunnel.require_sudo("setup-tunnel", ["/usr/bin/ip", "route"])
+    else:
+        tunnel.require_sudo("setup-tunnel", ["/usr/bin/ip", "route"])
 
 
 def test_routed_via_reads_the_gateway_of_the_route(fake_run: FakeRun):

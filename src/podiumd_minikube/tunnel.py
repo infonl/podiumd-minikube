@@ -1,6 +1,9 @@
 """`minikube tunnel` and the /etc/hosts line that points the *.local names at the edge."""
 
+import getpass
+import shutil
 import sys
+import tempfile
 
 from pathlib import Path
 
@@ -19,11 +22,43 @@ TIMEOUT_SECONDS = 30
 SERVICE_CIDR = "10.96.0.0/12"
 STOP_HINT = "Stop it with: podiumd-minikube setup-tunnel stop"
 ETC_HOSTS = Path("/etc/hosts")
+SUDOERS_FILE = "/etc/sudoers.d/podiumd-minikube-tunnel"
+
+
+def _ip() -> str:
+    """The ip binary's real path: sudoers rules name commands by full path."""
+    found = shutil.which("ip")
+    return str(Path(found).resolve()) if found else "ip"
 
 
 def route_args(action: str, node_ip: str) -> list[str]:
     """`sudo ip route <action>` for minikube's service network via the node."""
-    return ["sudo", "ip", "route", action, SERVICE_CIDR, "via", node_ip]
+    return ["sudo", _ip(), "route", action, SERVICE_CIDR, "via", node_ip]
+
+
+def sudoers_rule() -> str:
+    """A sudoers.d rule that lets this user add and remove the tunnel's route without a password."""
+    node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
+    commands = ", ".join(" ".join(route_args(action, node_ip)[1:]) for action in ("replace", "del"))
+    return f"# podiumd-minikube setup-tunnel: its route only.\n{getpass.getuser()} ALL=(root) NOPASSWD: {commands}\n"
+
+
+def install_sudoers() -> None:
+    """Checks sudoers_rule() with visudo, installs it as SUDOERS_FILE (sudo asks once) and verifies it."""
+    rule = sudoers_rule()
+    print(f"Installing {SUDOERS_FILE}:\n{rule}")
+    node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
+    with tempfile.NamedTemporaryFile("w", suffix=".sudoers", encoding="utf-8") as staged:
+        staged.write(rule)
+        staged.flush()
+        process.run([shutil.which("visudo") or "/usr/sbin/visudo", "-cf", staged.name])
+        process.run(
+            ["sudo", "install", "-m", "440", "-o", "root", "-g", "root", staged.name, SUDOERS_FILE], capture=False
+        )
+    if not process.succeeds(["sudo", "-n", "-l", *route_args("replace", node_ip)[1:]]):
+        msg = f"{SUDOERS_FILE} is installed, but sudo still asks for the route: check `sudo -l`"
+        raise UserError(msg)
+    print("Installed: setup-tunnel, deploy and start-cluster now add the route without a password.")
 
 
 def routed_via() -> str | None:
@@ -32,15 +67,26 @@ def routed_via() -> str | None:
     return shown[2] if shown[1:2] == ["via"] else None
 
 
-def require_sudo(command: str) -> None:
-    """Refuses when sudo would ask for a password and no terminal can answer it."""
-    if not sys.stdin.isatty() and not process.succeeds(["sudo", "-n", "true"]):
-        msg = f"sudo needs a terminal for its password: run `podiumd-minikube {command}` in a terminal"
+def sudo_answers(sudo_args: list[str]) -> bool:
+    """Whether sudo can run sudo_args now: a terminal for the password, or a rule without one."""
+    return sys.stdin.isatty() or process.succeeds(["sudo", "-n", "-l", *sudo_args])
+
+
+def require_sudo(command: str, sudo_args: list[str]) -> None:
+    """Refuses when sudo would ask for a password for sudo_args and no terminal can answer it."""
+    if not sudo_answers(sudo_args):
+        msg = (
+            f"sudo needs a terminal for its password: run `podiumd-minikube {command}` in a terminal,"
+            f" or install `podiumd-minikube setup-tunnel sudoers` as {SUDOERS_FILE} (README)"
+        )
         raise UserError(msg)
 
 
-def setup_tunnel() -> None:
+def setup_tunnel(*, ask: bool = True) -> bool:
     """Adds the route in the foreground (sudo asks here), then runs minikube tunnel in the background.
+
+    ask=False (deploy, start-cluster): only when sudo needs no password for the route; else
+    prints the manual step and returns False.
 
     The tunnel itself needs sudo only to add that route; it finds the route
     present and runs without a terminal. Not under sudo: minikube would look
@@ -54,14 +100,18 @@ def setup_tunnel() -> None:
         print(f"'minikube tunnel' runs (PID {pid}) and the edge has external IP {ip} - already up.")
         print(f"\n{hosts_hint(ip)}")
         print(STOP_HINT)
-        return
+        return True
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
     if routed_via() == node_ip:
         print(f"{SERVICE_CIDR} is already routed via the minikube node {node_ip}.")
     else:
-        require_sudo("setup-tunnel")
+        route = route_args("replace", node_ip)
+        if not ask and not process.succeeds(["sudo", "-n", "-l", *route[1:]]):
+            print(f"\nNext: podiumd-minikube setup-tunnel (sudo asks for the route; README: {SUDOERS_FILE}).")
+            return False
+        require_sudo("setup-tunnel", route[1:])
         print(f"Routing {SERVICE_CIDR} via the minikube node {node_ip} (sudo may ask for your password)...")
-        process.run(route_args("replace", node_ip), capture=False)
+        process.run(route, capture=False)
     if not pid:
         print(f"Starting 'minikube tunnel' in the background (log: {TUNNEL_LOG})...")
         process.spawn(["minikube", "tunnel", "-p", PROFILE], TUNNEL_LOG)
@@ -75,6 +125,7 @@ def setup_tunnel() -> None:
     print(f"Tunnel is up in the background. Edge external IP: {ip}")
     print(f"\n{hosts_hint(ip)}")
     print(STOP_HINT)
+    return True
 
 
 @lock.holding("setup-tunnel stop")
@@ -124,7 +175,7 @@ def update_hosts() -> None:
     if replace_hosts_line(current, line) == current:
         print(f"/etc/hosts is up to date:\n{line}")
         return
-    require_sudo("update-hosts")
+    require_sudo("update-hosts", ["true"])
     print("Caching sudo credentials up front...")
     process.run(["sudo", "-v"], capture=False)
     process.run(["sudo", "cp", str(ETC_HOSTS), f"{ETC_HOSTS}.bak"])

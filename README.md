@@ -49,6 +49,24 @@ Then run `podiumd-minikube update-hosts` (adds the `*.local` names to `/etc/host
 and open `https://zac.local` in a browser — it redirects to Keycloak, and back
 to the authenticated app on login.
 
+### setup-tunnel without a password
+
+`setup-tunnel` needs sudo for one thing: the route to minikube's service
+network (`ip route replace 10.96.0.0/12 via <node IP>`, and `del` on
+`setup-tunnel stop`). Install a sudoers.d rule that allows exactly those two
+commands without a password, once:
+
+```bash
+podiumd-minikube setup-tunnel sudoers   # checks the rule with visudo, installs it (sudo asks once), verifies it
+```
+
+Run it from this checkout (or with its `.venv` on your PATH). With the rule
+in place, `deploy` and `start-cluster` start the tunnel themselves; without
+it they print the `setup-tunnel` step to run by hand. The rule names the
+node IP (192.168.49.2 for minikube's first docker network); if a rebuilt
+node gets another one, sudo asks again: run the same command again.
+`update-hosts` still asks for your password.
+
 ### Edge
 
 As ExternalsPodiumD: NGINX Gateway Fabric with Gateway `public-gateway` in
@@ -167,7 +185,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | `podiumd-minikube show-cluster-status` | Node and per-container memory and CPU (against the budget and `tests/memory-baseline.json`), the last deploy, running containers per chart, profiles, recent restarts and failed Jobs, tunnel, lock and disk; reads only (`--top N`, `--all`) |
 | `podiumd-minikube start-cluster` | After a reboot: starts minikube, waits until every pod reports its state since the start and the apps are ready, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
 | `podiumd-minikube cluster-lock` | Shows, takes, releases or breaks the lock on the shared cluster; `run` holds it around a command (see "Shared cluster: the lock") |
-| `podiumd-minikube setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route |
+| `podiumd-minikube setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route; `setup-tunnel sudoers` installs a sudoers.d rule for that route without a password (see "setup-tunnel without a password") |
 | `podiumd-minikube teardown-cluster` | Deletes the entire minikube cluster and the host's older tags of the chart's image repositories (asks for confirmation; `--yes` to skip) |
 | `podiumd-minikube reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
 | `podiumd-minikube set-podiumd-version <podiumd> [<monitoring-logging>]` | Selects each Helm dependency in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. Each argument is a published version or a local chart checkout directory, so one can be a release and the other a branch. Without `<monitoring-logging>`: a podiumd checkout's sibling `monitoring-logging/`, else the recorded selection |

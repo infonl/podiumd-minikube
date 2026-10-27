@@ -52,7 +52,7 @@ def started(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """start() with a node booted at BOOT, no waiting, and the tunnel recorded."""
     calls: list[str] = []
     monkeypatch.setattr(provision, "start_node", lambda: calls.append("start_node"))
-    monkeypatch.setattr(tunnel, "setup_tunnel", lambda: calls.append("setup_tunnel"))
+    monkeypatch.setattr(tunnel, "setup_tunnel", lambda *, ask: calls.append("setup_tunnel"))
     monkeypatch.setattr(deploy, "READY_TIMEOUT", 0)
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     fake_run.on("docker", "inspect", stdout=BOOT)

@@ -1,5 +1,7 @@
 """Brings a stopped cluster back (after a reboot or `minikube stop`): node, apps, ZAC and the tunnel."""
 
+import sys
+
 from datetime import datetime
 from typing import Any
 
@@ -73,4 +75,4 @@ def start() -> None:
             msg = f"ZAC not ready after {deploy.READY_TIMEOUT}s: check `{logs}`"
             raise process.UserError(msg)
     print("All workloads ready.\n")
-    tunnel.setup_tunnel()
+    tunnel.setup_tunnel(ask=sys.stdin.isatty())
