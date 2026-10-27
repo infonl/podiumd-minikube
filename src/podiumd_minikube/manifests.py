@@ -462,10 +462,12 @@ def retry_in_container(docs: list[Doc]) -> None:
                 continue
             command: list[str] = container.get("command") or []
             if command[:2] in (["sh", "-c"], ["/bin/sh", "-c"]) and len(command) == 3:
-                command[2] = (
-                    f"i=0; until ({command[2]}); do i=$((i + 1));"
+                # A shell of its own: an until condition turns off the script's `set -e`.
+                retry = (
+                    f'i=0; until {command[0]} -c "$1"; do i=$((i + 1));'
                     f' [ "$i" -ge {RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
                 )
+                container["command"] = [*command[:2], retry, "retry", command[2]]
 
 
 def tune_solr(docs: list[Doc]) -> None:

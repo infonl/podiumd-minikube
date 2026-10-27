@@ -8423,3 +8423,18 @@ either. Removed: the cache add/delete, the host pull of the Cilium images and
 `useDigest: false` (back to the chart's digests). The node pulls Cilium from
 quay.io again (75 s on the third fresh provision). Kept from 5db06e9: the
 single kubelet restart after the tuning.
+
+### Fourth fresh install: the retry wrapper hid the admin user's failure
+
+Provision 323 s (478 s this morning): `minikube start` 12 s, Cilium (still
+pulled by the node) ready 42 s later, tuning plus one restart of
+containerd, kubelet and journald 31 s (121 s), Gateway 23 s, cert-manager
+24 s, images 186 s. `deploy --full` (11:39) failed after 1062 s: the
+`ensure-podiumd-admin-user` Job completed with its first pod, but its SQL had
+failed ("relation \"realm\" does not exist") and the script still printed
+"Done": a command in an `until` condition runs with `set -e` turned off,
+also inside a `( )` subshell, so the script's own `set -e` did nothing. With
+no podiumd-admin, ensure-keycloak-operator-sa, the realm imports and every
+config Job behind them timed out. `retry_in_container` now runs the script
+in a shell of its own (`until sh -c "$1"`, the script as an argument), where
+`set -e` holds; a unit test runs a `set -e` script through it.

@@ -1,5 +1,9 @@
 """podiumd_minikube.manifests: the fixups applied to helm template output."""
 
+import subprocess
+
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -385,11 +389,28 @@ def test_retry_in_container_wraps_the_script_in_a_bounded_retry(kind: str, name:
         "spec": {"template": {"spec": {"initContainers": [retried], "containers": [other]}}},
     }
     manifests.retry_in_container([doc])
-    assert retried["command"][2] == (
-        f"i=0; until (curl a || curl b); do i=$((i + 1));"
-        f' [ "$i" -ge {manifests.RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
-    )
-    assert other["command"][2] == "curl c"
+    assert retried["command"] == [
+        shell,
+        "-c",
+        f'i=0; until {shell} -c "$1"; do i=$((i + 1)); [ "$i" -ge {manifests.RETRY_ATTEMPTS} ] && exit 1; sleep 2; done',
+        "retry",
+        "curl a || curl b",
+    ]
+    assert other["command"] == [shell, "-c", "curl c"]
+
+
+def test_retry_in_container_keeps_set_e_of_the_script(tmp_path: Path):
+    marker = tmp_path / "attempts"
+    script = f"set -e; echo x >> {marker}; [ $(wc -l < {marker}) -ge 2 ]; echo done"
+    container: manifests.Doc = {"name": manifests.ZAC_SOLR_INIT, "command": ["sh", "-c", script]}
+    doc: manifests.Doc = {
+        "kind": "Deployment",
+        "metadata": {"name": "zac"},
+        "spec": {"template": {"spec": {"initContainers": [container]}}},
+    }
+    manifests.retry_in_container([doc])
+    result = subprocess.run(container["command"], capture_output=True, text=True, check=False)
+    assert (result.returncode, result.stdout, marker.read_text().count("x")) == (0, "done\n", 2)
 
 
 def test_ease_solr_start_sets_zookeeper_probes_and_the_solr_startup_probe():
