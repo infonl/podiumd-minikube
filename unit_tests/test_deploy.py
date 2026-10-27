@@ -352,12 +352,19 @@ def test_deploy_restarts_zac_once_when_its_boot_failed(
     assert restarts == ["zac"]
 
 
-def test_deploy_restarts_zac_only_after_openzaak_config_completed(
-    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("name", deploy.ZAC_JOBS)
+def test_deploy_restarts_zac_only_after_its_jobs_completed(
+    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch, name: str
 ):
     zac = live["deployment"]["items"][0]
     zac["status"]["readyReplicas"] = 0
-    job = live["job"]["items"][0]
+    jobs = {manifests.name_of(item): item for item in live["job"]["items"]}
+    if name not in jobs:
+        jobs[name] = {**_job_status("Complete"), "metadata": {"name": name}}
+        live["job"]["items"].append(jobs[name])
+        render = manifests.Render(docs=[*RENDER.docs, _doc("Job", name)], large_configmaps=[])
+        monkeypatch.setattr(deploy.Options, "render", lambda _self, *args, **_kwargs: STORAGE if args else render)
+    job = jobs[name]
     complete, job["status"] = job["status"], {}
     events: list[str] = []
     answer = kube.get_json

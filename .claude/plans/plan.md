@@ -8333,3 +8333,22 @@ in a retry every 2 s, at most 150 times, as ZAC's Solr init container. Only
 the timing changes: the same script runs until it passes, as the Job's own
 retries do in ExternalsPodiumD. Checked helpers: `retry_zac_solr_init`
 (generalised, no second copy), `_pod_spec`/`_containers`.
+
+### Third fresh install: results
+
+Teardown 28 s; `provision-cluster` 478 s (391 s yesterday; not broken down
+yet). First `deploy --full` (09:43:23) reached the ready wait after 169 s,
+OpenBao no longer in front of it, but failed after 1078 s:
+
+- `ensure-podiumd-admin-user` passed only at 09:51:17 (see above), and eight
+  config Jobs (objecten, openarchiefbeheer, openformulieren, openinwoner,
+  openklant, opennotificaties, referentielijsten, ita-nieuw-cv-notify) used
+  up their backoffLimit of 6 container restarts (restartPolicy OnFailure)
+  meanwhile. Their pods were deleted with the Job, so the cause per Job is
+  not in a log; Keycloak not yet usable is the likely one.
+- ZAC: the restart at 09:52:56 came after `openzaak-config` but before
+  `create-required-catalogi-job`; WildFly failed again on
+  `CatalogusNotFoundException` (domein ALG), and the liveness probe had to
+  restart it. The restart now waits for both (`deploy.ZAC_JOBS`).
+
+A second `deploy --full` (10:01) passed in 135 s.
