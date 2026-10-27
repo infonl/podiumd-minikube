@@ -8516,3 +8516,18 @@ the 298 s of the second install is not investigated. podiumd-tests: bootstrap
 exit 0, smoke 20261027-140429 176 passed, 1 skipped, 9 xfailed, 1 xpassed,
 0 failed; its f461856 (scrape targets right after a Prometheus start) and
 5654674 (Keycloak serverinfo) passed on this fresh install.
+
+### Why the sixth install's deploy took 471 s
+
+Pod timings from the deploy start: `create-required-catalogi-job` and
+`create-required-objecttypen-job` failed 6 times while Open Zaak and
+Objecttypen were still being configured (`openzaak-config` done at 265 s);
+the last failure was at 220 s and the Job's pod back-off put the next try at
+387 s. ZAC restarts only after the catalogi Job (`deploy.ZAC_JOBS`), so ZAC
+was Ready at 460 s. Both Jobs run a Python script directly, not `sh -c`, so
+`retry_in_container` now wraps any command: `sh -c 'until "$@"; ...' retry
+<command> <args>`, the command still in a process of its own. Both Jobs are in
+`RETRIED_CONTAINERS`. Expected on a fresh install: ZAC Ready about 120 s
+sooner. Live: deploy --full 172 s, all five retried containers succeeded on
+their first try (the dependencies were up), so the retry itself is again
+proven only by the unit test.

@@ -461,34 +461,31 @@ def speed_up_keycloak_start(docs: list[Doc]) -> None:
 ZAC_SOLR_INIT = "init-solr-zac-core"
 KEYCLOAK_ADMIN_USER = "ensure-podiumd-admin-user"
 OPEN_INWONER_SEARCH_INDEX = "openinwoner-search-index"
-# (kind, name, container) whose script fails while a dependency starts, and the Job or kubelet
+# (kind, name, container) that fails while a dependency starts, and the Job or kubelet
 # back-off retried it up to 5 minutes later. ZAC's init container: Solr still starting.
 # Keycloak's admin user: its SQL needs the realm table Keycloak creates on its first start.
-# Open Inwoner's index rebuild: its Elasticsearch still starting.
+# Open Inwoner's index rebuild: its Elasticsearch still starting. The catalogus and
+# objecttypen Jobs: Open Zaak and Objecttypen still being configured; ZAC waits for the first.
 RETRIED_CONTAINERS = {
     ("Deployment", "zac", ZAC_SOLR_INIT),
     ("Job", KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_USER),
     ("Deployment", "openinwoner", OPEN_INWONER_SEARCH_INDEX),
+    ("Job", "create-required-catalogi-job", "create-required-catalogi"),
+    ("Job", "create-required-objecttypen-job", "create-required-objecttypen"),
 }
 RETRY_ATTEMPTS = 150
 
 
 def retry_in_container(docs: list[Doc]) -> None:
-    """Makes RETRIED_CONTAINERS retry their `sh -c` script every 2 s, RETRY_ATTEMPTS times, instead of failing."""
+    """Makes RETRIED_CONTAINERS rerun their command every 2 s, RETRY_ATTEMPTS times, instead of failing."""
+    retry = f'i=0; until "$@"; do i=$((i + 1)); [ "$i" -ge {RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
     for doc in docs:
         for container in _containers(_pod_spec(doc) or {}):
             if (doc.get("kind"), name_of(doc), container.get("name")) not in RETRIED_CONTAINERS:
                 continue
-            # The script is the command's third item, or the only arg.
-            command: list[str] = [*(container.get("command") or []), *(container.get("args") or [])]
-            if command[:2] in (["sh", "-c"], ["/bin/sh", "-c"], ["/bin/bash", "-c"]) and len(command) == 3:
-                # A shell of its own: an until condition turns off the script's `set -e`.
-                retry = (
-                    f'i=0; until {command[0]} -c "$1"; do i=$((i + 1));'
-                    f' [ "$i" -ge {RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
-                )
-                container["command"] = [*command[:2], retry, "retry", command[2]]
-                container.pop("args", None)
+            # A process of its own: an until condition would turn off a script's `set -e`.
+            argv: list[str] = [*(container.get("command") or []), *(container.pop("args", None) or [])]
+            container["command"] = ["sh", "-c", retry, "retry", *argv]
 
 
 def tune_solr(docs: list[Doc]) -> None:

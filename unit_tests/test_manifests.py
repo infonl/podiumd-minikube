@@ -414,41 +414,37 @@ def test_speed_up_keycloak_start_sets_probes_and_the_builder_cpu():
 
 
 @pytest.mark.parametrize(
-    ("kind", "name", "container", "shell"),
+    ("kind", "name", "container", "command", "args"),
     [
-        ("Deployment", "zac", manifests.ZAC_SOLR_INIT, "sh"),
-        ("Job", manifests.KEYCLOAK_ADMIN_USER, manifests.KEYCLOAK_ADMIN_USER, "/bin/sh"),
-        ("Deployment", "openinwoner", manifests.OPEN_INWONER_SEARCH_INDEX, "/bin/bash"),
+        ("Deployment", "zac", manifests.ZAC_SOLR_INIT, ["sh", "-c", "curl a || curl b"], None),
+        # Open Inwoner's chart passes the script as args.
+        ("Deployment", "openinwoner", manifests.OPEN_INWONER_SEARCH_INDEX, ["/bin/bash", "-c"], ["curl a"]),
+        ("Job", "create-required-catalogi-job", "create-required-catalogi", ["/jobs/create.py"], None),
     ],
 )
-def test_retry_in_container_wraps_the_script_in_a_bounded_retry(kind: str, name: str, container: str, shell: str):
-    command = [shell, "-c", "curl a || curl b"]
-    # Open Inwoner's chart passes the script as args.
-    split = shell == "/bin/bash"
-    retried: manifests.Doc = (
-        {"name": container, "command": command[:2], "args": command[2:]}
-        if split
-        else {
-            "name": container,
-            "command": command,
-        }
-    )
-    other: manifests.Doc = {"name": "other", "command": [shell, "-c", "curl c"]}
+def test_retry_in_container_reruns_the_command_in_a_bounded_retry(
+    kind: str, name: str, container: str, command: list[str], args: list[str] | None
+):
+    retried: manifests.Doc = {"name": container, "command": command, **({"args": args} if args else {})}
+    other: manifests.Doc = {"name": "other", "command": ["sh", "-c", "curl c"]}
     doc: manifests.Doc = {
         "kind": kind,
         "metadata": {"name": name},
         "spec": {"template": {"spec": {"initContainers": [retried], "containers": [other]}}},
     }
     manifests.retry_in_container([doc])
-    assert retried["command"] == [
-        shell,
-        "-c",
-        f'i=0; until {shell} -c "$1"; do i=$((i + 1)); [ "$i" -ge {manifests.RETRY_ATTEMPTS} ] && exit 1; sleep 2; done',
-        "retry",
-        "curl a || curl b",
-    ]
-    assert "args" not in retried
-    assert other["command"] == [shell, "-c", "curl c"]
+    assert retried == {
+        "name": container,
+        "command": [
+            "sh",
+            "-c",
+            f'i=0; until "$@"; do i=$((i + 1)); [ "$i" -ge {manifests.RETRY_ATTEMPTS} ] && exit 1; sleep 2; done',
+            "retry",
+            *command,
+            *(args or []),
+        ],
+    }
+    assert other["command"] == ["sh", "-c", "curl c"]
 
 
 def test_retry_in_container_keeps_set_e_of_the_script(tmp_path: Path):
