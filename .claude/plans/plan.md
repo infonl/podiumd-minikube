@@ -8589,3 +8589,19 @@ through the docker driver's container (`provision.NODE_IMPORT`); about 3 s
 less per image, 70 images. The layer blob is gone within 10 s of the import
 (containerd's GC), as with the file import. `NODE_IMAGE_TARBALLS` is gone:
 nothing copies tarballs into the node any more.
+
+### Eighth fresh install: 10 minutes
+
+Teardown 27 s (16:00), provision-cluster 230 s, deploy --full 354 s (exit 0
+at 16:11): 10 min 11 s, against 21 min 8 s for the seventh and 15 min 4 s
+for the sixth. Provision, with a timestamp per line: minikube start and
+Cilium 16 s, tuning and restarts 54 s, image list 4 s, 70 image loads 137 s
+(streamed, 1db11b2; about 480 s on the seventh), Gateway API CRDs then NGF
+and cert-manager in parallel 19 s (47 s one after the other). Deploy: no
+`Too many pods` (max-pods 150, 124 pods after the deploy); 5 failed pods
+left: `import-master-realm-job` and `pabc-migrations` (no command to wrap),
+`openbeheer-config` twice (Postgres not up yet; not seen failing before) and
+a `redis-ha-label-master` CronJob run. ZAC still failed its first boot
+(WFLYCTL0080) and was restarted at 16:09:41 after its Jobs. podiumd-tests:
+bootstrap 5 min 5 s (8 min on the seventh), smoke 20261027-151632 176
+passed, 1 skipped, 9 xfailed, 1 xpassed, 0 failed.
