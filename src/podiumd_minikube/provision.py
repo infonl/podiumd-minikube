@@ -94,8 +94,11 @@ def cpuset_args(cpus: int, host_cpus: int) -> list[str]:
     return [f"--cpuset-cpus=0-{cpus - 1}"] if cpus < host_cpus else []
 
 
-def start_node() -> None:
-    """start_minikube sized from MINIKUBE_CPUS (default 6) and memory.py, then requires its kubectl context."""
+def start_node(while_starting: Callable[[], None] = lambda: None) -> None:
+    """start_minikube sized from MINIKUBE_CPUS (default 6) and memory.py, then requires its kubectl context.
+
+    while_starting runs once containerd has its tuning, beside the waits for Cilium and the control plane.
+    """
     cpus = _env_int("MINIKUBE_CPUS", 6)
     start_minikube(cpus, memory.wanted())
     # The docker driver applies --memory but not --cpus on Linux (seen: NanoCpus 0). A CPU
@@ -103,14 +106,17 @@ def start_node() -> None:
     # GOMAXPROCS; the cpuset makes them see `cpus` (seen: 24 nginx workers).
     process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, os.cpu_count() or cpus), PROFILE])
     kube.require_minikube_context()
-    cni.apply()
     control_plane = tune_control_plane()
     services = tune_node_services()
     # The kubelet reported restarted static pods up to 100 s late (etcd); a restarted one at once.
     if (isolate_pod_dns() or control_plane) and "kubelet" not in services:
         services.append("kubelet")
     restart_node_services(services)
-    wait_for_control_plane(control_plane)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        started = pool.submit(while_starting)
+        cni.apply()
+        wait_for_control_plane(control_plane)
+        started.result()
 
 
 def with_control_plane_env(manifest: str) -> str | None:
@@ -362,9 +368,6 @@ def load_images(images: list[str]) -> None:
 def provision() -> None:
     """Runs every provisioning step; each skips what is already done."""
     disk.check(disk.PROVISION)
-    start_node()
-    # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
-    kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
     print("Running helm dependency update...")
     dependency.sync()
     print("Deriving the image list from the currently-selected podiumd version...")
@@ -372,8 +375,9 @@ def provision() -> None:
     edge = gateway.ngf_template() + "\n---\n" + pki.cert_manager_template()
     images = sorted({*chart_images(), *manifests.images(edge)})
     print(f"{len(images)} image(s) referenced by this chart's fully-enabled render, the edge and cert-manager.")
-    print("Checking which are already loaded in minikube...")
-    load_images(images)
+    start_node(functools.partial(load_images, images))
+    # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
+    kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
     remove_old_tags(images)
     gateway.install_crds()
     with ThreadPoolExecutor() as pool:

@@ -8605,3 +8605,18 @@ a `redis-ha-label-master` CronJob run. ZAC still failed its first boot
 (WFLYCTL0080) and was restarted at 16:09:41 after its Jobs. podiumd-tests:
 bootstrap 5 min 5 s (8 min on the seventh), smoke 20261027-151632 176
 passed, 1 skipped, 9 xfailed, 1 xpassed, 0 failed.
+
+After the eighth install:
+- `openbeheer-config` joins `RETRIED_CONTAINERS` (failed twice on port 5432).
+- ZAC: its Jobs completed at 15:09:30 UTC, the restart followed at 15:09:41
+  (one poll), Ready at 15:10:51. Starting ZAC only after its Jobs (replicas
+  0, then 1) would save about 10 s plus the CPU of the first, failing boot:
+  not worth a scale step in the deploy. Left as is.
+- Provision's 54 s of start-up waits: from `minikube start` to the
+  tuning restart 26 s (`cni.apply` waits for Cilium, whose image the node
+  pulls), then 25 s for containerd, the kubelet and the control plane.
+  The image imports need only containerd, so `start_node(while_starting)`
+  now restarts the tuned services first and runs the image loads beside
+  `cni.apply` and `wait_for_control_plane`; provision derives the image
+  list before it starts the node. start-cluster passes nothing and only
+  applies Cilium after the restart instead of before.

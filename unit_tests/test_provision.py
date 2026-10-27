@@ -3,6 +3,7 @@
 import json
 import tempfile
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -86,14 +87,10 @@ def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
     monkeypatch.setattr(provision, "isolate_pod_dns", lambda: kubelet_config)
     monkeypatch.setattr(provision, "restart_node_services", lambda names: calls.append(f"restart {names}"))
     monkeypatch.setattr(provision, "wait_for_control_plane", lambda names: calls.append(f"wait {names}"))
-    provision.start_node()
-    assert calls == [
-        "start 4 8192",
-        "require_minikube_context",
-        "apply",
-        f"restart {restarted}",
-        f"wait {control_plane}",
-    ]
+    provision.start_node(_record(calls, "while_starting"))
+    assert calls[:3] == ["start 4 8192", "require_minikube_context", f"restart {restarted}"]
+    # while_starting runs beside the waits for Cilium and the control plane.
+    assert sorted(calls[3:]) == sorted(["while_starting", "apply", f"wait {control_plane}"])
     assert fake_run.ran("docker", "update") == [["docker", "update", "--cpus=4", "--cpuset-cpus=0-3", PROFILE]]
 
 
@@ -227,8 +224,13 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
     monkeypatch.setattr(pki, "cert_manager_template", lambda: "image: cert-manager:2")
     monkeypatch.setattr(provision, "load_images", lambda images: calls.append(f"load {' '.join(images)}"))
     monkeypatch.setattr(provision, "remove_old_tags", lambda images: calls.append(f"remove old {' '.join(images)}"))
+
+    def start_node(while_starting: Callable[[], None]) -> None:
+        calls.append("start_node")
+        while_starting()
+
+    monkeypatch.setattr(provision, "start_node", start_node)
     for module, name in [
-        (provision, "start_node"),
         (gateway, "install_crds"),
         (gateway, "install"),
         (pki, "install_cert_manager"),
@@ -240,8 +242,8 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
     # NGF and cert-manager install in parallel, in either order.
     assert [*calls[:-3], *sorted(calls[-3:-1]), calls[-1]] == [
         f"disk {disk.PROVISION.fail_gib}",
-        "start_node",
         "sync",
+        "start_node",
         "load a/app:1.0 cert-manager:2 ngf:1",
         "remove old a/app:1.0 cert-manager:2 ngf:1",
         "install_crds",
