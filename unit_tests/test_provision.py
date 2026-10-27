@@ -53,6 +53,7 @@ def test_start_minikube_starts_only_a_stopped_profile(
     if started:
         assert starts[0][:7] == ["minikube", "start", "-p", PROFILE, "--driver=docker", "--cpus=4", "--memory=8192"]
         assert "--cni=/c/cilium.yaml" in starts[0]
+        assert f"--extra-config=kubelet.max-pods={provision.MAX_PODS}" in starts[0]
 
 
 @pytest.mark.parametrize(
@@ -231,6 +232,7 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
     monkeypatch.setattr(provision, "remove_old_tags", lambda images: calls.append(f"remove old {' '.join(images)}"))
     for module, name in [
         (provision, "start_node"),
+        (gateway, "install_crds"),
         (gateway, "install"),
         (pki, "install_cert_manager"),
         (pki, "install_issuer"),
@@ -238,12 +240,14 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
     ]:
         monkeypatch.setattr(module, name, _record(calls, name))
     provision.provision()
-    assert calls == [
+    # NGF and cert-manager install in parallel, in either order.
+    assert [*calls[:-3], *sorted(calls[-3:-1]), calls[-1]] == [
         f"disk {disk.PROVISION.fail_gib}",
         "start_node",
         "sync",
         "load a/app:1.0 cert-manager:2 ngf:1",
         "remove old a/app:1.0 cert-manager:2 ngf:1",
+        "install_crds",
         "install",
         "install_cert_manager",
         "install_issuer",

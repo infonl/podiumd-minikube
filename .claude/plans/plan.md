@@ -8545,3 +8545,36 @@ with the flag), then deletes the tarball. Live with `alpine:3.20`: the layer
 blob is gone right after the import, the config blob stays, and a pod with
 `imagePullPolicy: Never` ran from it. The running node keeps its 21 GB until
 the next fresh provision.
+
+### Seventh fresh install: the node's pod limit, more retried Jobs, parallel edge installs
+
+Teardown 37 s (15:26), provision-cluster 598 s, deploy --full 633 s (exit
+0 at 15:47). Images without packed layers (aaeaa5b): content store 21 GB ->
+1.1 MB, /var/lib/docker 59% -> 45%; provision was 190 s slower than the
+sixth (406 s), not from the network (no pulls, no retries): open.
+
+The deploy was slower than the sixth (471 s) because of the kubelet's limit
+of 110 pods: finished and failed Job pods stay on the node, 132 pods after
+the deploy. Postgres waited 63 s with `FailedScheduling: Too many pods`, as
+did Keycloak, both Elasticsearch clusters, Solr, ZooKeeper and redis-ha;
+everything else waits for Postgres. The limit was noted before ("Node pod
+limit 110: reached during a deploy, left as is") with the rule to raise it
+once it costs time; it now does. `provision.MAX_PODS` 150 is passed as
+`--extra-config=kubelet.max-pods=150` (AKS sets its own limit, so no
+deviation from the estates' behaviour).
+
+Ten Jobs still left failed pods before they succeeded. Retried in their
+container now (`RETRIED_CONTAINERS`): `openbao-db-schema` (psql: Postgres
+"Host is unreachable"), `openbao-config` (OpenBao not ready) and
+`openvtb-config` (setup_configuration failed). Not wrappable without copying
+the image's entrypoint, so left to the Job back-off: `pabc-migrations`,
+`pabc-seed-job` and keycloak-config-cli's `import-master-realm-job` (no
+`command`).
+
+From podiumd-infra's (kees00, QA) speedups: provision applies the Gateway
+API CRDs first (`gateway.install_crds`), then installs NGINX Gateway Fabric
+and cert-manager in parallel (23 and 24 s one after the other on the fourth
+install). Its other speedups do not apply: minikube already polls instead of
+`helm --wait` and preloads images; its Keycloak REST change concerns the
+chart's kcadm.sh Jobs (podiumd-chart-26); a skip of unchanged deploys would
+stop the deliberate Job reruns (Kees's call).

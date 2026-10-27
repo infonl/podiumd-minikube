@@ -61,11 +61,15 @@ def test_forwarded_host_annotation_replaces_the_host_sent_upstream():
     assert {"name": "X-Forwarded-Host", "value": "keycloak-admin.local"} in headers["requestHeaderModifier"]["set"]
 
 
-def test_install_applies_both_crd_sets_then_upgrades_ngf_with_the_cluster_dns(fake_run: FakeRun):
+def test_install_crds_applies_the_gateway_api_release(fake_run: FakeRun):
+    gateway.install_crds()
+    assert fake_run.ran("kubectl", "apply", "-f")[0][-1].endswith("/v1.5.1/standard-install.yaml")
+
+
+def test_install_applies_ngfs_crds_then_upgrades_ngf_with_the_cluster_dns(fake_run: FakeRun):
     fake_run.on("helm", "show", "crds", stdout="kind: CustomResourceDefinition\n")
     fake_run.on("kubectl", "get", "svc", "kube-dns", stdout="10.96.0.10")
     gateway.install()
-    assert fake_run.ran("kubectl", "apply", "-f")[0][-1].endswith("/v1.5.1/standard-install.yaml")
     server_side = fake_run.calls.index(["kubectl", "apply", "--server-side", "--force-conflicts", "-f", "-"])
     assert fake_run.stdins[server_side] == "kind: CustomResourceDefinition\n"
     upgrade = fake_run.calls.index(fake_run.ran("helm", "upgrade")[0])

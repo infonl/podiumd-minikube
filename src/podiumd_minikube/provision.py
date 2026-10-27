@@ -67,6 +67,11 @@ def _env_int(name: str, default: int) -> int:
     return int(os.environ.get(name, default))
 
 
+# A fresh --full deploy holds about 130 pods, finished Job pods included; at the kubelet's default
+# 110 Postgres waited 63 s with "Too many pods", and everything else waits for Postgres.
+MAX_PODS = 150
+
+
 def start_minikube(cpus: int, memory_mb: int) -> None:
     """Starts the profile with the docker driver and Cilium, or checks the running one's memory."""
     cni_manifest = cni.write_manifest()
@@ -79,7 +84,7 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
     # Without --driver=docker minikube silently falls back to qemu2.
     process.run(
         ["minikube", "start", "-p", PROFILE, "--driver=docker", f"--cpus={cpus}", f"--memory={memory_mb}",
-         f"--cni={cni_manifest}", *cni.START_ARGS],
+         f"--cni={cni_manifest}", *cni.START_ARGS, f"--extra-config=kubelet.max-pods={MAX_PODS}"],
         capture=False,
     )  # fmt: skip
 
@@ -369,8 +374,10 @@ def provision() -> None:
     print("Checking which are already loaded in minikube...")
     load_images(images)
     remove_old_tags(images)
-    gateway.install()
-    pki.install_cert_manager()
+    gateway.install_crds()
+    with ThreadPoolExecutor() as pool:
+        for future in [pool.submit(gateway.install), pool.submit(pki.install_cert_manager)]:
+            future.result()
     pki.install_issuer()
     print("\nCluster provisioned. Next steps:")
     print("  1. podiumd-minikube deploy (or podiumd-minikube deploy --full for every optional profile).")

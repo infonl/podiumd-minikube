@@ -74,16 +74,21 @@ def ngf_values(dns_ip: str) -> dict[str, Any]:
     }
 
 
-def install() -> None:
-    """Installs or upgrades the Gateway API CRDs, NGF's CRDs and NGF (an upgrade keeps its values current).
-
-    Helm installs a chart's crds/ only once, so NGF's CRDs are applied first, as ExternalsPodiumD does.
-    """
-    print(f"Installing the Gateway API CRDs {GATEWAY_API_VERSION} and NGINX Gateway Fabric {NGF_VERSION}...")
+def install_crds() -> None:
+    """Applies the Gateway API CRDs, which NGF and cert-manager (enableGatewayAPI) both watch."""
+    print(f"Installing the Gateway API CRDs {GATEWAY_API_VERSION}...")
     crds = (
         f"https://github.com/kubernetes-sigs/gateway-api/releases/download/{GATEWAY_API_VERSION}/standard-install.yaml"
     )
     kube.kubectl_shown("apply", "-f", crds)
+
+
+def install() -> None:
+    """Installs or upgrades NGF's CRDs and NGF (an upgrade keeps its values current); needs install_crds().
+
+    Helm installs a chart's crds/ only once, so NGF's CRDs are applied first, as ExternalsPodiumD does.
+    """
+    print(f"Installing NGINX Gateway Fabric {NGF_VERSION}...")
     ngf_crds = process.fetch(["helm", "show", "crds", NGF_CHART, "--version", NGF_VERSION])
     kube.kubectl("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=ngf_crds)
     dns_ip = kube.kubectl("get", "svc", "kube-dns", "-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")
