@@ -8620,3 +8620,8 @@ After the eighth install:
   `cni.apply` and `wait_for_control_plane`; provision derives the image
   list before it starts the node. start-cluster passes nothing and only
   applies Cilium after the restart instead of before.
+- The ninth install's first provision failed after 163 s: `cni.apply` ran
+  right after the restart, and `kubectl apply` could not download the
+  OpenAPI schema from the restarting kube-apiserver ("connection refused").
+  Cilium is now applied after `wait_for_control_plane`; the image loads still
+  run beside both. The 70 image loads took 136 s beside the waits.

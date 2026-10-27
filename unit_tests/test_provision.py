@@ -89,8 +89,9 @@ def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
     monkeypatch.setattr(provision, "wait_for_control_plane", lambda names: calls.append(f"wait {names}"))
     provision.start_node(_record(calls, "while_starting"))
     assert calls[:3] == ["start 4 8192", "require_minikube_context", f"restart {restarted}"]
-    # while_starting runs beside the waits for Cilium and the control plane.
-    assert sorted(calls[3:]) == sorted(["while_starting", "apply", f"wait {control_plane}"])
+    # while_starting runs beside the waits for the control plane and then Cilium.
+    assert [call for call in calls[3:] if call != "while_starting"] == [f"wait {control_plane}", "apply"]
+    assert "while_starting" in calls[3:]
     assert fake_run.ran("docker", "update") == [["docker", "update", "--cpus=4", "--cpuset-cpus=0-3", PROFILE]]
 
 

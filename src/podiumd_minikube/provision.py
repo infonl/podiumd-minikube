@@ -114,8 +114,9 @@ def start_node(while_starting: Callable[[], None] = lambda: None) -> None:
     restart_node_services(services)
     with ThreadPoolExecutor(max_workers=1) as pool:
         started = pool.submit(while_starting)
-        cni.apply()
+        # The restarted kube-apiserver refuses connections until it is ready.
         wait_for_control_plane(control_plane)
+        cni.apply()
         started.result()
 
 
