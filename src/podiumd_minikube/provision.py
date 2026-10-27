@@ -234,8 +234,10 @@ def wait_for_control_plane(changed: list[str]) -> None:
             raise process.UserError(msg)
 
 
-# Where `minikube image load` copies each tarball in the node; it keeps them (21 GB for --full).
 NODE_IMAGE_TARBALLS = "/var/lib/minikube/images"
+# --discard-unpacked-layers: without it the node keeps each layer packed beside its snapshot
+# (21 GB for --full); containerd's discard_unpacked_layers covers only what the kubelet pulls.
+NODE_IMPORT = f"sudo ctr -n k8s.io images import --local --discard-unpacked-layers --platform {PLATFORM}"
 
 
 def _repository(image: str) -> str:
@@ -301,8 +303,11 @@ def _save(directory: str, image: str) -> process.ProcessError | None:
 
 
 def _load(directory: str, image: str) -> process.ProcessError | None:
+    tarball = _tarball(directory, image)
+    staged = f"{NODE_IMAGE_TARBALLS}/{Path(tarball).name}"
     try:
-        process.run(["minikube", "image", "load", "-p", PROFILE, _tarball(directory, image)])
+        process.run(["minikube", "cp", "-p", PROFILE, tarball, staged])
+        kube.node(f"{NODE_IMPORT} {staged}; status=$?; sudo rm -f {staged}; exit $status")
     except process.ProcessError as error:
         return error
     return None
@@ -342,7 +347,6 @@ def load_images(images: list[str]) -> None:
             # containerd lose images without an error.
             saved = _in_batches(batch, "saving", functools.partial(_save, directory))
             _in_batches(saved, "loading", functools.partial(_load, directory), workers=1)
-        kube.node(f"sudo rm -rf {NODE_IMAGE_TARBALLS}/*")
     still_missing = missing_images(images, process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines())
     if still_missing:
         print(f"WARNING: not in minikube after loading: {' '.join(still_missing)}", file=sys.stderr)

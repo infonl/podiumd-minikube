@@ -8531,3 +8531,17 @@ was Ready at 460 s. Both Jobs run a Python script directly, not `sh -c`, so
 sooner. Live: deploy --full 172 s, all five retried containers succeeded on
 their first try (the dependencies were up), so the retry itself is again
 proven only by the unit test.
+
+### Images imported without their packed layers
+
+minikube's containerd config already has `discard_unpacked_layers = true`,
+but that covers only images the kubelet pulls. `minikube image load` imports
+with `ctr images import`, which keeps every layer packed in the content store
+beside its unpacked snapshot: 21 GB of content next to 24 GB of snapshots on
+the sixth install. `provision._load` now copies the tarball to the node
+(`minikube cp`) and runs `ctr -n k8s.io images import --local
+--discard-unpacked-layers --platform linux/amd64` (`--local` is required
+with the flag), then deletes the tarball. Live with `alpine:3.20`: the layer
+blob is gone right after the import, the config blob stays, and a pod with
+`imagePullPolicy: Never` ran from it. The running node keeps its 21 GB until
+the next fresh provision.

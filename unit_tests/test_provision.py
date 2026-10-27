@@ -201,8 +201,11 @@ def test_load_images_pulls_saves_and_loads_and_warns_on_failures(fake_run: FakeR
     provision.load_images(["a/app:1.0", "b/db:2", "c/bad:3"])
     assert [call[-1] for call in fake_run.ran("docker", "pull")] == ["b/db:2", "c/bad:3"]
     assert sorted(call[4] for call in fake_run.ran("docker", "save")) == ["b/db:2", "c/bad:3"]
-    loads = fake_run.ran("minikube", "image", "load")
-    assert len(loads) == 1 and loads[0][-1].endswith("b_db_2.tar")
+    (copy,) = fake_run.ran("minikube", "cp")
+    assert copy[-1] == f"{provision.NODE_IMAGE_TARBALLS}/b_db_2.tar"
+    (load,) = [call for call in fake_run.ran("minikube", "ssh") if provision.NODE_IMPORT in call[-1]]
+    assert load[-1].startswith(f"{provision.NODE_IMPORT} {copy[-1]}; ")
+    assert f"sudo rm -f {copy[-1]}" in load[-1]
     err = capsys.readouterr().err
     assert "pulling c/bad:3 failed" in err
     assert "saving c/bad:3 failed" in err and "no such image" in err
@@ -267,8 +270,3 @@ def test_remove_old_tags_runs_one_docker_rmi(fake_run: FakeRun):
     fake_run.on("docker", "images", stdout="busybox:1.36\nbusybox:1.37\npostgres:15\n")
     provision.remove_old_tags(["busybox:1.37"])
     assert fake_run.ran("docker", "rmi") == [["docker", "rmi", "busybox:1.36"]]
-
-
-def test_load_images_removes_the_nodes_tarballs_after_each_batch(fake_run: FakeRun):
-    provision.load_images(["a/app:1.0"])
-    assert fake_run.ran("minikube", "ssh")[-1][-1] == f"sudo rm -rf {provision.NODE_IMAGE_TARBALLS}/*"
