@@ -434,7 +434,7 @@ podiumd:
     auth:
       server: https://keycloak.local
       secret: keycloakZacClientSecret
-      # No enablePkce: off, as podiumd-infra (pkceEnabled "false").
+      # No enablePkce: podiumd's default (on, for ZAC and its Keycloak client), as ExternalsPodiumD and podiumd-infra.
     keycloak:
       adminClient:
         secret: zacAdminClientSecret

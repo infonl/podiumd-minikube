@@ -260,18 +260,21 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         client_settings_manifest(),
         *route_manifests(docs),
     ]
+    # NGF keeps an ExternalName Service's old target when it changes in place: such a Service is recreated.
+    wanted = {(doc["kind"], manifests.name_of(doc)): manifests.section(doc, "spec") for doc in objects}
+    for kind in ("HTTPRoute", "Service", "ProxySettingsPolicy", "ClientSettingsPolicy"):
+        live = kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]
+        for item in live:
+            spec = wanted.get((kind, item["metadata"]["name"]))
+            target = manifests.section(item, "spec").get("externalName")
+            if spec is None or target != spec.get("externalName"):
+                kube.kubectl("delete", kind.lower(), item["metadata"]["name"], "-n", EDGE_NAMESPACE)
+                print(f"  deleted {kind} {item['metadata']['name']} ({'retargeted' if spec else 'no longer rendered'})")
     kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
     if not polling.wait_until(lambda: kube.exists(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3):
         msg = f"NGF created no Service {EDGE_NAMESPACE}/{EDGE_SERVICE} for Gateway {GATEWAY} within 120s"
         raise process.UserError(msg)
     _pin_cluster_ip()
-    wanted = {(doc["kind"], manifests.name_of(doc)) for doc in objects}
-    for kind in ("HTTPRoute", "Service", "ProxySettingsPolicy", "ClientSettingsPolicy"):
-        live = kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]
-        for item in live:
-            if (kind, item["metadata"]["name"]) not in wanted:
-                kube.kubectl("delete", kind.lower(), item["metadata"]["name"], "-n", EDGE_NAMESPACE)
-                print(f"  deleted {kind} {item['metadata']['name']} (no longer rendered)")
     kube.kubectl_shown(
         "wait", "--for=condition=Ready", f"certificate/{tls.CERTIFICATE}", "-n", EDGE_NAMESPACE, "--timeout=120s"
     )

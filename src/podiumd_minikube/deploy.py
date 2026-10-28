@@ -101,14 +101,25 @@ def one_shot_jobs(own: manifests.Render, podiumd: manifests.Render) -> list[str]
     return [*own.jobs, *(name for name in podiumd.jobs if name in upgrade.EXTERNALS_DELETED_JOBS)]
 
 
-def _apply_crds(render: manifests.Render) -> None:
+def apply_crds(render: manifests.Render, release: str) -> None:
     """Applies the render's CRDs (the Keycloak operator's from upstream) server-side and waits until established.
 
-    Before the upgrade: Helm installs a chart's crds/ only when absent, and the adfinis subchart's are older.
+    Before the upgrade: Helm installs a chart's crds/ only when absent, and the adfinis subchart's are older;
+    a templated CRD must exist before Helm can map the objects of its kind. Those get release's ownership
+    metadata, else Helm refuses to adopt them.
     """
     if not render.crds:
         return
     docs = crds.with_upstream_keycloak(render.crds, crds.keycloak_version())
+    for doc in docs:
+        if manifests.name_of(doc) in render.templated_crds:
+            metadata = manifests.section(doc, "metadata")
+            metadata["labels"] = {**manifests.section(metadata, "labels"), "app.kubernetes.io/managed-by": "Helm"}
+            metadata["annotations"] = {
+                **manifests.section(metadata, "annotations"),
+                "meta.helm.sh/release-name": release,
+                "meta.helm.sh/release-namespace": NAMESPACE,
+            }
     print(f"\nApplying {len(docs)} CRD(s) first...")
     kube.kubectl_shown("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=manifests.dump(docs))
     names = [f"crd/{manifests.name_of(doc)}" for doc in docs]
@@ -140,6 +151,7 @@ def combined(renders: list[manifests.Render]) -> manifests.Render:
         docs=[doc for render in renders for doc in [*render.docs, *render.large_configmaps]],
         large_configmaps=[],
         crds=[doc for render in renders for doc in render.crds],
+        templated_crds=[name for render in renders for name in render.templated_crds],
         charts={key: value for render in renders for key, value in render.charts.items()},
     )
 
@@ -151,7 +163,7 @@ def _upgrade(selected: Options, found: list[releases.Release], renders: dict[str
     if monitoring and crds.needed(monitoring.docs):
         print("\nApplying monitoring-logging's own CRDs first...")
         crds.apply_monitoring_logging_crds()
-    _apply_crds(podiumd)
+    apply_crds(podiumd, releases.PODIUMD)
     held = hold_zac(podiumd)
     _delete_jobs(one_shot_jobs(own, podiumd))
     for release in found:
@@ -197,20 +209,21 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy") -> None:
     postgres.create_missing_databases()
     postgres.align_with_azure()
     postgres.rename_rows()
+    print()
+    chart_hosts = hosts.chart_hosts()
+    # Before the upgrades: podiumd's hook Jobs reach Keycloak by its host, and Helm waits for them.
+    # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
+    gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
+    dns.apply_hosts(chart_hosts)
     held = _upgrade(selected, found, renders)
     # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
     installed = {release.name: releases.installed(release) for release in found}
     live = combined([installed[RELEASE_NAME], installed[releases.PODIUMD]])
     deployed.record(command, combined(list(installed.values())))
     print()
-    chart_hosts = hosts.chart_hosts()
-    # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
-    gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
-    dns.apply_hosts(chart_hosts)
-    print()
     keycloak.repair_default_client_scopes(render)
-    openbao.bootstrap(render)
-    _wait_ready(live, held)
+    wire = openbao.bootstrap(render)
+    _wait_ready(live, held, wire_outway=wire)
     print("\nDeployed.")
     tunnel.setup_tunnel(ask=False)
 
@@ -286,10 +299,11 @@ def restart_zac() -> None:
     kube.kubectl_shown("rollout", "restart", f"deployment/{ZAC}", "-n", NAMESPACE)
 
 
-def _wait_ready(render: manifests.Render, held: list[int]) -> None:
+def _wait_ready(render: manifests.Render, held: list[int], *, wire_outway: bool = False) -> None:
     """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs.
 
-    held: ZAC's replicas from hold_zac, set once ZAC_JOBS have finished.
+    held: ZAC's replicas from hold_zac, set once ZAC_JOBS have finished. wire_outway: openbao.bootstrap
+    re-ran openbao-config (a Helm hook, so not in render); openbao.wire_outway runs once it finished.
     """
     print("\nWaiting until every rendered workload has rolled out and every Job has completed...")
     workloads = [
@@ -298,7 +312,7 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
         if doc.get("kind") in ("Deployment", "StatefulSet", *manifests.ECK_KINDS)
     ]
     kinds = ",".join(sorted({workload.split("/")[0] for workload in workloads}))
-    names = render.jobs
+    names = [*render.jobs, *([openbao.CONFIG_JOB] if wire_outway else [])]
 
     def job_state() -> tuple[list[str], list[str]]:
         return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
@@ -314,7 +328,7 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
     restarted: list[str] = []
     # Here, not in openbao.bootstrap: on a fresh install the Job retries until Keycloak
     # answers through the edge (5.5 min seen), and nothing else needs to wait for it.
-    unwired = [openbao.CONFIG_JOB] if openbao.CONFIG_JOB in names else []
+    unwired = [openbao.CONFIG_JOB] if wire_outway else []
 
     def settled() -> tuple[list[str]] | None:
         running, failed = job_state()

@@ -145,13 +145,27 @@ STEPS = [
     (postgres, "create_missing_databases"),
     (postgres, "align_with_azure"),
     (postgres, "rename_rows"),
-    (deployed, "record"),
     (gateway, "apply"),
     (dns, "apply_hosts"),
+    (deployed, "record"),
     (keycloak, "repair_default_client_scopes"),
     (openbao, "bootstrap"),
     (tunnel, "setup_tunnel"),
 ]
+
+
+def test_apply_crds_gives_templated_crds_the_releases_ownership(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(crds, "keycloak_version", lambda: None)
+    definitions = [CRD, _doc("CustomResourceDefinition", "b.x")]
+    render = manifests.Render(docs=[], large_configmaps=[], crds=definitions, templated_crds=["b.x"])
+    deploy.apply_crds(render, releases.PODIUMD)
+    applied = {manifests.name_of(doc): doc["metadata"] for doc in manifests.documents(fake_run.stdins[0] or "")}
+    assert "labels" not in applied["a.x"]
+    assert applied["b.x"]["labels"] == {"app.kubernetes.io/managed-by": "Helm"}
+    assert applied["b.x"]["annotations"] == {
+        "meta.helm.sh/release-name": releases.PODIUMD,
+        "meta.helm.sh/release-namespace": NAMESPACE,
+    }
 
 
 def _job_status(condition: str) -> dict[str, Any]:
@@ -223,14 +237,14 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         "create_missing_databases",
         "align_with_azure",
         "rename_rows",
+        "apply",
+        "apply_hosts",
         "apply --server-side --force-conflicts -f -",
         "wait --for=condition=Established crd/a.x --timeout=60s",
         f"delete job openzaak-config -n {NAMESPACE} --ignore-not-found --wait=false",
         f"upgrade {RELEASE_NAME} --ca-trust",
         f"upgrade {releases.PODIUMD} --ca-trust",
         "record",
-        "apply",
-        "apply_hosts",
         "repair_default_client_scopes",
         "bootstrap",
         "setup_tunnel",
@@ -417,14 +431,13 @@ def test_deploy_starts_zac_on_a_fresh_install_only_after_its_jobs_finished(
     assert called[called.index("bootstrap") + 1 :][:3] == ["poll", "poll", scale]
 
 
-def test_deploy_wires_the_outway_once_after_openbao_config_completed(
-    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch, renders: dict[str, manifests.Render]
+def test_deploy_wires_the_outway_once_after_the_rerun_openbao_config_completed(
+    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ):
+    # A Helm hook: in no release's manifest, only re-run by openbao.bootstrap.
     config = {"kind": "Job", "metadata": {"name": openbao.CONFIG_JOB}, "status": {}}
     live["job"]["items"].append(config)
-    renders[releases.PODIUMD] = manifests.Render(
-        docs=[*RENDER.docs, _doc("Job", openbao.CONFIG_JOB)], large_configmaps=[]
-    )
+    monkeypatch.setattr(openbao, "bootstrap", lambda _render: True)
     events: list[str] = []
     answer = kube.get_json
 

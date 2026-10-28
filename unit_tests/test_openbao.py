@@ -75,7 +75,7 @@ def test_seal_key_args_create_a_private_key_once(vault_dir: Path):
 
 
 def test_bootstrap_skips_a_render_without_openbao_while_its_statefulset_terminates(fake_run: FakeRun):
-    openbao.bootstrap(
+    assert not openbao.bootstrap(
         manifests.Render(docs=[{"kind": "Job", "metadata": {"name": "openzaak-config"}}], large_configmaps=[])
     )
     assert fake_run.calls == []
@@ -89,7 +89,7 @@ def _secrets(cluster: FakeRun) -> list[tuple[str, str]]:
 
 def test_bootstrap_initialises_mints_and_reruns_the_job_without_waiting(cluster: FakeRun):
     cluster.on("kubectl", "get", f"secret/{openbao.BOOTSTRAP_SECRET}", returncode=1)
-    openbao.bootstrap(RENDER)
+    assert openbao.bootstrap(RENDER)
     assert openbao.ROOT_TOKEN.read_text(encoding="utf-8") == "root"
     assert openbao.RECOVERY_KEY.read_text(encoding="utf-8") == "recovery"
     assert not [call for call in cluster.calls if "root" in call]

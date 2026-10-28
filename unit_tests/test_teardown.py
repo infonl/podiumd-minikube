@@ -99,8 +99,16 @@ def test_cluster_leftovers_match_the_instance_label_or_the_release_annotation():
             "metadata": {"name": "b", "annotations": {"meta.helm.sh/release-name": "podiumd-minikube"}},
         },
         {"kind": "ClusterRoleBinding", "metadata": {"name": "c", "labels": {"app.kubernetes.io/instance": "cilium"}}},
+        {
+            "kind": "CustomResourceDefinition",
+            "metadata": {"name": "d", "annotations": {"meta.helm.sh/release-name": "monitoring-logging"}},
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "metadata": {"name": "e", "labels": {"app.kubernetes.io/instance": "podiumd"}},
+        },
     ]
-    assert teardown.cluster_leftovers(items) == ["clusterrole/a", "clusterrole/b"]
+    assert teardown.cluster_leftovers(items) == ["clusterrole/a", "clusterrole/b", "customresourcedefinition/d"]
 
 
 def test_clear_finalizers_patches_only_objects_that_have_them(fake_run: FakeRun):

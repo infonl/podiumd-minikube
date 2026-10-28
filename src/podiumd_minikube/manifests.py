@@ -125,6 +125,8 @@ def strip_image_digests(text: str) -> str:
 
 # helm template's comment before each document: "# Source: <chart>/[charts/<dependency>/]<path>".
 _SOURCE = re.compile(r"^# Source: ([^/]+)/(?:charts/([^/]+)/)?", re.MULTILINE)
+# A template's output, which the release owns; a chart's crds/ files belong to no release.
+_TEMPLATE_SOURCE = re.compile(r"^# Source: \S*/templates/", re.MULTILINE)
 
 
 def images(text: str) -> list[str]:
@@ -734,6 +736,8 @@ class Render:
     docs: list[Doc]
     large_configmaps: list[Doc]
     crds: list[Doc] = field(default_factory=list[Doc])
+    # Names of the CRDs from templates (ECK's), which the release must own.
+    templated_crds: list[str] = field(default_factory=list[str])
     # "Kind/name" -> the dependency that renders it, or this chart.
     charts: dict[str, str] = field(default_factory=dict[str, str])
 
@@ -755,14 +759,21 @@ def _chunks(text: str) -> list[str]:
 
 def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
-    loaded: list[tuple[Doc | None, re.Match[str] | None]] = [(_load(c), _SOURCE.search(c)) for c in _chunks(text)]
-    charts = {f"{doc.get('kind')}/{name_of(doc)}": source[2] or source[1] for doc, source in loaded if doc and source}
+    loaded: list[tuple[Doc | None, str]] = [(_load(c), c) for c in _chunks(text)]
+    sources = [(doc, _SOURCE.search(chunk)) for doc, chunk in loaded]
+    charts = {f"{doc.get('kind')}/{name_of(doc)}": source[2] or source[1] for doc, source in sources if doc and source}
+    templated_crds = [
+        name_of(doc)
+        for doc, chunk in loaded
+        if doc and doc.get("kind") == "CustomResourceDefinition" and _TEMPLATE_SOURCE.search(chunk)
+    ]
     docs = [doc for doc, _ in loaded if doc and not _is_test_or_delete_hook(doc)]
     docs = post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust)
     return Render(
         docs=[doc for doc in docs if not _is_large_configmap(doc) and doc.get("kind") != "CustomResourceDefinition"],
         large_configmaps=[doc for doc in docs if _is_large_configmap(doc)],
         crds=[doc for doc in docs if doc.get("kind") == "CustomResourceDefinition"],
+        templated_crds=templated_crds,
         charts=charts,
     )
 

@@ -66,8 +66,11 @@ def test_issuer_follows_the_frontend_urls(edge_ip, realm, issuer):
 
 
 def test_pkce_requirements(live_clients):
-    required = [client_id for client_id in ("zac", *DJANGO_APP_CLIENT_IDS) if _pkce(live_clients.get(client_id, {}))]
+    required = [client_id for client_id in DJANGO_APP_CLIENT_IDS if _pkce(live_clients.get(client_id, {}))]
     assert not required, f"PKCE required for {required}, whose apps do not send it: their logins break"
+    # podiumd's zac.auth.enablePkce sets both sides; Keycloak must not require what ZAC does not send.
+    sends = json.loads(kubectl("get", "configmap", "zac", "-n", NAMESPACE, "-o", "json"))["data"]["AUTH_ENABLE_PKCE"]
+    assert bool(_pkce(live_clients["zac"])) == (sends == "true")
 
 
 def test_jvm_flags_reach_the_operator_built_pod(edge_ip):

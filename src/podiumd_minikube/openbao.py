@@ -146,12 +146,15 @@ def wire_outway() -> None:
     kube.kubectl_shown("rollout", "restart", f"deployment/{OUTWAY}", "-n", NAMESPACE)
 
 
-def bootstrap(render: manifests.Render) -> None:
-    """Initialises OpenBao once, mints the config token once and re-runs the openbao-config Job without waiting."""
+def bootstrap(render: manifests.Render) -> bool:
+    """Initialises OpenBao once, mints the config token once and re-runs the openbao-config Job without waiting.
+
+    False when the render has no openbao-config Job (frankgateway profile off).
+    """
     jobs = [doc for doc in render.docs if doc.get("kind") == "Job" and manifests.name_of(doc) == CONFIG_JOB]
     # The render, not the cluster: a pruned StatefulSet still exists while it terminates.
     if not jobs:
-        return
+        return False
     print("Bootstrapping OpenBao (openbao.py)...")
     status = polling.wait_until(_status, timeout=STARTUP_TIMEOUT, interval=5)
     if status is None:
@@ -171,3 +174,4 @@ def bootstrap(render: manifests.Render) -> None:
         _mint_token(root, POLICY, POLICY_HCL, BOOTSTRAP_SECRET)
     kube.kubectl_shown("delete", "job", CONFIG_JOB, "-n", NAMESPACE, "--ignore-not-found")
     kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(jobs))
+    return True

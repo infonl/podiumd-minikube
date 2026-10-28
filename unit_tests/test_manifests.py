@@ -483,6 +483,19 @@ def test_fix_up_separates_crds_for_server_side_apply():
     assert (_names(render.crds), _names(render.docs)) == (["elasticsearches.elasticsearch.k8s.elastic.co"], ["zac"])
 
 
+def test_fix_up_names_the_crds_from_templates():
+    text = """# Source: podiumd/charts/redis-operator/crds/crds.yaml
+kind: CustomResourceDefinition
+metadata: {name: a}
+---
+# Source: podiumd/charts/eck-operator/charts/eck-operator-crds/templates/all-crds.yaml
+kind: CustomResourceDefinition
+metadata: {name: b}
+"""
+    render = manifests.fix_up(text, objecten_merged=False)
+    assert (_names(render.crds), render.templated_crds) == (["a", "b"], ["b"])
+
+
 def test_route_outbound_only_with_the_outway():
     config: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": "zac"}, "data": {"BRP": "http://api-proxy/x"}}
     manifests.route_outbound([config])

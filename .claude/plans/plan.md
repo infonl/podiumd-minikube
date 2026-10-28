@@ -4736,9 +4736,9 @@ api-proxy stays for `https://api-proxy.local`.
   and re-runs the `openbao-config` Job.
 - Keycloak: client `openbao` (role `uploaders`), group `vault-uploaders`;
   `keycloak.sync_realm` now also creates missing top-level groups with
-  their client roles. `templates/openbao/keycloak-secret.yaml` renders the
+  their client roles. `templates/openbao/keycloak-secret.yaml` rendered the
   Secret the config Job reads, which the chart only renders with its
-  Keycloak operator.
+  Keycloak operator (removed 2026-10-28: minikube runs that operator now).
 - Fixed gateway admin keys: the chart's `lookup` never finds the Secret
   under `helm template` and would regenerate them on every render.
 
@@ -9111,3 +9111,46 @@ uninstall --no-hooks` of its releases (zookeeper-operator's pre-delete hook
 holds an uninstall 120 s), clear the finalizers of every object left (one
 `kubectl get` over all namespaced kinds), force-delete the pods without grace,
 then delete the namespace with a 120 s timeout and name what holds it.
+
+First live install as Helm releases (2026-10-28 18:07 CET) found:
+- Two templated CRDs from the kubectl-apply deploys
+  (zookeeperclusters.zookeeper.pravega.io in this chart,
+  podlogs.monitoring.grafana.com) kept `meta.helm.sh/release-namespace:
+  podiumd-minikube`; Helm refuses to adopt them. reset-namespace now also
+  deletes CRDs whose release annotation names one of our releases (Helm's
+  uninstall deletes templated CRDs too). By annotation only: ECK's CRDs
+  (podiumd's crds/) carry instance label podiumd and belong to no release.
+- `templates/openbao/keycloak-secret.yaml` and podiumd both render Secret
+  keycloak-podiumd-realm-secrets (with kubectl apply the later document won).
+  podiumd's has openbao-oidc-secret with the same value since minikube runs
+  the Keycloak operator: ours removed. The other overlap, storage-hooks'
+  PV/PVC, is safe: podiumd's `podiumd.storagePVC` skips them by `lookup`.
+- ECK's CRDs are templates (eck-operator-crds/templates/all-crds.yaml), the
+  only templated ones in podiumd. Deploy pre-applies them (Helm cannot map
+  KISS's Elasticsearch objects in the same install before their CRD exists),
+  so they had no Helm ownership and podiumd's install refused them.
+  `deploy.apply_crds` now gives the CRDs from templates
+  (`Render.templated_crds`, by their `# Source: .../templates/` line) the
+  podiumd release's ownership label and annotations, so Helm adopts them.
+- podiumd's post-install hook Jobs (objecten-config, openzaak-config) failed
+  their OIDC discovery at keycloak.local: the edge routes and CoreDNS hosts
+  came after the upgrades, and Helm waits for its hooks (with kubectl apply
+  the Jobs retried until the routes existed). The routes left on the cluster
+  pointed at the old namespace. Deploy now applies the Gateway and CoreDNS
+  hosts before the upgrades.
+- NGINX Gateway Fabric kept the old target of the edge's ExternalName
+  Services after `kubectl apply` changed `externalName` in place to the new
+  namespace (20 upstreams still at `*.podiumd-minikube.svc`, "no live
+  upstreams", 502 on every host). gateway.apply now deletes a Service whose
+  live target differs before it applies, so NGF sees a new one.
+- The outway answered 503 (`OPENBAO_TOKEN is not set`): `_wait_ready` wired
+  it only when openbao-config was among the installed Jobs, and as a Helm
+  hook it is in no release's manifest. openbao.bootstrap now says whether it
+  re-ran the Job; `_wait_ready` then waits for it and wires the outway.
+- tests/test_keycloak_realm.py expected no PKCE on the zac client. podiumd
+  4.10's `zac.auth.enablePkce` defaults to true and sets both sides (ZAC's
+  AUTH_ENABLE_PKCE and the client's S256); neither reference sets it. The
+  test now checks that the client matches what ZAC sends.
+Result: deploy --full exit 0 (redeploy 2 min 52 s), releases podiumd-minikube,
+podiumd (namespace podiumd) and monitoring-logging (monitoring) deployed;
+live suite passes except test_memory (baseline keys carry the old namespace).

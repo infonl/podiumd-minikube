@@ -52,8 +52,8 @@ RESET_INSTANCES = (RELEASE_NAME, PODIUMD_RELEASE, MONITORING_RELEASE)
 RESET_SUMMARY = f"""This permanently empties namespaces {", ".join(RESET_NAMESPACES)}:
   - every object in them, the Helm releases, and all data: Postgres, Solr, PABC, every app's media
   - every PersistentVolume bound to them, plus its hostPath data on the minikube node
-  - the releases' cluster-scoped RBAC/webhook objects
-It keeps the cluster and the CRDs (deploy re-applies them).
+  - the releases' cluster-scoped RBAC/webhook objects and the CRDs their templates create
+It keeps the cluster and the other CRDs (deploy re-applies them).
 """
 
 
@@ -110,21 +110,23 @@ def _empty(namespace: str) -> str:
     return f"{namespace}: deleted ({cleared} object(s) with finalizers cleared)"
 
 
-CLUSTER_KINDS = "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration"
+CLUSTER_KINDS = "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration,crd"
 
 
 def cluster_leftovers(items: list[Any]) -> list[str]:
     """kind/name of the cluster-scoped objects of RESET_INSTANCES: by label, or by Helm's release annotation.
 
     Some carry no instance label (the Keycloak and ZooKeeper operators' ClusterRoles); a release that
-    finds one owned by another release name fails to install.
+    finds one owned by another release name fails to install. CRDs count by annotation only: those of
+    crds/ directories (ECK's carry instance podiumd) are no release's, and deleting one deletes its objects.
     """
     found: list[str] = []
     for item in items:
         metadata = section(item, "metadata")
         instance = section(metadata, "labels").get("app.kubernetes.io/instance")
         release = section(metadata, "annotations").get("meta.helm.sh/release-name")
-        if instance in RESET_INSTANCES or release in RESET_INSTANCES:
+        by_label = instance in RESET_INSTANCES and item["kind"] != "CustomResourceDefinition"
+        if by_label or release in RESET_INSTANCES:
             found.append(f"{item['kind'].lower()}/{name_of(item)}")
     return found
 
@@ -152,7 +154,7 @@ def reset_namespace(*, yes: bool) -> int:
         kube.node(f"sudo rm -rf {paths}")
     except process.ProcessError:
         print("  WARNING: could not reach the minikube node to clear hostPath data - do it by hand.", file=sys.stderr)
-    print("Deleting the releases' cluster-scoped RBAC/webhook objects (if any)...")
+    print("Deleting the releases' cluster-scoped RBAC, webhook and CRD objects (if any)...")
     if leftovers := cluster_leftovers(kube.get_json(CLUSTER_KINDS)["items"]):
         kube.kubectl_shown("delete", *leftovers, "--ignore-not-found")
     else:

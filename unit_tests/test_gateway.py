@@ -118,6 +118,21 @@ def test_apply_applies_the_edge_and_deletes_routes_no_longer_rendered(
     assert f"{EDGE_NAMESPACE}/{EDGE_SERVICE}: external IP 10.96.0.200" in out
 
 
+def test_apply_recreates_a_backend_service_with_another_target(edge: FakeRun, capsys: pytest.CaptureFixture[str]):
+    live = [
+        {"metadata": {"name": "zac"}, "spec": {"externalName": "zac.old.svc.cluster.local"}},
+        {"metadata": {"name": "kept"}, "spec": {"externalName": "kept.podiumd.svc.cluster.local"}},
+    ]
+    edge.on("kubectl", "get", "service", "-n", EDGE_NAMESPACE, stdout=json.dumps({"items": live}))
+    docs = [_ingress("zac.local", "zac", {"number": 8080}), _ingress("kept.local", "kept", {"number": 8080})]
+    gateway.apply(docs, ["zac.local", "kept.local"])
+    deleted = edge.ran("kubectl", "delete")
+    assert ["kubectl", "delete", "service", "zac", "-n", EDGE_NAMESPACE] in deleted
+    assert edge.calls.index(deleted[-1]) < edge.calls.index(["kubectl", "apply", "-f", "-"])
+    assert "deleted Service zac (retargeted)" in capsys.readouterr().out
+    assert not [call for call in deleted if "kept" in call]
+
+
 def test_apply_recreates_an_edge_service_with_another_cluster_ip(edge: FakeRun, monkeypatch: pytest.MonkeyPatch):
     edge.on(*CLUSTER_IP, stdout="10.96.12.34")
     edge.on("kubectl", "delete", "svc", EDGE_SERVICE)
