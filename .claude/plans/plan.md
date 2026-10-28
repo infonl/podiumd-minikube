@@ -8798,3 +8798,26 @@ failures (2, 2, 5) are all in podiumd-tests' own tests. 57% of its workers'
 time went to starting Django shells, which podiumd-tests is cutting.
 The Celery liveness probes stay as the charts set them (Kees): a longer
 period would deviate from the reference projects for idle CPU only.
+
+### Redeploy and fresh-install timings (8 CPUs)
+
+Redeploy (`deploy --full` on a running cluster, 112 s): render 6 s, storage
+Job 8 s, Job deletion and CRDs 12 s, `kubectl apply` of the full manifest
+21 s, Gateway, OpenBao and prune 10 s, then 52 s until the last Job:
+podiumd's `keycloak-repair-client-scopes` (64 s: about 45 `kcadm.sh` JVM
+starts, already C1-only with a CDS archive; the Job before it finished 14
+s earlier). Its `kcadm.sh` calls are podiumd-chart-26.
+
+Eleventh fresh install (podiumd-tests agreed), 5 imports at a time:
+teardown 22 s, provision 130 s (143 with 3), imports 87 s (102), no image
+missing. deploy --full 302 s (354 on 6 CPUs). Times UTC, apply 11:58:55:
+keycloak-0 scheduled 11:59:02, its sandbox ready 11:59:28 (26 s),
+keycloak-builder 11:59:29-11:59:53, Keycloak started in 13.5 s (25 s on 6
+CPUs), Liquibase 12:00:14-12:00:44, bootstrap 38.9 s, Ready 12:00:53. Then
+ensure-keycloak-operator-sa 12:01:06, import-podiumd-realm 12:01:26,
+openzaak-config 12:01:38 (2 failed pods), create-required-catalogi
+12:01:42, ZAC scaled 12:01:49, deploy done 12:03:12. The node's CPU
+pressure (`some avg10`) stood at 74-85% from 11:59:20 to 12:00:55, the
+whole Keycloak start, and fell below 25% from 12:02. Keycloak, which
+everything waits for, competes with about 120 starting pods at a CPU
+request of 100m (chart 500m), that is a small cgroup CPU weight.

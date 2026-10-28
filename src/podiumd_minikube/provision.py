@@ -33,9 +33,9 @@ from podiumd_minikube.paths import PROFILE
 
 # Fully parallel loads once filled /tmp on the host.
 BATCH_SIZE = 6
-# Concurrent NODE_IMPORTs: 3 took 102 s for 70 images, 1 took 136 s.
+# Concurrent NODE_IMPORTs: 5 took 87 s for 70 images, 3 took 102 s, 1 took 136 s.
 # Parallel `minikube image load`s lost images without an error; load_images checks afterwards.
-IMPORT_WORKERS = 3
+IMPORT_WORKERS = 5
 # Images are amd64-only; on Apple Silicon only the workload images are forced to it,
 # never the node (minikube copies host-arch binaries into it).
 PLATFORM = "linux/amd64"
