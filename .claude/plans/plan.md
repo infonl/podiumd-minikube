@@ -8794,3 +8794,5 @@ the pod. The ConfigMap rewrite of `route_outbound` and this one share
 `_replace_in_configmaps` and `_roll_readers`. Live: api-proxy 1 worker, all
 nginx workers 102 -> 79. podiumd-tests on the 8-CPU node: full tier 652 s
 with 4 workers (634-648 s on 6 CPUs), 519 s with 6.
+The Celery liveness probes stay as the charts set them (Kees): a longer
+period would deviate from the reference projects for idle CPU only.
