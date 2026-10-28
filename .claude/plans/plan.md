@@ -8701,7 +8701,8 @@ The ZAC hold (102f4df) on a real fresh install: its Jobs finished
 09:07:11, ZAC scaled 09:07:17, Ready 09:08:27, 0 restarts, no
 `WFLYCTL0080`. Failed pods as on the ninth: import-master-realm-job,
 import-podiumd-realm-job, openzaak-config, pabc-migrations, one
-redis-ha-label-master run.
+redis-ha-label-master run. podiumd-tests: bootstrap exit 0, smoke 20261028-091425 176 passed,
+1 skipped, 9 xfailed, 1 xpassed (podiumd-chart-1), 0 failed.
 kees00 (QA, podiumd-infra, same day) shows the same causes: the config Jobs
 fail until the Keycloak realm is complete, create-required-catalogi gets
 403 "Client identifier bestaat niet" then KeyError 'results',
