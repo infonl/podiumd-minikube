@@ -167,9 +167,11 @@ after an intended change, on a settled cluster and after a full test run:
 pytest tests/test_memory.py --update-memory-baseline
 ```
 
-The node gets 6 CPUs (`MINIKUBE_CPUS`), pinned to the host's first CPUs
-(`--cpuset-cpus=0-5`) so that programs sizing themselves by the CPU count
-see 6 instead of all of the host's. On Intel and AMD hybrid CPUs the fast
+The node gets at most 8 CPUs and leaves a quarter of the host's (at least
+2) to other applications: 8 on a 12- or 24-CPU laptop, 6 on 8, 4 on 6
+(`MINIKUBE_CPUS` overrides). They are pinned to the host's first CPUs
+(`--cpuset-cpus=0-7`) so that programs sizing themselves by the CPU count
+see the node's count instead of all of the host's. On Intel and AMD hybrid CPUs the fast
 cores come first.
 
 What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,

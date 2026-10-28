@@ -97,17 +97,23 @@ def cpuset_args(cpus: int, host_cpus: int) -> list[str]:
     return [f"--cpuset-cpus=0-{cpus - 1}"] if cpus < host_cpus else []
 
 
+def default_cpus(host_cpus: int) -> int:
+    """The node's CPUs: at most 8, leaving a quarter of the host's (at least 2) to other applications; at least 2."""
+    return max(2, min(8, host_cpus - max(2, host_cpus // 4)))
+
+
 def start_node(while_starting: Callable[[], None] = lambda: None) -> None:
-    """start_minikube sized from MINIKUBE_CPUS (default 6) and memory.py, then requires its kubectl context.
+    """start_minikube sized from MINIKUBE_CPUS (default: default_cpus) and memory.py, then requires its kubectl context.
 
     while_starting runs once containerd has its tuning, beside the waits for Cilium and the control plane.
     """
-    cpus = _env_int("MINIKUBE_CPUS", 6)
+    host_cpus = os.cpu_count() or 2
+    cpus = _env_int("MINIKUBE_CPUS", default_cpus(host_cpus))
     start_minikube(cpus, memory.wanted())
     # The docker driver applies --memory but not --cpus on Linux (seen: NanoCpus 0). A CPU
     # quota alone still shows every host CPU to nproc, nginx's worker_processes auto and
     # GOMAXPROCS; the cpuset makes them see `cpus` (seen: 24 nginx workers).
-    process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, os.cpu_count() or cpus), PROFILE])
+    process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, host_cpus), PROFILE])
     kube.require_minikube_context()
     control_plane = tune_control_plane()
     services = tune_node_services()

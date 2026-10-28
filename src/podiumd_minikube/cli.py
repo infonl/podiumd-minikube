@@ -140,7 +140,8 @@ def flush_redis(argv: list[str]) -> None:
 def provision_cluster(argv: list[str]) -> None:
     """Creates the minikube cluster: minikube, NGINX Gateway Fabric, dependencies and every image the chart uses.
 
-    Sizes from MINIKUBE_CPUS (default 6) and MINIKUBE_MEMORY in MB (default: half the memory Docker sees).
+    Sizes from MINIKUBE_CPUS (default: at most 8, a quarter of the host's left free) and MINIKUBE_MEMORY
+    in MB (default: half the memory Docker sees).
     """
     _parser(provision_cluster).parse_args(argv)
     provision.provision()
