@@ -9012,3 +9012,27 @@ the CA added. A deviation from both reference environments, which run no
 post-renderer: each fixup in it exists only for a minikube cause (no registry
 access, the local CA and Postgres, the laptop budget, start-order races on one
 node, the merged objecten shape).
+
+Decision (the user, 2026-10-28): follow ExternalsPodiumD fully, and
+podiumd-infra is asked to do the same for kees00. ExternalsPodiumD
+(`pipelines/application.yml`, `pipelines/monitoring.yml`): release `podiumd`
+in namespace `podiumd` (chart dimpact/podiumd, or a helm-charts branch after
+`helm dependency build`), one `helm upgrade` with `--timeout 15m
+--server-side=true --force-conflicts`, resetValues, no second pass, no
+--wait; before it the 13 one-shot Jobs are deleted, after it
+podiumd-zaakbrug is patched. Release `monitoring-logging` in namespace
+`monitoring` with `--reset-values --create-namespace --timeout 10m --wait`.
+So minikube: namespace `podiumd-minikube` -> `podiumd` (every
+`*.podiumd-minikube.svc` address, object names without the
+`podiumd-minikube-` prefix), monitoring in `monitoring`; this chart's own
+templates become a third release `podiumd-minikube` in namespace `podiumd`
+(Postgres, Mailpit and the mocks stand in for Azure services the apps reach
+by short name).
+
+Found while sizing the third release: with `podiumd.enabled=false` its
+templates lose podiumd's chart defaults (Helm merges a subchart's defaults
+into the parent only while the subchart is enabled) and three of them read
+`.Subcharts.podiumd` (openklant and openarchiefbeheer create-superuser Jobs:
+the image tag's AppVersion fallback; keycloak/acc-mock-realm.yaml: Keycloak's
+values). The third release gets podiumd's defaults merged under `podiumd:`
+in a values file, and those three read values instead of `.Subcharts`.
