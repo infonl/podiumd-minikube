@@ -17,12 +17,7 @@ settings.disable2fa's own comment above for why this app doesn't need
 one), so the ConfigMap-sourced value this Job inherits is already the
 real, working openklant.conf.docker.
 
-image.tag isn't pinned in this repo's own values.yaml (unlike
-openformulieren) - falls back to the openklant subchart's own AppVersion
-via .Subcharts, matching exactly what that subchart's own Deployment
-template does internally with `.Values.image.tag | default .Chart.AppVersion`
-(that fallback can't be replicated with plain `.Chart.AppVersion` from
-here - it would resolve to *this* chart's own AppVersion instead).
+The image is podiumd's (its values.yaml pins the tag).
 */}}
 apiVersion: batch/v1
 kind: Job
@@ -40,7 +35,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: create-superuser
-          image: "{{ .Values.podiumd.openklant.image.repository }}:{{ .Values.podiumd.openklant.image.tag | default .Subcharts.podiumd.Subcharts.openklant.Chart.AppVersion }}"
+          image: "{{ .Values.podiumd.openklant.image.repository }}:{{ .Values.podiumd.openklant.image.tag }}"
           imagePullPolicy: {{ .Values.podiumd.openklant.image.pullPolicy }}
           workingDir: /app
           command:

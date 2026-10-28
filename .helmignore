@@ -1,13 +1,34 @@
-# Patterns to ignore when building packages.
-# This supports shell glob matching, relative path matching, and
-# negation (prefixed with !). Only one pattern per line.
+# What this chart's Helm release must not carry: Helm stores every file left in
+# the release Secret (1 MiB), so the local CA key, OpenBao's keys, Postgres
+# dumps and kubeconfigs would land in the cluster. The chart is Chart.yaml,
+# values.yaml, templates/, files/ and vendor/.
 .git/
 .gitignore
+.githooks/
+.github/
 .idea/
+.junie/
 .claude/
 .venv/
-tests/
+.cni/
+.kube/
+.openbao/
+.pki/
+.postgres-dumps/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.envrc
+.jscpd.json
+.podiumd-versions.yaml
 bin/
+helm-plugins/
 src/
+tests/
 unit_tests/
-.github/
+CLAUDE.md
+README.md
+mac.md
+pyproject.toml
+run_python_checks
+session_memory.json

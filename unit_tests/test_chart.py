@@ -35,10 +35,14 @@ keycloak-operator:
   jobs:
     ensurePodiumdAdminUser:
       initImage: {repository: python, tag: "3.14.7-slim"}
+keycloak:
+  keycloakConfigCli:
+    image: {registry: docker.io, repository: adorsys/keycloak-config-cli, tag: "6.5.1-26.5.5"}
 """
     assert chart.bundled_image_sets(tmp_path) == []
     make_tgz(tmp_path / "podiumd-4.10.0.tgz", {"podiumd/values.yaml": podiumd_values})
     assert chart.bundled_image_sets(tmp_path) == [
         "--set", "images.busybox=library/busybox:1.38.0-glibc@sha256:aa",
         "--set", "images.nginx=nginxinc/nginx-unprivileged:1.31.6", "--set", "images.python=python:3.14.7-slim",
+        "--set", "images.keycloakConfigCli=docker.io/adorsys/keycloak-config-cli:6.5.1-26.5.5",
     ]  # fmt: skip

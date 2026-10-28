@@ -4,7 +4,7 @@ podiumd realms federates to it, as the estates federate to Dimpact's
 acceptance Keycloak. keycloak-config-cli as the chart's realm imports; reruns
 on every deploy.
 */}}
-{{- $kc := .Subcharts.podiumd.Values.keycloak }}
+{{- $kc := .Values.podiumd.keycloak }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -65,7 +65,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: kc-config-cli
-          image: {{ include "podiumd.image" $kc.keycloakConfigCli.image }}
+          image: {{ required "images.keycloakConfigCli: set by podiumd-minikube deploy from podiumd's values.yaml" .Values.images.keycloakConfigCli }}
           env:
             - name: KEYCLOAK_URL
               value: http://keycloak-service:8080

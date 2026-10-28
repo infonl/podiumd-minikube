@@ -106,6 +106,7 @@ BUNDLED_IMAGES = {
     "busybox": ("global", "images", "busybox"),
     "nginx": ("global", "images", "nginx"),
     "python": ("keycloak-operator", "jobs", "ensurePodiumdAdminUser", "initImage"),
+    "keycloakConfigCli": ("keycloak", "keycloakConfigCli", "image"),
 }
 
 
@@ -140,7 +141,8 @@ def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
         image = podiumd_values
         for step in path:
             image = image[step]
-        sets += ["--set", f"images.{key}={image['repository']}:{image['tag']}"]
+        registry = f"{image['registry']}/" if image.get("registry") else ""
+        sets += ["--set", f"images.{key}={registry}{image['repository']}:{image['tag']}"]
     return sets
 
 

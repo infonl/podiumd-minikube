@@ -19,12 +19,7 @@ for openformulieren's identical Job - manifests as "AUTH_USER_MODEL refers
 to model 'auth.User' that has not been installed", not a straightforward
 ModuleNotFoundError).
 
-image.tag isn't pinned in this repo's own values.yaml - falls back to the
-openarchiefbeheer subchart's own AppVersion via .Subcharts, matching
-exactly what that subchart's own Deployment template does internally with
-`.Values.image.tag | default .Chart.AppVersion` (that fallback can't be
-replicated with plain `.Chart.AppVersion` from here - it would resolve to
-*this* chart's own AppVersion instead).
+The image is podiumd's (its values.yaml pins the tag).
 */}}
 {{- if .Values.podiumd.openarchiefbeheer.enabled }}
 apiVersion: batch/v1
@@ -43,7 +38,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: create-superuser
-          image: "{{ .Values.podiumd.openarchiefbeheer.image.repository }}:{{ .Values.podiumd.openarchiefbeheer.image.tag | default .Subcharts.podiumd.Subcharts.openarchiefbeheer.Chart.AppVersion }}"
+          image: "{{ .Values.podiumd.openarchiefbeheer.image.repository }}:{{ .Values.podiumd.openarchiefbeheer.image.tag }}"
           imagePullPolicy: {{ .Values.podiumd.openarchiefbeheer.image.pullPolicy }}
           workingDir: /app
           command:
