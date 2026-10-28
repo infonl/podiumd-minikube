@@ -9193,3 +9193,9 @@ deploy), not the chart's script.
   hand, the stored init root token was revoked, `.openbao/root-token*` and
   `recovery-key*` moved to `.openbao/old/`. Run on the existing vault: all 7
   steps OK, outway keys stored.
+- Fresh install after reset (2026-10-28 19:29 CET): the script initialised
+  the vault, stored the recovery key in the stand-in and read it back, then
+  all 7 steps OK; outway keys stored; deploy --full exit 0 in 10 min 5 s
+  (kubectl-apply deploys: 8 min 44 s); live suite 37 passed. Timeline:
+  podiumd's `helm upgrade` 19:30:04, waiting for its hook Jobs, until
+  monitoring-logging at 19:36:41; activation and ready wait to 19:39:36.
