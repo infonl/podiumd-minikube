@@ -9154,3 +9154,14 @@ First live install as Helm releases (2026-10-28 18:07 CET) found:
 Result: deploy --full exit 0 (redeploy 2 min 52 s), releases podiumd-minikube,
 podiumd (namespace podiumd) and monitoring-logging (monitoring) deployed;
 live suite passes except test_memory (baseline keys carry the old namespace).
+
+Memory baseline after podiumd-tests' full run 20261028-175815 on the Helm
+releases (598 passed): containers 12990 -> 13502 MiB. Most of it is
+kube-apiserver 705 -> 1126 MiB working set (live heap 704 MB; was 325-540,
+GOMEMLIMIT 1200MiB, 2 GC cycles a minute); 17 Helm release Secrets hold
+10 MB. Cause not found yet (server-side apply's managedFields, the release
+Secrets in the watch cache, or the deploy-day churn); to investigate. Open
+Zaak +82, Open Inwoner +75, Solr +64 MiB; Loki -71, Grafana -40.
+`helm status podiumd` 1.4-1.5 s, `helm get metadata` 0.17 s, `helm get
+hooks` 0.16 s on this cluster (openbao-activate.sh preflight, helm-charts
+ffe01736).
