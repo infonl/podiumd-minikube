@@ -8821,3 +8821,12 @@ pressure (`some avg10`) stood at 74-85% from 11:59:20 to 12:00:55, the
 whole Keycloak start, and fell below 25% from 12:02. Keycloak, which
 everything waits for, competes with about 120 starting pods at a CPU
 request of 100m (chart 500m), that is a small cgroup CPU weight.
+Keycloak's CPU request back to the chart's 500m (Kees), twelfth fresh
+install: Keycloak started in 7.5 s (13.5 s at 100m), keycloak-builder 14 s
+(24 s), but the database schema and master realm bootstrap took 42.0 s
+(38.9 s), Ready 123 s after the apply began (127 s). The Jobs ZAC waits for
+finished 188 s after it (176 s), deploy --full 314 s (302 s). No gain beyond
+the noise of one run each: the bootstrap is Liquibase's round trips to
+Postgres, which requests 100m under the same contention (CPU pressure
+70-80% from 12:24:18 to 12:25:39 UTC). 500m stays: it is the chart's value
+and reserves no memory.

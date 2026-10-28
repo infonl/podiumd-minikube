@@ -57,10 +57,10 @@ podiumd:
       database: keycloak
       user: keycloak
       password: keycloak
-    # Laptop budget: chart 1700Mi/2Gi. The JVM flags are in manifests.KEYCLOAK_JAVA_OPTS.
+    # Laptop budget: memory chart 1700Mi/2Gi; CPU as the chart. The JVM flags are in manifests.KEYCLOAK_JAVA_OPTS.
     resources:
       requests:
-        cpu: 100m
+        cpu: 500m
         memory: 512Mi
       limits:
         memory: 768Mi
