@@ -529,6 +529,9 @@ def retry_in_container(docs: list[Doc]) -> None:
             if not _retried(str(doc.get("kind")), name_of(doc), str(container.get("name"))):
                 continue
             command = container.get("command") or IMAGE_ENTRYPOINTS[str(container["name"])]
+            # podiumd's own retry (podiumd.retryCommand, helm-charts #666) wraps the same way.
+            if len(command) > 2 and 'until "$@"' in str(command[2]):
+                continue
             # A process of its own: an until condition would turn off a script's `set -e`.
             argv: list[str] = [*command, *(container.pop("args", None) or [])]
             container["command"] = ["sh", "-c", retry, "retry", *argv]

@@ -439,6 +439,19 @@ def test_retry_in_container_reruns_the_command_in_a_bounded_retry(
     assert other["command"] == ["sh", "-c", "curl c"]
 
 
+def test_retry_in_container_leaves_a_command_that_retries_itself():
+    retry = 'end=$(($(date +%s) + 600)); until "$@"; do sleep 5; done'
+    command = ["/bin/sh", "-c", retry, "retry", "/bin/sh", "-c", "exec java -jar x.jar"]
+    container: manifests.Doc = {"name": manifests.KC_CONFIG_CLI, "command": list(command)}
+    doc: manifests.Doc = {
+        "kind": "Job",
+        "metadata": {"name": "import-master-realm-job"},
+        "spec": {"template": {"spec": {"containers": [container]}}},
+    }
+    manifests.retry_in_container([doc])
+    assert container["command"] == command
+
+
 def test_retry_in_container_leaves_a_name_that_only_starts_alike():
     container: manifests.Doc = {"name": manifests.KC_CONFIG_CLI}
     doc: manifests.Doc = {

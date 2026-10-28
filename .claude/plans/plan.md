@@ -9311,3 +9311,12 @@ scaled): about 40% CRD handling (structural schemas, per-CRD OpenAPI),
   still terminating, had put the finalizers back. `_empty` now deletes the
   namespace without waiting and clears finalizers on every 5 s poll until it
   is gone (120 s).
+- helm-charts #666 (ccbcd2f3, podiumd.retryCommand around the realm imports,
+  repair-client-scopes and create-required-*, pabc-keycloak-groups-job
+  skipped when the import creates the roles) tested on a fresh install
+  (22:26 CET, verify branch verify/podiumd-4.10.1-pr659-pr660-pr666): deploy
+  --full 6 min 8 s, 0 failed pods in every Keycloak and create-required Job,
+  import-master 1 in-container retry (401), realm ready about 2 min 30 s
+  after the install. retry_in_container now leaves a command alone that
+  already retries itself (`until "$@"`), so podiumd's own retry is not wrapped
+  twice; ours stays for podiumd without #666.
