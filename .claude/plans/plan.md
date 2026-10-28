@@ -8840,6 +8840,36 @@ with Keycloak at 500m); deploy --full 294 s (302, 314), of which the
 parallel apply alone saves about 17 s. CPU pressure peaked at 77% (86, 81).
 No gain: reverted, Postgres keeps 100m.
 
+### helm-charts PR 659 and PR 660 (podiumd 4.10.1), verified
+
+Branch `verify/podiumd-4.10.1-pr659-pr660` (4d5f8def: feature/podiumd-4.10.1
+93fbf7c2 with pr-659 310f819a and pr-660 22625a9f), deployed as a redeploy
+over 4.10.0 on 2026-10-28 14:55 CET, with our Keycloak fixups still applied.
+
+- PR 659 (`keycloak-repair-client-scopes` reads all client state up front):
+  the Job took 19 s instead of 64-71 s, with 4 kcadm JVMs instead of about 45
+  when nothing needs a change. Client scopes of all 27 clients identical
+  before and after. Repair paths checked with throwaway clients and a copy of
+  the Job: a client without default scopes got the 6 realm defaults and
+  service_account, and lost optional offline_access (14 JVMs, 11 s); a client
+  marked pending with all defaults but email got email and the marker done.
+  `kcadm get --fields attributes` shows `{}` for a set attribute; read it as
+  `attributes(<key>)`.
+- PR 660 (Keycloak probes without initial delays): the rollout restarted
+  Keycloak once (pod spec changed; Ready 22 s after creation, no restarts).
+  The first attempts of the realm-import and repair Jobs failed with
+  `No route to host` during that restart and their retries completed. The
+  pod shows startupProbe period 5, failureThreshold 60 (ours: our
+  `KEYCLOAK_PROBES` fixup overrides the PR's 66) and liveness without a delay
+  (the PR's).
+- Redeploy: first one 126 s (the Keycloak restart), next one 87 s (106 s on
+  4.10.0); the repair Job is no longer the tail, `openinwoner-configure-kvk`
+  is (51 s).
+
+Once 4.10.1 is released with both PRs: `speed_up_keycloak_start` probes,
+`tune_kcadm` and the CPU overrides for `repairClientScopes` and
+`configCliResources` get `podiumd<4.10.1` markers.
+
 ### Parallel `kubectl apply` of the full manifest
 
 `kubectl apply` handles one object at a time: 452 objects of the --full
