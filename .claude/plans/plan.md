@@ -8865,6 +8865,10 @@ over 4.10.0 on 2026-10-28 14:55 CET, with our Keycloak fixups still applied.
 - Redeploy: first one 126 s (the Keycloak restart), next one 87 s (106 s on
   4.10.0); the repair Job is no longer the tail, `openinwoner-configure-kvk`
   is (51 s).
+- podiumd-tests full tier on this build, 8 workers (run 20261028-140439):
+  593 passed, 0 failed, 23 skipped, 30 xfailed, 2 xpassed, 474 s; the same
+  counts as on 4.10.0 (run 20261028-134421, 512 s while a kees00 run shared
+  the CPU).
 
 Once 4.10.1 is released with both PRs: `speed_up_keycloak_start` probes,
 `tune_kcadm` and the CPU overrides for `repairClientScopes` and
