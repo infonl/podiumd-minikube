@@ -149,7 +149,7 @@ STEPS = [
     (dns, "apply_hosts"),
     (deployed, "record"),
     (keycloak, "repair_default_client_scopes"),
-    (openbao, "bootstrap"),
+    (openbao, "activate"),
     (tunnel, "setup_tunnel"),
 ]
 
@@ -246,7 +246,7 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         f"upgrade {releases.PODIUMD} --ca-trust",
         "record",
         "repair_default_client_scopes",
-        "bootstrap",
+        "activate",
         "setup_tunnel",
     ]
     assert fake_run.calls == [
@@ -428,28 +428,4 @@ def test_deploy_starts_zac_on_a_fresh_install_only_after_its_jobs_finished(
     _deploy()
     assert f"upgrade {releases.PODIUMD} --hold-zac" in called
     scale = f"scale deployment/zac --replicas=1 -n {NAMESPACE}"
-    assert called[called.index("bootstrap") + 1 :][:3] == ["poll", "poll", scale]
-
-
-def test_deploy_wires_the_outway_once_after_the_rerun_openbao_config_completed(
-    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-):
-    # A Helm hook: in no release's manifest, only re-run by openbao.bootstrap.
-    config = {"kind": "Job", "metadata": {"name": openbao.CONFIG_JOB}, "status": {}}
-    live["job"]["items"].append(config)
-    monkeypatch.setattr(openbao, "bootstrap", lambda _render: True)
-    events: list[str] = []
-    answer = kube.get_json
-
-    def get_json(resource: str, *args: str) -> Any:
-        if resource == "job":
-            events.append("poll")
-            if events.count("poll") == 2:
-                config["status"] = _job_status("Complete")["status"]
-        return answer(resource, *args)
-
-    monkeypatch.setattr(kube, "get_json", get_json)
-    monkeypatch.setattr(openbao, "wire_outway", lambda: events.append("wire"))
-    monkeypatch.setattr("time.sleep", lambda _seconds: None)
-    _deploy()
-    assert events == ["poll", "poll", "wire"]
+    assert called[called.index("activate") + 1 :][:3] == ["poll", "poll", scale]

@@ -8,6 +8,8 @@ CHART_YAML = CHART_DIR / "Chart.yaml"
 CHART_LOCK = CHART_DIR / "Chart.lock"
 CHARTS_DIR = CHART_DIR / "charts"
 VERSIONS_FILE = CHART_DIR / ".podiumd-versions.yaml"
+# Local secrets: the OpenBao seal key and the keyvault stand-in (gitignored, helmignored).
+OPENBAO_DIR = CHART_DIR / ".openbao"
 VENDOR_DIR = CHART_DIR / "vendor" / "dimpact-zaakafhandelcomponent"
 
 # ExternalsPodiumD's releases and namespaces (pipelines/application.yml, monitoring.yml); RELEASE_NAME is this chart's.

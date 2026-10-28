@@ -9165,3 +9165,31 @@ Zaak +82, Open Inwoner +75, Solr +64 MiB; Loki -71, Grafana -40.
 `helm status podiumd` 1.4-1.5 s, `helm get metadata` 0.17 s, `helm get
 hooks` 0.16 s on this cluster (openbao-activate.sh preflight, helm-charts
 ffe01736).
+
+## OpenBao through podiumd's openbao-activate.sh (2026-10-28)
+
+Kees: run the chart's scripts/openbao-activate.sh on minikube, with a local
+stand-in for Azure Key Vault, instead of minikube's own init. How the
+estates do it: podiumd-infra (kees00) runs that script after every deploy
+(`podiumd-infra openbao-activate`, infra.yaml openbaoActivate) and writes the
+outway's keys with a temporary root token from generate-root;
+ExternalsPodiumD has OpenBao only on feature/ontw-dim1-podiumd-4.10.0, with
+its own openbao_bootstrap.py (operator, once) and openbao_unseal.py (every
+deploy), not the chart's script.
+
+- `keyvault.py`: `az keyvault secret show|set|set-attributes` on files in
+  `.openbao/keyvault/` (0600); any other az call fails, so a new call in the
+  script shows. `shim_dir` puts an `az` that runs it first on the script's
+  PATH.
+- `openbao.activate`: placeholder item `openbao-unseal-key` when missing,
+  the script from the selected chart directory or helm-charts tag
+  podiumd-<version> (sparse clone; a published chart leaves scripts/ out),
+  run with KUBE_CONTEXT minikube, NAMESPACE podiumd; then the outway's
+  kvk_api_key with a generate-root token, revoked. Replaces `_initialise`,
+  `_mint_token`, `bootstrap`, `wire_outway` and the ready-wait hook.
+- The root token is no longer kept: the script revokes it. podiumd 4.9.x has
+  no script: the frankgateway profile then stops with an error.
+- Migration of this cluster: the recovery key went into the stand-in by
+  hand, the stored init root token was revoked, `.openbao/root-token*` and
+  `recovery-key*` moved to `.openbao/old/`. Run on the existing vault: all 7
+  steps OK, outway keys stored.

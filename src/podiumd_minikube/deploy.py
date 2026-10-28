@@ -222,8 +222,8 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy") -> None:
     deployed.record(command, combined(list(installed.values())))
     print()
     keycloak.repair_default_client_scopes(render)
-    wire = openbao.bootstrap(render)
-    _wait_ready(live, held, wire_outway=wire)
+    openbao.activate(render)
+    _wait_ready(live, held)
     print("\nDeployed.")
     tunnel.setup_tunnel(ask=False)
 
@@ -299,11 +299,10 @@ def restart_zac() -> None:
     kube.kubectl_shown("rollout", "restart", f"deployment/{ZAC}", "-n", NAMESPACE)
 
 
-def _wait_ready(render: manifests.Render, held: list[int], *, wire_outway: bool = False) -> None:
+def _wait_ready(render: manifests.Render, held: list[int]) -> None:
     """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs.
 
-    held: ZAC's replicas from hold_zac, set once ZAC_JOBS have finished. wire_outway: openbao.bootstrap
-    re-ran openbao-config (a Helm hook, so not in render); openbao.wire_outway runs once it finished.
+    held: ZAC's replicas from hold_zac, set once ZAC_JOBS have finished.
     """
     print("\nWaiting until every rendered workload has rolled out and every Job has completed...")
     workloads = [
@@ -312,7 +311,7 @@ def _wait_ready(render: manifests.Render, held: list[int], *, wire_outway: bool 
         if doc.get("kind") in ("Deployment", "StatefulSet", *manifests.ECK_KINDS)
     ]
     kinds = ",".join(sorted({workload.split("/")[0] for workload in workloads}))
-    names = [*render.jobs, *([openbao.CONFIG_JOB] if wire_outway else [])]
+    names = render.jobs
 
     def job_state() -> tuple[list[str], list[str]]:
         return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
@@ -326,15 +325,9 @@ def _wait_ready(render: manifests.Render, held: list[int], *, wire_outway: bool 
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
     restarted: list[str] = []
-    # Here, not in openbao.bootstrap: on a fresh install the Job retries until Keycloak
-    # answers through the edge (5.5 min seen), and nothing else needs to wait for it.
-    unwired = [openbao.CONFIG_JOB] if wire_outway else []
 
     def settled() -> tuple[list[str]] | None:
         running, failed = job_state()
-        if unwired and openbao.CONFIG_JOB not in running + failed:
-            openbao.wire_outway()
-            unwired.clear()
         prepared = not set(ZAC_JOBS) & set(running)
         if held and prepared:
             print("ZAC's Jobs have finished; starting ZAC.")

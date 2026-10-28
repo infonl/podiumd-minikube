@@ -1,97 +1,82 @@
-"""OpenBao for the frankgateway profile: its seal key, one-time init, config token and the outway's keys.
+"""OpenBao for the frankgateway profile: its seal key, podiumd's openbao-activate.sh, and the outway's keys.
 
-The chart's static seal unseals OpenBao on every start, but the vault still
-has to be initialised once, and the chart's openbao-config Job needs a token
-that only exists after that. ExternalsPodiumD does this with
-pipelines/scripts/openbao_bootstrap.py and the chart's
-scripts/openbao-mint-config-token.sh; this is the same, unattended. The seal
-key, root token and recovery key stay in .openbao/ (gitignored), like .pki/.
+The chart's static seal unseals OpenBao on every start. podiumd's scripts/openbao-activate.sh does the rest after a
+deploy (initialise, tokens, the openbao-config Job), as podiumd-infra runs it; its Azure Key Vault item lives in
+the keyvault stand-in. The outway's API keys follow with a temporary root token from that item, as podiumd-infra's
+write_outway_keys. The seal key stays in .openbao/ (gitignored), like .pki/.
 """
 
+import base64
 import json
+import os
 import secrets
 import subprocess  # nosec B404 - only for the CompletedProcess type
+import tempfile
 import time
 
+from pathlib import Path
 from typing import Any
 
+from podiumd_minikube import dependency
+from podiumd_minikube import keyvault
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube import values
-from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
+from podiumd_minikube.paths import OPENBAO_DIR
 from podiumd_minikube.paths import PODIUMD_RELEASE
+from podiumd_minikube.paths import PROFILE
 
-OPENBAO_DIR = CHART_DIR / ".openbao"
 SEAL_KEY = OPENBAO_DIR / "seal-key"
-ROOT_TOKEN = OPENBAO_DIR / "root-token"
-RECOVERY_KEY = OPENBAO_DIR / "recovery-key"
 POD = f"{PODIUMD_RELEASE}-openbao-0"
 # Pod 0's own listener: the -active Service has no endpoints until OpenBao is unsealed.
 ADDR = "http://127.0.0.1:8200"
-# podiumd.openbao.configuration.bootstrapTokenSecret and its Job, in the chart.
-BOOTSTRAP_SECRET = "openbao-bootstrap-token"  # nosec B105  # noqa: S105 - a Secret name
+# The loopback listener of the chart's server.ha.config: only there is generate-root allowed without a token.
+LOCAL_ADDR = "http://127.0.0.1:8210"
 CONFIG_JOB = "openbao-config"
-POLICY = "podiumd-config-job"
-# The chart's scripts/openbao-mint-config-token.sh, for kvPath "secret".
-POLICY_HCL = """\
-path "sys/mounts"                { capabilities = ["read"] }
-path "sys/mounts/secret"         { capabilities = ["create", "read", "update", "sudo"] }
-path "sys/policies/acl/uploader" { capabilities = ["create", "read", "update"] }
-path "sys/auth"                  { capabilities = ["read"] }
-path "sys/auth/oidc"             { capabilities = ["create", "update", "sudo"] }
-path "auth/oidc/config"          { capabilities = ["create", "read", "update"] }
-path "auth/oidc/role/uploader"   { capabilities = ["create", "read", "update"] }
-path "identity/group"            { capabilities = ["create", "update"] }
-path "identity/group/name/*"     { capabilities = ["read"] }
-path "identity/group-alias"      { capabilities = ["create", "update"] }
-path "identity/group-alias/id/*" { capabilities = ["read", "update"] }
-"""
 STARTUP_TIMEOUT = 300
+SCRIPT = "openbao-activate.sh"
+HELM_CHARTS = "https://github.com/Dimpact-Samenwerking/helm-charts.git"
+# The script's KEYVAULT_ITEM default, and its value before the first init.
+KEY_ITEM = "openbao-unseal-key"
+PLACEHOLDER = "pending-init"
 # The Frank!Gateway outway reads its API keys at request time from KV_MOUNT/OUTWAY_KV_PATH
-# (files/frankgateway/openbao-secret-header.lua) with the token in READER_SECRET
-# (podiumd.frankgateway.openbao.tokenSecret, which the chart never creates).
+# (files/frankgateway/openbao-secret-header.lua) with the token the script mints.
 OUTWAY = "frankgateway-outway"
 KV_MOUNT = "secret"
 OUTWAY_KV_PATH = "frankgateway"
-READER_SECRET = "frankgateway-openbao-token"  # nosec B105  # noqa: S105 - a Secret name
-READER_POLICY = "frankgateway-reader"
-# frankgateway-openbao.md: the path itself and everything below it.
-READER_POLICY_HCL = f"""\
-path "{KV_MOUNT}/data/{OUTWAY_KV_PATH}"   {{ capabilities = ["read"] }}
-path "{KV_MOUNT}/data/{OUTWAY_KV_PATH}/*" {{ capabilities = ["read"] }}
-"""
 
 
-def _write_private(path_name: str, value: str) -> None:
+def _write_private(path: Path, value: str) -> None:
     OPENBAO_DIR.mkdir(mode=0o700, exist_ok=True)
-    path = OPENBAO_DIR / path_name
     path.write_text(value, encoding="utf-8")
     path.chmod(0o600)
 
 
 def forget_vault() -> None:
-    """Moves the root token and recovery key aside once the vault's database is gone; keeps the seal key."""
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    for path in (ROOT_TOKEN, RECOVERY_KEY):
-        if path.is_file():
-            path.rename(path.with_name(f"{path.name}.{stamp}"))
-            print(f"Moved {path.name} aside ({path.name}.{stamp}): its vault was deleted with Postgres.")
+    """Moves the recovery key aside once the vault's database is gone; keeps the seal key."""
+    path = keyvault.item(KEY_ITEM)
+    if path.is_file():
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        path.rename(path.with_name(f"{path.name}.{stamp}"))
+        print(f"Moved {path.name} aside ({path.name}.{stamp}): its vault was deleted with Postgres.")
 
 
 def seal_key_args() -> list[str]:
     """helm args setting the static seal key from .openbao/seal-key, created once (32 characters)."""
     if not SEAL_KEY.is_file():
-        _write_private(SEAL_KEY.name, secrets.token_hex(16))
+        _write_private(SEAL_KEY, secrets.token_hex(16))
     return ["--set-file", f"podiumd.openbao.seal.static.key={SEAL_KEY}"]
 
 
-def _bao(*args: str, token: str = "", stdin: str = "", check: bool = True) -> subprocess.CompletedProcess[str]:
+def _bao(
+    *args: str, token: str = "", stdin: str = "", addr: str = ADDR, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     """`bao args` in pod 0; the token travels as stdin's first line, never on a command line or in an error."""
     script = 'read -r BAO_TOKEN; [ -n "$BAO_TOKEN" ] && export BAO_TOKEN; exec bao "$@"'
-    command = ["kubectl", "exec", "-i", "-n", NAMESPACE, POD, "--", "env", f"BAO_ADDR={ADDR}", "sh", "-c", script]
+    command = ["kubectl", "exec", "-i", "-n", NAMESPACE, POD, "--", "env", f"BAO_ADDR={addr}", "sh", "-c", script]
     return process.run([*command, "sh", *args], stdin=f"{token}\n{stdin}", check=check)
 
 
@@ -104,74 +89,80 @@ def _status() -> dict[str, Any] | None:
         return None
 
 
-def _initialise() -> None:
-    print("Initialising OpenBao (once; recovery key and root token go to .openbao/)...")
-    out = json.loads(_bao("operator", "init", "-recovery-shares=1", "-recovery-threshold=1", "-format=json").stdout)
-    _write_private(ROOT_TOKEN.name, out["root_token"])
-    _write_private(RECOVERY_KEY.name, out["recovery_keys_b64"][0])
+def activate_script(work: Path) -> Path:
+    """The selected podiumd chart's openbao-activate.sh: in its directory, else from helm-charts tag podiumd-<version>.
 
-
-def _mint_token(root: str, policy: str, hcl: str, secret_name: str) -> None:
-    """Writes policy, creates an orphan periodic token with it and stores it as key `token` of Secret secret_name."""
-    _bao("policy", "write", policy, "-", token=root, stdin=hcl)
-    token = _bao(
-        "token", "create", "-orphan", f"-policy={policy}", "-period=768h", f"-display-name={policy}", "-field=token",
-        token=root,
-    ).stdout.strip()  # fmt: skip
-    secret = {
-        "apiVersion": "v1",
-        "kind": "Secret",
-        "metadata": {"name": secret_name, "namespace": NAMESPACE},
-        "stringData": {"token": token},
-    }
-    kube.kubectl("apply", "-f", "-", stdin=json.dumps(secret))
-    print(f"  minted a {policy} token into Secret {secret_name}")
-
-
-def wire_outway() -> None:
-    """Stores the outway's API keys in OpenBao and gives the outway its reader token (restarting it once).
-
-    Needs the KV mount the openbao-config Job creates.
+    A published chart leaves scripts/ out (its .helmignore).
     """
-    if not kube.exists(f"deployment/{OUTWAY}"):
-        return
-    root = ROOT_TOKEN.read_text(encoding="utf-8").strip()
-    _bao(
-        "kv", "put", f"-mount={KV_MOUNT}", OUTWAY_KV_PATH, "kvk_api_key=-", token=root, stdin=values.kvk_test_api_key()
+    selected = dependency.selection("podiumd")
+    if selected is not None and selected.mode == "path":
+        found = Path(selected.value) / "scripts" / SCRIPT
+    elif selected is not None:
+        clone = ["git", "clone", "--quiet", "--depth", "1", "--filter=blob:none", "--sparse"]
+        process.fetch([*clone, "--branch", f"podiumd-{selected.value}", HELM_CHARTS, str(work)])
+        process.run(["git", "-C", str(work), "sparse-checkout", "set", "charts/podiumd/scripts"])
+        found = work / "charts" / "podiumd" / "scripts" / SCRIPT
+    else:
+        raise dependency.missing_error(["podiumd"])
+    if not found.is_file():
+        msg = (
+            f"podiumd {selected.value} has no scripts/{SCRIPT} (from podiumd 4.10.0 on): turn off profile frankgateway"
+        )
+        raise process.UserError(msg)
+    return found
+
+
+def _root_token() -> str:
+    """A temporary root token from the recovery key (generate-root); the caller revokes it."""
+    attempt = json.loads(_bao("read", "-format=json", "sys/generate-root/attempt", addr=LOCAL_ADDR).stdout)
+    if attempt["data"].get("started"):
+        msg = f"a generate-root attempt runs on {POD}: cancel it with `bao operator generate-root -cancel` there"
+        raise process.UserError(msg)
+    started = json.loads(_bao("write", "-f", "-format=json", "sys/generate-root/attempt", addr=LOCAL_ADDR).stdout)
+    nonce, otp = started["data"]["nonce"], started["data"]["otp"]
+    key = keyvault.item(KEY_ITEM).read_text(encoding="utf-8")
+    update = _bao(
+        "write", "-format=json", "sys/generate-root/update", f"nonce={nonce}", "key=-", stdin=key, addr=LOCAL_ADDR
     )
-    if kube.exists(f"secret/{READER_SECRET}"):
-        return
-    _mint_token(root, READER_POLICY, READER_POLICY_HCL, READER_SECRET)
-    # OPENBAO_TOKEN comes from that Secret as an env var, read at start only.
-    kube.kubectl_shown("rollout", "restart", f"deployment/{OUTWAY}", "-n", NAMESPACE)
+    encoded = json.loads(update.stdout)["data"]["encoded_token"]
+    raw = base64.b64decode(encoded + "=" * (-len(encoded) % 4))
+    return bytes(a ^ b for a, b in zip(raw, otp.encode(), strict=False)).decode()
 
 
-def bootstrap(render: manifests.Render) -> bool:
-    """Initialises OpenBao once, mints the config token once and re-runs the openbao-config Job without waiting.
+def _write_outway_keys() -> None:
+    """Stores the outway's API keys in OpenBao with a temporary root token, revoked afterwards."""
+    root = _root_token()
+    try:
+        _bao(
+            "kv",
+            "put",
+            f"-mount={KV_MOUNT}",
+            OUTWAY_KV_PATH,
+            "kvk_api_key=-",
+            token=root,
+            stdin=values.kvk_test_api_key(),
+        )
+    finally:
+        _bao("token", "revoke", "-self", token=root)
+    print(f"  stored the outway's API keys in {KV_MOUNT}/{OUTWAY_KV_PATH}")
 
-    False when the render has no openbao-config Job (frankgateway profile off).
-    """
-    jobs = [doc for doc in render.docs if doc.get("kind") == "Job" and manifests.name_of(doc) == CONFIG_JOB]
+
+def activate(render: manifests.Render) -> None:
+    """Runs podiumd's openbao-activate.sh against the keyvault stand-in, then stores the outway's API keys."""
     # The render, not the cluster: a pruned StatefulSet still exists while it terminates.
-    if not jobs:
-        return False
-    print("Bootstrapping OpenBao (openbao.py)...")
-    status = polling.wait_until(_status, timeout=STARTUP_TIMEOUT, interval=5)
-    if status is None:
+    if not any(doc.get("kind") == "Job" and manifests.name_of(doc) == CONFIG_JOB for doc in render.docs):
+        return
+    print(f"Activating OpenBao (podiumd's {SCRIPT}, Key Vault item {KEY_ITEM} in {keyvault.KEYVAULT_DIR})...")
+    if polling.wait_until(_status, timeout=STARTUP_TIMEOUT, interval=5) is None:
         msg = f"OpenBao pod {POD} did not answer within {STARTUP_TIMEOUT}s: check `kubectl logs {POD}`"
         raise process.UserError(msg)
-    if not status["initialized"]:
-        if ROOT_TOKEN.is_file():
-            msg = f"OpenBao is not initialised but {ROOT_TOKEN} exists: an old vault's; move it away and redeploy"
-            raise process.UserError(msg)
-        _initialise()
-    # With HA storage an unsealed node only accepts writes once it holds the active lock.
-    if polling.wait_until(lambda: (s := _status()) is not None and s.get("is_self"), timeout=120, interval=3) is None:
-        msg = f"OpenBao did not become active: check the seal key in {SEAL_KEY} and `kubectl logs {POD}`"
-        raise process.UserError(msg)
-    root = ROOT_TOKEN.read_text(encoding="utf-8").strip()
-    if not kube.exists(f"secret/{BOOTSTRAP_SECRET}"):
-        _mint_token(root, POLICY, POLICY_HCL, BOOTSTRAP_SECRET)
-    kube.kubectl_shown("delete", "job", CONFIG_JOB, "-n", NAMESPACE, "--ignore-not-found")
-    kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(jobs))
-    return True
+    if not keyvault.item(KEY_ITEM).is_file():
+        keyvault.write(KEY_ITEM, PLACEHOLDER)
+    with tempfile.TemporaryDirectory() as work:
+        found = activate_script(Path(work) / "helm-charts")
+        settings = {"KUBE_CONTEXT": PROFILE, "NAMESPACE": NAMESPACE, "RELEASE": PODIUMD_RELEASE, "KEYVAULT": PROFILE}
+        path = f"{keyvault.shim_dir(Path(work))}{os.pathsep}{os.environ['PATH']}"
+        assignments = [f"{key}={value}" for key, value in {**settings, "PATH": path}.items()]
+        process.run(["env", *assignments, "bash", str(found)], capture=False)
+    if kube.exists(f"deployment/{OUTWAY}"):
+        _write_outway_keys()

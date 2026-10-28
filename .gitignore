@@ -45,7 +45,7 @@ session_memory.json
 
 # The local CA (src/podiumd_minikube/pki.py); one per checkout, its key never leaves it.
 .pki/
-# OpenBao's seal key, root token and recovery key (src/podiumd_minikube/openbao.py).
+# OpenBao's seal key and the keyvault stand-in with its recovery key (src/podiumd_minikube/openbao.py, keyvault.py).
 .openbao/
 # The rendered Cilium manifest minikube start rereads (src/podiumd_minikube/cni.py).
 .cni/
