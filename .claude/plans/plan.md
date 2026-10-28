@@ -8887,3 +8887,19 @@ errors, as before). Redeploy: apply 21 -> 4 s, deploy --full 112 -> 106 s.
 The Jobs now all start within the same 4 s and the last one,
 keycloak-repair-client-scopes, took 71 s instead of 64, so the wait grew
 52 -> 63 s; one run each.
+
+### podiumd's 200m CPU limit on its Python config Jobs: no redeploy gain
+
+On the PR 659/660 verify build the redeploy's last Jobs were podiumd's own
+Python config Jobs (openinwoner-configure-kvk 51 s, configure-clamav 46 s,
+openformulieren-configure-customer-interactions 45 s). Their chart limit is
+200m CPU (as ExternalsPodiumD and podiumd-infra keep it); a Django
+`manage.py shell` start costs about 6 CPU-seconds: 33 s at 200m, 6.5 s at 1,
+no faster at 2 (a copy of the Job's pod on an idle node). With limit 1 on all
+six (kvk, both clamav, customer-interactions, create-required-catalogi and
+-objecttypen) they took 18-25 s and 10-11 s, but deploy --full stayed 87 s:
+the Jobs run in parallel and the deploy now waited for
+zookeeper-operator-post-install-upgrade (50 s), a chart hook with a fixed
+`sleep 30` that ExternalsPodiumD's `helm upgrade` waits for too. Reverted (the
+user's call): a deviation from the reference values without a deploy-time
+gain. Breakdown of the 87 s: 31 s render and apply, 52 s Jobs, 4 s finish.
