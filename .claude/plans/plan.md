@@ -8930,3 +8930,48 @@ render has ServiceMonitors frankgateway-outway and podiumd-minikube-openbao;
 `templates/openbao-podmonitor.yaml` renders nothing with one HA replica (no
 standby). `NO_METRICS_SETS` turns off only the switches, so a deploy without
 metrics sets no 9101 ports that would point at a missing listener.
+
+### Deploying with Helm releases, as podiumd-infra: fixup inventory
+
+Why minikube uses `helm template | kubectl apply`: the first `helm install`
+(step 4) failed because Helm stores each release as a Secret holding the whole
+chart, capped at 1 MiB. Measured 2026-10-28 (base64 of the gzip, the size Helm
+stores): the umbrella chart (podiumd + monitoring-logging + our templates)
+3,245,724 B; podiumd alone with our values and --full 769,984 B; kees00's
+podiumd release 772,900 B (podiumd-infra-6b). The umbrella cannot be a
+release; podiumd alone can. Without a release podiumd-tests cannot test what
+needs one: `scripts/openbao-activate.sh` (helm-charts #662), hook order,
+`helm get`/`helm status`, upgrade and rollback.
+
+podiumd-infra's way (`helm_deploy.py`, `grafana.py`, `operators.py`): release
+`podiumd` from the published chart with `--skip-crds`, in two passes
+(Keycloak and Infinispan with `--wait`, then everything else); release
+`monitoring` (monitoring-logging) in its own namespace; CRDs applied
+server-side beforehand; default Secret storage, Helm 4.3; no post-renderer.
+What no chart exposes is a `kubectl patch` after Helm (`_after`: ZaakBrug's
+role mapping, ZAC's progressDeadlineSeconds); Helm's server-side apply does
+not own those fields, so later upgrades keep them.
+
+What each `manifests.fix_up` step becomes:
+
+| Group | Fixups | With Helm releases |
+|---|---|---|
+| A: gone | `mark_release_owner`, dropping test/delete hooks, `scrape_only_from_prometheus` (monitoring in its own namespace, as kees00), `drop_duplicate_env` (a kubectl warning), server-side apply of large ConfigMaps, `keep_finished_jobs` with `_rerun_jobs` | Helm does it, or the cause is gone |
+| B: chart value, to check per chart | `allow_rolling_updates`, `is_unused_zac_collector`, `route_through_nginx`, `limit_nginx_workers`, `route_outbound` | values.yaml |
+| C: `kubectl patch` after Helm, as podiumd-infra | `mount_zaakbrug_role_mapping` (podiumd-infra `_patch_zaakbrug`), `tune_keycloak`, `speed_up_keycloak_start` (Keycloak resource), `tune_solr`, `ease_solr_start` (SolrCloud), `disable_service_links` | on a fresh install these pods start once without the patch, then restart |
+| D: no podiumd-infra solution | `strip_image_digests`, `trust_ca`, `serve_postgres_tls`, `limit_runtimes`, `tune_kcadm`, `retry_in_container`, `fixup_merged_objecten` | must be in the manifest before anything is created (Jobs are immutable; every pod needs them from its first start): only Helm's `--post-renderer`, in Helm 4 a plugin |
+
+Open: whether a post-renderer plugin is acceptable for group D (the user's
+call); without it minikube stays on `kubectl apply`.
+
+Jobs (the user's decision, 2026-10-28): ExternalsPodiumD's way, also for
+podiumd-infra. Its pipeline (`pipelines/application.yml`, "Delete stale
+one-shot Jobs") deletes the 13 fixed-name Jobs in
+`upgrade.EXTERNALS_DELETED_JOBS` before every `helm upgrade`; Jobs with a
+content-hash or revision suffix re-run only when their content changes. Pros:
+the config Jobs restore lost configuration on every deploy, as test,
+acceptance and production do. Cons: they cost 30-50 s of CPU per deploy, and
+the list is kept by hand: a new fixed-name Job (now `openbeheer-config`)
+fails `helm upgrade` on its immutable spec until it is added. podiumd-infra
+deletes only Failed Jobs (`clear_failed_jobs`) and skips an unchanged
+upgrade, so a successful Job never runs again.
