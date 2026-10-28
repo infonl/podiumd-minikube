@@ -31,7 +31,7 @@ except Exception as e:
 def _wired_here(api_root):
     """In-cluster names and *.local hosts; public APIs (selectielijst.openzaak.nl) are out of reach offline."""
     labels = (urlparse(api_root).hostname or "").split(".")
-    return len(labels) == 1 or (len(labels) == 2 and labels[1] in ("podiumd-minikube", "local"))
+    return len(labels) == 1 or (len(labels) == 2 and labels[1] in (NAMESPACE, "local"))
 
 
 def _last_line(*args):

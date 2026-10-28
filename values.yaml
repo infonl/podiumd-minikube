@@ -277,10 +277,8 @@ podiumd:
                     storage: 2Gi
   eck-operator:
     enabled: false
-    # podiumd's operator watches namespace "podiumd" only; ours is
-    # podiumd-minikube (its Role/RoleBinding land there).
     managedNamespaces:
-      - podiumd-minikube
+      - podiumd
     # The metrics profile turns on its podMonitor. As the chart's
     # values-enable-observability.yaml; ExternalsPodiumD sets metricsPort, which
     # eck-operator 3.x ignores: its metrics.port default "0" wins.
@@ -406,7 +404,7 @@ podiumd:
   networkPolicies:
     enabled: true
     ingressControllerNamespace: ingress-basic
-    monitoringNamespace: podiumd-minikube
+    monitoringNamespace: monitoring
 
   # --- zac (always on - the app itself) ---
   zac:
@@ -417,7 +415,7 @@ podiumd:
     maxFileSizeMB: 150
     nginx:
       useXForwardedHost: true
-      allowedHosts: zac.local,zac.podiumd-minikube
+      allowedHosts: zac.local,zac.podiumd
       client_max_body_size: 150M
     autoscaling:
       enabled: false
@@ -521,7 +519,7 @@ podiumd:
     # ZAC's SolrCloud through the chart's solr-operator, as ExternalsPodiumD; ZAC's
     # init-solr-zac-core container creates the zac collection.
     solr-operator:
-      watchNamespaces: podiumd-minikube
+      watchNamespaces: podiumd
       solr:
         replicas: 1 # chart 3
         # Laptop budget: chart -Xms512m -Xmx768m, 1Gi/2Gi. The GC is in manifests.tune_solr.
@@ -535,7 +533,7 @@ podiumd:
         storage:
           storageClassName: standard
       zookeeper-operator:
-        watchNamespace: podiumd-minikube
+        watchNamespace: podiumd
         zookeeper:
           replicas: 1 # as ExternalsPodiumD
           # Laptop budget: chart 256Mi/512Mi. The heap is in manifests.tune_solr.
@@ -814,7 +812,7 @@ podiumd:
       # Required: Django refuses every request without SECRET_KEY.
       secretKey: openZaakSecretKey
       # As ExternalsPodiumD: the public host, its nginx Service, and two proxies (edge, nginx).
-      allowedHosts: openzaak.local,openzaak-nginx.podiumd-minikube.svc.cluster.local
+      allowedHosts: openzaak.local,openzaak-nginx.podiumd.svc.cluster.local
       numProxies: 2
       # As ExternalsPodiumD: Secure cookies and https URLs (the edge
       # terminates TLS). Its domain for URLs built outside a request comes
@@ -1075,7 +1073,7 @@ podiumd:
     # The FQDN: Django's URLValidator rejects a host without a dot. The Job
     # bypasses manifests.route_outbound, so KvK skips the Frank!Gateway outway.
     kvk:
-      apiRoot: http://api-proxy.podiumd-minikube.svc.cluster.local/api/
+      apiRoot: http://api-proxy.podiumd.svc.cluster.local/api/
     configuration:
       enabled: true
       secrets:
@@ -1195,7 +1193,7 @@ podiumd:
         processes: 1
         threads: 2
       secretKey: openInwonerSecretKey
-      allowedHosts: openinwoner.local,openinwoner-nginx.podiumd-minikube.svc.cluster.local
+      allowedHosts: openinwoner.local,openinwoner-nginx.podiumd.svc.cluster.local
       isHttps: true
       numProxies: 2
       digidMock: true
@@ -1610,7 +1608,7 @@ podiumd:
       secretKey: objectenApiSecretKey
       # As ExternalsPodiumD: also its internal Service, which KISS calls. The
       # objecttypen names reach Open Object (podiumd >= 4.10), which serves both APIs.
-      allowedHosts: objecten.local,objecten.podiumd-minikube.svc.cluster.local,objecttypen,objecttypen.podiumd-minikube,objecttypen.local
+      allowedHosts: objecten.local,objecten.podiumd.svc.cluster.local,objecttypen,objecttypen.podiumd,objecttypen.local
       # Open Object only (podiumd >= 4.10); its chart requires it.
       siteDomain: objecten.local
       # See openzaak's isHttps comment.
@@ -2226,7 +2224,7 @@ podiumd:
       djangoSettingsModule: openarchiefbeheer.conf.docker_no2fa
       secretKey: oabSecretKey
       # As ExternalsPodiumD: the public host and the in-cluster nginx Service.
-      allowedHosts: openarchiefbeheer-ui.local,openarchiefbeheer-nginx.podiumd-minikube.svc.cluster.local
+      allowedHosts: openarchiefbeheer-ui.local,openarchiefbeheer-nginx.podiumd.svc.cluster.local
       # See openzaak's isHttps comment.
       isHttps: true
       # See openzaak's own email comment above - same chart-default
@@ -2492,7 +2490,7 @@ podiumd:
         processes: 1
         threads: 2
       secretKey: openFormulierenSecretKey
-      allowedHosts: openformulieren-nginx.local,openformulieren-nginx.podiumd-minikube.svc.cluster.local
+      allowedHosts: openformulieren-nginx.local,openformulieren-nginx.podiumd.svc.cluster.local
       # As ExternalsPodiumD and podiumd-infra: the public host. Mails drop links
       # to any other host (the pause mail's resume link).
       baseUrl: "https://openformulieren-nginx.local"
@@ -2720,7 +2718,7 @@ podiumd:
       # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
       uwsgi:
         processes: 1
-      allowedHosts: openbeheer.local,openbeheer-nginx.podiumd-minikube.svc.cluster.local
+      allowedHosts: openbeheer.local,openbeheer-nginx.podiumd.svc.cluster.local
       apiDomain: openbeheer.local
       secretKey: openbeheerSecretKey
       environment: podiumd-minikube
@@ -2823,7 +2821,7 @@ podiumd:
         environment: Development
       notify:
         api:
-          baseUrl: http://ptest-bootstrap-mock-server.podiumd-minikube/notify
+          baseUrl: http://ptest-bootstrap-mock-server.podiumd/notify
           # ExternalsPodiumD's NotifyNL test key (name-serviceId-secret).
           key: omcconfigtest-0c9cdaaf-7b0a-4d88-a8d8-dacbccf52734-173e579d-0f99-4d29-a6f8-7b522418f57b
         templateId:
@@ -3076,15 +3074,15 @@ podiumd:
         emailFrom: noreply@example.com
         emailTo: noreply@example.com
       afdelingen:
-        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
+        baseUrl: http://objecten.podiumd.svc.cluster.local
         objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/c8d301f9-80b8-4575-8b29-3e9431f92994
         token: objectenContactToken
       groepen:
-        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
+        baseUrl: http://objecten.podiumd.svc.cluster.local
         objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/cbec27ac-157b-490b-b586-9e8a8f5bbb85
         token: objectenContactToken
       logboek:
-        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
+        baseUrl: http://objecten.podiumd.svc.cluster.local
         objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
         token: objectenContactToken
       managementInformatie:
@@ -3103,19 +3101,19 @@ podiumd:
             token: openklantContactToken
       syncJobs:
         kennisbank:
-          baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
+          baseUrl: http://objecten.podiumd.svc.cluster.local
           objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/e4d2e353-80ea-4962-8276-920d59a3e8de
           schedule: "15 6-14 * * 1-5"
           token: objectenContactToken
         medewerkers:
-          baseUrl: http://podiumd-minikube-adapter
+          baseUrl: http://podiumd-adapter
           objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/90984726-2692-49d8-8f9d-742075cb761d
           schedule: "15 6-14 * * 1-5"
           clientId: contact_intern
           clientSecret: contactAdapterSecret-hs256-needs-over-32-bytes
         vac:
           manageFromKiss: true
-          baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
+          baseUrl: http://objecten.podiumd.svc.cluster.local
           objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/6a0d8f9d-f7e2-4e57-a91b-01656968a62d
           schedule: "15 6-14 * * 1-5"
           token: objectenContactToken
@@ -3126,7 +3124,7 @@ podiumd:
       organisatieIds:
         - "856683164"
     adapter:
-      baseUrl: http://podiumd-minikube-adapter
+      baseUrl: http://podiumd-adapter
       clientId: contact_intern
       # Same as syncJobs.medewerkers.clientSecret; HS256 signing needs over 32 bytes.
       secret: contactAdapterSecret-hs256-needs-over-32-bytes
@@ -3143,7 +3141,7 @@ podiumd:
       # podiumd >= 4.10 reads the objecttypen keys under objecten.
       objecten:
         <<: *adapterObjecttypen
-        baseUrl: http://objecten.podiumd-minikube.svc.cluster.local
+        baseUrl: http://objecten.podiumd.svc.cluster.local
         token: objectenContactToken
       # No e-Suite here: unreachable, so contactverzoeken through the adapter fail.
       esuite:
@@ -3186,8 +3184,7 @@ monitoring-logging:
     # the first start (Init:Error); fsGroup covers ownership on minikube's storage.
     initChownData:
       enabled: false
-    # The chart's Prometheus URL assumes "<release>-kube-prometheus-prometheus";
-    # kube-prometheus-stack truncates the name to "podiumd-minikube-kube-prom-prometheus".
+    # Prometheus as ExternalsPodiumD (kube-prometheus-stack.fullnameOverride below).
     # The whole list is repeated: Helm replaces lists.
     datasources:
       datasources.yaml:
@@ -3198,7 +3195,7 @@ monitoring-logging:
             type: prometheus
             uid: prometheus
             readOnly: false
-            url: http://podiumd-minikube-kube-prom-prometheus:9090
+            url: http://kube-prometheus-prometheus:9090
             access: proxy
             isDefault: false
           - name: loki
@@ -3208,7 +3205,7 @@ monitoring-logging:
             editable: true
             access: proxy
             isDefault: true
-            url: http://podiumd-minikube-loki-gateway
+            url: http://{{ .Release.Name }}-loki-gateway
             version: 1
             jsonData:
               timeout: 300
@@ -3239,13 +3236,16 @@ monitoring-logging:
       path: /
       pathType: ImplementationSpecific
   kube-prometheus-stack:
+    # As ExternalsPodiumD: Prometheus is kube-prometheus-prometheus for Grafana and the
+    # collector, and Helm installs no CRDs (crds.apply_monitoring_logging_crds does).
+    fullnameOverride: kube-prometheus
+    crds:
+      enabled: false
     # Off: its ServiceMonitor sets trackTimestampsStaleness, which the bundled CRD
     # rejects (version skew inside monitoring-logging).
     kubelet:
       enabled: false
-    # Off: these create Services in kube-system, which the deploy's single
-    # `kubectl apply -n podiumd-minikube` rejects; minikube's static control-plane
-    # pods have nothing for them to scrape.
+    # Off: minikube's static control-plane pods have nothing for them to scrape.
     coreDns:
       enabled: false
     kubeControllerManager:
@@ -3312,10 +3312,10 @@ monitoring-logging:
     # Alloy's DaemonSet keeps the chart's AKS node label
     # (kubernetes.azure.com/agentpool: userpool), which Helm could not clear
     # at this nesting depth; provision.py labels the minikube node instead.
-    # The chart's own log pipeline, for this namespace (ExternalsPodiumD:
-    # podiumd and monitoring).
+    # As ExternalsPodiumD.
     logCollectionNamespaces:
-      - podiumd-minikube
+      - podiumd
+      - monitoring
     # Laptop budget, as Loki: GOGC=50 (its anon memory; most of its working set is log-file cache).
     alloy:
       # Helm replaces lists: the chart's NODE_NAME must stay, or its env("NODE_NAME")
@@ -3425,6 +3425,5 @@ monitoring-logging:
         memory: 256Mi
     config:
       exporters:
-        # Same Prometheus name mismatch as Grafana's datasource above.
         prometheusremotewrite:
-          endpoint: http://podiumd-minikube-kube-prom-prometheus:9090/api/v1/write
+          endpoint: http://kube-prometheus-prometheus:9090/api/v1/write

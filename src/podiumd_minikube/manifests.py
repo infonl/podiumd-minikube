@@ -243,7 +243,8 @@ def _configmaps_used(spec: Doc) -> set[str]:
 
 # App Service -> the nginx Service in front of it. ZAC's chart points its
 # Ingress at the app even with nginx.enabled; ExternalsPodiumD routes to zac-nginx.
-NGINX_FRONTS = {"zac": "zac-nginx"}
+ZAC_DEPLOYMENT = "zac"
+NGINX_FRONTS = {ZAC_DEPLOYMENT: "zac-nginx"}
 
 
 def _ingress_rules(docs: list[Doc]) -> list[Doc]:
@@ -415,14 +416,6 @@ def is_unused_zac_collector(doc: Doc) -> bool:
     return doc.get("kind") == "Deployment" and name_of(doc) == ZAC_COLLECTOR
 
 
-def mark_release_owner(docs: list[Doc]) -> None:
-    """Adds the release annotations `helm upgrade` sets; the chart's objecttypen-compat-service checks them."""
-    for doc in docs:
-        _mapping(doc, "metadata", "annotations").update(
-            {"meta.helm.sh/release-name": RELEASE_NAME, "meta.helm.sh/release-namespace": NAMESPACE}
-        )
-
-
 def keep_finished_jobs(docs: list[Doc]) -> None:
     """Drops ttlSecondsAfterFinished from Jobs, so deploy sees their outcome after its slower steps.
 
@@ -500,7 +493,7 @@ RETRIED_CONTAINERS = {
     ("Job", "openbao-db-schema", "schema"),
     ("Job", "openbao-config", "config"),
     ("Job", "openvtb-config", "openvtb"),
-    ("Deployment", "zac", ZAC_SOLR_INIT),
+    ("Deployment", ZAC_DEPLOYMENT, ZAC_SOLR_INIT),
     ("Job", KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_USER),
     ("Deployment", "openinwoner", OPEN_INWONER_SEARCH_INDEX),
     ("Job", "create-required-catalogi-job", "create-required-catalogi"),
@@ -609,28 +602,6 @@ def mount_zaakbrug_role_mapping(docs: list[Doc]) -> None:
                 {"name": ZAAKBRUG_ROLE_MAPPING, "mountPath": f"{_ZAAKBRUG_RESOURCES}/{key}", "subPath": key}
                 for key in ("oauth-role-mapping.properties", "RoutingProfiles.json")
             ]
-
-
-PROMETHEUS_POD = {"app.kubernetes.io/name": "prometheus"}
-
-
-def scrape_only_from_prometheus(docs: list[Doc]) -> None:
-    """Narrows the chart's NetworkPolicy rules for networkPolicies.monitoringNamespace to the Prometheus pod.
-
-    The estates scrape from a namespace of their own; here Prometheus shares
-    NAMESPACE, which the rule would open whole (Solr and OpenBao serve metrics
-    on their main ports).
-    """
-    for doc in docs:
-        if doc.get("kind") != "NetworkPolicy":
-            continue
-        rules: list[Doc] = section(doc, "spec").get("ingress") or []
-        for rule in rules:
-            peers: list[Doc] = rule.get("from") or []
-            for peer in peers:
-                labels: Doc = section(peer, "namespaceSelector").get("matchLabels") or {}
-                if labels == {"kubernetes.io/metadata.name": NAMESPACE} and "podSelector" not in peer:
-                    peer["podSelector"] = {"matchLabels": dict(PROMETHEUS_POD)}
 
 
 def limit_runtimes(docs: list[Doc]) -> None:
@@ -785,21 +756,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     """Applies every local fixup to `helm template` output."""
     loaded: list[tuple[Doc | None, re.Match[str] | None]] = [(_load(c), _SOURCE.search(c)) for c in _chunks(text)]
     charts = {f"{doc.get('kind')}/{name_of(doc)}": source[2] or source[1] for doc, source in loaded if doc and source}
-    docs = [doc for doc, _ in loaded if doc and not _is_test_or_delete_hook(doc) and not is_unused_zac_collector(doc)]
-    disable_service_links(docs)
-    allow_rolling_updates(docs)
-    drop_duplicate_env(docs)
-    route_outbound(docs)
-    limit_nginx_workers(docs)
-    route_through_nginx(docs)
-    keep_finished_jobs(docs)
-    mark_release_owner(docs)
-    tune_keycloak(docs)
-    speed_up_keycloak_start(docs)
-    tune_solr(docs)
-    ease_solr_start(docs)
-    mount_zaakbrug_role_mapping(docs)
-    scrape_only_from_prometheus(docs)
+    docs = [doc for doc, _ in loaded if doc and not _is_test_or_delete_hook(doc)]
     docs = post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust)
     return Render(
         docs=[doc for doc in docs if not _is_large_configmap(doc) and doc.get("kind") != "CustomResourceDefinition"],
@@ -809,10 +766,30 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     )
 
 
-def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool) -> list[Doc]:
-    """The fixups every object needs before it is created: Jobs are immutable, pods read them at their start."""
+def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> list[Doc]:
+    """The local fixups of a rendered manifest, as the Helm post-renderer plugin applies them.
+
+    hold_zac: ZAC's Deployment at 0 replicas (deploy.hold_zac).
+    """
+    docs = [doc for doc in docs if not is_unused_zac_collector(doc)]
+    if hold_zac:
+        for doc in docs:
+            if doc.get("kind") == "Deployment" and name_of(doc) == ZAC_DEPLOYMENT:
+                section(doc, "spec")["replicas"] = 0
+    disable_service_links(docs)
+    allow_rolling_updates(docs)
+    drop_duplicate_env(docs)
+    route_outbound(docs)
+    limit_nginx_workers(docs)
+    route_through_nginx(docs)
+    keep_finished_jobs(docs)
+    tune_keycloak(docs)
     tune_kcadm(docs)
+    speed_up_keycloak_start(docs)
     retry_in_container(docs)
+    tune_solr(docs)
+    ease_solr_start(docs)
+    mount_zaakbrug_role_mapping(docs)
     limit_runtimes(docs)
     if ca_trust:
         trust_ca(docs)
@@ -822,10 +799,10 @@ def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool) -> li
     return docs
 
 
-def post_render_text(text: str, *, objecten_merged: bool, ca_trust: bool) -> str:
+def post_render_text(text: str, *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> str:
     """post_render on a rendered manifest, image digests stripped: the Helm post-renderer plugin's work."""
     docs = [doc for doc in map(_load, _chunks(text)) if doc]
-    return dump(post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust))
+    return dump(post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust, hold_zac=hold_zac))
 
 
 def helm_template(*args: str) -> str:

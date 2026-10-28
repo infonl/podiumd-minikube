@@ -182,6 +182,7 @@ def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
             continue
         rules: list[manifests.Doc] = manifests.section(doc, "spec").get("rules") or []
         annotations: manifests.Doc = manifests.section(manifests.section(doc, "metadata"), "annotations")
+        namespace = manifests.section(doc, "metadata").get("namespace", NAMESPACE)
         for rule in rules:
             host = str(rule["host"])
             forwarded = str(annotations.get(FORWARDED_HOST_ANNOTATION, host))
@@ -195,7 +196,7 @@ def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
                 "metadata": {"name": backend["name"], "namespace": EDGE_NAMESPACE, "labels": LABELS},
                 "spec": {
                     "type": "ExternalName",
-                    "externalName": f"{backend['name']}.{NAMESPACE}.svc.cluster.local",
+                    "externalName": f"{backend['name']}.{namespace}.svc.cluster.local",
                     "ports": [{"port": port, "targetPort": port}],
                 },
             }

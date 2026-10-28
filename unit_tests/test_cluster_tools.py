@@ -58,7 +58,7 @@ def test_routes_resolve_named_ports_through_the_service():
 
 def test_bound_volumes_selects_by_claim_namespace():
     volumes = [
-        {"metadata": {"name": "mine"}, "spec": {"claimRef": {"namespace": "podiumd-minikube"}}},
+        {"metadata": {"name": "mine"}, "spec": {"claimRef": {"namespace": "podiumd"}}},
         {"metadata": {"name": "other"}, "spec": {"claimRef": {"namespace": "kube-system"}}},
         {"metadata": {"name": "unbound"}, "spec": {}},
     ]

@@ -22,13 +22,13 @@ from podiumd_minikube import process
 from podiumd_minikube import values
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
-from podiumd_minikube.paths import RELEASE_NAME
+from podiumd_minikube.paths import PODIUMD_RELEASE
 
 OPENBAO_DIR = CHART_DIR / ".openbao"
 SEAL_KEY = OPENBAO_DIR / "seal-key"
 ROOT_TOKEN = OPENBAO_DIR / "root-token"
 RECOVERY_KEY = OPENBAO_DIR / "recovery-key"
-POD = f"{RELEASE_NAME}-openbao-0"
+POD = f"{PODIUMD_RELEASE}-openbao-0"
 # Pod 0's own listener: the -active Service has no endpoints until OpenBao is unsealed.
 ADDR = "http://127.0.0.1:8200"
 # podiumd.openbao.configuration.bootstrapTokenSecret and its Job, in the chart.

@@ -34,7 +34,7 @@ def test_first_pod_waits_for_a_ready_pod(fake_run: FakeRun, monkeypatch: pytest.
     if name:
         assert kube.first_pod("app=keycloak") == name
     else:
-        with pytest.raises(UserError, match="no Ready pod with labels app=keycloak in namespace podiumd-minikube"):
+        with pytest.raises(UserError, match="no Ready pod with labels app=keycloak in namespace podiumd"):
             kube.first_pod("app=keycloak")
     assert timeouts == [kube.POD_TIMEOUT]
-    assert fake_run.calls[0][:7] == ["kubectl", "get", "pod", "-n", "podiumd-minikube", "-l", "app=keycloak"]
+    assert fake_run.calls[0][:7] == ["kubectl", "get", "pod", "-n", "podiumd", "-l", "app=keycloak"]

@@ -11,7 +11,7 @@ from podiumd_minikube import process
 from podiumd_minikube import services
 from podiumd_minikube.process import UserError
 
-EXEC = ["kubectl", "exec", "-n", "podiumd-minikube"]
+EXEC = ["kubectl", "exec", "-n", "podiumd"]
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def test_expose_postgres_starts_a_forward(cluster: FakeRun, monkeypatch: pytest.
 
     monkeypatch.setattr(process, "spawn", spawn)
     services.expose_postgres(5432)
-    assert spawned == [["kubectl", "port-forward", "svc/postgres", "5432:5432", "-n", "podiumd-minikube"]]
+    assert spawned == [["kubectl", "port-forward", "svc/postgres", "5432:5432", "-n", "podiumd"]]
 
 
 def test_expose_postgres_fails_when_the_forward_does_not_come_up(cluster: FakeRun, monkeypatch: pytest.MonkeyPatch):

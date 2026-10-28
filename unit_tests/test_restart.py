@@ -96,7 +96,5 @@ def test_start_restarts_zac_once_after_a_failed_boot(
     else:
         with pytest.raises(UserError, match="ZAC not ready after 0s"):
             restart.start()
-    assert fake_run.ran("kubectl", "rollout") == [
-        ["kubectl", "rollout", "restart", "deployment/zac", "-n", "podiumd-minikube"]
-    ]
+    assert fake_run.ran("kubectl", "rollout") == [["kubectl", "rollout", "restart", "deployment/zac", "-n", "podiumd"]]
     assert started[-1] == ("setup_tunnel" if recovered else "start_node")

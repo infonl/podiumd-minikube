@@ -26,9 +26,17 @@ makes the tests prove something the real environments do not do.
   does not have yet. Include such optional functionality anyway (the
   podiumd-infra way), so broader tests can run. Where both configure the same
   thing differently, ExternalsPodiumD's way wins.
-- Deviate only where minikube cannot do the same (single node, no Azure, no
-  cloud operators, no public DNS), and record each deviation with its reason
-  in `values.yaml` and `plan.md`.
+- Deviate where minikube cannot do the same (single node, no Azure, no
+  cloud operators, no public DNS), or where it serves minikube's own purposes
+  (the user, 2026-10-28): a low footprint (memory first, then CPU), a very
+  fast bootstrap and (re)deploy, debug facilities, and suitability for
+  developers. Never where it makes the tests prove something the estates do
+  not do. Record each deviation with its reason in `values.yaml` or the code,
+  and in `plan.md`.
+- How it is deployed follows ExternalsPodiumD's pipelines: Helm releases
+  `podiumd` (namespace `podiumd`) and `monitoring-logging` (namespace
+  `monitoring`), their Helm flags and its one-shot Job list. "Exactly" is too
+  much (the user, 2026-10-28): the deviations above stay.
 - Requests from podiumd-tests are checked against both projects the same way.
   What ExternalsPodiumD
   and podiumd-infra configure outweighs what a podiumd-tests handoff asks for

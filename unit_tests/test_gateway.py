@@ -44,7 +44,7 @@ def test_routes_follow_externalspodiumd_and_resolve_named_ports():
     services = {o["metadata"]["name"]: o for o in objects if o["kind"] == "Service"}
     routes = {o["metadata"]["name"]: o for o in objects if o["kind"] == "HTTPRoute"}
     assert set(services) == {"keycloak", "openarchiefbeheer-nginx"}
-    assert services["keycloak"]["spec"]["externalName"] == "keycloak.podiumd-minikube.svc.cluster.local"
+    assert services["keycloak"]["spec"]["externalName"] == "keycloak.podiumd.svc.cluster.local"
     assert set(routes) == {"hr-keycloak", "hr-openarchiefbeheer-web", "hr-openarchiefbeheer-ui"}
     rule = routes["hr-keycloak"]["spec"]["rules"][0]
     assert rule["backendRefs"] == [{"name": "keycloak", "port": 8080}]

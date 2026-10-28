@@ -5,6 +5,8 @@ import tarfile
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
+from typing import Any
+from typing import cast
 
 import yaml
 
@@ -51,7 +53,7 @@ SKIP_ROLES_SETS = [
 # metrics profile). Opt-in: about 50 MiB per Maykin web pod. ZAC reads its endpoint only with its
 # own collector subchart enabled; renamed (its default name is the shared collector's), its
 # Deployment dropped by manifests.is_unused_zac_collector.
-OTEL_COLLECTOR = "http://podiumd-minikube-opentelemetry-collector:4317"
+OTEL_COLLECTOR = "http://monitoring-logging-opentelemetry-collector.monitoring:4317"
 OTEL_APPS = ("openzaak", "opennotificaties", "objecten", "openklant", "openformulieren", "openinwoner")
 OTEL_SETS = [
     *METRICS_SETS,
@@ -144,6 +146,33 @@ def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
         registry = f"{image['registry']}/" if image.get("registry") else ""
         sets += ["--set", f"images.{key}={registry}{image['repository']}:{image['tag']}"]
     return sets
+
+
+def merged(base: Any, override: Any) -> Any:
+    """override deep-merged onto base, as Helm merges values: maps per key, everything else replaced."""
+    if isinstance(base, dict) and isinstance(override, dict):
+        old = cast("dict[str, Any]", base)
+        new = cast("dict[str, Any]", override)
+        return {key: merged(old.get(key), new[key]) if key in new else old[key] for key in {**old, **new}}
+    return cast("Any", base if override is None else override)
+
+
+def podiumd_defaults(charts_dir: Path = CHARTS_DIR) -> dict[str, Any]:
+    """podiumd's values.yaml with each subchart's own defaults under its key, as podiumd's templates see them.
+
+    Empty before a fetch.
+    """
+    tgz = tarball("podiumd", charts_dir)
+    text = member_text(tgz, "podiumd/values.yaml") if tgz else None
+    if tgz is None or text is None:
+        return {}
+    values: dict[str, Any] = yaml.safe_load(text)
+    for dependency in yaml.safe_load(member_text(tgz, "podiumd/Chart.yaml") or "{}").get("dependencies", []):
+        own = member_text(tgz, f"podiumd/charts/{dependency['name']}/values.yaml")
+        key = dependency.get("alias") or dependency["name"]
+        if own is not None:
+            values[key] = merged(yaml.safe_load(own) or {}, values.get(key))
+    return values
 
 
 @dataclass(frozen=True)

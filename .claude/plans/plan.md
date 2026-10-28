@@ -9036,3 +9036,40 @@ into the parent only while the subchart is enabled) and three of them read
 the image tag's AppVersion fallback; keycloak/acc-mock-realm.yaml: Keycloak's
 values). The third release gets podiumd's defaults merged under `podiumd:`
 in a values file, and those three read values instead of `.Subcharts`.
+
+Refinement (the user, 2026-10-28): "exactly is too much". minikube follows
+ExternalsPodiumD's releases, namespaces, Helm flags and one-shot Job list,
+and keeps deviations that serve its own purposes: a low footprint (memory
+first, then CPU), a very fast bootstrap and (re)deploy, debug facilities,
+suitability for developers. So every current fixup stays, in the
+post-renderer (group C included: patching chart-set fields after Helm would
+restart Keycloak and Solr on every deploy); `.claude/memory/reference-environments.md`
+records the rule.
+
+Step 2 design (in progress):
+- `releases.releases(helm_args)`: `podiumd-minikube` (this chart, namespace
+  `podiumd`, `podiumd.enabled=false metrics.enabled=false`, podiumd's
+  coalesced defaults from `chart.podiumd_defaults` under `podiumd:`; 341 KB
+  stored), `podiumd` (charts/podiumd-*.tgz, values.yaml `podiumd:`, the
+  `podiumd.` sets without prefix), `monitoring-logging` (namespace
+  `monitoring`, with the metrics profile). The `--full` renders of the three
+  hold the same objects as the umbrella render (names aside).
+- Helm flags: ExternalsPodiumD's (`--timeout 15m --server-side=true
+  --force-conflicts --reset-values`; monitoring `--timeout 10m --wait`),
+  `--post-renderer podiumd-minikube` with `HELM_PLUGINS=helm-plugins`.
+- Helm 4 post-renders hook manifests too (checked with a post-install Job).
+- values.yaml: `*.podiumd-minikube.svc` -> `*.podiumd.svc`; NetworkPolicy
+  `monitoringNamespace: monitoring` (kees00); Prometheus
+  `kube-prometheus-prometheus` via `kube-prometheus-stack.fullnameOverride:
+  kube-prometheus` and `crds.enabled: false`, Loki `{{ .Release.Name
+  }}-loki-gateway`, `logCollectionNamespaces` podiumd and monitoring (all
+  as ExternalsPodiumD dimp test monitoring.yml).
+- Still to do: deploy.py flow (own release first: storage hooks are its
+  pre-install hooks and podiumd's storage templates look them up; Postgres
+  steps; CRDs; delete the 13 one-shot Jobs and our own Jobs; podiumd;
+  monitoring-logging; zaakbrug and the rest as now), hold_zac as a
+  post-renderer flag, docs carry their release's namespace for gateway
+  routes (Grafana is in `monitoring`), `prune` removed (Helm deletes what
+  drops out of a release), reset-namespace removes the old
+  `podiumd-minikube` namespace, src/tests/README for the new names, then a
+  fresh install with podiumd-tests.

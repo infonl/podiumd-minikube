@@ -8,7 +8,6 @@ import pytest
 import yaml
 
 from podiumd_minikube import manifests
-from podiumd_minikube.paths import NAMESPACE
 
 DIGEST = "a" * 64
 
@@ -354,15 +353,6 @@ def test_keep_finished_jobs_drops_only_the_jobs_ttl():
     assert cron["spec"]["jobTemplate"]["spec"] == {"ttlSecondsAfterFinished": 60}
 
 
-def test_mark_release_owner_keeps_existing_annotations():
-    annotated: manifests.Doc = {"kind": "Service", "metadata": {"annotations": {"a": "b"}}}
-    bare: manifests.Doc = {"kind": "Service", "metadata": {"annotations": None}}
-    manifests.mark_release_owner([annotated, bare])
-    owner = {"meta.helm.sh/release-name": "podiumd-minikube", "meta.helm.sh/release-namespace": NAMESPACE}
-    assert annotated["metadata"]["annotations"] == {"a": "b", **owner}
-    assert bare["metadata"]["annotations"] == owner
-
-
 def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
     resources: manifests.Doc = {"limits": {"memory": "768Mi"}}
     builder: manifests.Doc = {"name": "keycloak-builder"}
@@ -482,7 +472,7 @@ def test_ease_solr_start_adds_the_live_node_wait_with_solrs_image():
     manifests.ease_solr_start([solr])
     (wait,) = solr["spec"]["customSolrKubeOptions"]["podOptions"]["initContainers"]
     assert wait["image"] == "library/solr:9.11.0-slim"
-    assert 'node="$POD_NAME.zac-solr-solrcloud-headless.podiumd-minikube:8983_solr"' in wait["command"][2]
+    assert 'node="$POD_NAME.zac-solr-solrcloud-headless.podiumd:8983_solr"' in wait["command"][2]
     assert {"name": "ZK_HOST", "value": "zac-solr-solrcloud-zookeeper-client:2181"} in wait["env"]
 
 
@@ -554,20 +544,6 @@ def test_drop_duplicate_env_keeps_the_last_entry_per_name():
         {"name": "B", "value": "1"},
         {"name": "A", "value": "ours"},
     ]
-
-
-def test_scrape_only_from_prometheus_narrows_only_the_namespace_rule():
-    own = {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": NAMESPACE}}}
-    ingress_controller = {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "ingress-basic"}}}
-    client = {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "zac"}}}
-    policy: manifests.Doc = {
-        "kind": "NetworkPolicy",
-        "spec": {"ingress": [{"from": [own, ingress_controller, client]}]},
-    }
-    manifests.scrape_only_from_prometheus([policy])
-    assert own["podSelector"] == {"matchLabels": manifests.PROMETHEUS_POD}
-    assert "podSelector" not in ingress_controller
-    assert client == {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "zac"}}}
 
 
 def test_fix_up_drops_only_zacs_own_collector_deployment():

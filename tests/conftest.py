@@ -5,7 +5,7 @@ These are integration/smoke tests against a real, already-deployed minikube
 cluster - not unit tests. They assume:
 
   - `kubectl` is configured against the cluster (current context)
-  - the chart is deployed to the `podiumd-minikube` namespace
+  - the releases are deployed to namespaces `podiumd` and (metrics profile) `monitoring`
   - the edge (NGINX Gateway Fabric) has a real LoadBalancer external IP (via `minikube tunnel` -
     see podiumd-minikube setup-tunnel)
 
@@ -24,8 +24,9 @@ from pathlib import Path
 import pytest
 
 from podiumd_minikube import status
+from podiumd_minikube.paths import MONITORING_NAMESPACE
+from podiumd_minikube.paths import NAMESPACE
 
-NAMESPACE = "podiumd-minikube"
 # The edge: NGINX Gateway Fabric's Service for Gateway public-gateway (src/podiumd_minikube/paths.py).
 EDGE_NAMESPACE = "ingress-basic"
 EDGE_SERVICE = "public-gateway-nginx"
@@ -83,11 +84,14 @@ def _resolve_local_hosts_to(ip):
     socket.getaddrinfo = getaddrinfo
 
 
+def _pods(namespace):
+    return json.loads(kubectl("get", "pods", "-n", namespace, "-o", "json"))["items"]
+
+
 @pytest.fixture(scope="session")
 def pods(edge_ip):
-    """All pods in the chart's namespace: name, phase, container_statuses, from_job, job (its Job's name or None)."""
-    raw = kubectl("get", "pods", "-n", NAMESPACE, "-o", "json")
-    data = json.loads(raw)
+    """All pods in the releases' namespaces: name, phase, container_statuses, from_job, job (its Job's name or None)."""
+    items = [item for ns in (NAMESPACE, MONITORING_NAMESPACE) for item in _pods(ns)]
     return [
         {
             "name": item["metadata"]["name"],
@@ -99,7 +103,7 @@ def pods(edge_ip):
                 (ref["name"] for ref in item["metadata"].get("ownerReferences", []) if ref.get("kind") == "Job"), None
             ),
         }
-        for item in data["items"]
+        for item in items
     ]
 
 

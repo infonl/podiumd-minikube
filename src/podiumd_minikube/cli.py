@@ -100,7 +100,7 @@ def cluster_lock(argv: list[str]) -> int:
 
 
 def deploy(argv: list[str]) -> None:
-    """Renders this chart and applies it to the minikube cluster; extra arguments (--set x=y) go to helm."""
+    """Installs this chart, podiumd and monitoring-logging as Helm releases; extra arguments (--set x=y) go to helm."""
     _deploy(deploy, argv)
 
 
@@ -108,7 +108,7 @@ def deploy_extended(argv: list[str]) -> None:
     """deploy --full without metrics, with openzaak's and openklant's Celery workers.
 
     opennotificaties needs openzaak's worker to publish notifications. Re-running deploy
-    with other flags prunes the difference, so this combination is kept here.
+    with other flags removes the difference, so this combination is kept here.
     """
     _deploy(deploy_extended, [*EXTENDED, *argv])
 
@@ -118,7 +118,6 @@ def _deploy(command: Command, argv: list[str]) -> None:
     options = [*(chart.SKIP_ROLES_SETS if args.skip_roles else []), *(chart.OTEL_SETS if args.otel else [])]
     deployment.deploy(
         full=args.full,
-        force_prune=args.force_prune,
         extra=[*options, *extra],
         command=" ".join([_name(command), *argv]),
     )
@@ -156,7 +155,7 @@ def replicas(argv: list[str]) -> None:
 
 
 def reset_namespace(argv: list[str]) -> int:
-    """Empties the podiumd-minikube namespace and its cluster-wide leftovers, after confirmation."""
+    """Empties the releases' namespaces and their cluster-wide leftovers, after confirmation."""
     return teardown.reset_namespace(yes=_yes(reset_namespace, argv))
 
 
@@ -245,8 +244,11 @@ def post_render(argv: list[str]) -> None:
     parser = _parser(post_render)
     parser.add_argument("--objecten-merged", action="store_true", help="objecten's merged shape (default: classic)")
     parser.add_argument("--ca-trust", action="store_true", help="trust the local CA, Postgres over TLS (default: off)")
+    parser.add_argument("--hold-zac", action="store_true", help="ZAC at 0 replicas, for a fresh install (default: off)")
     args = parser.parse_args(argv)
-    text = manifests.post_render_text(sys.stdin.read(), objecten_merged=args.objecten_merged, ca_trust=args.ca_trust)
+    text = manifests.post_render_text(
+        sys.stdin.read(), objecten_merged=args.objecten_merged, ca_trust=args.ca_trust, hold_zac=args.hold_zac
+    )
     sys.stdout.write(text)
 
 

@@ -21,6 +21,7 @@ from podiumd_minikube import process
 from podiumd_minikube import tunnel
 from podiumd_minikube.manifests import section
 from podiumd_minikube.paths import CHART_DIR
+from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import PROFILE
 
@@ -54,7 +55,7 @@ PROFILE_PODS = {
     "zgw-office-addin": "zgw-office-addin-backend",
     "frankgateway": "frankgateway-outway",
     "clamav": "clamav",
-    "metrics": "podiumd-minikube-grafana",
+    "metrics": "monitoring-logging-grafana",
     "replicas": "redis-ha-1",
 }
 
@@ -246,7 +247,9 @@ def _container_lines(usage: dict[str, Usage], top: int) -> list[str]:
 def report(top: int) -> None:
     """Prints the status; top limits the container list (0: all)."""
     items = pods()
-    profiles = enabled_profiles([p["metadata"]["name"] for p in items if p["metadata"]["namespace"] == NAMESPACE])
+    profiles = enabled_profiles(
+        [p["metadata"]["name"] for p in items if p["metadata"]["namespace"] in (NAMESPACE, MONITORING_NAMESPACE)]
+    )
     usage = container_usage(items)
     age = youngest_container_seconds(items)
     settled = "settled" if age >= SETTLE_SECONDS else "not settled yet: memory is still growing"

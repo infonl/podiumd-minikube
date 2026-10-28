@@ -48,16 +48,20 @@ def test_reset_namespace_deletes_the_namespace_its_volumes_and_its_cluster_objec
     fake_run.on("minikube", "ssh", returncode=node_code)
     assert teardown.reset_namespace(yes=True) == 0
     assert fake_run.ran("kubectl", "delete", "namespace") == [
-        ["kubectl", "delete", "namespace", NAMESPACE, "--ignore-not-found"]
+        ["kubectl", "delete", "namespace", *teardown.RESET_NAMESPACES, "--ignore-not-found"]
     ]
-    assert fake_run.ran("kubectl", "wait")[0][-2:] == [f"namespace/{NAMESPACE}", "--timeout=120s"]
+    waited = [call[-2] for call in fake_run.ran("kubectl", "wait")]
+    assert waited == [f"namespace/{namespace}" for namespace in teardown.RESET_NAMESPACES]
     assert fake_run.ran("kubectl", "delete", "pv") == (
         [["kubectl", "delete", "pv", "pv-postgres"]] if node_code == 0 else []
     )
-    assert fake_run.ran("minikube", "ssh")[0][-1] == (
-        f"sudo rm -rf /data/{NAMESPACE}/* /tmp/hostpath-provisioner/{NAMESPACE}"
+    assert (
+        f"sudo rm -rf /data/{NAMESPACE}/* /tmp/hostpath-provisioner/{NAMESPACE} "
+        in fake_run.ran("minikube", "ssh")[0][-1]
     )
-    assert fake_run.calls[-1][-3:] == ["-l", f"app.kubernetes.io/instance={NAMESPACE}", "--ignore-not-found"]
+    assert fake_run.calls[-1][-3:] == [
+        "-l", f"app.kubernetes.io/instance in ({','.join(teardown.RESET_INSTANCES)})", "--ignore-not-found",
+    ]  # fmt: skip
     assert forgotten == ["forget_vault"]
     captured = capsys.readouterr()
     assert ("(none found)" in captured.out) == (node_code == 1)

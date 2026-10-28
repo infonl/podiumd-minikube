@@ -3,6 +3,7 @@
 import json
 
 from conftest import EDGE_NAMESPACE
+from conftest import MONITORING_NAMESPACE
 from conftest import NAMESPACE
 from conftest import kubectl
 
@@ -13,7 +14,10 @@ def _items(*args):
 
 def _ingress_hosts():
     return {
-        rule["host"] for ingress in _items("ingress", "-n", NAMESPACE) for rule in ingress["spec"].get("rules") or []
+        rule["host"]
+        for ns in (NAMESPACE, MONITORING_NAMESPACE)
+        for ingress in _items("ingress", "-n", ns)
+        for rule in ingress["spec"].get("rules") or []
     }
 
 

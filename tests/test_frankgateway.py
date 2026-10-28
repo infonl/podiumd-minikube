@@ -6,7 +6,9 @@ import pytest
 
 from conftest import kubectl
 
-NAMESPACE = "podiumd-minikube"
+from podiumd_minikube import openbao
+from podiumd_minikube.paths import NAMESPACE
+
 OUTWAY = "http://frankgateway-outway:9080"
 
 
@@ -19,7 +21,7 @@ def frankgateway(enabled_profiles):
 def test_openbao_initialised_and_unsealed():
     status = json.loads(
         kubectl(
-            "exec", "-n", NAMESPACE, "podiumd-minikube-openbao-0", "--",
+            "exec", "-n", NAMESPACE, openbao.POD, "--",
             "env", "BAO_ADDR=http://127.0.0.1:8200", "bao", "status", "-format=json",
         )
     )  # fmt: skip

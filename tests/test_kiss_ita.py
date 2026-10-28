@@ -5,6 +5,7 @@ import json
 import pytest
 import requests
 
+from conftest import NAMESPACE
 from conftest import host_url
 from conftest import kubectl
 
@@ -17,7 +18,7 @@ ITA_OBJECTEN_TOKEN = "objectenItaToken"  # nosec B105
 def test_kiss_elasticsearch_green(enabled_profiles):
     if not enabled_profiles.get("kiss"):
         pytest.skip("'kiss' profile is not deployed")
-    health = json.loads(kubectl("get", "elasticsearch", "kiss", "-n", "podiumd-minikube", "-o", "json"))["status"]
+    health = json.loads(kubectl("get", "elasticsearch", "kiss", "-n", NAMESPACE, "-o", "json"))["status"]
     assert health.get("health") == "green"
 
 

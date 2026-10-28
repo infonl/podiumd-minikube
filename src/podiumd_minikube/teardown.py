@@ -12,8 +12,13 @@ from podiumd_minikube import provision
 from podiumd_minikube import tunnel
 from podiumd_minikube.manifests import name_of
 from podiumd_minikube.manifests import section
+from podiumd_minikube.paths import MONITORING_NAMESPACE
+from podiumd_minikube.paths import MONITORING_RELEASE
 from podiumd_minikube.paths import NAMESPACE
+from podiumd_minikube.paths import OLD_NAMESPACE
+from podiumd_minikube.paths import PODIUMD_RELEASE
 from podiumd_minikube.paths import PROFILE
+from podiumd_minikube.paths import RELEASE_NAME
 
 
 def confirmed(summary: str, *, yes: bool) -> bool:
@@ -39,42 +44,48 @@ def bound_volumes(volumes: list[Any], namespace: str = NAMESPACE) -> list[str]:
     return [name_of(pv) for pv in volumes if section(section(pv, "spec"), "claimRef").get("namespace") == namespace]
 
 
-RESET_SUMMARY = f"""This permanently empties namespace '{NAMESPACE}':
-  - every object in it, and all data: Postgres, Solr, PABC, every app's media
-  - every PersistentVolume bound to it, plus its hostPath data on the minikube node
-  - monitoring-logging's cluster-scoped RBAC/webhook objects, if it was ever enabled
-It keeps the cluster and the monitoring-logging CRDs (deploy re-applies them).
+# The kubectl-apply deploys' namespace goes too, so a deploy can start clean after the Helm switch.
+RESET_NAMESPACES = (NAMESPACE, MONITORING_NAMESPACE, OLD_NAMESPACE)
+RESET_INSTANCES = (RELEASE_NAME, PODIUMD_RELEASE, MONITORING_RELEASE)
+RESET_SUMMARY = f"""This permanently empties namespaces {", ".join(RESET_NAMESPACES)}:
+  - every object in them, the Helm releases, and all data: Postgres, Solr, PABC, every app's media
+  - every PersistentVolume bound to them, plus its hostPath data on the minikube node
+  - the releases' cluster-scoped RBAC/webhook objects
+It keeps the cluster and the CRDs (deploy re-applies them).
 """
 
 
 @lock.holding("reset-namespace")
 def reset_namespace(*, yes: bool) -> int:
-    """Deletes the namespace and what it leaves behind cluster-wide; 1 when not confirmed."""
+    """Deletes the namespaces and what they leave behind cluster-wide; 1 when not confirmed."""
     kube.require_minikube_context()
     if not confirmed(RESET_SUMMARY, yes=yes):
         return 1
-    print(f"Deleting namespace '{NAMESPACE}'...")
-    kube.kubectl_shown("delete", "namespace", NAMESPACE, "--ignore-not-found")
-    print("Waiting for the namespace to finish deleting (finalizers can make this slow)...")
-    process.run(["kubectl", "wait", "--for=delete", f"namespace/{NAMESPACE}", "--timeout=120s"], check=False)
-    print(f"Deleting PersistentVolumes still bound to '{NAMESPACE}'...")
-    stale = bound_volumes(kube.get_json("pv")["items"])
+    print(f"Deleting namespaces {', '.join(RESET_NAMESPACES)}...")
+    kube.kubectl_shown("delete", "namespace", *RESET_NAMESPACES, "--ignore-not-found")
+    print("Waiting for them to finish deleting (finalizers can make this slow)...")
+    for namespace in RESET_NAMESPACES:
+        process.run(["kubectl", "wait", "--for=delete", f"namespace/{namespace}", "--timeout=120s"], check=False)
+    print("Deleting PersistentVolumes still bound to them...")
+    volumes = kube.get_json("pv")["items"]
+    stale = [name for namespace in RESET_NAMESPACES for name in bound_volumes(volumes, namespace)]
     if stale:
         kube.kubectl_shown("delete", "pv", *stale)
     else:
         print("  (none found)")
     print("Clearing hostPath data on the minikube node...")
+    paths = " ".join(f"/data/{ns}/* /tmp/hostpath-provisioner/{ns}" for ns in RESET_NAMESPACES)
     try:
-        kube.node(f"sudo rm -rf /data/{NAMESPACE}/* /tmp/hostpath-provisioner/{NAMESPACE}")
+        kube.node(f"sudo rm -rf {paths}")
     except process.ProcessError:
         print("  WARNING: could not reach the minikube node to clear hostPath data - do it by hand.", file=sys.stderr)
-    print("Deleting monitoring-logging's cluster-scoped RBAC/webhook objects (if any)...")
+    print("Deleting the releases' cluster-scoped RBAC/webhook objects (if any)...")
     kube.kubectl_shown(
         "delete", "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration",
-        "-l", f"app.kubernetes.io/instance={NAMESPACE}", "--ignore-not-found",
+        "-l", f"app.kubernetes.io/instance in ({','.join(RESET_INSTANCES)})", "--ignore-not-found",
     )  # fmt: skip
     openbao.forget_vault()
-    print(f"\nDone. '{NAMESPACE}' is gone - run podiumd-minikube deploy to redeploy from scratch.")
+    print("\nDone. Run podiumd-minikube deploy to redeploy from scratch.")
     return 0
 
 

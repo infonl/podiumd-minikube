@@ -183,13 +183,13 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | Command | What it does |
 |---|---|
 | `podiumd-minikube provision-cluster` | Starts minikube (sized for the full stack) with Cilium, installs NGINX Gateway Fabric, pre-pulls every image (only those the host lacks), runs `helm dependency update`; removes the host's older tags of the chart's image repositories |
-| `podiumd-minikube deploy [--full] [--otel] [--skip-roles] [--force-prune]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml`, renders and applies the chart (`--full` for every profile), prunes resources left over from a different profile set (`--force-prune` to confirm an unusually large prune). On a fresh install ZAC starts only once `openzaak-config` and `create-required-catalogi-job` have finished: its boot reads what they create and does not retry (known issues zac-8, podiumd-chart-30). The realm import creates the realm and client roles and the groups (`keycloak.config.skipRoles/skipGroups: false`, as the chart docs advise for O/T); `--skip-roles` uses the chart default true instead, as long-lived realms do; a fresh realm then lacks the roles and podiumd-tests' bootstrap fails. `--otel`: the Maykin apps and ZAC send OpenTelemetry metrics to the metrics profile's collector, as ExternalsPodiumD dim1/info/mayk (off by default: about 50 MiB per Maykin web pod, and `--full` is near its 17 GiB budget). Warns about fixed-name Jobs ExternalsPodiumD does not delete before `helm upgrade` |
+| `podiumd-minikube deploy [--full] [--otel] [--skip-roles]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml` and installs the Helm releases (`--full` for every profile; see "Helm releases" below). On a fresh install ZAC starts only once `openzaak-config` and `create-required-catalogi-job` have finished: its boot reads what they create and does not retry (known issues zac-8, podiumd-chart-30). The realm import creates the realm and client roles and the groups (`keycloak.config.skipRoles/skipGroups: false`, as the chart docs advise for O/T); `--skip-roles` uses the chart default true instead, as long-lived realms do; a fresh realm then lacks the roles and podiumd-tests' bootstrap fails. `--otel`: the Maykin apps and ZAC send OpenTelemetry metrics to the metrics profile's collector, as ExternalsPodiumD dim1/info/mayk (off by default: about 50 MiB per Maykin web pod, and `--full` is near its 17 GiB budget). Warns about fixed-name Jobs ExternalsPodiumD does not delete before `helm upgrade` |
 | `podiumd-minikube show-cluster-status` | Node and per-container memory and CPU (against the budget and `tests/memory-baseline.json`), the last deploy, running containers per chart, profiles, recent restarts and failed Jobs, tunnel, lock and disk; reads only (`--top N`, `--all`) |
 | `podiumd-minikube start-cluster` | After a reboot: starts minikube, waits until every pod reports its state since the start and the apps are ready, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
 | `podiumd-minikube cluster-lock` | Shows, takes, releases or breaks the lock on the shared cluster; `run` holds it around a command (see "Shared cluster: the lock") |
 | `podiumd-minikube setup-tunnel` | Adds the route to minikube's service network (sudo, in the foreground) and runs `minikube tunnel` in the background; idempotent. `setup-tunnel stop` stops it and removes the route; `setup-tunnel sudoers` installs a sudoers.d rule for that route without a password (see "setup-tunnel without a password") |
 | `podiumd-minikube teardown-cluster` | Deletes the entire minikube cluster and the host's older tags of the chart's image repositories (asks for confirmation; `--yes` to skip) |
-| `podiumd-minikube reset-namespace` | Empties the namespace without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
+| `podiumd-minikube reset-namespace` | Empties namespaces `podiumd` and `monitoring` (and the old `podiumd-minikube`) without deleting the cluster — wipes all seeded data (asks for confirmation; `--yes` to skip) |
 | `podiumd-minikube set-podiumd-version <podiumd> [<monitoring-logging>]` | Selects each Helm dependency in `.podiumd-versions.yaml` (never `Chart.yaml`) and fetches them. Each argument is a published version or a local chart checkout directory, so one can be a release and the other a branch. Without `<monitoring-logging>`: a podiumd checkout's sibling `monitoring-logging/`, else the recorded selection |
 | `podiumd-minikube show-podiumd-version` | Prints the current version selection and fetch status per dependency |
 | `podiumd-minikube show-port-mappings` | Prints how host traffic reaches each deployed app (Ingress hostname → backend Service:port) |
@@ -197,7 +197,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | `podiumd-minikube replicas on\|off` | `on`: Redis at 3 pods, Keycloak at 2 (the chart's counts) for tests that need more than one pod; `off`: one each, as `values.yaml` and every deploy. Patches the live objects, no deploy (`on` about 80 s) |
 | `podiumd-minikube flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
 | `podiumd-minikube update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
-| `podiumd-minikube post-render [--ca-trust] [--objecten-merged]` | Helm post-renderer (plugin `helm-plugins/podiumd-minikube`): reads a rendered manifest on stdin and writes it with the fixups each object needs at its creation (image digests, capacity env, the local CA) |
+| `podiumd-minikube post-render [--ca-trust] [--objecten-merged] [--hold-zac]` | Helm post-renderer (plugin `helm-plugins/podiumd-minikube`): reads a rendered manifest on stdin and writes it with this project's fixups (`manifests.post_render`: image digests, capacity settings, the local CA, Keycloak and Solr start-up) |
 | `podiumd-minikube deploy-extended` | `deploy --full` without metrics, with openzaak's and openklant's Celery workers |
 
 `podiumd-minikube reset-namespace` vs `podiumd-minikube teardown-cluster`: use `podiumd-minikube reset-namespace` to
@@ -263,22 +263,29 @@ dead. The same test fails on an `image.tag` under `podiumd:` in
 `values.yaml`: podiumd pins its images itself, and a pin of ours goes stale
 with the next release.
 
-## Why not `helm install`?
+## Helm releases
 
-Helm's own release record embeds the entire resolved chart — including
-the ~3.87MB `podiumd` dependency — which exceeds Kubernetes' 3MB API
-request-size limit. This project uses `helm template | kubectl apply`
-instead, which means Helm's install/upgrade hooks never fire —
-`podiumd-minikube deploy` handles the one place that matters
-(`templates/storage-hooks.yaml`'s PV/PVC pre-provisioning) as a separate
-step instead.
+`deploy` installs Helm releases named and placed as ExternalsPodiumD's
+pipelines do: `podiumd` in namespace `podiumd` (`helm upgrade --install
+--timeout 15m --server-side=true --force-conflicts --reset-values`) and, with
+the metrics profile, `monitoring-logging` in namespace `monitoring`
+(`--timeout 10m --wait --reset-values`). This chart's own templates (Postgres,
+Mailpit, the mocks: what the estates get from Azure) are a third release,
+`podiumd-minikube`, in namespace `podiumd`, installed first: its pre-install
+hooks create the PV/PVC pairs podiumd's storage templates look up. Before the
+upgrades it deletes ExternalsPodiumD's 13 one-shot Jobs (`upgrade.EXTERNALS_DELETED_JOBS`)
+and this chart's own Jobs, so they run again.
 
-The render does run the chart's `lookup` against the cluster, as `helm upgrade`
-does (`helm template --dry-run=server --take-ownership`, `deploy.LOOKUP_ARGS`).
-What stays untested: hook order and weights, `.Release.Revision` above 1, Helm's
-three-way merge, and the "field is immutable" failure of a changed fixed-name
-Job (deploy recreates its Jobs, and warns about fixed-name Jobs ExternalsPodiumD
-does not delete first).
+Every release goes through the post-renderer plugin
+`helm-plugins/podiumd-minikube` (`HELM_PLUGINS` points at it; nothing is
+installed in your Helm). It applies the fixups that keep minikube small, fast
+and on its local CA; ExternalsPodiumD uses none. One umbrella release would not
+fit: Helm stores a release with its whole chart in a Secret of at most 1 MiB
+(podiumd alone about 770 KB). `.helmignore` keeps the local CA key, OpenBao's
+keys and the Postgres dumps out of this chart's release.
+
+A cluster deployed before the releases (namespace `podiumd-minikube`) needs
+`podiumd-minikube reset-namespace` once; deploy refuses until then.
 
 ## Differences from the estates
 

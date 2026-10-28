@@ -1,9 +1,8 @@
-"""Renders this chart and applies it to the minikube cluster."""
+"""Installs this chart, podiumd and monitoring-logging as Helm releases on the minikube cluster."""
 
 import argparse
-import re
 
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
@@ -26,26 +25,19 @@ from podiumd_minikube import pki
 from podiumd_minikube import polling
 from podiumd_minikube import postgres
 from podiumd_minikube import process
-from podiumd_minikube import prune
+from podiumd_minikube import releases
 from podiumd_minikube import tunnel
 from podiumd_minikube import upgrade
 from podiumd_minikube.paths import NAMESPACE
+from podiumd_minikube.paths import OLD_NAMESPACE
+from podiumd_minikube.paths import RELEASE_NAME
 
-STORAGE_HOOKS = "templates/storage-hooks.yaml"
-STORAGE_PERMISSIONS_JOB = "storage-permissions-fix"
 # Rollouts and config Jobs of a --full deploy, Elasticsearch included.
 READY_TIMEOUT = 900
 
-# Server-side rejections start "Error from server ("; the others are client-side.
-_CLIENT_SIDE_ERRORS = re.compile(
-    "no matches for kind|does not match the namespace|ensure CRDs are installed|cannot be handled as"
-)
-
-
 # As `helm upgrade`: the chart's `lookup` reads the live cluster (a plain `helm template`
 # gets nothing, so e.g. Grafana's admin password changed on every deploy).
-# --take-ownership skips Helm's check that a release owns the live objects: kubectl
-# apply manages them here, and a dry run writes nothing.
+# --take-ownership skips Helm's check that the release owns the live objects; a dry run writes nothing.
 LOOKUP_ARGS = ["--dry-run=server", "--take-ownership"]
 # A server-side dry run also maps every kind; before the operators' CRDs exist (a fresh
 # cluster, where lookup finds nothing anyway) the render falls back to plain helm template.
@@ -60,16 +52,26 @@ class Options:
     objecten_merged: bool = False
 
     def render(self, *args: str, lookup: bool = True) -> manifests.Render:
-        """`helm template` with these options and args, fixed up; lookup: against the live cluster."""
+        """`helm template` of the umbrella chart with these options and args, fixed up (hosts, images, tests)."""
+        return self._fixed_up(lambda *extra: manifests.helm_template(*extra, *self.helm_args, *args), lookup=lookup)
+
+    def render_release(self, release: releases.Release, *, lookup: bool = True) -> manifests.Render:
+        """release as its `helm upgrade` installs it; each object carries the release's namespace."""
+        render = self._fixed_up(lambda *extra: releases.template(release, *extra), lookup=lookup)
+        for doc in [*render.docs, *render.large_configmaps]:
+            manifests.section(doc, "metadata").setdefault("namespace", release.namespace)
+        return render
+
+    def _fixed_up(self, template: Callable[..., str], *, lookup: bool) -> manifests.Render:
         text = None
         if lookup:
             try:
-                text = manifests.helm_template(*LOOKUP_ARGS, *self.helm_args, *args)
+                text = template(*LOOKUP_ARGS)
             except process.ProcessError as error:
                 if _CRDS_MISSING not in error.stderr:
                     raise
         if text is None:
-            text = manifests.helm_template(*self.helm_args, *args)
+            text = template()
         return manifests.fix_up(text, objecten_merged=self.objecten_merged, ca_trust=True)
 
 
@@ -84,51 +86,24 @@ def options(*, full: bool, extra: list[str]) -> Options:
     return selected
 
 
-def apply_errors(output: str) -> int:
-    """Number of failed objects in `kubectl apply` output."""
-    lines = output.splitlines()
-    return sum(1 for line in lines if line.startswith("Error from server (")) + sum(
-        1 for line in lines if _CLIENT_SIDE_ERRORS.search(line)
-    )
-
-
-def expected_storage_errors(storage: manifests.Render) -> int:
-    """podiumd's own Azure PV and PVC per app in storage-hooks.yaml, rejected as immutable on purpose."""
-    return 2 * sum(1 for doc in storage.docs if doc.get("kind") == "PersistentVolume")
-
-
-def _rerun_jobs(render: manifests.Render) -> None:
-    """Deletes the render's Jobs so the apply recreates and re-runs them.
-
-    As ExternalsPodiumD's pipeline does before every deploy: a Job is
-    immutable, so a changed spec cannot be applied, and an unchanged one only
-    re-runs once its TTL has removed it.
-    """
-    names = render.jobs
+def _delete_jobs(names: list[str]) -> None:
+    """Deletes Jobs so the next `helm upgrade` recreates and re-runs them (a Job's pod template is immutable)."""
     if names:
         print(f"Deleting {len(names)} Job(s) so this deploy re-runs them...")
-        # No wait: Jobs carry no finalizers, so each is gone before the apply (waiting took 5 s for 37).
+        # No wait: Jobs carry no finalizers, so each is gone before the upgrade (waiting took 5 s for 37).
         kube.kubectl_shown("delete", "job", *names, "-n", NAMESPACE, "--ignore-not-found", "--wait=false")
 
 
-def _apply_storage_hooks(selected: Options) -> manifests.Render:
-    """Applies storage-hooks.yaml's hostPath PV/PVC pairs before the rest, so podiumd's cannot replace them."""
-    # Its volume list follows the enabled profiles, and Jobs are immutable.
-    kube.kubectl_shown("delete", "job", STORAGE_PERMISSIONS_JOB, "-n", NAMESPACE, "--ignore-not-found")
-    print("Applying storage-hook PV/PVC pairs first...")
-    # Before the full render: podiumd's storage templates look these up. They have no lookup themselves.
-    storage = selected.render("-s", STORAGE_HOOKS, lookup=False)
-    kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=storage.manifest)
-    if kube.exists(f"job/{STORAGE_PERMISSIONS_JOB}"):
-        print(f"Waiting for the {STORAGE_PERMISSIONS_JOB} Job to complete...")
-        kube.kubectl_shown(
-            "wait", "--for=condition=complete", f"job/{STORAGE_PERMISSIONS_JOB}", "-n", NAMESPACE, "--timeout=60s"
-        )
-    return storage
+def one_shot_jobs(own: manifests.Render, podiumd: manifests.Render) -> list[str]:
+    """The Jobs deleted before the upgrades: ExternalsPodiumD's list among podiumd's, and all of this chart's."""
+    return [*own.jobs, *(name for name in podiumd.jobs if name in upgrade.EXTERNALS_DELETED_JOBS)]
 
 
 def _apply_crds(render: manifests.Render) -> None:
-    """Applies the render's CRDs (the Keycloak operator's from upstream) server-side and waits until established."""
+    """Applies the render's CRDs (the Keycloak operator's from upstream) server-side and waits until established.
+
+    Before the upgrade: Helm installs a chart's crds/ only when absent, and the adfinis subchart's are older.
+    """
     if not render.crds:
         return
     docs = crds.with_upstream_keycloak(render.crds, crds.keycloak_version())
@@ -138,112 +113,92 @@ def _apply_crds(render: manifests.Render) -> None:
     kube.kubectl_shown("wait", "--for=condition=Established", *names, "--timeout=60s")
 
 
-# What a pod reads when it is created: applied before the workloads, else their first pods fail.
-POD_INPUT_KINDS = {
-    "ServiceAccount", "Secret", "ConfigMap", "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding",
-    "PersistentVolume", "PersistentVolumeClaim",
-}  # fmt: skip
-# One `kubectl apply` of the --full render took 21 s (one object at a time); 8 in parallel 3.5 s.
-APPLY_WORKERS = 8
-
-
-def apply_phases(docs: list[manifests.Doc]) -> list[list[manifests.Doc]]:
-    """docs as [POD_INPUT_KINDS, the rest], each in render order; empty phases left out."""
-    inputs = [doc for doc in docs if doc.get("kind") in POD_INPUT_KINDS]
-    rest = [doc for doc in docs if doc.get("kind") not in POD_INPUT_KINDS]
-    return [phase for phase in (inputs, rest) if phase]
-
-
-def apply_parallel(docs: list[manifests.Doc]) -> list[tuple[str, int]]:
-    """`kubectl apply` of docs split over APPLY_WORKERS processes: (output, exit code) per chunk, in order."""
-    chunks = [docs[i::APPLY_WORKERS] for i in range(min(APPLY_WORKERS, len(docs)))]
-
-    def apply(chunk: list[manifests.Doc]) -> tuple[str, int]:
-        command = ["kubectl", "apply", "-n", NAMESPACE, "-f", "-"]
-        result = process.run(command, stdin=manifests.dump(chunk), check=False, merge_stderr=True)
-        return result.stdout, result.returncode
-
-    with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
-        return list(pool.map(apply, chunks))
-
-
-def _apply_full_manifest(render: manifests.Render, expected: int) -> None:
-    print("\nApplying the full manifest...")
-    print(f'NOTE: expect {expected} long "spec is immutable" errors below for PersistentVolumes/')
-    print("PersistentVolumeClaims - HARMLESS. podiumd's own Azure-CSI storage objects are")
-    print("rejected on purpose so this chart's hostPath ones (applied above) stay in place.")
-    output, returncode = "", 0
-    for phase in apply_phases(render.docs):
-        for stdout, code in apply_parallel(phase):
-            output += stdout
-            returncode = returncode or code
-    print(output, end="")
-    actual = apply_errors(output)
-    print()
-    if returncode == 0:
-        print("Applied cleanly.")
-    elif actual == expected:
-        print(f'{actual} "spec is immutable" error(s) above - expected and HARMLESS (podiumd\'s')
-        print("own competing Azure-CSI storage objects being correctly rejected, so this chart's")
-        print("hostPath PV/PVCs stay in place), not a real failure.")
-    else:
-        msg = f"{actual} apply error(s), expected exactly {expected} (immutable PV/PVC): check the output above"
-        raise process.UserError(msg)
-    if render.large_configmaps:
-        print("\nApplying large ConfigMap(s) via --server-side...")
-        kube.kubectl_shown(
-            "apply", "--server-side", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(render.large_configmaps)
+def _refuse_old_namespace() -> None:
+    """UserError while the namespace of the kubectl-apply deploys still exists."""
+    if kube.exists(f"namespace/{OLD_NAMESPACE}"):
+        msg = (
+            f"namespace {OLD_NAMESPACE} is from before the Helm releases (now namespace {NAMESPACE}): "
+            "run podiumd-minikube reset-namespace, then deploy"
         )
+        raise process.UserError(msg)
+
+
+def _ensure_namespace(namespace: str) -> None:
+    """Creates namespace with the local CA's ConfigMap, which every pod mounts."""
+    print(f"Ensuring namespace '{namespace}' exists...")
+    kube.kubectl(
+        "apply", "-f", "-", stdin=kube.kubectl("create", "namespace", namespace, "--dry-run=client", "-o", "yaml")
+    )
+    pki.apply_trust(namespace)
+
+
+def combined(renders: list[manifests.Render]) -> manifests.Render:
+    """One Render of several releases' renders."""
+    return manifests.Render(
+        docs=[doc for render in renders for doc in [*render.docs, *render.large_configmaps]],
+        large_configmaps=[],
+        crds=[doc for render in renders for doc in render.crds],
+        charts={key: value for render in renders for key, value in render.charts.items()},
+    )
+
+
+def _upgrade(selected: Options, found: list[releases.Release], renders: dict[str, manifests.Render]) -> list[int]:
+    """CRDs, the one-shot Jobs, then each release's `helm upgrade`; returns hold_zac's result."""
+    own, podiumd = renders[RELEASE_NAME], renders[releases.PODIUMD]
+    monitoring = renders.get(releases.MONITORING)
+    if monitoring and crds.needed(monitoring.docs):
+        print("\nApplying monitoring-logging's own CRDs first...")
+        crds.apply_monitoring_logging_crds()
+    _apply_crds(podiumd)
+    held = hold_zac(podiumd)
+    _delete_jobs(one_shot_jobs(own, podiumd))
+    for release in found:
+        # This chart first: its pre-install hooks create the PV/PVC pairs podiumd's storage templates look up.
+        post_render = releases.post_renderer_args(
+            objecten_merged=selected.objecten_merged, hold_zac=bool(held) and release.name == releases.PODIUMD
+        )
+        releases.upgrade(release, post_render)
+    if undeleted := upgrade.undeleted_fixed_jobs(podiumd.docs):
+        print(
+            f"\nWARNING: fixed-name Jobs ExternalsPodiumD does not delete before helm upgrade: {', '.join(undeleted)}"
+        )
+    return held
 
 
 @lock.holding("deploy")
-def deploy(*, full: bool, force_prune: bool, extra: list[str], command: str = "deploy") -> None:
-    """Syncs dependencies, applies the render, then the guarded and post-apply steps."""
+def deploy(*, full: bool, extra: list[str], command: str = "deploy") -> None:
+    """Syncs dependencies, then the Helm releases with the steps around them."""
     kube.require_minikube_context()
     disk.check(disk.DEPLOY)
     memory.check(full=full)
     dependency.sync()
     selected = options(full=full, extra=extra)
-
-    print(f"Ensuring namespace '{NAMESPACE}' exists...")
-    namespace = kube.kubectl("create", "namespace", NAMESPACE, "--dry-run=client", "-o", "yaml")
-    kube.kubectl("apply", "-f", "-", stdin=namespace)
-
+    _refuse_old_namespace()
     if not pki.CA_CERT.is_file():
         msg = f"no local CA in {pki.PKI_DIR}: run podiumd-minikube provision-cluster (it creates the CA and its issuer)"
         raise process.UserError(msg)
-    # Before anything with pods: every pod, the storage Job included, mounts it.
-    pki.apply_trust(NAMESPACE)
-    storage = _apply_storage_hooks(selected)
-    render = selected.render()
+
+    found = releases.releases(selected.helm_args)
+    for namespace in dict.fromkeys(release.namespace for release in found):
+        _ensure_namespace(namespace)
+    renders = {release.name: selected.render_release(release) for release in found}
+    # The podiumd namespace's objects; monitoring-logging's `helm upgrade --wait` covers its own.
+    render = combined([renders[RELEASE_NAME], renders[releases.PODIUMD]])
     postgres.migrate_major(render)
     postgres.rename_databases()
     postgres.create_missing_databases()
     postgres.align_with_azure()
     postgres.rename_rows()
-    if crds.needed(render.docs):
-        print("\nApplying monitoring-logging's own CRDs first...")
-        crds.apply_monitoring_logging_crds()
-    held = hold_zac(render)
-    _rerun_jobs(render)
-    _apply_crds(render)
-    _apply_full_manifest(render, expected_storage_errors(storage))
+    held = _upgrade(selected, found, renders)
     deployed.record(command, render)
     print()
     chart_hosts = hosts.chart_hosts()
     # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
-    gateway.apply(render.docs, chart_hosts)
+    gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
     dns.apply_hosts(chart_hosts)
-
-    if undeleted := upgrade.undeleted_fixed_jobs(render.docs):
-        print(
-            f"\nWARNING: fixed-name Jobs ExternalsPodiumD does not delete before helm upgrade: {', '.join(undeleted)}"
-        )
     print()
     keycloak.repair_default_client_scopes(render)
     openbao.bootstrap(render)
-    print(f"\nPruning {', '.join(prune.PRUNABLE_KINDS)} not part of this render...")
-    prune.prune([*render.docs, *render.large_configmaps], force=force_prune)
     _wait_ready(render, held)
     print("\nDeployed.")
     tunnel.setup_tunnel(ask=False)
@@ -305,7 +260,8 @@ def zac_state() -> str | None:
 def hold_zac(render: manifests.Render) -> list[int]:
     """On a fresh install, sets ZAC's replicas to 0 in render; returns the rendered count, else [].
 
-    Its first boot would fail before ZAC_JOBS completed; _wait_ready scales it up after them.
+    Its first boot would fail before ZAC_JOBS completed; the post-renderer's --hold-zac installs it
+    at 0 and _wait_ready scales it up after them.
     """
     if not set(ZAC_JOBS) & set(render.jobs) or kube.exists(f"deployment/{ZAC}"):
         return []
@@ -396,8 +352,5 @@ def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         "--skip-roles",
         action="store_true",
         help="realm import without roles and groups (chart default; a fresh realm then lacks them)",
-    )
-    parser.add_argument(
-        "--force-prune", action="store_true", help=f"prune more than {prune.LARGE_PRUNE_THRESHOLD} orphaned resources"
     )
     return parser
