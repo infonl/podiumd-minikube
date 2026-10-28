@@ -9275,3 +9275,23 @@ Keycloak chain, CET:
   monitoring-logging: its render at install time differs from the next one
   (lookups find what the install created), once. The gain on a fresh install
   is not measured yet (needs a reset).
+
+## kube-apiserver memory after the Helm switch (2026-10-28 21:00-21:50 CET)
+
+Before: live heap 675 MB, RSS 1230 MB (GOMEMLIMIT 1200MiB), working set 1101
+MiB (705 before the switch). Heap profile (`/debug/pprof/heap?debug=1`,
+scaled): about 40% CRD handling (structural schemas, per-CRD OpenAPI),
+20% etcd3 decode, 9% response encoding; the stored objects are only about
+15 MB, the 64 CRDs 5.5 MiB of spec, none of the 12 unused monitoring CRDs.
+- Restart (crictl stop, 21:01): live 347 MB, RSS 633 MB, flat for 6 min.
+  The growth is accumulated, not a steady cost.
+- No-change deploy: +100 MB the first time after the restart (lazily built
+  caches), then flat. Three renders and `helm get manifest`: +20 MB,
+  temporary. CRD re-apply (podiumd's 23 + monitoring's): no growth.
+- `deploy --every-release`: +70-85 MB live each time (445 -> 516 -> 602).
+  monitoring-logging and podiumd-minikube upgrades alone: no growth;
+  podiumd alone: +46 then -10 MB (noisy). The day's many full upgrades
+  ended near 675 MB: it looks bounded (caches), not proven.
+- Mistake while measuring: one upgrade of monitoring-logging ran without the
+  post-renderer; repaired with `deploy --every-release` (its digest still
+  matched, so a plain deploy would have skipped it).
