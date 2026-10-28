@@ -1,7 +1,9 @@
-"""Irreversible removal of the namespace or the whole cluster, after confirmation."""
+"""Irreversible removal of the namespaces or the whole cluster, after confirmation."""
 
+import json
 import sys
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from podiumd_minikube import kube
@@ -55,6 +57,59 @@ It keeps the cluster and the CRDs (deploy re-applies them).
 """
 
 
+# The releases per namespace; the old namespace's objects came from kubectl apply.
+NAMESPACE_RELEASES = {
+    NAMESPACE: (PODIUMD_RELEASE, RELEASE_NAME),
+    MONITORING_NAMESPACE: (MONITORING_RELEASE,),
+    OLD_NAMESPACE: (),
+}
+NAMESPACE_TIMEOUT = "120s"
+
+
+def clear_finalizers(namespace: str) -> int:
+    """Clears the finalizers of every object left in namespace; returns how many objects had them.
+
+    The operators that would finish them (Redis, Solr, ECK, Keycloak) go with the namespace, which then
+    stays Terminating (podiumd-infra's reset.py does the same).
+    """
+    kinds = kube.kubectl("api-resources", "--verbs=list,delete", "--namespaced", "-o", "name").split()
+    # A kind the API server cannot list does not stop the others: kubectl prints what it found.
+    listed = process.run(["kubectl", "get", ",".join(kinds), "-n", namespace, "-o", "json"], check=False)
+    items: list[dict[str, Any]] = json.loads(listed.stdout or "{}").get("items") or []
+    held = [item for item in items if item["metadata"].get("finalizers")]
+    for item in held:
+        group = item["apiVersion"].split("/")[0] if "/" in item["apiVersion"] else ""
+        kind = f"{item['kind'].lower()}.{group}" if group else item["kind"].lower()
+        patch = ["patch", f"{kind}/{name_of(item)}", "-n", namespace, "--type=merge"]
+        process.run(["kubectl", *patch, "-p", '{"metadata":{"finalizers":null}}'], check=False)
+    return len(held)
+
+
+def _empty(namespace: str) -> str:
+    """Uninstalls namespace's releases without hooks, clears finalizers, deletes it; returns what it did.
+
+    No hooks: zookeeper-operator's pre-delete hook holds an uninstall for its 120 s timeout. No grace
+    period: the data goes anyway, and the namespace would wait for every pod's shutdown.
+    """
+    if not kube.exists(f"namespace/{namespace}"):
+        return f"{namespace}: does not exist"
+    for release in NAMESPACE_RELEASES[namespace]:
+        process.run(["helm", "uninstall", release, "-n", namespace, "--no-hooks", "--timeout", "120s"], check=False)
+    cleared = clear_finalizers(namespace)
+    process.run(
+        ["kubectl", "delete", "pods", "--all", "-n", namespace, "--grace-period=0", "--force", "--wait=false"],
+        check=False,
+    )
+    delete = ["kubectl", "delete", "namespace", namespace, "--ignore-not-found", f"--timeout={NAMESPACE_TIMEOUT}"]
+    if process.run(delete, check=False).returncode != 0:
+        msg = (
+            f"namespace {namespace} is still Terminating after {NAMESPACE_TIMEOUT}: `kubectl get namespace {namespace}"
+            " -o yaml` names what holds it in status.conditions"
+        )
+        raise process.UserError(msg)
+    return f"{namespace}: deleted ({cleared} object(s) with finalizers cleared)"
+
+
 CLUSTER_KINDS = "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration"
 
 
@@ -80,11 +135,10 @@ def reset_namespace(*, yes: bool) -> int:
     kube.require_minikube_context()
     if not confirmed(RESET_SUMMARY, yes=yes):
         return 1
-    print(f"Deleting namespaces {', '.join(RESET_NAMESPACES)}...")
-    kube.kubectl_shown("delete", "namespace", *RESET_NAMESPACES, "--ignore-not-found")
-    print("Waiting for them to finish deleting (finalizers can make this slow)...")
-    for namespace in RESET_NAMESPACES:
-        process.run(["kubectl", "wait", "--for=delete", f"namespace/{namespace}", "--timeout=120s"], check=False)
+    print(f"Deleting namespaces {', '.join(RESET_NAMESPACES)} and their releases...")
+    with ThreadPoolExecutor(max_workers=len(RESET_NAMESPACES)) as pool:
+        for line in pool.map(_empty, RESET_NAMESPACES):
+            print(f"  {line}")
     print("Deleting PersistentVolumes still bound to them...")
     volumes = kube.get_json("pv")["items"]
     stale = [name for namespace in RESET_NAMESPACES for name in bound_volumes(volumes, namespace)]

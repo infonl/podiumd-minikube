@@ -9101,3 +9101,13 @@ Known, left: `openbao.bootstrap` re-runs openbao-config, now also a Helm
 hook (it exits 0 without its token Secret, so twice is harmless);
 `chart.merged` keeps a key Helm would delete on an explicit null (no nulls
 in values.yaml).
+
+First reset after the switch (2026-10-28 17:54 CET) hung: namespace
+podiumd-minikube stayed Terminating on a RedisReplication
+(redisReplicationFinalizer) and a SolrCloud (storage.finalizers.solr.apache.org),
+whose operators went with the namespace. reset-namespace now does what
+podiumd-infra's reset.py does (2bcd70e): per namespace, in parallel, `helm
+uninstall --no-hooks` of its releases (zookeeper-operator's pre-delete hook
+holds an uninstall 120 s), clear the finalizers of every object left (one
+`kubectl get` over all namespaced kinds), force-delete the pods without grace,
+then delete the namespace with a 120 s timeout and name what holds it.

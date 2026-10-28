@@ -48,11 +48,11 @@ def test_reset_namespace_deletes_the_namespace_its_volumes_and_its_cluster_objec
     fake_run.on("kubectl", "get", teardown.CLUSTER_KINDS, stdout=json.dumps({"items": []}))
     fake_run.on("minikube", "ssh", returncode=node_code)
     assert teardown.reset_namespace(yes=True) == 0
-    assert fake_run.ran("kubectl", "delete", "namespace") == [
-        ["kubectl", "delete", "namespace", *teardown.RESET_NAMESPACES, "--ignore-not-found"]
-    ]
-    waited = [call[-2] for call in fake_run.ran("kubectl", "wait")]
-    assert waited == [f"namespace/{namespace}" for namespace in teardown.RESET_NAMESPACES]
+    deleted = sorted(call[3] for call in fake_run.ran("kubectl", "delete", "namespace"))
+    assert deleted == sorted(teardown.RESET_NAMESPACES)
+    uninstalled = sorted(call[2] for call in fake_run.ran("helm", "uninstall"))
+    assert uninstalled == sorted(r for releases in teardown.NAMESPACE_RELEASES.values() for r in releases)
+    assert all("--no-hooks" in call for call in fake_run.ran("helm", "uninstall"))
     assert fake_run.ran("kubectl", "delete", "pv") == (
         [["kubectl", "delete", "pv", "pv-postgres"]] if node_code == 0 else []
     )
@@ -101,3 +101,18 @@ def test_cluster_leftovers_match_the_instance_label_or_the_release_annotation():
         {"kind": "ClusterRoleBinding", "metadata": {"name": "c", "labels": {"app.kubernetes.io/instance": "cilium"}}},
     ]
     assert teardown.cluster_leftovers(items) == ["clusterrole/a", "clusterrole/b"]
+
+
+def test_clear_finalizers_patches_only_objects_that_have_them(fake_run: FakeRun):
+    fake_run.on("kubectl", "api-resources", stdout="pods\nsolrclouds.solr.apache.org\n")
+    items = [
+        {
+            "apiVersion": "solr.apache.org/v1beta1",
+            "kind": "SolrCloud",
+            "metadata": {"name": "zac", "finalizers": ["x"]},
+        },
+        {"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "p"}},
+    ]
+    fake_run.on("kubectl", "get", "pods,solrclouds.solr.apache.org", stdout=json.dumps({"items": items}))
+    assert teardown.clear_finalizers("podiumd") == 1
+    assert [call[2] for call in fake_run.ran("kubectl", "patch")] == ["solrcloud.solr.apache.org/zac"]
