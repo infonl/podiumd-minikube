@@ -8831,6 +8831,15 @@ Postgres, which requests 100m under the same contention (CPU pressure
 70-80% from 12:24:18 to 12:25:39 UTC). 500m stays: it is the chart's value
 and reserves no memory.
 
+Postgres' CPU request 100m -> 500m, thirteenth fresh install (2026-10-28
+14:28 CET, apply in parallel since 6de658a): the bootstrap took 32.4 s
+(38.9 s at 100m, 42.0 s with Keycloak at 500m), but Keycloak was Ready and
+the Jobs ZAC waits for had finished at the same moments as at 100m, 118 and
+166 s after the first Job was created (118 and 167 s at 100m, 113 and 178 s
+with Keycloak at 500m); deploy --full 294 s (302, 314), of which the
+parallel apply alone saves about 17 s. CPU pressure peaked at 77% (86, 81).
+No gain: reverted, Postgres keeps 100m.
+
 ### Parallel `kubectl apply` of the full manifest
 
 `kubectl apply` handles one object at a time: 452 objects of the --full
