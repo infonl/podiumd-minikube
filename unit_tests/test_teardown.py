@@ -45,6 +45,7 @@ def test_reset_namespace_deletes_the_namespace_its_volumes_and_its_cluster_objec
 ):
     fake_run.on("kubectl", "config", "current-context", stdout=f"{PROFILE}\n")
     fake_run.on("kubectl", "get", "pv", stdout=json.dumps(volumes))
+    fake_run.on("kubectl", "get", teardown.CLUSTER_KINDS, stdout=json.dumps({"items": []}))
     fake_run.on("minikube", "ssh", returncode=node_code)
     assert teardown.reset_namespace(yes=True) == 0
     assert fake_run.ran("kubectl", "delete", "namespace") == [
@@ -59,12 +60,11 @@ def test_reset_namespace_deletes_the_namespace_its_volumes_and_its_cluster_objec
         f"sudo rm -rf /data/{NAMESPACE}/* /tmp/hostpath-provisioner/{NAMESPACE} "
         in fake_run.ran("minikube", "ssh")[0][-1]
     )
-    assert fake_run.calls[-1][-3:] == [
-        "-l", f"app.kubernetes.io/instance in ({','.join(teardown.RESET_INSTANCES)})", "--ignore-not-found",
-    ]  # fmt: skip
+    assert fake_run.ran("kubectl", "get", teardown.CLUSTER_KINDS)
+    assert not fake_run.ran("kubectl", "delete", "clusterrole")
     assert forgotten == ["forget_vault"]
     captured = capsys.readouterr()
-    assert ("(none found)" in captured.out) == (node_code == 1)
+    assert ("Deleting PersistentVolumes still bound to them...\n  (none found)" in captured.out) == (node_code == 1)
     assert ("could not reach the minikube node" in captured.err) == (node_code == 1)
 
 
@@ -89,3 +89,15 @@ def test_teardown_cluster_stops_the_tunnel_and_deletes_the_profile_once_confirme
     assert teardown.teardown_cluster(yes=False) == code
     assert fake_run.calls == ([["minikube", "delete", "-p", PROFILE]] if code == 0 else [])
     assert forgotten == (["stop_tunnel", "forget_vault", "remove old a/app:1.0"] if code == 0 else [])
+
+
+def test_cluster_leftovers_match_the_instance_label_or_the_release_annotation():
+    items = [
+        {"kind": "ClusterRole", "metadata": {"name": "a", "labels": {"app.kubernetes.io/instance": "podiumd"}}},
+        {
+            "kind": "ClusterRole",
+            "metadata": {"name": "b", "annotations": {"meta.helm.sh/release-name": "podiumd-minikube"}},
+        },
+        {"kind": "ClusterRoleBinding", "metadata": {"name": "c", "labels": {"app.kubernetes.io/instance": "cilium"}}},
+    ]
+    assert teardown.cluster_leftovers(items) == ["clusterrole/a", "clusterrole/b"]

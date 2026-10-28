@@ -3,7 +3,7 @@
 values.yaml runs one pod of each. `on` renders the chart with the counts below
 and applies only what differs from the plain render: changed fields as a merge
 patch, objects only that render has (a PodDisruptionBudget the chart renders for
-more than one pod). `off` does the reverse; a deploy also resets it.
+more than one pod). `off` does the reverse. A deploy resets the counts, not the created objects: run `off`.
 """
 
 import json

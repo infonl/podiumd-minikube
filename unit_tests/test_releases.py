@@ -12,6 +12,7 @@ from podiumd_minikube import releases
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
+from podiumd_minikube.process import UserError
 
 ARGS = [
     "--set", "images.busybox=b:1",
@@ -83,3 +84,16 @@ def test_upgrade_runs_helm_with_the_repository_plugins(fake_run: FakeRun):
         "--post-renderer",
         releases.POST_RENDERER,
     ]
+
+
+def test_the_seal_key_stays_out_of_this_charts_release(fetched: Path):
+    seal = ["--set-file", "podiumd.openbao.seal.static.key=/k"]
+    own, podiumd = releases.releases([*ARGS[:4], *seal])
+    assert seal[1] not in own.sets
+    assert podiumd.sets[-1] == "openbao.seal.static.key=/k"
+
+
+@pytest.mark.parametrize("args", [["--set=a=1"], ["--set", "a"], ["-f", "x.yaml"]])
+def test_releases_refuse_arguments_they_cannot_route(fetched: Path, args: list[str]):
+    with pytest.raises(UserError, match="pairs to helm"):
+        releases.releases(args)

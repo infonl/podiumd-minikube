@@ -55,8 +55,9 @@ def test_running_containers_follow_owners_to_the_rendered_object(owners: FakeRun
         {"metadata": {"name": "mock-5b7c", "ownerReferences": [_owner("Deployment", "mock")]}},
     ]}))  # fmt: skip
     assert deployed.running_containers(PODS, CHARTS) == {"podiumd": 2, "monitoring-logging": 1, "other": 1}
-    fetched = [call[2] for call in owners.calls]
-    assert fetched == ["ReplicaSet.apps", "StatefulSet.apps", "Deployment.apps"]
+    fetched = [(call[2], call[4]) for call in owners.calls]
+    kinds = ["ReplicaSet.apps", "StatefulSet.apps", "Deployment.apps"]
+    assert fetched == [(kind, namespace) for kind in kinds for namespace in deployed.NAMESPACES]
 
 
 def test_selected_names_a_version_or_a_checkout_with_its_commit(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):

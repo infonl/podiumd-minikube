@@ -55,6 +55,25 @@ It keeps the cluster and the CRDs (deploy re-applies them).
 """
 
 
+CLUSTER_KINDS = "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration"
+
+
+def cluster_leftovers(items: list[Any]) -> list[str]:
+    """kind/name of the cluster-scoped objects of RESET_INSTANCES: by label, or by Helm's release annotation.
+
+    Some carry no instance label (the Keycloak and ZooKeeper operators' ClusterRoles); a release that
+    finds one owned by another release name fails to install.
+    """
+    found: list[str] = []
+    for item in items:
+        metadata = section(item, "metadata")
+        instance = section(metadata, "labels").get("app.kubernetes.io/instance")
+        release = section(metadata, "annotations").get("meta.helm.sh/release-name")
+        if instance in RESET_INSTANCES or release in RESET_INSTANCES:
+            found.append(f"{item['kind'].lower()}/{name_of(item)}")
+    return found
+
+
 @lock.holding("reset-namespace")
 def reset_namespace(*, yes: bool) -> int:
     """Deletes the namespaces and what they leave behind cluster-wide; 1 when not confirmed."""
@@ -80,10 +99,10 @@ def reset_namespace(*, yes: bool) -> int:
     except process.ProcessError:
         print("  WARNING: could not reach the minikube node to clear hostPath data - do it by hand.", file=sys.stderr)
     print("Deleting the releases' cluster-scoped RBAC/webhook objects (if any)...")
-    kube.kubectl_shown(
-        "delete", "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration",
-        "-l", f"app.kubernetes.io/instance in ({','.join(RESET_INSTANCES)})", "--ignore-not-found",
-    )  # fmt: skip
+    if leftovers := cluster_leftovers(kube.get_json(CLUSTER_KINDS)["items"]):
+        kube.kubectl_shown("delete", *leftovers, "--ignore-not-found")
+    else:
+        print("  (none found)")
     openbao.forget_vault()
     print("\nDone. Run podiumd-minikube deploy to redeploy from scratch.")
     return 0

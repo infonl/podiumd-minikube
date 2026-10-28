@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 from podiumd_minikube import chart
+from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import MONITORING_NAMESPACE
@@ -33,7 +34,9 @@ HELM_PLUGINS = CHART_DIR / "helm-plugins"
 POST_RENDERER = "podiumd-minikube"
 # ExternalsPodiumD's podiumd upgrade; monitoring-logging's adds --wait and its own timeout.
 UPGRADE_ARGS = ["--timeout", "15m", "--server-side=true", "--force-conflicts", "--reset-values"]
-MONITORING_ARGS = ["--timeout", "10m", "--wait", "--reset-values"]
+# --skip-crds: crds.apply_monitoring_logging_crds applies the CRDs it needs, without the 12 unused ones
+# (crds.UNUSED_MONITORING_LOGGING_CRDS: kube-apiserver memory); Helm would install them all.
+MONITORING_ARGS = ["--timeout", "10m", "--wait", "--reset-values", "--skip-crds"]
 
 
 @dataclass
@@ -47,15 +50,30 @@ class Release:
     sets: list[str] = field(default_factory=list[str])
 
 
+SET_FLAGS = ("--set", "--set-string", "--set-file")
+# OpenBao's static seal key (openbao.seal_key_args) belongs to podiumd's release only: Helm stores --set values.
+_PODIUMD_ONLY = "podiumd.openbao.seal."
+
+
+def _pairs(helm_args: list[str]) -> list[tuple[str, str]]:
+    """helm_args as (flag, key=value) pairs; UserError on anything else, which cannot be routed to a release."""
+    pairs = list(zip(helm_args[::2], helm_args[1::2], strict=False))
+    if len(helm_args) % 2 or any(flag not in SET_FLAGS or "=" not in value for flag, value in pairs):
+        msg = f"deploy passes only {'/'.join(SET_FLAGS)} <key>=<value> pairs to helm, got: {' '.join(helm_args)}"
+        raise process.UserError(msg)
+    return pairs
+
+
 def _split(helm_args: list[str], prefix: str) -> list[str]:
     """The --set pairs of helm_args under prefix, with the prefix removed."""
-    pairs = zip(helm_args[::2], helm_args[1::2], strict=True)
-    return [arg for flag, value in pairs if value.startswith(prefix) for arg in (flag, value[len(prefix) :])]
+    return [
+        arg for flag, value in _pairs(helm_args) if value.startswith(prefix) for arg in (flag, value[len(prefix) :])
+    ]
 
 
 def _enabled(helm_args: list[str], key: str, *, default: bool) -> bool:
     """The last `--set key=true|false` in helm_args, else default."""
-    found = [value.split("=", 1)[1] == "true" for value in helm_args[1::2] if value.startswith(f"{key}=")]
+    found = [value.split("=", 1)[1] == "true" for _, value in _pairs(helm_args) if value.startswith(f"{key}=")]
     return found[-1] if found else default
 
 
@@ -66,6 +84,9 @@ def releases(helm_args: list[str]) -> list[Release]:
     if podiumd_tgz is None:
         msg = "podiumd is not fetched: run podiumd-minikube set-podiumd-version"
         raise process.UserError(msg)
+    own_sets = [
+        arg for flag, value in _pairs(helm_args) if not value.startswith(_PODIUMD_ONLY) for arg in (flag, value)
+    ]
     # Our templates read podiumd's values; Helm hands a subchart's defaults to the parent only
     # while the subchart is part of the release.
     own = Release(
@@ -73,11 +94,14 @@ def releases(helm_args: list[str]) -> list[Release]:
         NAMESPACE,
         CHART_DIR,
         {PODIUMD: chart.merged(chart.podiumd_defaults(), values[PODIUMD])},
-        [*helm_args, "--set", f"{PODIUMD}.enabled=false", "--set", "metrics.enabled=false"],
+        [*own_sets, "--set", f"{PODIUMD}.enabled=false", "--set", "metrics.enabled=false"],
     )
     found = [own, Release(PODIUMD, NAMESPACE, podiumd_tgz, values[PODIUMD], _split(helm_args, f"{PODIUMD}."))]
-    monitoring_tgz = chart.tarball(MONITORING)
-    if _enabled(helm_args, "metrics.enabled", default=values["metrics"]["enabled"]) and monitoring_tgz:
+    if _enabled(helm_args, "metrics.enabled", default=values["metrics"]["enabled"]):
+        monitoring_tgz = chart.tarball(MONITORING)
+        if monitoring_tgz is None:
+            msg = "monitoring-logging is not fetched: run podiumd-minikube set-podiumd-version"
+            raise process.UserError(msg)
         sets = _split(helm_args, f"{MONITORING}.")
         found.append(Release(MONITORING, MONITORING_NAMESPACE, monitoring_tgz, values[MONITORING], sets))
     return found
@@ -116,5 +140,24 @@ def upgrade(release: Release, post_render: list[str]) -> None:
 def template(release: Release, *extra: str) -> str:
     """`helm template` of release with its values, before the post-renderer: manifests.fix_up applies the same."""
     with values_file(release) as values:
-        args = ["template", release.name, str(release.chart), "--namespace", release.namespace, "--values", values]
-        return process.output(["helm", *args, "--include-crds", *release.sets, *extra])
+        return manifests.helm_template(
+            "--values",
+            values,
+            *release.sets,
+            *extra,
+            release=release.name,
+            chart=release.chart,
+            namespace=release.namespace,
+        )
+
+
+def installed(release: Release) -> manifests.Render:
+    """What release's last `helm upgrade` installed, post-rendered, without hooks; objects carry their namespace.
+
+    Not `helm template`: it renders .Release.Revision as 1, and keeps hook Jobs Helm deletes once they succeeded.
+    """
+    docs = manifests.documents(process.output(["helm", "get", "manifest", release.name, "-n", release.namespace]))
+    for doc in docs:
+        manifests.section(doc, "metadata").setdefault("namespace", release.namespace)
+    charts = {f"{doc.get('kind')}/{manifests.name_of(doc)}": release.name for doc in docs}
+    return manifests.Render(docs=docs, large_configmaps=[], charts=charts)

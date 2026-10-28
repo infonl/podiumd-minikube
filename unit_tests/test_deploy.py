@@ -174,10 +174,11 @@ def live(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 @pytest.fixture
 def renders(monkeypatch: pytest.MonkeyPatch) -> dict[str, manifests.Render]:
-    """What Options.render_release returns per release; a test replaces podiumd's."""
+    """What Options.render_release and releases.installed return per release; a test replaces podiumd's."""
     found = {RELEASE_NAME: OWN, releases.PODIUMD: RENDER}
     monkeypatch.setattr(releases, "releases", lambda _args: RELEASES)
     monkeypatch.setattr(deploy.Options, "render_release", lambda _self, release, **_kwargs: found[release.name])
+    monkeypatch.setattr(releases, "installed", lambda release: found[release.name])
     return found
 
 

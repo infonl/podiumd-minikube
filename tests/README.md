@@ -10,7 +10,7 @@ See [`../README.md`](../README.md) for provisioning and deploying the cluster.
 
 ## Prerequisites
 
-- The chart is deployed to the `podiumd-minikube` namespace, e.g. via
+- The releases are deployed to namespaces `podiumd` and `monitoring`, e.g. via
   `podiumd-minikube deploy --full`.
 - `kubectl` points at the cluster.
 - The edge has an external IP: run `podiumd-minikube setup-tunnel` first if

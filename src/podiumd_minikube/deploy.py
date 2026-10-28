@@ -32,6 +32,8 @@ from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OLD_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
 
+# templates/storage-hooks.yaml's chmod of the PersistentVolumes.
+STORAGE_PERMISSIONS_JOB = "storage-permissions-fix"
 # Rollouts and config Jobs of a --full deploy, Elasticsearch included.
 READY_TIMEOUT = 900
 
@@ -153,11 +155,17 @@ def _upgrade(selected: Options, found: list[releases.Release], renders: dict[str
     held = hold_zac(podiumd)
     _delete_jobs(one_shot_jobs(own, podiumd))
     for release in found:
-        # This chart first: its pre-install hooks create the PV/PVC pairs podiumd's storage templates look up.
+        # This chart first: it creates the PV/PVC pairs podiumd's storage templates look up.
         post_render = releases.post_renderer_args(
             objecten_merged=selected.objecten_merged, hold_zac=bool(held) and release.name == releases.PODIUMD
         )
         releases.upgrade(release, post_render)
+        if release.name == RELEASE_NAME and STORAGE_PERMISSIONS_JOB in own.jobs:
+            # Open Formulieren (UID 1000) writes to its volume at its first start.
+            print(f"Waiting for the {STORAGE_PERMISSIONS_JOB} Job to complete...")
+            kube.kubectl_shown(
+                "wait", "--for=condition=complete", f"job/{STORAGE_PERMISSIONS_JOB}", "-n", NAMESPACE, "--timeout=60s"
+            )
     if undeleted := upgrade.undeleted_fixed_jobs(podiumd.docs):
         print(
             f"\nWARNING: fixed-name Jobs ExternalsPodiumD does not delete before helm upgrade: {', '.join(undeleted)}"
@@ -190,7 +198,10 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy") -> None:
     postgres.align_with_azure()
     postgres.rename_rows()
     held = _upgrade(selected, found, renders)
-    deployed.record(command, render)
+    # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
+    installed = {release.name: releases.installed(release) for release in found}
+    live = combined([installed[RELEASE_NAME], installed[releases.PODIUMD]])
+    deployed.record(command, combined(list(installed.values())))
     print()
     chart_hosts = hosts.chart_hosts()
     # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
@@ -199,7 +210,7 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy") -> None:
     print()
     keycloak.repair_default_client_scopes(render)
     openbao.bootstrap(render)
-    _wait_ready(render, held)
+    _wait_ready(live, held)
     print("\nDeployed.")
     tunnel.setup_tunnel(ask=False)
 
@@ -234,7 +245,7 @@ def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[
     return running, failed
 
 
-ZAC = "zac"
+ZAC = manifests.ZAC_DEPLOYMENT
 # WildFly gives up on ZAC's deployment when Open Zaak answers 502 (still starting) or 403 (a fresh
 # install, before openzaak-config) during its boot, and the liveness probe restarts it only after 16 x 30 s.
 # Known issues zac-8 and podiumd-chart-30 (fix: an init container); remove hold_zac and restart_zac with it.
@@ -258,7 +269,7 @@ def zac_state() -> str | None:
 
 
 def hold_zac(render: manifests.Render) -> list[int]:
-    """On a fresh install, sets ZAC's replicas to 0 in render; returns the rendered count, else [].
+    """On a fresh install, ZAC's rendered replica count, else [].
 
     Its first boot would fail before ZAC_JOBS completed; the post-renderer's --hold-zac installs it
     at 0 and _wait_ready scales it up after them.
@@ -266,12 +277,7 @@ def hold_zac(render: manifests.Render) -> list[int]:
     if not set(ZAC_JOBS) & set(render.jobs) or kube.exists(f"deployment/{ZAC}"):
         return []
     zac = next((d for d in render.docs if d.get("kind") == "Deployment" and manifests.name_of(d) == ZAC), None)
-    if zac is None:
-        return []
-    spec = zac["spec"]
-    replicas = spec.get("replicas", 1)
-    spec["replicas"] = 0
-    return [replicas]
+    return [] if zac is None else [zac["spec"].get("replicas", 1)]
 
 
 def restart_zac() -> None:

@@ -16,10 +16,12 @@ from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube.dependency import DEPENDENCIES
+from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
 
 CONFIGMAP = "podiumd-minikube-deployed"
+NAMESPACES = (NAMESPACE, MONITORING_NAMESPACE)
 # Pods no rendered object owns: podiumd-tests' mock server, Jobs started by hand.
 OTHER = "other"
 
@@ -71,13 +73,13 @@ def _running(pod: dict[str, Any]) -> int:
 
 
 def running_containers(items: list[dict[str, Any]], charts: dict[str, str]) -> Counter[str]:
-    """Running containers per chart in NAMESPACE: the chart of a pod's nearest rendered owner, else OTHER."""
+    """Running containers per chart in NAMESPACES: the chart of a pod's nearest rendered owner, else OTHER."""
     live: dict[str, dict[str, Any]] = {}
 
     def owner(reference: dict[str, str]) -> dict[str, Any] | None:
         kinds = kube.reference(reference["apiVersion"], reference["kind"])
         if kinds not in live:
-            found = kube.get_json(kinds, "-n", NAMESPACE)["items"]
+            found = [item for ns in NAMESPACES for item in kube.get_json(kinds, "-n", ns)["items"]]
             live[kinds] = {item["metadata"]["name"]: item["metadata"] for item in found}
         return live[kinds].get(reference["name"])
 
@@ -91,7 +93,7 @@ def running_containers(items: list[dict[str, Any]], charts: dict[str, str]) -> C
 
     counts: Counter[str] = Counter()
     for pod in items:
-        if pod["metadata"]["namespace"] == NAMESPACE and (running := _running(pod)):
+        if pod["metadata"]["namespace"] in NAMESPACES and (running := _running(pod)):
             counts[chart_of(pod["metadata"])] += running
     return counts
 
@@ -100,7 +102,7 @@ def lines(items: list[dict[str, Any]]) -> list[str]:
     """show-cluster-status' lines on the last deploy and the running containers per chart."""
     deployed = read()
     if not deployed:
-        total = sum(_running(pod) for pod in items if pod["metadata"]["namespace"] == NAMESPACE)
+        total = sum(_running(pod) for pod in items if pod["metadata"]["namespace"] in NAMESPACES)
         return [
             f"Deployed    no configmap/{CONFIGMAP}: the next deploy writes it",
             f"Running     containers: {total}",

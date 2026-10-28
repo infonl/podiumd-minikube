@@ -1,6 +1,8 @@
 # Every app is reachable in the namespace by its plain name (podiumd sets
 # each fullnameOverride), e.g. http://openzaak/, http://openklant/, http://pabc/.
 
+# The podiumd release's name (paths.PODIUMD_RELEASE), for our templates that point at its objects.
+podiumdRelease: podiumd
 objecten:
   # Open Object (podiumd >= 4.10) or separate objecten/objecttypen charts;
   # set by podiumd-minikube deploy from chart.objecten_shape, never by hand.

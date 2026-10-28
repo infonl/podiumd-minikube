@@ -16,11 +16,11 @@ Note: this always creates a ReadWriteOnce PV/PVC pair, even though
 podiumd's own competing Azure-CSI objects request ReadWriteMany. That's
 deliberate, not a mismatch to fix: a single-replica app on a single-node
 minikube VM never needs multi-writer access, and RWO is what minikube's
-`standard`/hostPath-backed storage actually supports well. The two specs
-*needing* to differ is exactly what makes Kubernetes' immutable-PVC-spec
-check reject podiumd's competing objects on every subsequent `kubectl
-apply` (verified live in step 4) - matching access modes would remove that
-protection, not strengthen it.
+`standard`/hostPath-backed storage actually supports well.
+
+Plain objects of this chart's release, which the deploy installs before
+podiumd's: as Helm pre-upgrade hooks they would be deleted and recreated
+on every upgrade, which their in-use protection blocks.
 
 Ranges over all these apps but only renders for whichever are
 actually enabled, so turning on a profile flag in values.yaml (step 5) is
@@ -36,8 +36,6 @@ metadata:
   labels:
     {{- include "podiumd-minikube.labels" $ | nindent 4 }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "0"
     helm.sh/resource-policy: keep
 spec:
   capacity:
@@ -47,7 +45,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath:
-    path: /data/podiumd-minikube/{{ $app }}
+    path: /data/{{ $.Release.Namespace }}/{{ $app }}
     type: DirectoryOrCreate
 ---
 apiVersion: v1
@@ -57,8 +55,6 @@ metadata:
   labels:
     {{- include "podiumd-minikube.labels" $ | nindent 4 }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "0"
     helm.sh/resource-policy: keep
 spec:
   accessModes:
@@ -82,10 +78,8 @@ mechanism doesn't reliably apply to bare hostPath-sourced PVs either
 (confirmed live - the directory stayed root:root even with fsGroup: 1000 set).
 One Job, not one per app, chmods every enabled app's volume to world-writable
 - simplest fix that doesn't need to know each app's own UID/GID, and safe to
-re-run (chmod is idempotent). Not annotated as a Helm hook since this whole
-mechanism only runs via `kubectl apply` (see plan.md's Helm-hooks-don't-fire
-note) - ordering comes from applying this file before the rest of the
-manifest, same as the PV/PVC objects above.
+re-run (chmod is idempotent). The deploy waits for it before installing
+podiumd (deploy.STORAGE_PERMISSIONS_JOB).
 */}}
 {{- $anyEnabled := false }}
 {{- range $app := $apps }}{{- if (index $.Values.podiumd $app).enabled }}{{- $anyEnabled = true }}{{- end }}{{- end }}

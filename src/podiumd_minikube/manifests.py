@@ -10,6 +10,7 @@ import re
 
 from dataclasses import dataclass
 from dataclasses import field
+from pathlib import Path
 from typing import Any
 from typing import cast
 
@@ -799,12 +800,17 @@ def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool, hold_
     return docs
 
 
+def documents(text: str) -> list[Doc]:
+    """The objects of a rendered manifest, image digests stripped."""
+    return [doc for doc in map(_load, _chunks(text)) if doc]
+
+
 def post_render_text(text: str, *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> str:
     """post_render on a rendered manifest, image digests stripped: the Helm post-renderer plugin's work."""
-    docs = [doc for doc in map(_load, _chunks(text)) if doc]
+    docs = documents(text)
     return dump(post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust, hold_zac=hold_zac))
 
 
-def helm_template(*args: str) -> str:
-    """Raw `helm template` of this chart, with the subcharts' crds/ (the Keycloak operator's)."""
-    return process.output(["helm", "template", RELEASE_NAME, str(CHART_DIR), "-n", NAMESPACE, "--include-crds", *args])
+def helm_template(*args: str, release: str = RELEASE_NAME, chart: Path = CHART_DIR, namespace: str = NAMESPACE) -> str:
+    """Raw `helm template` of chart (default: this one), with the subcharts' crds/ (the Keycloak operator's)."""
+    return process.output(["helm", "template", release, str(chart), "-n", namespace, "--include-crds", *args])

@@ -9073,3 +9073,31 @@ Step 2 design (in progress):
   drops out of a release), reset-namespace removes the old
   `podiumd-minikube` namespace, src/tests/README for the new names, then a
   fresh install with podiumd-tests.
+
+Review of step 2 (independent agent, before the first live install), fixed:
+- The wait list came from `helm template`: it names `.Release.Revision` Jobs
+  `-1` (pabc-migrations, keycloak-repair-client-scopes are `-2`, `-3` live)
+  and keeps hook Jobs Helm deletes after success
+  (zookeeper-operator-post-install-upgrade); every deploy would have timed
+  out. The wait, the deploy record and the chart counts now come from `helm
+  get manifest` (`releases.installed`).
+- storage-hooks.yaml's PV/PVC were `pre-install,pre-upgrade` hooks: Helm
+  deletes a hook before re-creating it (`before-hook-creation`), which the
+  PVCs' in-use protection blocks. Now plain objects of this chart's release,
+  installed before podiumd's; the deploy waits for storage-permissions-fix
+  again before installing podiumd.
+- reset-namespace missed the Keycloak and ZooKeeper operators' ClusterRoles
+  (no instance label; the old `mark_release_owner` annotation names
+  podiumd-minikube), on which podiumd's first install would fail: it now
+  also matches Helm's release annotation.
+- monitoring-logging gets `--skip-crds` (Helm would install
+  podlogs.monitoring.grafana.com, one of the 12 unused CRDs).
+- OpenBao's seal key no longer goes to this chart's release; deploy refuses
+  extra helm arguments it cannot route to a release (only `--set*` pairs);
+  a missing monitoring-logging tarball with the metrics profile is an error.
+- The openbao.local Ingress pointed at `podiumd-minikube-openbao-active`
+  (`.Release.Name` of this chart): `podiumdRelease` in values.yaml.
+Known, left: `openbao.bootstrap` re-runs openbao-config, now also a Helm
+hook (it exits 0 without its token Secret, so twice is harmless);
+`chart.merged` keeps a key Helm would delete on an explicit null (no nulls
+in values.yaml).
