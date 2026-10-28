@@ -8786,3 +8786,11 @@ liveness probes run `celery inspect ... active` every 50 s (the charts'),
 a Python start of 2.7 CPU-s (Open Formulieren) and 1.8 CPU-s (Open Zaak):
 53 and 36 m, nearly all of each worker's idle CPU. 22 exec probes run 124
 times a minute in all, each also costing containerd an exec.
+podiumd's api-proxy: `manifests.limit_nginx_workers` sets `worker_processes
+1;` (what the autotune gives for its 500m CPU limit) in ConfigMaps with
+`worker_processes auto;` and annotates the pods that read them, since
+podiumd's `checksum/config` is computed before the fixup and would not roll
+the pod. The ConfigMap rewrite of `route_outbound` and this one share
+`_replace_in_configmaps` and `_roll_readers`. Live: api-proxy 1 worker, all
+nginx workers 102 -> 79. podiumd-tests on the 8-CPU node: full tier 652 s
+with 4 workers (634-648 s on 6 CPUs), 519 s with 6.

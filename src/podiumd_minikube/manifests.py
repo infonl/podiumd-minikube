@@ -189,20 +189,44 @@ def route_outbound(docs: list[Doc]) -> None:
     """
     outway = any(doc.get("kind") == "Service" and name_of(doc) == OUTWAY_SERVICE for doc in docs)
     target = OUTWAY_URL if outway else API_PROXY_URL
-    routed: set[str] = set()
+    _roll_readers(docs, _replace_in_configmaps(docs, API_PROXY_URL, target), OUTBOUND_ANNOTATION, target)
+
+
+def _replace_in_configmaps(docs: list[Doc], old: str, new: str) -> set[str]:
+    """Replaces old by new in every ConfigMap value; returns the names of the ConfigMaps that had it."""
+    changed: set[str] = set()
     for doc in docs:
         if doc.get("kind") != "ConfigMap":
             continue
         data: Doc = doc.get("data") or {}
         for key, value in data.items():
-            if isinstance(value, str) and API_PROXY_URL in value:
-                data[key] = value.replace(API_PROXY_URL, target)
-                routed.add(name_of(doc))
+            if isinstance(value, str) and old in value:
+                data[key] = value.replace(old, new)
+                changed.add(name_of(doc))
+    return changed
+
+
+def _roll_readers(docs: list[Doc], configmaps: set[str], annotation: str, value: str) -> None:
+    """Annotates the pod templates that read configmaps with annotation=value, so a change rolls them."""
     for doc in docs:
         spec = _pod_spec(doc)
-        if doc.get("kind") in _POD_SPEC_PATHS and spec is not None and routed & _configmaps_used(spec):
+        if doc.get("kind") in _POD_SPEC_PATHS and spec is not None and configmaps & _configmaps_used(spec):
             template = _mapping(doc, *_POD_SPEC_PATHS[doc["kind"]][:-1])
-            _mapping(template, "metadata", "annotations")[OUTBOUND_ANNOTATION] = target
+            _mapping(template, "metadata", "annotations")[annotation] = value
+
+
+# podiumd's api-proxy mounts its nginx.conf from a ConfigMap, read-only for the
+# entrypoint's autotune (CAPACITY_ENV); `auto` counts the host's CPUs, not the cpuset.
+# 1: what the autotune gives for its 500m CPU limit.
+NGINX_AUTO_WORKERS = "worker_processes auto;"
+NGINX_WORKERS = "1"
+NGINX_WORKERS_ANNOTATION = "podiumd-minikube/nginx-workers"
+
+
+def limit_nginx_workers(docs: list[Doc]) -> None:
+    """Sets NGINX_WORKERS in ConfigMaps with NGINX_AUTO_WORKERS and rolls the pods that read them."""
+    changed = _replace_in_configmaps(docs, NGINX_AUTO_WORKERS, f"worker_processes {NGINX_WORKERS};")
+    _roll_readers(docs, changed, NGINX_WORKERS_ANNOTATION, NGINX_WORKERS)
 
 
 def _configmaps_used(spec: Doc) -> set[str]:
@@ -762,6 +786,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     allow_rolling_updates(docs)
     drop_duplicate_env(docs)
     route_outbound(docs)
+    limit_nginx_workers(docs)
     route_through_nginx(docs)
     keep_finished_jobs(docs)
     mark_release_owner(docs)

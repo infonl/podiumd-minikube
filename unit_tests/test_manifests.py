@@ -515,6 +515,20 @@ def test_route_outbound_rolls_the_pods_that_read_a_routed_configmap():
     assert "metadata" not in other["spec"]["template"]
 
 
+def test_limit_nginx_workers_rewrites_auto_and_rolls_its_readers():
+    conf = "worker_processes auto;\nevents {}\n"
+    config: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": "proxy"}, "data": {"nginx.conf": conf}}
+    volume = {"name": "c", "configMap": {"name": "proxy"}}
+    reader: manifests.Doc = {
+        "kind": "Deployment",
+        "spec": {"template": {"spec": {"volumes": [volume], "containers": [{"name": "nginx"}]}}},
+    }
+    manifests.limit_nginx_workers([config, reader])
+    assert config["data"]["nginx.conf"] == "worker_processes 1;\nevents {}\n"
+    annotations = reader["spec"]["template"]["metadata"]["annotations"]
+    assert annotations[manifests.NGINX_WORKERS_ANNOTATION] == manifests.NGINX_WORKERS
+
+
 def _ingress(service: str) -> manifests.Doc:
     backend = {"service": {"name": service, "port": {"number": 80}}}
     return {
