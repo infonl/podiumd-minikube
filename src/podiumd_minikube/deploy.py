@@ -192,6 +192,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str], command: str = "d
     if crds.needed(render.docs):
         print("\nApplying monitoring-logging's own CRDs first...")
         crds.apply_monitoring_logging_crds()
+    held = hold_zac(render)
     _rerun_jobs(render)
     _apply_crds(render)
     _apply_full_manifest(render, expected_storage_errors(storage))
@@ -211,7 +212,7 @@ def deploy(*, full: bool, force_prune: bool, extra: list[str], command: str = "d
     openbao.bootstrap(render)
     print(f"\nPruning {', '.join(prune.PRUNABLE_KINDS)} not part of this render...")
     prune.prune([*render.docs, *render.large_configmaps], force=force_prune)
-    _wait_ready(render)
+    _wait_ready(render, held)
     print("\nDeployed.")
     tunnel.setup_tunnel(ask=False)
 
@@ -251,7 +252,7 @@ ZAC = "zac"
 # install, before openzaak-config) during its boot, and the liveness probe restarts it only after 16 x 30 s.
 BOOT_FAILED = "WFLYCTL0080"
 # Jobs that create what ZAC's boot reads: its Open Zaak authorisations and the ALG catalogus;
-# a restart before they completed failed again.
+# a start or restart before they completed fails.
 ZAC_JOBS = ("openzaak-config", "create-required-catalogi-job")
 
 
@@ -268,14 +269,30 @@ def zac_state() -> str | None:
     return "failed" if zac_boot_failed() else None
 
 
+def hold_zac(render: manifests.Render) -> list[int]:
+    """On a fresh install, sets ZAC's replicas to 0 in render; returns the rendered count, else [].
+
+    Its first boot would fail before ZAC_JOBS completed; _wait_ready scales it up after them.
+    """
+    if not set(ZAC_JOBS) & set(render.jobs) or kube.exists(f"deployment/{ZAC}"):
+        return []
+    spec = next(d for d in render.docs if d.get("kind") == "Deployment" and manifests.name_of(d) == ZAC)["spec"]
+    replicas = spec.get("replicas", 1)
+    spec["replicas"] = 0
+    return [replicas]
+
+
 def restart_zac() -> None:
     """Restarts ZAC after a failed boot."""
     print("ZAC's boot failed while Open Zaak was not ready for it; restarting it.")
     kube.kubectl_shown("rollout", "restart", f"deployment/{ZAC}", "-n", NAMESPACE)
 
 
-def _wait_ready(render: manifests.Render) -> None:
-    """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs."""
+def _wait_ready(render: manifests.Render, held: list[int]) -> None:
+    """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs.
+
+    held: ZAC's replicas from hold_zac, set once ZAC_JOBS have finished.
+    """
     print("\nWaiting until every rendered workload has rolled out and every Job has completed...")
     workloads = [
         f"{doc['kind'].lower()}/{manifests.name_of(doc)}"
@@ -306,8 +323,11 @@ def _wait_ready(render: manifests.Render) -> None:
         if unwired and openbao.CONFIG_JOB not in running + failed:
             openbao.wire_outway()
             unwired.clear()
-        waiting = stuck()
         prepared = not set(ZAC_JOBS) & set(running)
+        if held and prepared:
+            print("ZAC's Jobs have finished; starting ZAC.")
+            kube.kubectl_shown("scale", f"deployment/{ZAC}", f"--replicas={held.pop()}", "-n", NAMESPACE)
+        waiting = stuck()
         if f"deployment/{ZAC}" in waiting and prepared and not restarted and zac_boot_failed():
             restart_zac()
             restarted.append(ZAC)

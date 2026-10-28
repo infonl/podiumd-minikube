@@ -254,10 +254,11 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         ["kubectl", "create", "namespace", NAMESPACE, "--dry-run=client", "-o", "yaml"],
         ["kubectl", "apply", "-f", "-"],
         ["kubectl", "get", f"job/{storage_job}", "-n", NAMESPACE],
+        ["kubectl", "get", "deployment/zac", "-n", NAMESPACE],
         ["kubectl", "apply", "-n", NAMESPACE, "-f", "-"],
     ]
     assert fake_run.stdins[1] == "kind: Namespace\n"
-    assert fake_run.stdins[3] == RENDER.manifest
+    assert fake_run.stdins[4] == RENDER.manifest
 
 
 @pytest.mark.parametrize(("returncode", "said"), [(0, "Applied cleanly."), (1, "expected and HARMLESS")])
@@ -389,6 +390,32 @@ def test_deploy_restarts_zac_only_after_its_jobs_completed(
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     _deploy()
     assert events.index("restart") == 3
+
+
+def test_deploy_starts_zac_on_a_fresh_install_only_after_its_jobs_finished(
+    fake_run: FakeRun, called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+):
+    zac = {**_doc("Deployment", "zac"), "spec": {"replicas": 1}}
+    render = manifests.Render(docs=[zac, _doc("Job", "openzaak-config")], large_configmaps=[])
+    monkeypatch.setattr(deploy.Options, "render", lambda _self, *args, **_kwargs: STORAGE if args else render)
+    fake_run.on("kubectl", "get", "deployment/zac", returncode=1)
+    job = live["job"]["items"][0]
+    complete, job["status"] = job["status"], {}
+    answer = kube.get_json
+
+    def get_json(resource: str, *args: str) -> Any:
+        if resource == "job":
+            called.append("poll")
+            if called.count("poll") == 2:
+                job["status"] = complete
+        return answer(resource, *args)
+
+    monkeypatch.setattr(kube, "get_json", get_json)
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    _deploy()
+    assert zac["spec"]["replicas"] == 0
+    scale = f"scale deployment/zac --replicas=1 -n {NAMESPACE}"
+    assert called[called.index("prune") + 1 :][:3] == ["poll", "poll", scale]
 
 
 def test_deploy_wires_the_outway_once_after_openbao_config_completed(

@@ -8668,3 +8668,18 @@ Inwoner's search-index init had none.
 (median before 188 s), exit 0. The control-plane and kubelet/containerd
 tuning was intact (no restart needed), the tunnel process had survived the
 stop, and keycloak.local answered 302.
+
+### ZAC starts after its Jobs on a fresh install (Kees)
+
+Kees asked to start ZAC only after its Jobs, which the eighth install had left
+as is. When `deployment/zac` does not exist yet and the render holds one of
+`ZAC_JOBS`, deploy applies ZAC with 0 replicas (`deploy.hold_zac`). The ready
+wait scales it to the rendered count once those Jobs no longer run. A
+redeploy applies the rendered count as before. The restart on a failed boot
+stays for the other cases: a redeploy or start-cluster while Open Zaak
+answers 502. The failing first boot no longer takes CPU while the other pods
+start.
+Live (2026-10-28, after `kubectl delete deployment zac`): `deploy --full`
+177 s, exit 0. openzaak-config completed at 08:42:22 UTC, ZAC was scaled up
+and its pod created at 08:42:30, Ready at 08:43:41. 0 restarts, no
+`WFLYCTL0080` in its log. Not yet seen on a fresh provision.
