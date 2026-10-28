@@ -8727,3 +8727,30 @@ investigates) and test_begeleider_starts_a_samenwerking (flaky).
 Kees: back to the checkout until 1.0.19 is published. deploy --full 123 s
 (10:44 CET), ConfigMap records the checkout again. podiumd-tests records
 that ConfigMap per run ("Deployed build"), so a switch shows in its reports.
+
+### Fresh install: where the Keycloak realm wait goes
+
+On the tenth install the config Jobs succeeded about 3.5 minutes after the
+apply, on kees00 the same. Keycloak's pod survived the later deploys, so its
+start could still be read (times UTC, apply 09:03:44):
+
+- 09:03:51 keycloak-0 scheduled; 09:04:20 its sandbox and keycloak-builder
+  created (29 s, with about 120 pods starting at once).
+- keycloak-builder (`kc.sh build`, every start, 2 CPU) 09:04:23-09:04:49.
+- Keycloak (Quarkus) started in 25 s, at 09:05:18.
+- Database schema (Liquibase) 09:05:23-09:05:55, then Infinispan and the
+  master realm: "Bootstrap completed in 45.9 seconds" at 09:06:03.
+- Ready 09:06:12; the operator's realm imports from 09:06:15.
+- Config Jobs succeeded 09:06:52-09:07:11; ZAC scaled 09:07:17, Ready
+  09:08:27.
+
+Ruled out: Keycloak's 1 CPU limit (the chart's, also in ExternalsPodiumD and
+podiumd-infra): over its whole life, the start included, the cgroup
+throttled it for 0.8 s in 26 periods. Postgres commits: 300 single-row
+commits took 145 ms with `synchronous_commit=on`, 45 ms off, so the 32 s
+of Liquibase does not wait on fsync. Left: the node's CPU contention
+during the start (node CPU pressure `some avg10` 9% while idle), the
+builder (26 s on every start, by podiumd's design) and the 29 s before the
+pod's first container. The next fresh install samples the node's CPU
+pressure and the pod phases every 5 s and keeps the Keycloak operator's
+and realm Jobs' logs, to tell these apart.
