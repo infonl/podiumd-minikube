@@ -8975,3 +8975,40 @@ the list is kept by hand: a new fixed-name Job (now `openbeheer-config`)
 fails `helm upgrade` on its immutable spec until it is added. podiumd-infra
 deletes only Failed Jobs (`clear_failed_jobs`) and skips an unchanged
 upgrade, so a successful Job never runs again.
+
+Decision (the user, 2026-10-28): group D goes into a Helm post-renderer
+plugin; minikube moves to Helm releases. Spike (Helm 4.3.0): a plugin is a
+directory with `plugin.yaml` (`apiVersion: v1`, `type: postrenderer/v1`,
+`runtime: subprocess`, `runtimeConfig.platformCommand[].command`), found
+through `HELM_PLUGINS`; `--post-renderer <name>` pipes the manifest through
+its command. `helm plugin install <local dir>` symlinks into the default
+plugin directory and ignores `HELM_PLUGINS`, so the deploy sets
+`HELM_PLUGINS` to the repository's plugin directory instead of installing.
+
+Build order:
+
+1. `podiumd-minikube post-render`: stdin manifest -> group D fixups ->
+   stdout; the plugin directory in this repository; unit tests.
+2. Releases as podiumd-infra: `podiumd` (the selected podiumd chart, values
+   from `values.yaml` `podiumd:`), `monitoring` (monitoring-logging, its own
+   namespace, as kees00), and this chart's own templates; CRDs server-side
+   first (`crds`), `--skip-crds`.
+3. Group B as values, group C as `kubectl patch` after Helm, group A removed.
+4. Jobs: delete `upgrade.EXTERNALS_DELETED_JOBS` before every upgrade.
+5. Two passes as podiumd-infra (Keycloak and Infinispan with `--wait`, then
+   the rest); readiness gate after.
+6. Fresh install, `tests/`, README, podiumd-tests full tier.
+
+Step 1 done: `manifests.post_render` holds group D (`tune_kcadm`,
+`retry_in_container`, `limit_runtimes`, `trust_ca`, `serve_postgres_tls`,
+`fixup_merged_objecten`), with `strip_image_digests` in front through
+`_chunks`; `fix_up` calls it last, so today's render is unchanged (compared
+byte for byte, apart from a generated password). `podiumd-minikube
+post-render [--ca-trust] [--objecten-merged]` runs it on stdin; plugin
+`helm-plugins/podiumd-minikube` calls `bin/post-render`. Checked through
+`helm template --post-renderer podiumd-minikube` with
+`HELM_PLUGINS=helm-plugins`: digest stripped, CAPACITY_ENV, GOMEMLIMIT and
+the CA added. A deviation from both reference environments, which run no
+post-renderer: each fixup in it exists only for a minikube cause (no registry
+access, the local CA and Postgres, the laptop budget, start-order races on one
+node, the merged objecten shape).

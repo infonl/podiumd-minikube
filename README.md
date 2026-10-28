@@ -197,6 +197,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | `podiumd-minikube replicas on\|off` | `on`: Redis at 3 pods, Keycloak at 2 (the chart's counts) for tests that need more than one pod; `off`: one each, as `values.yaml` and every deploy. Patches the live objects, no deploy (`on` about 80 s) |
 | `podiumd-minikube flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
 | `podiumd-minikube update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
+| `podiumd-minikube post-render [--ca-trust] [--objecten-merged]` | Helm post-renderer (plugin `helm-plugins/podiumd-minikube`): reads a rendered manifest on stdin and writes it with the fixups each object needs at its creation (image digests, capacity env, the local CA) |
 | `podiumd-minikube deploy-extended` | `deploy --full` without metrics, with openzaak's and openklant's Celery workers |
 
 `podiumd-minikube reset-namespace` vs `podiumd-minikube teardown-cluster`: use `podiumd-minikube reset-namespace` to

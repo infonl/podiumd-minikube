@@ -1,0 +1,9 @@
+# Helm 4 post-renderer: `--post-renderer podiumd-minikube` with HELM_PLUGINS=helm-plugins.
+apiVersion: v1
+name: podiumd-minikube
+type: postrenderer/v1
+runtime: subprocess
+version: 0.1.0
+runtimeConfig:
+  platformCommand:
+    - command: ${HELM_PLUGIN_DIR}/../../bin/post-render

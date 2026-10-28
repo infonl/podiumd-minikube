@@ -776,10 +776,14 @@ class Render:
         return dump(self.docs)
 
 
+def _chunks(text: str) -> list[str]:
+    """The YAML documents of rendered text, image digests stripped."""
+    return re.split(r"^---$", strip_image_digests(text), flags=re.MULTILINE)
+
+
 def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
-    chunks = re.split(r"^---$", strip_image_digests(text), flags=re.MULTILINE)
-    loaded: list[tuple[Doc | None, re.Match[str] | None]] = [(_load(c), _SOURCE.search(c)) for c in chunks]
+    loaded: list[tuple[Doc | None, re.Match[str] | None]] = [(_load(c), _SOURCE.search(c)) for c in _chunks(text)]
     charts = {f"{doc.get('kind')}/{name_of(doc)}": source[2] or source[1] for doc, source in loaded if doc and source}
     docs = [doc for doc, _ in loaded if doc and not _is_test_or_delete_hook(doc) and not is_unused_zac_collector(doc)]
     disable_service_links(docs)
@@ -791,25 +795,37 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     keep_finished_jobs(docs)
     mark_release_owner(docs)
     tune_keycloak(docs)
-    tune_kcadm(docs)
     speed_up_keycloak_start(docs)
-    retry_in_container(docs)
     tune_solr(docs)
     ease_solr_start(docs)
     mount_zaakbrug_role_mapping(docs)
     scrape_only_from_prometheus(docs)
-    limit_runtimes(docs)
-    if ca_trust:
-        trust_ca(docs)
-        docs = serve_postgres_tls(docs)
-    if objecten_merged:
-        fixup_merged_objecten(docs)
+    docs = post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust)
     return Render(
         docs=[doc for doc in docs if not _is_large_configmap(doc) and doc.get("kind") != "CustomResourceDefinition"],
         large_configmaps=[doc for doc in docs if _is_large_configmap(doc)],
         crds=[doc for doc in docs if doc.get("kind") == "CustomResourceDefinition"],
         charts=charts,
     )
+
+
+def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool) -> list[Doc]:
+    """The fixups every object needs before it is created: Jobs are immutable, pods read them at their start."""
+    tune_kcadm(docs)
+    retry_in_container(docs)
+    limit_runtimes(docs)
+    if ca_trust:
+        trust_ca(docs)
+        docs = serve_postgres_tls(docs)
+    if objecten_merged:
+        fixup_merged_objecten(docs)
+    return docs
+
+
+def post_render_text(text: str, *, objecten_merged: bool, ca_trust: bool) -> str:
+    """post_render on a rendered manifest, image digests stripped: the Helm post-renderer plugin's work."""
+    docs = [doc for doc in map(_load, _chunks(text)) if doc]
+    return dump(post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust))
 
 
 def helm_template(*args: str) -> str:

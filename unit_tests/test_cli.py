@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import yaml
 
 from conftest import FakeRun
 
@@ -205,3 +206,28 @@ def test_main_runs_the_command_named_in_argv(entry: Callable[[], object], monkey
         entry()
     assert exited.value.code == 0
     assert shown == [True]
+
+
+def test_post_render_fixes_up_a_manifest_from_stdin():
+    manifest = (
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: d\nspec:\n  template:\n    spec:\n"
+        f"      containers:\n        - name: c\n          image: busybox:1.38@sha256:{'a' * 64}\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "podiumd_minikube", "post-render"],
+        input=manifest,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "image: busybox:1.38\n" in result.stdout
+    assert "MALLOC_ARENA_MAX" in result.stdout
+
+
+def test_helm_plugin_runs_the_post_render_stub():
+    plugin = yaml.safe_load((BIN_DIR.parent / "helm-plugins" / "podiumd-minikube" / "plugin.yaml").read_text())
+    command = plugin["runtimeConfig"]["platformCommand"][0]["command"]
+    assert plugin["type"] == "postrenderer/v1"
+    assert command == "${HELM_PLUGIN_DIR}/../../bin/post-render"
+    assert (BIN_DIR / "post-render").readlink() == Path(".stub")

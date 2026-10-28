@@ -41,6 +41,7 @@ live: the tunnel script's own host list went stale, which is why
    | node/container memory and CPU, running profiles, problem pods | `podiumd_minikube.status` (also used by `tests/test_memory.py` and `tests/conftest.py`) |
    | changing the shared cluster | `lock.holding`/`lock.held` (commands), `podiumd-minikube cluster-lock` (by hand) |
    | the rendered manifest, with all local fixups | `deploy.Options.render`; a new fixup is one more step in `manifests.fix_up` |
+   | a fixup every object needs at its creation (Jobs, first pod start) | one more step in `manifests.post_render`, which the Helm post-renderer plugin (`helm-plugins/podiumd-minikube`, `podiumd-minikube post-render`) runs too |
    | YAML sections that may be null, a resource's name | `manifests.section`, `manifests.name_of` |
    | the `*.local` hosts of all Ingresses | `podiumd_minikube.hosts` |
    | what the last deploy applied, running containers per chart | `podiumd_minikube.deployed` (ConfigMap `podiumd-minikube-deployed`) |

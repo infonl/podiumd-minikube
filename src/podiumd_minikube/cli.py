@@ -9,6 +9,7 @@ from podiumd_minikube import chart
 from podiumd_minikube import deploy as deployment
 from podiumd_minikube import kube
 from podiumd_minikube import lock
+from podiumd_minikube import manifests
 from podiumd_minikube import ports
 from podiumd_minikube import process
 from podiumd_minikube import provision
@@ -239,6 +240,16 @@ def update_hosts(argv: list[str]) -> None:
     tunnel.update_hosts()
 
 
+def post_render(argv: list[str]) -> None:
+    """Helm post-renderer: stdin's rendered manifest to stdout, with the fixups each object needs at its creation."""
+    parser = _parser(post_render)
+    parser.add_argument("--objecten-merged", action="store_true", help="objecten's merged shape (default: classic)")
+    parser.add_argument("--ca-trust", action="store_true", help="trust the local CA, Postgres over TLS (default: off)")
+    args = parser.parse_args(argv)
+    text = manifests.post_render_text(sys.stdin.read(), objecten_merged=args.objecten_merged, ca_trust=args.ca_trust)
+    sys.stdout.write(text)
+
+
 COMMANDS: dict[str, Command] = {
     _name(command): command
     for command in (
@@ -247,6 +258,7 @@ COMMANDS: dict[str, Command] = {
         deploy_extended,
         expose_postgres,
         flush_redis,
+        post_render,
         provision_cluster,
         replicas,
         reset_namespace,
