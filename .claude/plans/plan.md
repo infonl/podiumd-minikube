@@ -9305,3 +9305,9 @@ scaled): about 40% CRD handling (structural schemas, per-CRD OpenAPI),
   found; the growth is spread over kube-apiserver's own caches and buffers
   and levels off (347 after a restart, 600-680 after a day of upgrades).
   Left as is; test_memory.py and the GOMEMLIMIT of 1200MiB bound it.
+- reset-namespace (22:18 CET) left namespace podiumd Terminating on a
+  RedisReplication and a SolrCloud: their deletionTimestamp was the
+  namespace delete, after clear_finalizers had run, and their operators,
+  still terminating, had put the finalizers back. `_empty` now deletes the
+  namespace without waiting and clears finalizers on every 5 s poll until it
+  is gone (120 s).

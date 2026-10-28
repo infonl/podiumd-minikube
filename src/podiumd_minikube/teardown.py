@@ -9,6 +9,7 @@ from typing import Any
 from podiumd_minikube import kube
 from podiumd_minikube import lock
 from podiumd_minikube import openbao
+from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube import provision
 from podiumd_minikube import tunnel
@@ -63,7 +64,7 @@ NAMESPACE_RELEASES = {
     MONITORING_NAMESPACE: (MONITORING_RELEASE,),
     OLD_NAMESPACE: (),
 }
-NAMESPACE_TIMEOUT = "120s"
+NAMESPACE_TIMEOUT = 120
 
 
 def clear_finalizers(namespace: str) -> int:
@@ -95,19 +96,25 @@ def _empty(namespace: str) -> str:
         return f"{namespace}: does not exist"
     for release in NAMESPACE_RELEASES[namespace]:
         process.run(["helm", "uninstall", release, "-n", namespace, "--no-hooks", "--timeout", "120s"], check=False)
-    cleared = clear_finalizers(namespace)
     process.run(
         ["kubectl", "delete", "pods", "--all", "-n", namespace, "--grace-period=0", "--force", "--wait=false"],
         check=False,
     )
-    delete = ["kubectl", "delete", "namespace", namespace, "--ignore-not-found", f"--timeout={NAMESPACE_TIMEOUT}"]
-    if process.run(delete, check=False).returncode != 0:
+    process.run(["kubectl", "delete", "namespace", namespace, "--ignore-not-found", "--wait=false"], check=False)
+    cleared: list[int] = []
+
+    # Again on every poll: an operator still terminating puts a finalizer back after a clear.
+    def gone() -> bool:
+        cleared.append(clear_finalizers(namespace))
+        return not kube.exists(f"namespace/{namespace}")
+
+    if not polling.wait_until(gone, timeout=NAMESPACE_TIMEOUT, interval=5):
         msg = (
-            f"namespace {namespace} is still Terminating after {NAMESPACE_TIMEOUT}: `kubectl get namespace {namespace}"
+            f"namespace {namespace} is still Terminating after {NAMESPACE_TIMEOUT}s: `kubectl get namespace {namespace}"
             " -o yaml` names what holds it in status.conditions"
         )
         raise process.UserError(msg)
-    return f"{namespace}: deleted ({cleared} object(s) with finalizers cleared)"
+    return f"{namespace}: deleted ({max(cleared)} object(s) with finalizers cleared)"
 
 
 CLUSTER_KINDS = "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration,crd"
