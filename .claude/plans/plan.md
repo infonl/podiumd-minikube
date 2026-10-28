@@ -9235,3 +9235,25 @@ Kees chose two changes:
   no activation: 20.7 s (kubectl apply: 87 s). openbao-activate.sh by hand on
   the operational vault: 12.7 s in total; preflight helm check 0.17 s
   (`helm get metadata` + `helm get hooks`), the openbao-config Job 10.3 s.
+
+## Keycloak start on a fresh install (2026-10-28 20:25 CET, logs captured)
+
+Fresh deploy --full 6 min 8 s (earlier fresh install 10 min 5 s; this one
+with the parallel upgrades and a quicker Keycloak, so not one cause). The
+Keycloak chain, CET:
+- 20:26:27 podiumd install; 20:27:16 Keycloak started (Quarkus 7.1 s). The
+  earlier run's Keycloak needed 1 min 43 s to Ready: start time varies with
+  the node's load at install.
+- ensure-podiumd-admin-user: its SQL fails ("relation realm does not exist")
+  until Keycloak has created its schema, retried every 2 s
+  (retry_in_container); admin user at 20:27:53.
+- ensure-keycloak-operator-sa's init container: first 10 x 5 s for an SA that
+  cannot exist on a fresh install (not on the critical path), then a
+  podiumd-admin login every 10 s: authenticated 20:28:04 (11 s after the
+  user). SA ready 20:28:08.
+- import-podiumd-realm-job: 401 at 20:28:19.566, the same millisecond as
+  import-master-realm-job's 401; then 409 on realm role 'behandelaars' while
+  pabc-keycloak-groups-job created roles; third attempt OK at 20:29:04. The
+  Job back-off (10 s, 20 s) and the reruns cost about 55 s. Sent to
+  podiumd-tests as a known-issue candidate.
+- Realm podiumd ready 2 min 37 s after the install.
