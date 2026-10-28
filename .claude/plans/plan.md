@@ -8754,3 +8754,35 @@ builder (26 s on every start, by podiumd's design) and the 29 s before the
 pod's first container. The next fresh install samples the node's CPU
 pressure and the pod phases every 5 s and keeps the Keycloak operator's
 and realm Jobs' logs, to tell these apart.
+
+### Node CPUs from the host; nginx workers from the cpuset
+
+Kees, via podiumd-tests (handoff aad658b): the node's CPUs follow the host,
+at most 8, a quarter of the host's (at least 2) left for other applications
+(`provision.default_cpus`; 24 -> 8, 12 -> 8, 8 -> 6, 6 -> 4, 4 -> 2;
+`MINIKUBE_CPUS` overrides). podiumd-tests' full tier took 634-648 s with 4
+pytest workers and 573 s with 6, the minikube container at about 434% of its
+600% and 4 more failures from contention. Applied live by `start-cluster`
+(16 s, `docker update --cpus=8 --cpuset-cpus=0-7`, nproc 8). On the Ryzen AI
+9 HX 370, CPUs 0-7 are 8 distinct cores (4 Zen 5 at 5.2 GHz, 4 Zen 5c at
+3.3 GHz; the SMT siblings are 12-23).
+Checking what sizes itself by the CPU count: 8 nginx sidecars ran 24 workers
+each, although their cpuset had 6 CPUs (`nproc` 6): `worker_processes auto`
+counts the host's online CPUs. 212 nginx workers on the node took 264 MiB
+(PSS, about 1.2 MiB each). The nginx-unprivileged image's entrypoint sizes
+the workers from the CPU limit or the cpuset when
+`NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE` is set, so `CAPACITY_ENV` sets
+it. After `deploy --full` (265 s, every pod restarted): 7 sidecars at 8
+workers, all nginx workers 102 and 148 MiB. podiumd's api-proxy mounts a
+read-only `nginx.conf` (worker_processes auto, CPU limit 500m), so the
+entrypoint cannot edit it: it keeps 24 workers (about 29 MiB). Neither
+reference project sets the workers; AKS nodes have fewer CPUs.
+
+Idle CPU on the node, 5 minutes after a full tier (11:23-11:33): 616
+millicores in all. containerd 106 m, kubelet 61 m, kube-apiserver 48 m; the
+Celery workers 205 m together: Open Formulieren 57, Open Archiefbeheer 39,
+Open Zaak 39, Open Klant 22, Open Notificaties 19, Objecten 18 m. Their
+liveness probes run `celery inspect ... active` every 50 s (the charts'),
+a Python start of 2.7 CPU-s (Open Formulieren) and 1.8 CPU-s (Open Zaak):
+53 and 36 m, nearly all of each worker's idle CPU. 22 exec probes run 124
+times a minute in all, each also costing containerd an exec.

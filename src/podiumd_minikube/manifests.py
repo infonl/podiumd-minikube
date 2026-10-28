@@ -46,11 +46,14 @@ ECK_KINDS = ("Elasticsearch", "Kibana")
 # .NET: workstation GC without the background GC, compacting more. glibc: up to
 # 8 malloc arenas per CPU in threaded processes (uWSGI threads, JVMs).
 # Elasticsearch: its launcher JVM stays resident beside the server (heap in use 13 MiB).
+# nginx images: `worker_processes auto` counts the host's CPUs, not the cpuset; the
+# entrypoint's autotune uses the CPU limit or the cpuset (needs a writable nginx.conf).
 CAPACITY_ENV = {
     "DOTNET_gcServer": "0",
     "DOTNET_gcConcurrent": "0",
     "DOTNET_GCConserveMemory": "7",
     "APISIX_WORKER_PROCESSES": "2",
+    "NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE": "1",
     "MALLOC_ARENA_MAX": "2",
     "CLI_JAVA_OPTS": "-Xmx32m -XX:TieredStopAtLevel=1",
     **memory.GO_NO_HUGE_PAGES,
