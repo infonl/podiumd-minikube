@@ -8708,3 +8708,22 @@ fail until the Keycloak realm is complete, create-required-catalogi gets
 403 "Client identifier bestaat niet" then KeyError 'results',
 create-required-objecttypen 401. ZAC failed with WFLYCTL0080 and stayed
 unready until its liveness probe restarted it about 8 minutes later.
+
+### monitoring-logging: 1.0.18 by mistake, back to the checkout
+
+podiumd already ran the published 4.10.0 (the deployed ConfigMap said so
+since the tenth install); only monitoring-logging came from the verify
+checkout (1.0.19 + #481, `verify/podiumd-4.10.0-combined-4` f0548763).
+Asked to deploy "the released 4.10.0", I also switched monitoring-logging
+to the published 1.0.18, a step back: kube-prometheus-stack 83.0.0
+(checkout 90.0.0), Alloy 1.6.2 (1.12.1), pushgateway 3.6.0 (3.8.0), no
+Grafana HSTS (#481), `use_refresh_token: true`, no sidecar requests, and the
+kube-controller-manager, etcd, kube-proxy and kube-scheduler scrapers on.
+deploy --full 135 s (10:28 CET). podiumd-tests' full tier on it
+(20261028-093009): 586 passed, 6 failed, 23 skipped, 32 xfailed, 1 xpassed
+(zac-7); 4 failures passed on rerun (Loki brp-personen-mock, 3 Open Inwoner
+UI), 2 reproduce: kennisartikel Objecten POST 400 (podiumd-tests
+investigates) and test_begeleider_starts_a_samenwerking (flaky).
+Kees: back to the checkout until 1.0.19 is published. deploy --full 123 s
+(10:44 CET), ConfigMap records the checkout again. podiumd-tests records
+that ConfigMap per run ("Deployed build"), so a switch shows in its reports.
