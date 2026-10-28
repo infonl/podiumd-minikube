@@ -9295,3 +9295,13 @@ scaled): about 40% CRD handling (structural schemas, per-CRD OpenAPI),
 - Mistake while measuring: one upgrade of monitoring-logging ran without the
   post-renderer; repaired with `deploy --every-release` (its digest still
   matched, so a plain deploy would have skipped it).
+- Option 2 (Kees): heap profiles before and after one podiumd upgrade
+  (22:07-22:10 CET): live 577 -> 634 MB. The diff (scaled, by stack) spreads
+  over response encoding (+14), watch decoding (+10, +7) and the CRD OpenAPI
+  v3 builder (+29 in several small stacks). No CRD's resourceVersion changed
+  during the upgrade, so not CRD churn; at a 1 MiB sampling rate those small
+  stacks are within the noise. podiumd's release history: 9 revisions,
+  8.6 MB of release Secrets (Helm keeps 10). Conclusion: no single structure
+  found; the growth is spread over kube-apiserver's own caches and buffers
+  and levels off (347 after a restart, 600-680 after a day of upgrades).
+  Left as is; test_memory.py and the GOMEMLIMIT of 1200MiB bound it.
