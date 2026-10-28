@@ -33,6 +33,11 @@ def host_mb() -> int:
     return int(process.output(["docker", "info", "--format", "{{.MemTotal}}"]).strip()) // MIB
 
 
+def host_cpus() -> int:
+    """CPUs Docker sees: on Docker Desktop its VM's, not the host's."""
+    return int(process.output(["docker", "info", "--format", "{{.NCPU}}"]).strip())
+
+
 def node_mb() -> int:
     """The running profile's memory cap in MB; 0 when it has none or is not running."""
     result = process.run(["docker", "inspect", PROFILE, "--format", "{{.HostConfig.Memory}}"], check=False)

@@ -309,7 +309,10 @@ def hold_zac(render: manifests.Render) -> list[int]:
     """
     if not set(ZAC_JOBS) & set(render.jobs) or kube.exists(f"deployment/{ZAC}"):
         return []
-    spec = next(d for d in render.docs if d.get("kind") == "Deployment" and manifests.name_of(d) == ZAC)["spec"]
+    zac = next((d for d in render.docs if d.get("kind") == "Deployment" and manifests.name_of(d) == ZAC), None)
+    if zac is None:
+        return []
+    spec = zac["spec"]
     replicas = spec.get("replicas", 1)
     spec["replicas"] = 0
     return [replicas]
@@ -372,6 +375,8 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
         msg = (
             f"after {READY_TIMEOUT}s: not rolled out: {', '.join(stuck()) or '-'}; running: {', '.join(running) or '-'}"
         )
+        if held:
+            msg += f"; deployment/{ZAC} still at 0 replicas: the next deploy starts it"
         raise process.UserError(msg)
     if result[0]:
         msg = f"Job(s) failed: {', '.join(result[0])}: check `kubectl logs job/<name> -n {NAMESPACE}`"

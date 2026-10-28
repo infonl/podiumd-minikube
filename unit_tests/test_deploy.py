@@ -295,6 +295,28 @@ def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(
         _deploy()
 
 
+def test_deploy_names_a_held_zac_on_timeout(
+    fake_run: FakeRun, called: list[str], live: dict[str, Any], poll_once: None, monkeypatch: pytest.MonkeyPatch
+):
+    zac = {**_doc("Deployment", "zac"), "spec": {"replicas": 1}}
+    render = manifests.Render(docs=[zac, _doc("Job", "openzaak-config")], large_configmaps=[])
+    monkeypatch.setattr(deploy.Options, "render", lambda _self, *args, **_kwargs: STORAGE if args else render)
+    fake_run.on("kubectl", "get", "deployment/zac", returncode=1)
+    live["job"]["items"] = []
+    with pytest.raises(process.UserError, match=r"running: openzaak-config; deployment/zac still at 0 replicas"):
+        _deploy()
+
+
+def test_hold_zac_leaves_an_existing_or_missing_zac_alone(fake_run: FakeRun):
+    render = manifests.Render(docs=[_doc("Job", "openzaak-config")], large_configmaps=[])
+    fake_run.on("kubectl", "get", "deployment/zac", returncode=1)
+    assert deploy.hold_zac(render) == []
+    zac = {**_doc("Deployment", "zac"), "spec": {"replicas": 1}}
+    render = manifests.Render(docs=[zac, _doc("Job", "openzaak-config")], large_configmaps=[])
+    fake_run.on("kubectl", "get", "deployment/zac")
+    assert (deploy.hold_zac(render), zac["spec"]["replicas"]) == ([], 1)
+
+
 def test_apply_phases_puts_what_pods_read_first():
     docs = [_doc("Deployment", "a"), _doc("ConfigMap", "b"), _doc("Job", "c"), _doc("ServiceAccount", "d")]
     assert [[manifests.name_of(doc) for doc in phase] for phase in deploy.apply_phases(docs)] == [
@@ -304,7 +326,7 @@ def test_apply_phases_puts_what_pods_read_first():
     assert deploy.apply_phases([_doc("Job", "c")]) == [[_doc("Job", "c")]]
 
 
-def testapply_parallel_splits_the_docs_over_the_workers(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
+def test_apply_parallel_splits_the_docs_over_the_workers(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(deploy, "APPLY_WORKERS", 2)
     docs = [_doc("ConfigMap", name) for name in "abc"]
     results = deploy.apply_parallel(docs)

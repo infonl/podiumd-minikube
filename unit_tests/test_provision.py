@@ -77,7 +77,7 @@ def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
 ):
     calls: list[str] = []
     monkeypatch.setenv("MINIKUBE_CPUS", "4")
-    monkeypatch.setattr("os.cpu_count", lambda: 16)
+    monkeypatch.setattr(memory, "host_cpus", lambda: 16)
     monkeypatch.setattr(memory, "wanted", lambda: 8192)
     monkeypatch.setattr(provision, "start_minikube", lambda cpus, mb: calls.append(f"start {cpus} {mb}"))
     for module, name in [(kube, "require_minikube_context"), (cni, "apply")]:

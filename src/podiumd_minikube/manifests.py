@@ -217,7 +217,7 @@ def _roll_readers(docs: list[Doc], configmaps: set[str], annotation: str, value:
 
 # podiumd's api-proxy mounts its nginx.conf from a ConfigMap, read-only for the
 # entrypoint's autotune (CAPACITY_ENV); `auto` counts the host's CPUs, not the cpuset.
-# 1: what the autotune gives for its 500m CPU limit.
+# One worker: api-proxy's CPU limit is 500m.
 NGINX_AUTO_WORKERS = "worker_processes auto;"
 NGINX_WORKERS = "1"
 NGINX_WORKERS_ANNOTATION = "podiumd-minikube/nginx-workers"

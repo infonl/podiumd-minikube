@@ -34,7 +34,7 @@ from podiumd_minikube.paths import PROFILE
 # Fully parallel loads once filled /tmp on the host.
 BATCH_SIZE = 6
 # Concurrent NODE_IMPORTs: 5 took 87 s for 70 images, 3 took 102 s, 1 took 136 s.
-# Parallel `minikube image load`s lost images without an error; load_images checks afterwards.
+# Parallel `minikube image load`s lost images without an error; load_images warns of missing ones.
 IMPORT_WORKERS = 5
 # Images are amd64-only; on Apple Silicon only the workload images are forced to it,
 # never the node (minikube copies host-arch binaries into it).
@@ -98,7 +98,7 @@ def cpuset_args(cpus: int, host_cpus: int) -> list[str]:
 
 
 def default_cpus(host_cpus: int) -> int:
-    """The node's CPUs: at most 8, leaving a quarter of the host's (at least 2) to other applications; at least 2."""
+    """The node's CPUs: at most 8 and at least 2; above 4 host CPUs, a quarter of them (at least 2) stays free."""
     return max(2, min(8, host_cpus - max(2, host_cpus // 4)))
 
 
@@ -107,7 +107,7 @@ def start_node(while_starting: Callable[[], None] = lambda: None) -> None:
 
     while_starting runs once containerd has its tuning, beside the waits for Cilium and the control plane.
     """
-    host_cpus = os.cpu_count() or 2
+    host_cpus = memory.host_cpus()
     cpus = _env_int("MINIKUBE_CPUS", default_cpus(host_cpus))
     start_minikube(cpus, memory.wanted())
     # The docker driver applies --memory but not --cpus on Linux (seen: NanoCpus 0). A CPU
