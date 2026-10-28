@@ -8683,3 +8683,27 @@ Live (2026-10-28, after `kubectl delete deployment zac`): `deploy --full`
 177 s, exit 0. openzaak-config completed at 08:42:22 UTC, ZAC was scaled up
 and its pod created at 08:42:30, Ready at 08:43:41. 0 restarts, no
 `WFLYCTL0080` in its log. Not yet seen on a fresh provision.
+
+### Tenth fresh install: 3 image imports at a time, 8 min 44 s
+
+The control-plane tuning (54 s on the eighth install) is no longer on a
+critical path: provision imports images beside its waits (8fd62b2), and
+start-cluster after a reboot left the tuned static pod manifests in place
+(all four started once, 7 s after the node). The image imports were the
+longest leg: 136 s for 70 images, one at a time.
+The rule "one at a time" came from parallel `minikube image load`s, which
+lost 23 images. Imports now stream through `docker exec ... ctr images
+import` (1db11b2), so 3 at a time were measured (`IMPORT_WORKERS`).
+Tenth fresh install (podiumd-tests agreed), 2026-10-28 UTC: teardown 27 s,
+provision-cluster 143 s (181), imports 102 s (136), no image missing after
+the loads. deploy --full 354 s. Total 8 min 44 s (9 min 22 s).
+The ZAC hold (102f4df) on a real fresh install: its Jobs finished
+09:07:11, ZAC scaled 09:07:17, Ready 09:08:27, 0 restarts, no
+`WFLYCTL0080`. Failed pods as on the ninth: import-master-realm-job,
+import-podiumd-realm-job, openzaak-config, pabc-migrations, one
+redis-ha-label-master run.
+kees00 (QA, podiumd-infra, same day) shows the same causes: the config Jobs
+fail until the Keycloak realm is complete, create-required-catalogi gets
+403 "Client identifier bestaat niet" then KeyError 'results',
+create-required-objecttypen 401. ZAC failed with WFLYCTL0080 and stayed
+unready until its liveness probe restarted it about 8 minutes later.

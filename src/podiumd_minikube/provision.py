@@ -33,6 +33,9 @@ from podiumd_minikube.paths import PROFILE
 
 # Fully parallel loads once filled /tmp on the host.
 BATCH_SIZE = 6
+# Concurrent NODE_IMPORTs: 3 took 102 s for 70 images, 1 took 136 s.
+# Parallel `minikube image load`s lost images without an error; load_images checks afterwards.
+IMPORT_WORKERS = 3
 # Images are amd64-only; on Apple Silicon only the workload images are forced to it,
 # never the node (minikube copies host-arch binaries into it).
 PLATFORM = "linux/amd64"
@@ -356,10 +359,9 @@ def load_images(images: list[str]) -> None:
             _in_batches(to_pull, "pulling", _pull)
         print(f"Loading batch into minikube: {' '.join(batch)}")
         with tempfile.TemporaryDirectory() as directory:
-            # Saves in parallel (6 s for 701 MB each), loads one at a time: parallel loads into
-            # containerd lose images without an error.
+            # Saves in parallel: 6 s for 701 MB each.
             saved = _in_batches(batch, "saving", functools.partial(_save, directory))
-            _in_batches(saved, "loading", functools.partial(_load, directory), workers=1)
+            _in_batches(saved, "loading", functools.partial(_load, directory), workers=IMPORT_WORKERS)
     still_missing = missing_images(images, process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines())
     if still_missing:
         print(f"WARNING: not in minikube after loading: {' '.join(still_missing)}", file=sys.stderr)
