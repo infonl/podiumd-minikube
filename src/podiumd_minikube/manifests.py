@@ -482,6 +482,9 @@ def speed_up_keycloak_start(docs: list[Doc]) -> None:
 
 
 ZAC_SOLR_INIT = "init-solr-zac-core"
+KC_CONFIG_CLI = "kc-config-cli"
+# The ENTRYPOINT of a retried container's image, which sets no command (crictl inspecti).
+IMAGE_ENTRYPOINTS = {KC_CONFIG_CLI: ["/bin/sh", "-c", "exec java $JAVA_OPTS -jar /app/keycloak-config-cli.jar"]}
 KEYCLOAK_ADMIN_USER = "ensure-podiumd-admin-user"
 OPEN_INWONER_SEARCH_INDEX = "openinwoner-search-index"
 # (kind, name, container) that fails while a dependency starts, and the Job or kubelet
@@ -491,7 +494,12 @@ OPEN_INWONER_SEARCH_INDEX = "openinwoner-search-index"
 # objecttypen Jobs: Open Zaak and Objecttypen still being configured (known issue podiumd-chart-31);
 # ZAC waits for the first.
 # OpenBao's schema and config, Open VTB's and Open Beheer's config: Postgres or OpenBao still starting.
+# The realm imports and PABC's groups Job: they race each other on a fresh install (401, 409 on a PABC
+# role; known issue podiumd-chart-31). A name matches with or without its hash suffix.
 RETRIED_CONTAINERS = {
+    ("Job", "import-podiumd-realm-job", KC_CONFIG_CLI),
+    ("Job", "import-master-realm-job", KC_CONFIG_CLI),
+    ("Job", "pabc-keycloak-groups-job", "pabc-keycloak-groups"),
     ("Job", "openbeheer-config", "openbeheer"),
     ("Job", "openbao-db-schema", "schema"),
     ("Job", "openbao-config", "config"),
@@ -505,15 +513,24 @@ RETRIED_CONTAINERS = {
 RETRY_ATTEMPTS = 150
 
 
+def _retried(kind: str, name: str, container: str) -> bool:
+    """Whether RETRIED_CONTAINERS has the container, its workload named name or name plus a hash suffix."""
+    return any(
+        (kind, container) == (retried_kind, retried_container) and (name == base or name.startswith(f"{base}-"))
+        for retried_kind, base, retried_container in RETRIED_CONTAINERS
+    )
+
+
 def retry_in_container(docs: list[Doc]) -> None:
     """Makes RETRIED_CONTAINERS rerun their command every 2 s, RETRY_ATTEMPTS times, instead of failing."""
     retry = f'i=0; until "$@"; do i=$((i + 1)); [ "$i" -ge {RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
     for doc in docs:
         for container in _containers(_pod_spec(doc) or {}):
-            if (doc.get("kind"), name_of(doc), container.get("name")) not in RETRIED_CONTAINERS:
+            if not _retried(str(doc.get("kind")), name_of(doc), str(container.get("name"))):
                 continue
+            command = container.get("command") or IMAGE_ENTRYPOINTS[str(container["name"])]
             # A process of its own: an until condition would turn off a script's `set -e`.
-            argv: list[str] = [*(container.get("command") or []), *(container.pop("args", None) or [])]
+            argv: list[str] = [*command, *(container.pop("args", None) or [])]
             container["command"] = ["sh", "-c", retry, "retry", *argv]
 
 

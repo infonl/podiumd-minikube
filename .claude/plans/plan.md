@@ -9257,3 +9257,13 @@ Keycloak chain, CET:
   Job back-off (10 s, 20 s) and the reruns cost about 55 s. Sent to
   podiumd-tests as a known-issue candidate.
 - Realm podiumd ready 2 min 37 s after the install.
+- Kees chose to retry the racing Jobs in their container: import-podiumd-realm-job,
+  import-master-realm-job (kc-config-cli) and pabc-keycloak-groups-job join
+  RETRIED_CONTAINERS (2 s instead of the Job back-off of 10 s, then 20 s). A
+  name matches with its hash suffix. kc-config-cli sets no command: its
+  image's ENTRYPOINT (`/bin/sh -c "exec java $JAVA_OPTS -jar
+  /app/keycloak-config-cli.jar"`, from crictl inspecti) is in
+  `manifests.IMAGE_ENTRYPOINTS`. On a running cluster the hash-named Jobs keep
+  their name, so their changed pod template needs them deleted once before
+  the next deploy (a Job's template is immutable). The race itself is
+  podiumd-chart-31 (known-issues fcc2cf3).

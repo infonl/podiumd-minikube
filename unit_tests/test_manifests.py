@@ -410,6 +410,8 @@ def test_speed_up_keycloak_start_sets_probes_and_the_builder_cpu():
         # Open Inwoner's chart passes the script as args.
         ("Deployment", "openinwoner", manifests.OPEN_INWONER_SEARCH_INDEX, ["/bin/bash", "-c"], ["curl a"]),
         ("Job", "create-required-catalogi-job", "create-required-catalogi", ["/jobs/create.py"], None),
+        # A hash-suffixed name; podiumd's realm import sets no command: the image's entrypoint.
+        ("Job", "import-podiumd-realm-job-9bf0aa63b8", manifests.KC_CONFIG_CLI, [], None),
     ],
 )
 def test_retry_in_container_reruns_the_command_in_a_bounded_retry(
@@ -430,11 +432,22 @@ def test_retry_in_container_reruns_the_command_in_a_bounded_retry(
             "-c",
             f'i=0; until "$@"; do i=$((i + 1)); [ "$i" -ge {manifests.RETRY_ATTEMPTS} ] && exit 1; sleep 2; done',
             "retry",
-            *command,
+            *(command or manifests.IMAGE_ENTRYPOINTS[container]),
             *(args or []),
         ],
     }
     assert other["command"] == ["sh", "-c", "curl c"]
+
+
+def test_retry_in_container_leaves_a_name_that_only_starts_alike():
+    container: manifests.Doc = {"name": manifests.KC_CONFIG_CLI}
+    doc: manifests.Doc = {
+        "kind": "Job",
+        "metadata": {"name": "import-podiumd-realm-jobs"},
+        "spec": {"template": {"spec": {"containers": [container]}}},
+    }
+    manifests.retry_in_container([doc])
+    assert container == {"name": manifests.KC_CONFIG_CLI}
 
 
 def test_retry_in_container_keeps_set_e_of_the_script(tmp_path: Path):
