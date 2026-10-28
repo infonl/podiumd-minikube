@@ -9199,3 +9199,25 @@ deploy), not the chart's script.
   (kubectl-apply deploys: 8 min 44 s); live suite 37 passed. Timeline:
   podiumd's `helm upgrade` 19:30:04, waiting for its hook Jobs, until
   monitoring-logging at 19:36:41; activation and ready wait to 19:39:36.
+
+## Faster deploys: skip unchanged releases, parallel upgrades (2026-10-28)
+
+Fresh install 10 min 5 s (kubectl apply: 8 min 44 s), redeploy 2 min 52 s
+(was 87 s). From the Job times of the fresh install: Keycloak's start is the
+critical path (realm imports done after about 4 min, every hook waits on it),
+then 7 post-install hooks one by one (50 s), then monitoring-logging's
+`--wait` (about 1.3 min, sequential), activation about 15 s.
+
+Kees chose two changes:
+- Skip a release whose render is unchanged, as podiumd-infra's
+  helmSkipUnchanged (fingerprint.py, a digest kept in a ConfigMap). Here the
+  digest is of the fixed-up render plus the post-renderer flags
+  (`releases.digest`): the render covers chart, values, --set and fixups, and
+  is deterministic with lookups (two renders of each release compared equal).
+  Stored in the deployed ConfigMap (`deployed.record`, `last_digests`). A
+  release without a deployed revision is always upgraded; `deploy
+  --every-release` upgrades all. As podiumd-infra, an unchanged podiumd on an
+  unsealed vault skips openbao-activate.sh.
+- podiumd and monitoring-logging upgrade together, after this chart's release
+  (it creates the PV/PVC pairs podiumd looks up): separate namespaces, as
+  ExternalsPodiumD's separate pipelines.

@@ -77,7 +77,7 @@ def test_selected_names_a_version_or_a_checkout_with_its_commit(fake_run: FakeRu
 
 def test_record_writes_the_configmap(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(deployed, "selected", lambda key: f"{key} 1.0")
-    deployed.record("deploy --full", manifests.Render(docs=[], large_configmaps=[], charts=CHARTS))
+    deployed.record("deploy --full", manifests.Render(docs=[], large_configmaps=[], charts=CHARTS), {"podiumd": "d1"})
     assert fake_run.calls == [["kubectl", "apply", "--server-side", "--force-conflicts", "-n", NAMESPACE, "-f", "-"]]
     doc = yaml.safe_load(fake_run.stdins[0] or "")
     assert doc["metadata"] == {"name": deployed.CONFIGMAP}
@@ -89,6 +89,8 @@ def test_record_writes_the_configmap(fake_run: FakeRun, monkeypatch: pytest.Monk
     )
     assert "podiumd-minikube" not in data
     assert json.loads(data["charts"]) == CHARTS
+    fake_run.on("kubectl", "get", f"configmap/{deployed.CONFIGMAP}", stdout=json.dumps({"data": data}))
+    assert deployed.last_digests() == {"podiumd": "d1"}
 
 
 def test_lines_show_the_record_a_changed_selection_and_the_containers(owners: FakeRun, monkeypatch: pytest.MonkeyPatch):

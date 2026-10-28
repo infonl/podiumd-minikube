@@ -120,6 +120,7 @@ def _deploy(command: Command, argv: list[str]) -> None:
         full=args.full,
         extra=[*options, *extra],
         command=" ".join([_name(command), *argv]),
+        every=args.every_release,
     )
 
 

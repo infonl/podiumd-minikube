@@ -96,10 +96,11 @@ def test_cluster_lock_run_keeps_the_commands_own_double_dash(tmp_path: Path):
 @pytest.mark.parametrize(
     ("argv", "module", "function", "expected"),
     [
-        (["deploy", "--full", "--set", "a=b"], deploy, "deploy", ((), {"full": True, "extra": ["--set", "a=b"], "command": "deploy --full --set a=b"})),
-        (["deploy", "--skip-roles"], deploy, "deploy", ((), {"full": False, "extra": chart.SKIP_ROLES_SETS, "command": "deploy --skip-roles"})),
-        (["deploy", "--full", "--otel"], deploy, "deploy", ((), {"full": True, "extra": chart.OTEL_SETS, "command": "deploy --full --otel"})),
-        (["deploy-extended"], deploy, "deploy", ((), {"full": True, "extra": cli.EXTENDED[1:], "command": " ".join(["deploy-extended", *cli.EXTENDED])})),
+        (["deploy", "--full", "--set", "a=b"], deploy, "deploy", ((), {"full": True, "extra": ["--set", "a=b"], "command": "deploy --full --set a=b", "every": False})),
+        (["deploy", "--every-release"], deploy, "deploy", ((), {"full": False, "extra": [], "command": "deploy --every-release", "every": True})),
+        (["deploy", "--skip-roles"], deploy, "deploy", ((), {"full": False, "extra": chart.SKIP_ROLES_SETS, "command": "deploy --skip-roles", "every": False})),
+        (["deploy", "--full", "--otel"], deploy, "deploy", ((), {"full": True, "extra": chart.OTEL_SETS, "command": "deploy --full --otel", "every": False})),
+        (["deploy-extended"], deploy, "deploy", ((), {"full": True, "extra": cli.EXTENDED[1:], "command": " ".join(["deploy-extended", *cli.EXTENDED]), "every": False})),
         (["expose-postgres"], services, "expose_postgres", ((5432,), {})),
         (["expose-postgres", "15432"], services, "expose_postgres", ((15432,), {})),
         (["flush-redis"], services, "flush_redis", ((None,), {})),

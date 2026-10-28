@@ -48,13 +48,14 @@ def selected(key: str) -> str:
     return f"checkout {checkout(selection.value)}"
 
 
-def record(command: str, render: manifests.Render) -> None:
-    """Writes the deploy's command, the selections and render.charts to the cluster."""
+def record(command: str, render: manifests.Render, digests: dict[str, str]) -> None:
+    """Writes the deploy's command, the selections, render.charts and each release's digest to the cluster."""
     data = {
         "time": datetime.now(UTC).isoformat(timespec="seconds"),
         "command": command,
         **{chart: selected(key) for key, chart in DEPENDENCIES.items()},
         "charts": json.dumps(render.charts, sort_keys=True),
+        "digests": json.dumps(digests, sort_keys=True),
     }
     doc = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": CONFIGMAP}, "data": data}
     kube.kubectl("apply", "--server-side", "--force-conflicts", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump([doc]))
@@ -65,6 +66,11 @@ def read() -> dict[str, str]:
     if not kube.exists(f"configmap/{CONFIGMAP}"):
         return {}
     return kube.get_json(f"configmap/{CONFIGMAP}", "-n", NAMESPACE).get("data") or {}
+
+
+def last_digests() -> dict[str, str]:
+    """Each release's digest (releases.digest) at the last deploy; {} before one recorded them."""
+    return json.loads(read().get("digests") or "{}")
 
 
 def _running(pod: dict[str, Any]) -> int:

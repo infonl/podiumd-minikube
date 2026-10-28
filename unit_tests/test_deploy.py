@@ -214,6 +214,9 @@ def called(
     monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
     monkeypatch.setattr(pki, "CA_CERT", tmp_path / "ca.crt")
     monkeypatch.setattr(crds, "keycloak_version", lambda: None)
+    monkeypatch.setattr(deployed, "last_digests", dict)
+    monkeypatch.setattr(releases, "is_deployed", lambda _release: True)
+    monkeypatch.setattr(openbao, "unsealed", lambda: False)
     pki.CA_CERT.write_text("")
     fake_run.on("kubectl", "get", f"namespace/{OLD_NAMESPACE}", returncode=1)
     fake_run.on("kubectl", "create", "namespace", stdout="kind: Namespace\n")
@@ -429,3 +432,41 @@ def test_deploy_starts_zac_on_a_fresh_install_only_after_its_jobs_finished(
     assert f"upgrade {releases.PODIUMD} --hold-zac" in called
     scale = f"scale deployment/zac --replicas=1 -n {NAMESPACE}"
     assert called[called.index("activate") + 1 :][:3] == ["poll", "poll", scale]
+
+
+def test_deploy_upgrades_only_releases_whose_render_changed(called: list[str], monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(releases, "digest", lambda render, _post: "own" if render is OWN else "podiumd-new")
+    monkeypatch.setattr(deployed, "last_digests", lambda: {RELEASE_NAME: "own", releases.PODIUMD: "podiumd-old"})
+    _deploy()
+    assert [step for step in called if step.startswith("upgrade")] == [f"upgrade {releases.PODIUMD} --ca-trust"]
+    assert f"delete job openzaak-config -n {NAMESPACE} --ignore-not-found --wait=false" in called
+
+
+def test_deploy_skips_unchanged_releases_and_an_unsealed_vaults_activation(
+    called: list[str], monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(releases, "digest", lambda _render, _post: "same")
+    monkeypatch.setattr(deployed, "last_digests", lambda: {RELEASE_NAME: "same", releases.PODIUMD: "same"})
+    monkeypatch.setattr(openbao, "unsealed", lambda: True)
+    _deploy()
+    assert not [step for step in called if step.startswith(("upgrade", "delete", "apply --server-side"))]
+    assert "activate" not in called
+    assert "record" in called
+
+
+def test_deploy_every_release_upgrades_unchanged_ones(called: list[str], monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(releases, "digest", lambda _render, _post: "same")
+    monkeypatch.setattr(deployed, "last_digests", lambda: {RELEASE_NAME: "same", releases.PODIUMD: "same"})
+    deploy.deploy(full=False, extra=[], every=True)
+    assert [step for step in called if step.startswith("upgrade")] == [
+        f"upgrade {RELEASE_NAME} --ca-trust",
+        f"upgrade {releases.PODIUMD} --ca-trust",
+    ]
+
+
+def test_deploy_upgrades_a_release_without_a_deployed_revision(called: list[str], monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(releases, "digest", lambda _render, _post: "same")
+    monkeypatch.setattr(deployed, "last_digests", lambda: {RELEASE_NAME: "same", releases.PODIUMD: "same"})
+    monkeypatch.setattr(releases, "is_deployed", lambda release: release.name == RELEASE_NAME)
+    _deploy()
+    assert [step for step in called if step.startswith("upgrade")] == [f"upgrade {releases.PODIUMD} --ca-trust"]

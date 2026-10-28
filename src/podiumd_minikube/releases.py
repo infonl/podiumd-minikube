@@ -6,6 +6,8 @@ templates (Postgres, Mailpit, the mocks: what the estates get from Azure) are a 
 release next to podiumd, which reaches them by short name.
 """
 
+import hashlib
+import json
 import tempfile
 
 from collections.abc import Generator
@@ -125,6 +127,24 @@ def values_file(release: Release) -> Generator[str]:
 def helm(*args: str) -> list[str]:
     """argv of helm with this repository's plugins (the post-renderer) instead of the user's."""
     return ["env", f"HELM_PLUGINS={HELM_PLUGINS}", "helm", *args]
+
+
+def digest(render: manifests.Render, post_render: list[str]) -> str:
+    """sha256 of what an upgrade installs: the fixed-up render (chart, values, --set, fixups) and post-renderer flags.
+
+    As podiumd-infra's helmSkipUnchanged, minus its inputs: the render covers them, and is deterministic with lookups.
+    """
+    sha = hashlib.sha256(json.dumps(post_render).encode())
+    sha.update(manifests.dump([*render.docs, *render.large_configmaps, *render.crds]).encode())
+    return sha.hexdigest()
+
+
+def is_deployed(release: Release) -> bool:
+    """Whether release has a deployed revision; from its release Secret's labels (helm status decodes the manifest)."""
+    selector = f"owner=helm,name={release.name},status=deployed"
+    return bool(
+        process.output(["kubectl", "get", "secret", "-n", release.namespace, "-l", selector, "-o", "name"]).strip()
+    )
 
 
 def upgrade(release: Release, post_render: list[str]) -> None:

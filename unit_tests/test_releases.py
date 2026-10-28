@@ -8,6 +8,7 @@ from conftest import FakeRun
 from conftest import make_tgz
 
 from podiumd_minikube import chart
+from podiumd_minikube import manifests
 from podiumd_minikube import releases
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
@@ -97,3 +98,21 @@ def test_the_seal_key_stays_out_of_this_charts_release(fetched: Path):
 def test_releases_refuse_arguments_they_cannot_route(fetched: Path, args: list[str]):
     with pytest.raises(UserError, match="pairs to helm"):
         releases.releases(args)
+
+
+def test_digest_follows_the_render_and_the_post_renderer_flags():
+    render = manifests.Render(docs=[{"kind": "ConfigMap", "metadata": {"name": "a"}}], large_configmaps=[])
+    other = manifests.Render(docs=[{"kind": "ConfigMap", "metadata": {"name": "b"}}], large_configmaps=[])
+    digests = {
+        releases.digest(r, post) for r in (render, other) for post in ([], ["--post-renderer-args", "--hold-zac"])
+    }
+    assert len(digests) == 4
+    assert releases.digest(render, []) == releases.digest(render, [])
+
+
+def test_is_deployed_reads_the_release_secrets_labels(fake_run: FakeRun):
+    release = releases.Release(releases.PODIUMD, NAMESPACE, Path("p.tgz"), {})
+    assert not releases.is_deployed(release)
+    fake_run.on("kubectl", "get", "secret", stdout="secret/sh.helm.release.v1.podiumd.v4\n")
+    assert releases.is_deployed(release)
+    assert fake_run.calls[0][-3:] == ["owner=helm,name=podiumd,status=deployed", "-o", "name"]

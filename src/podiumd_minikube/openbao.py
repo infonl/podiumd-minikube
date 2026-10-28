@@ -89,6 +89,12 @@ def _status() -> dict[str, Any] | None:
         return None
 
 
+def unsealed() -> bool:
+    """Whether pod 0 answers initialised and unsealed."""
+    status = _status()
+    return bool(status) and status.get("initialized") is True and status.get("sealed") is False
+
+
 def activate_script(work: Path) -> Path:
     """The selected podiumd chart's openbao-activate.sh: in its directory, else from helm-charts tag podiumd-<version>.
 

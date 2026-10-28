@@ -3,6 +3,7 @@
 import argparse
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
@@ -156,38 +157,87 @@ def combined(renders: list[manifests.Render]) -> manifests.Render:
     )
 
 
-def _upgrade(selected: Options, found: list[releases.Release], renders: dict[str, manifests.Render]) -> list[int]:
-    """CRDs, the one-shot Jobs, then each release's `helm upgrade`; returns hold_zac's result."""
+def _prepare(names: list[str], renders: dict[str, manifests.Render]) -> None:
+    """Before the upgrades of names: their CRDs, and the one-shot Jobs they re-run."""
     own, podiumd = renders[RELEASE_NAME], renders[releases.PODIUMD]
     monitoring = renders.get(releases.MONITORING)
-    if monitoring and crds.needed(monitoring.docs):
+    if monitoring and releases.MONITORING in names and crds.needed(monitoring.docs):
         print("\nApplying monitoring-logging's own CRDs first...")
         crds.apply_monitoring_logging_crds()
-    apply_crds(podiumd, releases.PODIUMD)
-    held = hold_zac(podiumd)
-    _delete_jobs(one_shot_jobs(own, podiumd))
+    if releases.PODIUMD in names:
+        apply_crds(podiumd, releases.PODIUMD)
+    empty = manifests.Render(docs=[], large_configmaps=[])
+    _delete_jobs(
+        one_shot_jobs(own if RELEASE_NAME in names else empty, podiumd if releases.PODIUMD in names else empty)
+    )
+
+
+def _changed(found: list[releases.Release], digests: dict[str, str], *, every: bool) -> list[releases.Release]:
+    """The releases of found to upgrade: digest changed since the last deploy, or no deployed revision (every: all)."""
+    last = deployed.last_digests()
+    changed = [
+        release
+        for release in found
+        if every or last.get(release.name) != digests[release.name] or not releases.is_deployed(release)
+    ]
     for release in found:
-        # This chart first: it creates the PV/PVC pairs podiumd's storage templates look up.
-        post_render = releases.post_renderer_args(
+        if release not in changed:
+            print(
+                f"\n{release.name}: render unchanged since the last deploy; not upgraded (deploy --every-release does)"
+            )
+    return changed
+
+
+@dataclass
+class Upgraded:
+    """What _upgrade did: hold_zac's result, the releases it upgraded, and every release's digest."""
+
+    held: list[int]
+    names: list[str]
+    digests: dict[str, str]
+
+
+def _upgrade(
+    selected: Options, found: list[releases.Release], renders: dict[str, manifests.Render], *, every: bool
+) -> Upgraded:
+    """CRDs, the one-shot Jobs, then the `helm upgrade` of each release whose digest changed (every: all).
+
+    This chart's release first: it creates the PV/PVC pairs podiumd's storage templates look up. podiumd and
+    monitoring-logging then together: separate namespaces, as ExternalsPodiumD's separate pipelines.
+    """
+    held = hold_zac(renders[releases.PODIUMD])
+    post = {
+        release.name: releases.post_renderer_args(
             objecten_merged=selected.objecten_merged, hold_zac=bool(held) and release.name == releases.PODIUMD
         )
-        releases.upgrade(release, post_render)
-        if release.name == RELEASE_NAME and STORAGE_PERMISSIONS_JOB in own.jobs:
+        for release in found
+    }
+    digests = {release.name: releases.digest(renders[release.name], post[release.name]) for release in found}
+    changed = _changed(found, digests, every=every)
+    names = [release.name for release in changed]
+    _prepare(names, renders)
+    if own_release := next((release for release in changed if release.name == RELEASE_NAME), None):
+        releases.upgrade(own_release, post[RELEASE_NAME])
+        if STORAGE_PERMISSIONS_JOB in renders[RELEASE_NAME].jobs:
             # Open Formulieren (UID 1000) writes to its volume at its first start.
             print(f"Waiting for the {STORAGE_PERMISSIONS_JOB} Job to complete...")
             kube.kubectl_shown(
                 "wait", "--for=condition=complete", f"job/{STORAGE_PERMISSIONS_JOB}", "-n", NAMESPACE, "--timeout=60s"
             )
-    if undeleted := upgrade.undeleted_fixed_jobs(podiumd.docs):
+    with ThreadPoolExecutor(max_workers=len(found)) as pool:
+        upgrades = [pool.submit(releases.upgrade, r, post[r.name]) for r in changed if r.name != RELEASE_NAME]
+        for done in upgrades:
+            done.result()
+    if releases.PODIUMD in names and (undeleted := upgrade.undeleted_fixed_jobs(renders[releases.PODIUMD].docs)):
         print(
             f"\nWARNING: fixed-name Jobs ExternalsPodiumD does not delete before helm upgrade: {', '.join(undeleted)}"
         )
-    return held
+    return Upgraded(held, names, digests)
 
 
 @lock.holding("deploy")
-def deploy(*, full: bool, extra: list[str], command: str = "deploy") -> None:
-    """Syncs dependencies, then the Helm releases with the steps around them."""
+def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool = False) -> None:
+    """Syncs dependencies, then the Helm releases with the steps around them; every: also unchanged releases."""
     kube.require_minikube_context()
     disk.check(disk.DEPLOY)
     memory.check(full=full)
@@ -215,15 +265,17 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy") -> None:
     # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
     gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
     dns.apply_hosts(chart_hosts)
-    held = _upgrade(selected, found, renders)
+    upgraded = _upgrade(selected, found, renders, every=every)
     # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
     installed = {release.name: releases.installed(release) for release in found}
     live = combined([installed[RELEASE_NAME], installed[releases.PODIUMD]])
-    deployed.record(command, combined(list(installed.values())))
+    deployed.record(command, combined(list(installed.values())), upgraded.digests)
     print()
     keycloak.repair_default_client_scopes(render)
-    openbao.activate(render)
-    _wait_ready(live, held)
+    # As podiumd-infra: an unchanged podiumd release on an unsealed vault needs no activation.
+    if releases.PODIUMD in upgraded.names or not openbao.unsealed():
+        openbao.activate(render)
+    _wait_ready(live, upgraded.held)
     print("\nDeployed.")
     tunnel.setup_tunnel(ask=False)
 
@@ -360,6 +412,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         "--otel",
         action="store_true",
         help="apps send OpenTelemetry metrics (with the metrics profile); ~50 MiB per web pod",
+    )
+    parser.add_argument(
+        "--every-release",
+        action="store_true",
+        help="also upgrade a release whose render is unchanged since the last deploy",
     )
     parser.add_argument(
         "--skip-roles",
