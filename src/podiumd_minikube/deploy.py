@@ -250,6 +250,7 @@ def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[
 ZAC = "zac"
 # WildFly gives up on ZAC's deployment when Open Zaak answers 502 (still starting) or 403 (a fresh
 # install, before openzaak-config) during its boot, and the liveness probe restarts it only after 16 x 30 s.
+# Known issues zac-8 and podiumd-chart-30 (fix: an init container); remove hold_zac and restart_zac with it.
 BOOT_FAILED = "WFLYCTL0080"
 # Jobs that create what ZAC's boot reads: its Open Zaak authorisations and the ALG catalogus;
 # a start or restart before they completed fails.

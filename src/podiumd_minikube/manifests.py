@@ -465,7 +465,8 @@ OPEN_INWONER_SEARCH_INDEX = "openinwoner-search-index"
 # back-off retried it up to 5 minutes later. ZAC's init container: Solr still starting.
 # Keycloak's admin user: its SQL needs the realm table Keycloak creates on its first start.
 # Open Inwoner's index rebuild: its Elasticsearch still starting. The catalogus and
-# objecttypen Jobs: Open Zaak and Objecttypen still being configured; ZAC waits for the first.
+# objecttypen Jobs: Open Zaak and Objecttypen still being configured (known issue podiumd-chart-31);
+# ZAC waits for the first.
 # OpenBao's schema and config, Open VTB's and Open Beheer's config: Postgres or OpenBao still starting.
 RETRIED_CONTAINERS = {
     ("Job", "openbeheer-config", "openbeheer"),
