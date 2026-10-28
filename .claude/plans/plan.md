@@ -9221,3 +9221,17 @@ Kees chose two changes:
 - podiumd and monitoring-logging upgrade together, after this chart's release
   (it creates the PV/PVC pairs podiumd looks up): separate namespaces, as
   ExternalsPodiumD's separate pipelines.
+- podiumd-tests run 20261028-184614 (597 passed, 1 failed): the Keycloak
+  operator's CRDs were the subchart's older ones. deploy.apply_crds applied
+  upstream 26.8.1 first, then Helm 4's install server-side applied the
+  subchart's crds/ over them (managedFields: `helm Apply` at the install).
+  Upgrades leave crds/ alone, so it showed only after a fresh install. The
+  podiumd and own releases now get `--skip-crds`, as monitoring-logging
+  (ExternalsPodiumD and podiumd-infra run install-keycloak-operator-crds.sh
+  before their deploy).
+- Measured (2026-10-28 CET): redeploy #1, every release upgraded (no
+  digests recorded yet), podiumd and monitoring-logging in parallel: 2 min
+  41 s (was 2 min 52 s). Redeploy #2, nothing changed: all three skipped,
+  no activation: 20.7 s (kubectl apply: 87 s). openbao-activate.sh by hand on
+  the operational vault: 12.7 s in total; preflight helm check 0.17 s
+  (`helm get metadata` + `helm get hooks`), the openbao-config Job 10.3 s.

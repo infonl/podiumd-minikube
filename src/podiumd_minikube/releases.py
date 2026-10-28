@@ -34,8 +34,10 @@ PODIUMD = PODIUMD_RELEASE
 MONITORING = MONITORING_RELEASE
 HELM_PLUGINS = CHART_DIR / "helm-plugins"
 POST_RENDERER = "podiumd-minikube"
-# ExternalsPodiumD's podiumd upgrade; monitoring-logging's adds --wait and its own timeout.
-UPGRADE_ARGS = ["--timeout", "15m", "--server-side=true", "--force-conflicts", "--reset-values"]
+# ExternalsPodiumD's podiumd upgrade; monitoring-logging's adds --wait and its own timeout. --skip-crds:
+# deploy.apply_crds applies the crds/ CRDs first (the Keycloak operator's from upstream, as the chart's
+# install-keycloak-operator-crds.sh); Helm 4's install applied the subchart's older ones over them.
+UPGRADE_ARGS = ["--timeout", "15m", "--server-side=true", "--force-conflicts", "--reset-values", "--skip-crds"]
 # --skip-crds: crds.apply_monitoring_logging_crds applies the CRDs it needs, without the 12 unused ones
 # (crds.UNUSED_MONITORING_LOGGING_CRDS: kube-apiserver memory); Helm would install them all.
 MONITORING_ARGS = ["--timeout", "10m", "--wait", "--reset-values", "--skip-crds"]
