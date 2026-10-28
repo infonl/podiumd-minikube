@@ -3,6 +3,7 @@
 import argparse
 import re
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
@@ -137,18 +138,49 @@ def _apply_crds(render: manifests.Render) -> None:
     kube.kubectl_shown("wait", "--for=condition=Established", *names, "--timeout=60s")
 
 
+# What a pod reads when it is created: applied before the workloads, else their first pods fail.
+POD_INPUT_KINDS = {
+    "ServiceAccount", "Secret", "ConfigMap", "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding",
+    "PersistentVolume", "PersistentVolumeClaim",
+}  # fmt: skip
+# One `kubectl apply` of the --full render took 21 s (one object at a time); 8 in parallel 3.5 s.
+APPLY_WORKERS = 8
+
+
+def apply_phases(docs: list[manifests.Doc]) -> list[list[manifests.Doc]]:
+    """docs as [POD_INPUT_KINDS, the rest], each in render order; empty phases left out."""
+    inputs = [doc for doc in docs if doc.get("kind") in POD_INPUT_KINDS]
+    rest = [doc for doc in docs if doc.get("kind") not in POD_INPUT_KINDS]
+    return [phase for phase in (inputs, rest) if phase]
+
+
+def apply_parallel(docs: list[manifests.Doc]) -> list[tuple[str, int]]:
+    """`kubectl apply` of docs split over APPLY_WORKERS processes: (output, exit code) per chunk, in order."""
+    chunks = [docs[i::APPLY_WORKERS] for i in range(min(APPLY_WORKERS, len(docs)))]
+
+    def apply(chunk: list[manifests.Doc]) -> tuple[str, int]:
+        command = ["kubectl", "apply", "-n", NAMESPACE, "-f", "-"]
+        result = process.run(command, stdin=manifests.dump(chunk), check=False, merge_stderr=True)
+        return result.stdout, result.returncode
+
+    with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
+        return list(pool.map(apply, chunks))
+
+
 def _apply_full_manifest(render: manifests.Render, expected: int) -> None:
     print("\nApplying the full manifest...")
     print(f'NOTE: expect {expected} long "spec is immutable" errors below for PersistentVolumes/')
     print("PersistentVolumeClaims - HARMLESS. podiumd's own Azure-CSI storage objects are")
     print("rejected on purpose so this chart's hostPath ones (applied above) stay in place.")
-    applied = process.run(
-        ["kubectl", "apply", "-n", NAMESPACE, "-f", "-"], stdin=render.manifest, check=False, merge_stderr=True
-    )
-    print(applied.stdout, end="")
-    actual = apply_errors(applied.stdout)
+    output, returncode = "", 0
+    for phase in apply_phases(render.docs):
+        for stdout, code in apply_parallel(phase):
+            output += stdout
+            returncode = returncode or code
+    print(output, end="")
+    actual = apply_errors(output)
     print()
-    if applied.returncode == 0:
+    if returncode == 0:
         print("Applied cleanly.")
     elif actual == expected:
         print(f'{actual} "spec is immutable" error(s) above - expected and HARMLESS (podiumd\'s')

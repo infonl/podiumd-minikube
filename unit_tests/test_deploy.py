@@ -210,6 +210,7 @@ def called(
     monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
     monkeypatch.setattr(pki, "CA_CERT", tmp_path / "ca.crt")
     monkeypatch.setattr(crds, "keycloak_version", lambda: None)
+    monkeypatch.setattr(deploy, "APPLY_WORKERS", 1)
     pki.CA_CERT.write_text("")
     fake_run.on("kubectl", "create", "namespace", stdout="kind: Namespace\n")
     fake_run.on("kubectl", "apply", "-n", NAMESPACE, returncode=1, stdout=IMMUTABLE * 2)
@@ -292,6 +293,24 @@ def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(
     live["deployment"]["items"][0]["status"]["readyReplicas"] = 0
     with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac; running: openzaak-config$"):
         _deploy()
+
+
+def test_apply_phases_puts_what_pods_read_first():
+    docs = [_doc("Deployment", "a"), _doc("ConfigMap", "b"), _doc("Job", "c"), _doc("ServiceAccount", "d")]
+    assert [[manifests.name_of(doc) for doc in phase] for phase in deploy.apply_phases(docs)] == [
+        ["b", "d"],
+        ["a", "c"],
+    ]
+    assert deploy.apply_phases([_doc("Job", "c")]) == [[_doc("Job", "c")]]
+
+
+def testapply_parallel_splits_the_docs_over_the_workers(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(deploy, "APPLY_WORKERS", 2)
+    docs = [_doc("ConfigMap", name) for name in "abc"]
+    results = deploy.apply_parallel(docs)
+    assert len(results) == len(fake_run.calls) == 2
+    applied = sorted(stdin or "" for stdin in fake_run.stdins)
+    assert applied == sorted([manifests.dump([docs[0], docs[2]]), manifests.dump([docs[1]])])
 
 
 def test_deploy_needs_the_local_ca(called: list[str]):

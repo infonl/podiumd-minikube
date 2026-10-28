@@ -8830,3 +8830,17 @@ the noise of one run each: the bootstrap is Liquibase's round trips to
 Postgres, which requests 100m under the same contention (CPU pressure
 70-80% from 12:24:18 to 12:25:39 UTC). 500m stays: it is the chart's value
 and reserves no memory.
+
+### Parallel `kubectl apply` of the full manifest
+
+`kubectl apply` handles one object at a time: 452 objects of the --full
+render took 21.4 s in a server-side dry run, 5.6 s split over 4 processes,
+3.5 s over 8. `deploy` now applies in two phases, first what a pod reads at
+its creation (ServiceAccounts, Secrets, ConfigMaps, RBAC, PV/PVC), then the
+rest, each split round-robin over `APPLY_WORKERS` (8) processes; the output
+is joined in chunk order, so the expected-error count is unchanged (a
+redeploy applies cleanly, a fresh install shows the 20 immutable PV/PVC
+errors, as before). Redeploy: apply 21 -> 4 s, deploy --full 112 -> 106 s.
+The Jobs now all start within the same 4 s and the last one,
+keycloak-repair-client-scopes, took 71 s instead of 64, so the wait grew
+52 -> 63 s; one run each.
