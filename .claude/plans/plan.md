@@ -8903,3 +8903,30 @@ zookeeper-operator-post-install-upgrade (50 s), a chart hook with a fixed
 `sleep 30` that ExternalsPodiumD's `helm upgrade` waits for too. Reverted (the
 user's call): a deviation from the reference values without a deploy-time
 gain. Breakdown of the 87 s: 31 s render and apply, 52 s Jobs, 4 s finish.
+
+### helm-charts PR 662, 664 and 665 on the verify build
+
+Verify branch at e8dd4efa: feature/podiumd-4.10.1 93fbf7c2 + #659 + #660 +
+#662 + #664 + #665; deploy --full 86 s. #664: OpenBao restarted and, with
+minikube's static seal, came back unsealed; `X-Content-Type-Options: nosniff`
+comes from the pod's 8200 listener itself, not only through the edge. #662
+changes `scripts/openbao-activate.sh`, which minikube never runs (no Helm
+release: helm template + kubectl apply; `openbao.py` replaces it), so its
+preflight cannot be timed here. #665: the podiumd realm went 27 -> 26 clients;
+the one gone is `datamigratie`, which values.yaml disables. Before #665 the
+import rendered it as a disabled client; now it is not rendered, and
+keycloak-config-cli deletes it (IMPORT_REMOTESTATE_ENABLED true, no
+IMPORT_MANAGED_CLIENT: the default `full` removes clients it created earlier).
+
+### Frank!Gateway and OpenBao metrics (podiumd-tests handoff 7951281)
+
+podiumd-tests' test_metrics found no frankgateway and openbao metrics in
+Prometheus. The metrics profile (`chart.METRICS_SETS`) now sets, as the
+chart's values-enable-observability.yaml: `frankgateway.metrics.enabled` and
+its serviceMonitor, `openbao.serverTelemetry.serviceMonitor.enabled` and the
+9101 `metrics` ports on the server and its Service (the render fails without
+them). Intervals are the chart defaults, the same as that file. The live
+render has ServiceMonitors frankgateway-outway and podiumd-minikube-openbao;
+`templates/openbao-podmonitor.yaml` renders nothing with one HA replica (no
+standby). `NO_METRICS_SETS` turns off only the switches, so a deploy without
+metrics sets no 9101 ports that would point at a missing listener.

@@ -281,9 +281,9 @@ podiumd:
     # podiumd-minikube (its Role/RoleBinding land there).
     managedNamespaces:
       - podiumd-minikube
-    # The metrics profile turns on its podMonitor. ExternalsPodiumD and the chart's
-    # values-enable-observability.yaml set metricsPort, which eck-operator 3.x
-    # ignores: its metrics.port default "0" wins.
+    # The metrics profile turns on its podMonitor. As the chart's
+    # values-enable-observability.yaml; ExternalsPodiumD sets metricsPort, which
+    # eck-operator 3.x ignores: its metrics.port default "0" wins.
     config:
       metrics:
         port: "8080"

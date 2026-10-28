@@ -20,8 +20,23 @@ METRICS_SETS = [
     "--set", "podiumd.redis-operator.redis-ha.redisExporter.enabled=true",
     "--set", "podiumd.redis-operator.redis-ha.redisExporter.podMonitor.enabled=true",
     "--set", "podiumd.eck-operator.podMonitor.enabled=true",
+    "--set", "podiumd.frankgateway.metrics.enabled=true",
+    "--set", "podiumd.frankgateway.metrics.serviceMonitor.enabled=true",
+    # As the chart's values-enable-observability.yaml: the render fails without the 9101 ports.
+    "--set", "podiumd.openbao.serverTelemetry.serviceMonitor.enabled=true",
+    "--set", "podiumd.openbao.server.extraPorts[0].name=metrics",
+    "--set", "podiumd.openbao.server.extraPorts[0].containerPort=9101",
+    "--set", "podiumd.openbao.server.service.extraPorts[0].name=metrics",
+    "--set", "podiumd.openbao.server.service.extraPorts[0].port=9101",
+    "--set", "podiumd.openbao.server.service.extraPorts[0].targetPort=9101",
 ]  # fmt: skip
-NO_METRICS_SETS = [arg.replace("=true", "=false") for arg in METRICS_SETS]
+# The switches only: OpenBao's ports without its telemetry listener would point at nothing.
+NO_METRICS_SETS = [
+    item
+    for flag, arg in zip(METRICS_SETS[::2], METRICS_SETS[1::2], strict=True)
+    if arg.endswith("=true")
+    for item in (flag, arg.replace("=true", "=false"))
+]
 
 # deploy --skip-roles: keycloak.config.skipRoles/skipGroups true, the chart default: the realm
 # import creates no realm or client roles and no groups; pabc-keycloak-groups-job adds PABC's.
