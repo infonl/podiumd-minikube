@@ -9267,3 +9267,11 @@ Keycloak chain, CET:
   their name, so their changed pod template needs them deleted once before
   the next deploy (a Job's template is immutable). The race itself is
   podiumd-chart-31 (known-issues fcc2cf3).
+- Live: after deleting the two hash-named Jobs once, redeploy 2 min 37 s;
+  import-master-realm-job, import-podiumd-realm-job and
+  pabc-keycloak-groups-job ran through the retry wrapper, succeeded, no
+  failed pods; live suite 37 passed; the next redeploy skipped all three
+  releases (19.2 s). The first redeploy after a fresh install also upgraded
+  monitoring-logging: its render at install time differs from the next one
+  (lookups find what the install created), once. The gain on a fresh install
+  is not measured yet (needs a reset).
