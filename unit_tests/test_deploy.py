@@ -44,10 +44,11 @@ def fixed_sets(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.MonkeyPatch, fixed_sets: None):
-    monkeypatch.setattr(chart, "objecten_shape", lambda: chart.ObjectenShape(merged=True, sets=["--set", "shape=1"]))
+    monkeypatch.setattr(chart, "objecten_shape", lambda: chart.ObjectenShape(merged=True, sets=[]))
+    monkeypatch.setattr(chart, "full_profile_sets", lambda: ["--set", "full=1"])
     selected = deploy.options(full=True, extra=["--set", "x=y"])
     assert selected.objecten_merged
-    assert selected.helm_args == [*chart.FULL_PROFILE_SETS, "--set", "shape=1", *SEAL, "--set", "x=y"]
+    assert selected.helm_args == ["--set", "full=1", *SEAL, "--set", "x=y"]
 
 
 def test_options_core_has_no_profile_sets(fixed_sets: None):

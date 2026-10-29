@@ -25,6 +25,19 @@ def test_objecten_shape_is_merged_with_openobject(tmp_path: Path):
     assert "objecten.merged=true" in shape.sets
 
 
+def test_full_profile_sets_drop_openvtb_without_its_subchart(tmp_path: Path):
+    make_tgz(tmp_path / "podiumd-4.9.4.tgz", {"podiumd/charts/objecten/Chart.yaml": ""})
+    sets = chart.full_profile_sets(tmp_path)
+    assert "podiumd.openvtb.enabled=true" not in sets
+    assert len(sets) == len(chart.FULL_PROFILE_SETS) - 2 + len(chart.objecten_shape(tmp_path).sets)
+    assert "podiumd.zaakbrug.enabled=true" in sets
+
+
+def test_full_profile_sets_keep_openvtb_with_its_subchart(tmp_path: Path):
+    make_tgz(tmp_path / "podiumd-4.10.0.tgz", {"podiumd/charts/openvtb/Chart.yaml": ""})
+    assert chart.full_profile_sets(tmp_path)[: len(chart.FULL_PROFILE_SETS)] == chart.FULL_PROFILE_SETS
+
+
 def test_bundled_image_sets_come_from_podiumds_values(tmp_path: Path):
     podiumd_values = """\
 global:

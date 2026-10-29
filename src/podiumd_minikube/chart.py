@@ -203,6 +203,18 @@ def objecten_shape(charts_dir: Path = CHARTS_DIR) -> ObjectenShape:
     )
 
 
+def full_profile_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
+    """FULL_PROFILE_SETS and the objecten shape's sets, without a profile the podiumd tarball has no subchart for."""
+    tgz = tarball("podiumd", charts_dir)
+    names = member_names(tgz) if tgz else []
+    sets = [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets]
+    # podiumd<4.10: no openvtb subchart.
+    if tgz and not any(name.startswith("podiumd/charts/openvtb/") for name in names):
+        index = sets.index("podiumd.openvtb.enabled=true")
+        del sets[index - 1 : index + 1]
+    return sets
+
+
 def everything_args(charts_dir: Path = CHARTS_DIR) -> list[str]:
     """helm args that render every profile: all images and hosts the chart can have."""
-    return [*FULL_PROFILE_SETS, *objecten_shape(charts_dir).sets, *bundled_image_sets(charts_dir)]
+    return [*full_profile_sets(charts_dir), *bundled_image_sets(charts_dir)]
