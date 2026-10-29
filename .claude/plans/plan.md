@@ -9320,3 +9320,34 @@ scaled): about 40% CRD handling (structural schemas, per-CRD OpenAPI),
   after the install. retry_in_container now leaves a command alone that
   already retries itself (`until "$@"`), so podiumd's own retry is not wrapped
   twice; ours stays for podiumd without #666.
+
+## helm-charts #660 verified (2026-10-29 19:15-19:50 CET)
+
+For podiumd-tests: #660 (9b82acea) drops the keycloak-builder init container
+and the keycloak-build-data volume, and sets `startOptimized: false`
+(podiumd-chart-36). Checkout `helm-charts-podiumd-4.10.1-pr660`.
+
+- Fresh install, `--full`: keycloak-0 (26.8.1, no init containers) took
+  64 s from container start to Ready. The kc.sh build at start took 22 s,
+  with Quarkus augmentation 16.3 s at the chart's 1 CPU limit. The empty
+  database's schema init kept /health/ready down until 56 s.
+- Upgrade 4.9.4 (26.7.3) to #660 (26.8.1): keycloak-update-job failed.
+  The operator builds its `actual` container from the deployed pod template:
+  26.7.3 with `--optimized` and keycloak-build-data (emptyDir, no builder)
+  mounted over `/opt/keycloak/lib/quarkus`. That gave
+  `NoSuchFileException: .../quarkus-application.dat`, as podiumd-chart-36.
+  The operator recreated Keycloak (40 s to Ready) and left
+  `RecreateUpdateUsed` "Unexpected update-compatibility command exit code
+  (1)" on the CR. So #660 fixes only the version changes after it is
+  installed. Evidence is in `infonl/pr660-upgrade-evidence/`.
+- Found on the way, ours: deploy of podiumd 4.9.4 failed in the
+  every-profile render (templates/openvtb, no openvtb subchart in 4.9.4).
+  `chart.full_profile_sets` leaves openvtb out then (5c57ba6).
+- Found on the way, ours, open: an upgrade 4.9.4 to 4.10 stops on Ingress
+  `objecttypen`. Release podiumd (4.9.4's objecttypen subchart) owns it,
+  and podiumd-minikube, upgraded first, renders it in the merged shape
+  (`templates/objecten/ingress-objecttypen-alias.yaml`). Worked around by
+  deleting the Ingress by hand.
+- 4.9.4 with `--full`: frankgateway needs podiumd 4.10's
+  openbao-activate.sh, so its seed hook failed. That marked the upgraded
+  release podiumd `failed`.
