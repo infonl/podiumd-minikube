@@ -9351,3 +9351,15 @@ and the keycloak-build-data volume, and sets `startOptimized: false`
 - 4.9.4 with `--full`: frankgateway needs podiumd 4.10's
   openbao-activate.sh, so its seed hook failed. That marked the upgraded
   release podiumd `failed`.
+- After #660 installed (podiumd-tests' follow-up, 20:05-20:17 CET): fresh
+  install of #660 with `--set podiumd.keycloak.image.tag=26.7.3` (podiumd's
+  values need the `podiumd.` prefix, `releases._split`), then a deploy
+  without it (26.8.1). Both keycloak-update-job containers ran without
+  `--optimized` and without build-data mounts. `actual` (26.7.3,
+  `update-compatibility metadata`) exited 0. `desired` (26.8.1, `check`,
+  kc.sh build first, augmentation 7.4 s) exited 3: "Rolling Update is not
+  available. 'feature-compatibility.login-failures' is incompatible". The
+  Job shows Failed (exit 3 is non-zero). The operator read that as a
+  recreate: `RecreateUpdateUsed` "Incompatible changes detected", Keycloak
+  26.8.1 Ready 25 s after its container start. So #660 fixes
+  podiumd-chart-36 for version changes once it is installed.
