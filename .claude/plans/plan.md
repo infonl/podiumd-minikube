@@ -9460,3 +9460,16 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   skips our values.yaml silently: kiss.enabled is false there (--full sets
   it); with KISS on it adds exactly the 2 lines now in values.yaml. #684
   changes no templates.
+- 4.10.1 RC (local merge a3a12212: c941e189 with #673, #674, #683, #686 +
+  #684 2c881c46 + #681 + #682), fresh `--full`, redis-ha 1, hold_zac off,
+  15:52-15:58 CET: zac-restart-after-openzaak-config restarted ZAC, Ready
+  67 s after openzaak-config. Job retries: openzaak-config 3,
+  pabc-seed-job 1 (duplicate key on pg_type_typname_nsp_index, new),
+  redis-ha-label-master's first run. podiumd-tests: full tier 596 passed,
+  3 failed: test_kiss_reads_itas_logboek a strict XPASS (#684 works), two
+  UI flakes (Open Archiefbeheer login, Open Inwoner document) that pass
+  on rerun.
+- The local merge resolved a docs conflict with `--ours`; rerere (one
+  rr-cache for all helm-charts worktrees) probably replayed it into
+  podiumd-f6's rebases of #679/#681/#682, dropping a doc section.
+  helm-charts now has rerere.enabled false.
