@@ -9473,3 +9473,11 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   rr-cache for all helm-charts worktrees) probably replayed it into
   podiumd-f6's rebases of #679/#681/#682, dropping a doc section.
   helm-charts now has rerere.enabled false.
+- RC2 (local merge 30c49de8: 81a99d22 with #685 + #678, #679, #681,
+  #682, #684 at their rebased heads; the docs conflicts of #681/#682 kept
+  both sections, rerere off), fresh `--full` 16:34-16:40 CET: tree
+  993cc5c3, identical to podiumd-infra's test/podiumd-4.10.1-rc2
+  (12722299) on kees00. ZAC Ready 81 s after openzaak-config through the
+  restart Job; retries: openzaak-config 2, redis-ha-label-master's first
+  run. podiumd-tests: full tier 598 passed, 1 failed (the strict XPASS of
+  test_kiss_reads_itas_logboek, #684), no flakes.
