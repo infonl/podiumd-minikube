@@ -9409,3 +9409,20 @@ exit 0.
   recreate. First attempts of frankgateway-outway-seed (etcd starting),
   keycloak-repair-client-scopes (Keycloak restarting) and the zac-sig-del
   CronJob failed and their retries succeeded.
+
+## podiumd 4.10.1 branch (2026-11-02)
+
+Kees: test helm-charts `feature/podiumd-4.10.1`; fetch it before each use,
+PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
+(local branch podiumd-4.10.1-test); monitoring-logging stays 1.0.19
+(4.10.0-verify; the branch has 1.0.18).
+
+- bb2a68e2 (with #660), fresh `--full` 10:35-10:43 CET: every Job
+  Complete, Keycloak 26.8.1 without init containers. podiumd-tests: full
+  tier 598 passed, 0 failed, 7m25s.
+- cc440fde (adds #662 faster openbao-activate.sh, #663 docs, #664 OpenBao
+  nosniff), fresh `--full` 10:56-11:05 CET: openbao-activate.sh from start
+  to the outway's keys stored 16 s (11:03:21-11:03:37);
+  https://openbao.local answers `x-content-type-options: nosniff`.
+  openzaak-config needed 4 failed attempts before it completed (2 on the
+  earlier installs), the known startup race.
