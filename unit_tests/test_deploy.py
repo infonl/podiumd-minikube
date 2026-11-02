@@ -23,6 +23,7 @@ from podiumd_minikube import keycloak
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import memory
+from podiumd_minikube import objecten
 from podiumd_minikube import openbao
 from podiumd_minikube import pki
 from podiumd_minikube import postgres
@@ -495,3 +496,18 @@ def test_deploy_deletes_what_this_chart_takes_over_and_upgrades_its_release_agai
         f"upgrade {releases.PODIUMD} --ca-trust",
         f"upgrade {RELEASE_NAME} --ca-trust",
     ]
+
+
+def test_deploy_imports_the_objecttypes_before_the_edge_routes_objecttypen_to_objecten(
+    called: list[str], monkeypatch: pytest.MonkeyPatch
+):
+    classic = manifests.Render(
+        docs=[*RENDER.docs, _doc("Deployment", "objecten"), _doc("Deployment", "objecttypen")], large_configmaps=[]
+    )
+    answers = iter([classic, RENDER])  # before the upgrade, then after it
+    monkeypatch.setattr(
+        releases, "installed", lambda release: next(answers) if release.name == releases.PODIUMD else OWN
+    )
+    monkeypatch.setattr(objecten, "import_objecttypes", lambda: called.append("import_objecttypes"))
+    _deploy()
+    assert called.index("import_objecttypes") < called.index("apply")

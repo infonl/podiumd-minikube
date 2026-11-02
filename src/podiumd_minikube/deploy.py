@@ -165,21 +165,24 @@ def taken_over(own: manifests.Render, podiumd: manifests.Render, installed: mani
     return [key for doc in own.docs if (key := manifests.key_of(doc)) in owned]
 
 
-def _prepare(names: list[str], renders: dict[str, manifests.Render], found: list[releases.Release]) -> list[str]:
-    """Before the upgrades of names: objecten's import, fsGroups, CRDs, one-shot Jobs; returns objects moving here.
+def installed_podiumd(found: list[releases.Release]) -> manifests.Render:
+    """What release podiumd has installed; empty before its first install."""
+    release = next(release for release in found if release.name == releases.PODIUMD)
+    return (
+        releases.installed(release) if releases.is_deployed(release) else manifests.Render(docs=[], large_configmaps=[])
+    )
 
-    Helm deletes them again in podiumd's upgrade, which still lists them in its old manifest.
+
+def _prepare(
+    names: list[str], renders: dict[str, manifests.Render], found: list[releases.Release], before: manifests.Render
+) -> list[str]:
+    """Before the upgrades of names: fsGroups, CRDs, one-shot Jobs; returns the objects moving to this chart.
+
+    Helm deletes them again in podiumd's upgrade, which still lists them in its old manifest (before).
     """
-    moved: list[str] = []
     own, podiumd = renders[RELEASE_NAME], renders[releases.PODIUMD]
-    podiumd_release = next(release for release in found if release.name == releases.PODIUMD)
-    if releases.is_deployed(podiumd_release):
-        installed = releases.installed(podiumd_release)
-        # podiumd 4.9 to 4.10: Ingress objecttypen moves to templates/objecten, and this release upgrades first.
-        if RELEASE_NAME in names:
-            moved = taken_over(own, podiumd, installed)
-        if releases.PODIUMD in names and objecten.merging(installed, podiumd):
-            objecten.import_objecttypes()
+    # podiumd 4.9 to 4.10: Ingress objecttypen moves to templates/objecten, and this release upgrades first.
+    moved = taken_over(own, podiumd, before) if RELEASE_NAME in names else []
     if moved:
         print(f"Deleting {', '.join(moved)}: release {releases.PODIUMD} owns it, this chart's release takes over")
         kube.kubectl_shown("delete", *moved, "-n", NAMESPACE, "--ignore-not-found")
@@ -225,9 +228,16 @@ class Upgraded:
 
 
 def _upgrade(
-    selected: Options, found: list[releases.Release], renders: dict[str, manifests.Render], *, every: bool
+    selected: Options,
+    found: list[releases.Release],
+    renders: dict[str, manifests.Render],
+    before: manifests.Render,
+    *,
+    every: bool,
 ) -> Upgraded:
     """CRDs, the one-shot Jobs, then the `helm upgrade` of each release whose digest changed (every: all).
+
+    before: what release podiumd had installed (installed_podiumd).
 
     This chart's release first: it creates the PV/PVC pairs podiumd's storage templates look up. podiumd and
     monitoring-logging then together: separate namespaces, as ExternalsPodiumD's separate pipelines.
@@ -242,7 +252,7 @@ def _upgrade(
     digests = {release.name: releases.digest(renders[release.name], post[release.name]) for release in found}
     changed = _changed(found, digests, every=every)
     names = [release.name for release in changed]
-    moved = _prepare(names, renders, found)
+    moved = _prepare(names, renders, found, before)
     if own_release := next((release for release in changed if release.name == RELEASE_NAME), None):
         releases.upgrade(own_release, post[RELEASE_NAME])
         if STORAGE_PERMISSIONS_JOB in renders[RELEASE_NAME].jobs:
@@ -253,8 +263,7 @@ def _upgrade(
             )
     try:
         with ThreadPoolExecutor(max_workers=len(found)) as pool:
-            upgrades = [pool.submit(releases.upgrade, r, post[r.name]) for r in changed if r.name != RELEASE_NAME]
-            for done in upgrades:
+            for done in [pool.submit(releases.upgrade, r, post[r.name]) for r in changed if r.name != RELEASE_NAME]:
                 done.result()
     finally:
         if own_release and moved:
@@ -295,9 +304,13 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool
     chart_hosts = hosts.chart_hosts()
     # Before the upgrades: podiumd's hook Jobs reach Keycloak by its host, and Helm waits for them.
     # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
+    before = installed_podiumd(found)
+    # Before the edge: its new routes send objecttypen.local to objecten, which the import reads objecttypen through.
+    if objecten.merging(before, renders[releases.PODIUMD]):
+        objecten.import_objecttypes()
     gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
     dns.apply_hosts(chart_hosts)
-    upgraded = _upgrade(selected, found, renders, every=every)
+    upgraded = _upgrade(selected, found, renders, before, every=every)
     # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
     installed = {release.name: releases.installed(release) for release in found}
     live = combined([installed[RELEASE_NAME], installed[releases.PODIUMD]])
