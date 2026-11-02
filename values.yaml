@@ -1504,6 +1504,9 @@ podiumd:
                   mode: read_and_write
                 - object_type: 6a0d8f9d-f7e2-4e57-a91b-01656968a62d
                   mode: read_and_write
+                # KISS reads ITA's Activiteitenlog with this token (helm-charts #684, kiss-2).
+                - object_type: "2eb81bd1-0d2b-4123-84ab-d55b99b9e75a"
+                  mode: read_only
             - identifier: ita
               token: objectenItaToken
               contact_person: ITA

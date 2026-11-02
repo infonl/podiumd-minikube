@@ -9443,3 +9443,20 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   in values.yaml, true in `chart.METRICS_SETS` (works on every podiumd
   version, unlike dropping the oidcUrl, which fails the render before #679).
   Render on 4.10.1: default profile without the client, metrics with it.
+- helm-charts #681 (14a74814, podiumd-chart-28 redis-ha replicas), fresh
+  `--full` with redis-ha 3 from the start, 14:49-14:57 CET: podiumd-tests
+  saw errorstat_READONLY 4 on redis-ha-1 (startup only), no app
+  connections on replicas; full tier 598 passed, 0 failed.
+- helm-charts #682 (826736c0, podiumd-chart-30): our deploy's hold_zac
+  hides the case on a fresh install (the new
+  zac-restart-after-openzaak-config Job logs "nothing to do"). Rerun with
+  hold_zac and zac_boot_failed overridden in-process, 15:18-15:25 CET: ZAC
+  started 15:20:58, WFLYCTL0080; openzaak-config done 15:23:21; the Job
+  restarted deployment/zac; new pod Ready 15:24:38, 77 s later, no liveness
+  kill. Once podiumd with #682 is the oldest deployed, hold_zac and
+  restart_zac go (deploy.py's zac-8/podiumd-chart-30 note).
+- helm-charts #684 (kiss-2): KISS's logboek token (the Objecten item
+  `contact`) gets read_only on the Activiteitenlog 2eb81bd1. Its script
+  skips our values.yaml silently: kiss.enabled is false there (--full sets
+  it); with KISS on it adds exactly the 2 lines now in values.yaml. #684
+  changes no templates.
