@@ -480,7 +480,7 @@ def test_taken_over_is_what_podiumd_installed_drops_and_this_chart_renders():
     assert deploy.taken_over(own, new, installed) == ["Ingress/objecttypen"]
 
 
-def test_deploy_deletes_what_this_chart_takes_over_before_its_upgrade(
+def test_deploy_deletes_what_this_chart_takes_over_and_upgrades_its_release_again(
     called: list[str], renders: dict[str, manifests.Render], monkeypatch: pytest.MonkeyPatch
 ):
     ingress = _doc("Ingress", "objecttypen")
@@ -488,5 +488,10 @@ def test_deploy_deletes_what_this_chart_takes_over_before_its_upgrade(
     old = manifests.Render(docs=[*RENDER.docs, ingress], large_configmaps=[])
     monkeypatch.setattr(releases, "installed", lambda release: old if release.name == releases.PODIUMD else OWN)
     _deploy()
-    delete = f"delete Ingress/objecttypen -n {NAMESPACE} --ignore-not-found"
-    assert called.index(delete) < called.index(f"upgrade {RELEASE_NAME} --ca-trust")
+    upgrades = [step for step in called if step.startswith(("upgrade", "delete Ingress"))]
+    assert upgrades == [
+        f"delete Ingress/objecttypen -n {NAMESPACE} --ignore-not-found",
+        f"upgrade {RELEASE_NAME} --ca-trust",
+        f"upgrade {releases.PODIUMD} --ca-trust",
+        f"upgrade {RELEASE_NAME} --ca-trust",
+    ]

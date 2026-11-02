@@ -163,16 +163,18 @@ def taken_over(own: manifests.Render, podiumd: manifests.Render, installed: mani
     return [key for doc in own.docs if (key := manifests.key_of(doc)) in owned]
 
 
-def _prepare(names: list[str], renders: dict[str, manifests.Render], found: list[releases.Release]) -> None:
-    """Before the upgrades of names: their CRDs, the one-shot Jobs they re-run, objects moving to this chart."""
+def _prepare(names: list[str], renders: dict[str, manifests.Render], found: list[releases.Release]) -> list[str]:
+    """Before the upgrades of names: their CRDs and the one-shot Jobs they re-run; returns objects moving to this chart.
+
+    Helm deletes them again in podiumd's upgrade, which still lists them in its old manifest.
+    """
+    moved: list[str] = []
     own, podiumd = renders[RELEASE_NAME], renders[releases.PODIUMD]
     podiumd_release = next(release for release in found if release.name == releases.PODIUMD)
     # podiumd 4.9 to 4.10: Ingress objecttypen moves to templates/objecten, and this release upgrades first.
-    if (
-        RELEASE_NAME in names
-        and releases.is_deployed(podiumd_release)
-        and (moved := taken_over(own, podiumd, releases.installed(podiumd_release)))
-    ):
+    if RELEASE_NAME in names and releases.is_deployed(podiumd_release):
+        moved = taken_over(own, podiumd, releases.installed(podiumd_release))
+    if moved:
         print(f"Deleting {', '.join(moved)}: release {releases.PODIUMD} owns it, this chart's release takes over")
         kube.kubectl_shown("delete", *moved, "-n", NAMESPACE, "--ignore-not-found")
     monitoring = renders.get(releases.MONITORING)
@@ -185,6 +187,7 @@ def _prepare(names: list[str], renders: dict[str, manifests.Render], found: list
     _delete_jobs(
         one_shot_jobs(own if RELEASE_NAME in names else empty, podiumd if releases.PODIUMD in names else empty)
     )
+    return moved
 
 
 def _changed(found: list[releases.Release], digests: dict[str, str], *, every: bool) -> list[releases.Release]:
@@ -230,7 +233,7 @@ def _upgrade(
     digests = {release.name: releases.digest(renders[release.name], post[release.name]) for release in found}
     changed = _changed(found, digests, every=every)
     names = [release.name for release in changed]
-    _prepare(names, renders, found)
+    moved = _prepare(names, renders, found)
     if own_release := next((release for release in changed if release.name == RELEASE_NAME), None):
         releases.upgrade(own_release, post[RELEASE_NAME])
         if STORAGE_PERMISSIONS_JOB in renders[RELEASE_NAME].jobs:
@@ -239,10 +242,15 @@ def _upgrade(
             kube.kubectl_shown(
                 "wait", "--for=condition=complete", f"job/{STORAGE_PERMISSIONS_JOB}", "-n", NAMESPACE, "--timeout=60s"
             )
-    with ThreadPoolExecutor(max_workers=len(found)) as pool:
-        upgrades = [pool.submit(releases.upgrade, r, post[r.name]) for r in changed if r.name != RELEASE_NAME]
-        for done in upgrades:
-            done.result()
+    try:
+        with ThreadPoolExecutor(max_workers=len(found)) as pool:
+            upgrades = [pool.submit(releases.upgrade, r, post[r.name]) for r in changed if r.name != RELEASE_NAME]
+            for done in upgrades:
+                done.result()
+    finally:
+        if own_release and moved:
+            # Also after a failed podiumd upgrade: the next deploy no longer sees them as moved.
+            releases.upgrade(own_release, post[RELEASE_NAME])
     if releases.PODIUMD in names and (undeleted := upgrade.undeleted_fixed_jobs(renders[releases.PODIUMD].docs)):
         print(
             f"\nWARNING: fixed-name Jobs ExternalsPodiumD does not delete before helm upgrade: {', '.join(undeleted)}"
