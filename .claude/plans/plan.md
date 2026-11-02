@@ -9492,3 +9492,14 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   show-cluster-status now prints it under the Node line
   (status.reclaimable_kernel_mib). Not freed on a timer: drop_caches is
   host-wide; memory.reclaim on the container would only move the number.
+- kube-apiserver heap profile (`kubectl get --raw /debug/pprof/heap`, read
+  with `go tool pprof` in a golang:1.24 container), 17:09 CET, 627 MB in
+  use: per-CRD serving info 74 MB, aggregated OpenAPI v2 58 MB, CRD
+  OpenAPI v3 43 MB, etcd watch decoding 122 MB, Helm release Secrets
+  19 MB, watch cache 10 MB. 64 CRDs (6.0 MiB JSON); 43 without objects
+  (2.8 MiB: Redis cluster/sentinel/standalone, solrprometheusexporters,
+  Cilium policies, Gateway TLS/GRPC routes, cert-manager issuers and
+  challenges, keycloakrealmimports, 11 ECK kinds). Not filtered: about
+  70-90 MiB at 24 MiB heap per MiB CRD JSON, and several operators fail
+  without the kinds they watch. What grows after a restart (325 -> 687 MiB
+  live): a second profile diffed with `pprof -base` (pending).
