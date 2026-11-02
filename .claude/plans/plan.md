@@ -9426,3 +9426,5 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   https://openbao.local answers `x-content-type-options: nosniff`.
   openzaak-config needed 4 failed attempts before it completed (2 on the
   earlier installs), the known startup race.
+  podiumd-tests full tier on cc440fde: 598 passed, 0 failed, 7m29s; new
+  XPASS test_security_headers[openbao] (podiumd-chart-23, fixed by #664).
