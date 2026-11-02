@@ -202,6 +202,8 @@ def cluster(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     fake_run.on("kubectl", "get", "pods", "-A", stdout=json.dumps({"items": [pod]}))
     fake_run.on("kubectl", "get", "jobs", "-A", stdout=json.dumps({"items": []}))
     fake_run.on("docker", "stats", stdout="4GiB / 16GiB|150%")
+    stat = "anon 1\nslab_reclaimable 536870912\nslab 600000000\n"
+    fake_run.on("minikube", "ssh", "-p", "minikube", "--", "cat /sys/fs/cgroup/memory.stat", stdout=stat)
     fake_run.on("docker", "inspect", "minikube", "--format", "{{.HostConfig.Memory}}", stdout=str(16 * 1024**3))
     fake_run.on("docker", "inspect", "minikube", "--format", "{{.HostConfig.NanoCpus}}", stdout="6000000000\n")
     fake_run.on("docker", "info", stdout=str(tmp_path))
@@ -216,6 +218,7 @@ def test_report_shows_node_profiles_access_and_containers_against_the_baseline(
     status.report(top=2)
     out = capsys.readouterr().out
     assert "Node        memory 4.0 / 16.0 GiB cap, budget 17.0 GiB, containers 0.3 GiB" in out
+    assert "of which 0.5 GiB kernel caches, freed under memory pressure" in out
     assert "CPU 1.5 / 6 cores" in out
     assert "Deployed    by deploy --full\nProfiles    kiss\n" in out
     assert "youngest container 60 min ago (settled)" in out

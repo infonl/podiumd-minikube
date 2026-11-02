@@ -9481,3 +9481,14 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   restart Job; retries: openzaak-config 2, redis-ha-label-master's first
   run. podiumd-tests: full tier 598 passed, 1 failed (the strict XPASS of
   test_kiss_reads_itas_logboek, #684), no flakes.
+- Footprint check after the RC2 day (16:01 UTC): node 15.8 GiB of 17,
+  containers 13.1 GiB, no container above its tolerance. Measured, no
+  saving: containerd 118 MiB itself (its cgroup's 549 MiB is 82 shims of
+  about 5 MiB); Keycloak heap committed 150 MiB of -Xmx512m, Solr 185 of
+  512m (tenured 94% used). kube-apiserver live heap 687 MiB vs 325 after
+  its last restart; object counts small (1074 events, 121 pods), cause not
+  found. Of the node's kernel memory about 1.75 GiB is reclaimable slab
+  (dentries/inodes after 7 installs), which docker stats counts:
+  show-cluster-status now prints it under the Node line
+  (status.reclaimable_kernel_mib). Not freed on a timer: drop_caches is
+  host-wide; memory.reclaim on the container would only move the number.

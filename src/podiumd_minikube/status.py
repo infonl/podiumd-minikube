@@ -94,6 +94,13 @@ def node_usage() -> Usage:
     return Usage(mib=_mib(used.split(" / ")[0]), cpu=float(cpu.rstrip("%")) / 100)
 
 
+def reclaimable_kernel_mib() -> int:
+    """MiB of the node's kernel caches the kernel frees under memory pressure (counted in node_usage)."""
+    stat = kube.node("cat /sys/fs/cgroup/memory.stat")
+    found = next((line.split()[1] for line in stat.splitlines() if line.startswith("slab_reclaimable ")), "0")
+    return round(int(found) / MIB)
+
+
 def workloads(items: list[dict[str, Any]]) -> dict[str, str]:
     """Workload name per 'namespace/pod': a ReplicaSet's Deployment, else the pod's owner, else the pod."""
     names: dict[str, str] = {}
@@ -219,6 +226,7 @@ def _node_lines(profiles: dict[str, bool], node: Usage, usage: dict[str, Usage])
             f"Node        memory {_gib(node.mib)} / {_gib(cap) if cap else '?'} GiB cap, "
             f"budget {_gib(budget_mib(profiles))} GiB, containers {_gib(sum(u.mib for u in usage.values()))} GiB"
         ),
+        f"            of which {_gib(reclaimable_kernel_mib())} GiB kernel caches, freed under memory pressure",
         f"            CPU {node.cpu:.1f} / {cores} cores",
         f"Disk        {root}: {disk.verdict(space.total, space.free, disk.DEPLOY)[1]}",
     ]
