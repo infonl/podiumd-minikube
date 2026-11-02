@@ -9347,7 +9347,12 @@ and the keycloak-build-data volume, and sets `startOptimized: false`
   `objecttypen`. Release podiumd (4.9.4's objecttypen subchart) owns it,
   and podiumd-minikube, upgraded first, renders it in the merged shape
   (`templates/objecten/ingress-objecttypen-alias.yaml`). Worked around by
-  deleting the Ingress by hand.
+  deleting the Ingress by hand. Fixed 2026-11-02 (b05d953): before this
+  chart's release upgrades, deploy deletes each object it renders that
+  release podiumd installed and podiumd's new render drops
+  (`deploy.taken_over`); Helm does not adopt another release's object.
+  The "Kind/name" key, built in three places, is now `manifests.key_of`.
+  Not yet run live on a 4.9.4 to 4.10 upgrade.
 - 4.9.4 with `--full`: frankgateway needs podiumd 4.10's
   openbao-activate.sh, so its seed hook failed. That marked the upgraded
   release podiumd `failed`.
