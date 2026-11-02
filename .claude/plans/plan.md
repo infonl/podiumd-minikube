@@ -9502,4 +9502,13 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   challenges, keycloakrealmimports, 11 ECK kinds). Not filtered: about
   70-90 MiB at 24 MiB heap per MiB CRD JSON, and several operators fail
   without the kinds they watch. What grows after a restart (325 -> 687 MiB
-  live): a second profile diffed with `pprof -base` (pending).
+  live): a second profile diffed with `pprof -base`.
+- Second kube-apiserver heap profile, 20:22 CET, after three podiumd-tests
+  full tiers (17:52, 18:30, 19:30 CET; 597/1 flake, 598/0, 598/0) and no
+  deploy: 561 MB in use (627 at 17:09). `pprof -base`: -63 MB, all in
+  request handling at the first sample (list responses being encoded
+  -42 MB, gzip writers -17 MB); no function grew by more than 1 MB.
+  go_memstats_heap_alloc_bytes 669 MB. So the heap does not grow under
+  test traffic and shows no leak; the 325 -> 687 MiB after a restart
+  more likely comes with the deploys (not measured: it would need a
+  profile before and after one install). No change.
