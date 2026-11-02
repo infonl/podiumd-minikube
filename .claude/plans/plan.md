@@ -9428,3 +9428,11 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   earlier installs), the known startup race.
   podiumd-tests full tier on cc440fde: 598 passed, 0 failed, 7m29s; new
   XPASS test_security_headers[openbao] (podiumd-chart-23, fixed by #664).
+- The branch was rebased onto a newer main (docs #671, #607, #676);
+  cc440fde is now 7ad8bc3a. 19c17367 (adds #665 realm clients only for
+  installed components, #666 configuration Jobs retry in the container),
+  fresh `--full` 11:54-12:03 CET: one failed Job pod in the whole install
+  (openzaak-config, once; 4 on cc440fde). #665 on render: default profile 11
+  realm clients (still `monitoring`, although monitoring-logging is a
+  separate release), `--full` 23. podiumd-tests full tier 598 passed, 0
+  failed, 7m42s, as on 7ad8bc3a.
