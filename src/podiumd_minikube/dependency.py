@@ -31,6 +31,7 @@ Mode = Literal["version", "path"]
 DEPENDENCIES = {"podiumd": "podiumd", "monitoringLogging": "monitoring-logging"}
 
 USAGE_HINT = "run podiumd-minikube set-podiumd-version <podiumd> <monitoring-logging> (each a version or a checkout)"
+HELM_CHARTS = "https://github.com/Dimpact-Samenwerking/helm-charts.git"
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,23 @@ def selection(key: str, path: Path = VERSIONS_FILE) -> Selection | None:
     if entry.get("version"):
         return Selection("version", str(entry["version"]))
     return None
+
+
+def podiumd_script(name: str, work: Path) -> Path:
+    """The selected podiumd chart's scripts/name: in its checkout, else from helm-charts tag podiumd-<version>.
+
+    A published chart leaves scripts/ out (its .helmignore). The path may not exist: older podiumd lacks the script.
+    """
+    selected = selection("podiumd")
+    if selected is None:
+        raise missing_error(["podiumd"])
+    if selected.mode == "path":
+        return Path(selected.value) / "scripts" / name
+    if not (work / ".git").is_dir():
+        clone = ["git", "clone", "--quiet", "--depth", "1", "--filter=blob:none", "--sparse"]
+        process.fetch([*clone, "--branch", f"podiumd-{selected.value}", HELM_CHARTS, str(work)])
+        process.run(["git", "-C", str(work), "sparse-checkout", "set", "charts/podiumd/scripts"])
+    return work / "charts" / "podiumd" / "scripts" / name
 
 
 def missing_error(names: list[str]) -> UserError:

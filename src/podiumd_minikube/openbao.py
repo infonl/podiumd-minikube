@@ -38,7 +38,6 @@ LOCAL_ADDR = "http://127.0.0.1:8210"
 CONFIG_JOB = "openbao-config"
 STARTUP_TIMEOUT = 300
 SCRIPT = "openbao-activate.sh"
-HELM_CHARTS = "https://github.com/Dimpact-Samenwerking/helm-charts.git"
 # The script's KEYVAULT_ITEM default, and its value before the first init.
 KEY_ITEM = "openbao-unseal-key"
 PLACEHOLDER = "pending-init"
@@ -96,24 +95,12 @@ def unsealed() -> bool:
 
 
 def activate_script(work: Path) -> Path:
-    """The selected podiumd chart's openbao-activate.sh: in its directory, else from helm-charts tag podiumd-<version>.
-
-    A published chart leaves scripts/ out (its .helmignore).
-    """
-    selected = dependency.selection("podiumd")
-    if selected is not None and selected.mode == "path":
-        found = Path(selected.value) / "scripts" / SCRIPT
-    elif selected is not None:
-        clone = ["git", "clone", "--quiet", "--depth", "1", "--filter=blob:none", "--sparse"]
-        process.fetch([*clone, "--branch", f"podiumd-{selected.value}", HELM_CHARTS, str(work)])
-        process.run(["git", "-C", str(work), "sparse-checkout", "set", "charts/podiumd/scripts"])
-        found = work / "charts" / "podiumd" / "scripts" / SCRIPT
-    else:
-        raise dependency.missing_error(["podiumd"])
+    """The selected podiumd chart's openbao-activate.sh (dependency.podiumd_script)."""
+    found = dependency.podiumd_script(SCRIPT, work)
     if not found.is_file():
-        msg = (
-            f"podiumd {selected.value} has no scripts/{SCRIPT} (from podiumd 4.10.0 on): turn off profile frankgateway"
-        )
+        selected = dependency.selection("podiumd")
+        version = selected.value if selected else "podiumd"
+        msg = f"podiumd {version} has no scripts/{SCRIPT} (from podiumd 4.10.0 on): turn off profile frankgateway"
         raise process.UserError(msg)
     return found
 

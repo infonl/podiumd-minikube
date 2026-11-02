@@ -152,7 +152,7 @@ def test_script_of_a_version_comes_from_its_helm_charts_tag(
     found.write_text("", encoding="utf-8")
     assert openbao.activate_script(tmp_path) == found
     (clone,) = fake_run.ran("git", "clone")
-    assert clone[-3:] == ["podiumd-4.10.0", openbao.HELM_CHARTS, str(tmp_path)]
+    assert clone[-3:] == ["podiumd-4.10.0", dependency.HELM_CHARTS, str(tmp_path)]
     assert fake_run.ran("git", "-C", str(tmp_path), "sparse-checkout", "set", "charts/podiumd/scripts")
 
 

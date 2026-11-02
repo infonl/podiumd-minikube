@@ -21,6 +21,7 @@ from podiumd_minikube import kube
 from podiumd_minikube import lock
 from podiumd_minikube import manifests
 from podiumd_minikube import memory
+from podiumd_minikube import objecten
 from podiumd_minikube import openbao
 from podiumd_minikube import pki
 from podiumd_minikube import polling
@@ -29,6 +30,7 @@ from podiumd_minikube import process
 from podiumd_minikube import releases
 from podiumd_minikube import tunnel
 from podiumd_minikube import upgrade
+from podiumd_minikube import volumes
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OLD_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -164,19 +166,26 @@ def taken_over(own: manifests.Render, podiumd: manifests.Render, installed: mani
 
 
 def _prepare(names: list[str], renders: dict[str, manifests.Render], found: list[releases.Release]) -> list[str]:
-    """Before the upgrades of names: their CRDs and the one-shot Jobs they re-run; returns objects moving to this chart.
+    """Before the upgrades of names: objecten's import, fsGroups, CRDs, one-shot Jobs; returns objects moving here.
 
     Helm deletes them again in podiumd's upgrade, which still lists them in its old manifest.
     """
     moved: list[str] = []
     own, podiumd = renders[RELEASE_NAME], renders[releases.PODIUMD]
     podiumd_release = next(release for release in found if release.name == releases.PODIUMD)
-    # podiumd 4.9 to 4.10: Ingress objecttypen moves to templates/objecten, and this release upgrades first.
-    if RELEASE_NAME in names and releases.is_deployed(podiumd_release):
-        moved = taken_over(own, podiumd, releases.installed(podiumd_release))
+    if releases.is_deployed(podiumd_release):
+        installed = releases.installed(podiumd_release)
+        # podiumd 4.9 to 4.10: Ingress objecttypen moves to templates/objecten, and this release upgrades first.
+        if RELEASE_NAME in names:
+            moved = taken_over(own, podiumd, installed)
+        if releases.PODIUMD in names and objecten.merging(installed, podiumd):
+            objecten.import_objecttypes()
     if moved:
         print(f"Deleting {', '.join(moved)}: release {releases.PODIUMD} owns it, this chart's release takes over")
         kube.kubectl_shown("delete", *moved, "-n", NAMESPACE, "--ignore-not-found")
+    for release in found:
+        if release.name in names and release.name != RELEASE_NAME:
+            volumes.apply_fs_groups(renders[release.name].docs, release.namespace)
     monitoring = renders.get(releases.MONITORING)
     if monitoring and releases.MONITORING in names and crds.needed(monitoring.docs):
         print("\nApplying monitoring-logging's own CRDs first...")

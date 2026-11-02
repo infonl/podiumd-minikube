@@ -49,6 +49,9 @@ live: the tunnel script's own host list went stale, which is why
    | a single setting from `values.yaml` | `podiumd_minikube.values` |
    | facts from the vendored tarballs (objecten shape) | `podiumd_minikube.chart` |
    | the monitoring-logging CRDs | `crds.apply_monitoring_logging_crds` |
+   | podiumd's `scripts/` (openbao-activate.sh, migrate-objecttypen-tokens.sh) | `dependency.podiumd_script` |
+   | a pod's fsGroup on minikube's hostPath volumes | `podiumd_minikube.volumes` |
+   | steps before podiumd's upgrade to Open Object | `podiumd_minikube.objecten` |
    | unit-test fakes for processes and tarballs | fixture `fake_run`, `make_tgz` in `unit_tests/conftest.py` |
    | PV/PVC pre-provisioning for an app | `templates/storage-hooks.yaml` |
    | a database and user for an app | the init SQL in `templates/postgres` |
