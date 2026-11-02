@@ -471,3 +471,22 @@ def test_deploy_upgrades_a_release_without_a_deployed_revision(called: list[str]
     monkeypatch.setattr(releases, "is_deployed", lambda release: release.name == RELEASE_NAME)
     _deploy()
     assert [step for step in called if step.startswith("upgrade")] == [f"upgrade {releases.PODIUMD} --ca-trust"]
+
+
+def test_taken_over_is_what_podiumd_installed_drops_and_this_chart_renders():
+    own = manifests.Render(docs=[_doc("Ingress", "objecttypen"), _doc("Service", "kept")], large_configmaps=[])
+    new = manifests.Render(docs=[_doc("Service", "kept")], large_configmaps=[])
+    installed = manifests.Render(docs=[_doc("Ingress", "objecttypen"), _doc("Service", "kept")], large_configmaps=[])
+    assert deploy.taken_over(own, new, installed) == ["Ingress/objecttypen"]
+
+
+def test_deploy_deletes_what_this_chart_takes_over_before_its_upgrade(
+    called: list[str], renders: dict[str, manifests.Render], monkeypatch: pytest.MonkeyPatch
+):
+    ingress = _doc("Ingress", "objecttypen")
+    renders[RELEASE_NAME] = manifests.Render(docs=[*OWN.docs, ingress], large_configmaps=[])
+    old = manifests.Render(docs=[*RENDER.docs, ingress], large_configmaps=[])
+    monkeypatch.setattr(releases, "installed", lambda release: old if release.name == releases.PODIUMD else OWN)
+    _deploy()
+    delete = f"delete Ingress/objecttypen -n {NAMESPACE} --ignore-not-found"
+    assert called.index(delete) < called.index(f"upgrade {RELEASE_NAME} --ca-trust")

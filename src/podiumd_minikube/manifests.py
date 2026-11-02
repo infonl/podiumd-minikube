@@ -161,6 +161,11 @@ def name_of(doc: Doc) -> str:
     return str(section(doc, "metadata").get("name") or "")
 
 
+def key_of(doc: Doc) -> str:
+    """Kind/name of doc, as kubectl takes it."""
+    return f"{doc.get('kind')}/{name_of(doc)}"
+
+
 def _is_configmap(doc: Doc, name: str) -> bool:
     return doc.get("kind") == "ConfigMap" and name_of(doc) == name
 
@@ -781,7 +786,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     """Applies every local fixup to `helm template` output."""
     loaded: list[tuple[Doc | None, str]] = [(_load(c), c) for c in _chunks(text)]
     sources = [(doc, _SOURCE.search(chunk)) for doc, chunk in loaded]
-    charts = {f"{doc.get('kind')}/{name_of(doc)}": source[2] or source[1] for doc, source in sources if doc and source}
+    charts = {key_of(doc): source[2] or source[1] for doc, source in sources if doc and source}
     templated_crds = [
         name_of(doc)
         for doc, chunk in loaded

@@ -156,9 +156,25 @@ def combined(renders: list[manifests.Render]) -> manifests.Render:
     )
 
 
-def _prepare(names: list[str], renders: dict[str, manifests.Render]) -> None:
-    """Before the upgrades of names: their CRDs, and the one-shot Jobs they re-run."""
+def taken_over(own: manifests.Render, podiumd: manifests.Render, installed: manifests.Render) -> list[str]:
+    """The "Kind/name"s of own that release podiumd installed and its new render drops: Helm refuses to adopt them."""
+    keep = {manifests.key_of(doc) for doc in podiumd.docs}
+    owned = {manifests.key_of(doc) for doc in installed.docs} - keep
+    return [key for doc in own.docs if (key := manifests.key_of(doc)) in owned]
+
+
+def _prepare(names: list[str], renders: dict[str, manifests.Render], found: list[releases.Release]) -> None:
+    """Before the upgrades of names: their CRDs, the one-shot Jobs they re-run, objects moving to this chart."""
     own, podiumd = renders[RELEASE_NAME], renders[releases.PODIUMD]
+    podiumd_release = next(release for release in found if release.name == releases.PODIUMD)
+    # podiumd 4.9 to 4.10: Ingress objecttypen moves to templates/objecten, and this release upgrades first.
+    if (
+        RELEASE_NAME in names
+        and releases.is_deployed(podiumd_release)
+        and (moved := taken_over(own, podiumd, releases.installed(podiumd_release)))
+    ):
+        print(f"Deleting {', '.join(moved)}: release {releases.PODIUMD} owns it, this chart's release takes over")
+        kube.kubectl_shown("delete", *moved, "-n", NAMESPACE, "--ignore-not-found")
     monitoring = renders.get(releases.MONITORING)
     if monitoring and releases.MONITORING in names and crds.needed(monitoring.docs):
         print("\nApplying monitoring-logging's own CRDs first...")
@@ -214,7 +230,7 @@ def _upgrade(
     digests = {release.name: releases.digest(renders[release.name], post[release.name]) for release in found}
     changed = _changed(found, digests, every=every)
     names = [release.name for release in changed]
-    _prepare(names, renders)
+    _prepare(names, renders, found)
     if own_release := next((release for release in changed if release.name == RELEASE_NAME), None):
         releases.upgrade(own_release, post[RELEASE_NAME])
         if STORAGE_PERMISSIONS_JOB in renders[RELEASE_NAME].jobs:

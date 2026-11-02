@@ -181,5 +181,5 @@ def installed(release: Release) -> manifests.Render:
     docs = manifests.documents(process.output(["helm", "get", "manifest", release.name, "-n", release.namespace]))
     for doc in docs:
         manifests.section(doc, "metadata").setdefault("namespace", release.namespace)
-    charts = {f"{doc.get('kind')}/{manifests.name_of(doc)}": release.name for doc in docs}
+    charts = {manifests.key_of(doc): release.name for doc in docs}
     return manifests.Render(docs=docs, large_configmaps=[], charts=charts)
