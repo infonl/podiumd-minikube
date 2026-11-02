@@ -166,7 +166,9 @@ podiumd:
         starttls: "false"
       clients:
         # Grafana keeps anonymous access (monitoring-logging.grafana's grafana.ini).
+        # Enabled by the metrics profile (chart.METRICS_SETS): no Grafana, no client.
         monitoring:
+          enabled: false
           secret: keycloakMonitoringClientSecret
           oidcUrl: https://grafana.local
         # No Datamigratie here.

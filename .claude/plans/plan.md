@@ -9436,3 +9436,10 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   realm clients (still `monitoring`, although monitoring-logging is a
   separate release), `--full` 23. podiumd-tests full tier 598 passed, 0
   failed, 7m42s, as on 7ad8bc3a.
+- Keycloak client `monitoring` without monitoring-logging (Kees: not
+  intended). podiumd's chart cannot see the separate release; helm-charts
+  #679 (open) renders a client only when its flag is not false and its
+  oidcUrl is set. Ours: `keycloak.config.clients.monitoring.enabled: false`
+  in values.yaml, true in `chart.METRICS_SETS` (works on every podiumd
+  version, unlike dropping the oidcUrl, which fails the render before #679).
+  Render on 4.10.1: default profile without the client, metrics with it.

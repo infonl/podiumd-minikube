@@ -17,6 +17,7 @@ from podiumd_minikube.paths import CHARTS_DIR
 # kube-apiserver), so the exporters never come without it.
 METRICS_SETS = [
     "--set", "metrics.enabled=true",
+    "--set", "podiumd.keycloak.config.clients.monitoring.enabled=true",
     "--set", "podiumd.clamav.metrics.enabled=true",
     "--set", "podiumd.clamav.metrics.serviceMonitor.enabled=true",
     "--set", "podiumd.redis-operator.redis-ha.redisExporter.enabled=true",
