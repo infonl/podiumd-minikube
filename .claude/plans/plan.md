@@ -9368,3 +9368,44 @@ and the keycloak-build-data volume, and sets `startOptimized: false`
   recreate: `RecreateUpdateUsed` "Incompatible changes detected", Keycloak
   26.8.1 Ready 25 s after its container start. So #660 fixes
   podiumd-chart-36 for version changes once it is installed.
+
+## Upgrade 4.9.4 to 4.10 without manual steps (2026-11-02)
+
+Three live runs of 4.9.4 `--full` followed by helm-charts #660 (9b82acea)
+`--full`. Each found something; the third upgraded in 5 min with deploy
+exit 0.
+
+- Run 1 (b05d953 only): the Ingress `objecttypen` was deleted before this
+  chart's release took it over, but podiumd's upgrade deleted it again: its
+  old manifest still lists it. cf6a2a7 upgrades this chart's release once
+  more after podiumd's, also when podiumd's fails (the next deploy no longer
+  sees the object as moved, and this release's digest is unchanged).
+- Run 1, objecten: Open Object 4.3.0 refused to start, "Upgrading from 3.6.2
+  to 4.3.0 is not possible": the objecttypes were not imported. 97083d1:
+  `objecten.import_objecttypes` runs podiumd-infra's import snippet in
+  objecten and podiumd's `scripts/migrate-objecttypen-tokens.sh --apply`
+  when podiumd's upgrade drops Deployment objecttypen, as the chart's
+  4.9.5-to-4.10.0 upgrade guide and podiumd-infra do.
+- Run 1, frankgateway etcd: "open /etcd-data/member/.touch: permission
+  denied". 4.10 runs etcd as uid 1001 with fsGroup 1001 (OnRootMismatch);
+  4.9 ran it as root, and minikube's hostPath volumes ignore fsGroup. The
+  guide names a one-off `chown -R 1001:1001` for such storage. 97083d1:
+  `volumes.apply_fs_groups` gives the existing hostPath volumes of each pod
+  template with an fsGroup that group (chgrp, g+rwX, setgid directories)
+  before the upgrade, only when the volume root's group differs: what the
+  kubelet does on Azure disks. Deviation from the estates: minikube only.
+- Run 2: the import got 401 from https://objecttypen.local/api/v2/.
+  `gateway.apply` had already routed that host to objecten (the new
+  render's routes), so objecten asked itself. 224ec86 runs the import
+  before `gateway.apply`.
+- Run 3 (10:21-10:33 CET): import `OK`; the token script reported
+  objecten-wins 5, skipped 1 (minikube's values give the clients objecten's
+  tokens already); `check_for_external_objecttypes` OK on Open Object 4.3.0;
+  12 volumes got their fsGroup, frankgateway-etcd-0 Running; release podiumd
+  revision 2 deployed; Ingress `objecttypen` owned by podiumd-minikube.
+  keycloak-update-job failed in `actual` (exit 1, podiumd-chart-36, fixed by
+  #660 only after it is installed); RecreateUpdateUsed "Unexpected
+  update-compatibility command exit code (1)", Keycloak Ready after the
+  recreate. First attempts of frankgateway-outway-seed (etcd starting),
+  keycloak-repair-client-scopes (Keycloak restarting) and the zac-sig-del
+  CronJob failed and their retries succeeded.
