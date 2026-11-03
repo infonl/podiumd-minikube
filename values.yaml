@@ -3124,6 +3124,11 @@ podiumd:
           objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/6a0d8f9d-f7e2-4e57-a91b-01656968a62d
           schedule: "15 6-14 * * 1-5"
           token: objectenContactToken
+        # As ExternalsPodiumD's dimp ontw and test; podiumd-tests crawls it and searches KISS.
+        website:
+          - sourceName: "Website"
+            domain: "https://www.dimpact.nl"
+            schedule: "0 7 * * 1-5"
       oidc:
         authority: https://keycloak.local/realms/podiumd/
         clientSecret: kissClientSecret

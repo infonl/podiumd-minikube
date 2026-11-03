@@ -7544,8 +7544,8 @@ dropping hosts, secrets, database hosts, mail relays and registries.
   functioneelBeheerderRole `administrator` as the chart's realm and dim1
   (dimp test/ontw and info set `administrators`; podiumd-tests checks whether
   that role exists there).
-- Not taken: the datamigratie client and the KISS website crawler (no app or
-  test uses them here), ZAC to the otel-collector (removed with Tempo),
+- Not taken: the datamigratie client (no app or test uses it here; the
+  KISS website crawler was added later, see 2026-11-03), ZAC to the otel-collector (removed with Tempo),
   icat-only BRP protocollering and KISS BRP headers (chart default and the majority).
 Effect on tests before the change: only skipRoles and the PABC role could
 let a test pass here that fails on dimp test.
@@ -9540,3 +9540,18 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   deviation from ExternalsPodiumD (Helm's default 10) for kube-apiserver
   memory, one rollback still possible. Live 10:40 CET: `deploy --full
   --every-release` pruned each release to revisions v3 and v4.
+- helm-charts #690 (9932a339, the KISS crawler hook's NetworkPolicy peer)
+  for podiumd-tests, 14:20-14:27 CET: (a) without a KISS website the
+  podiumd-elasticsearch policy has the `batch.kubernetes.io/job-name:
+  contact-crawler-index-template` peer; (b) with one website the hook's only
+  pod logged `{"acknowledged":true}` (reached Elasticsearch on 9200). Smoke
+  green after both. Our values already had phase 1 NetworkPolicies on.
+  Meanwhile feature/podiumd-4.10.1 merged #679, #681, #682, #684 (f8f3a0b7):
+  its chart equals RC2 30c49de8.
+- KISS website as ExternalsPodiumD's dimp ontw and test (sourceName
+  "Website", https://www.dimpact.nl, "0 7 * * 1-5"), Kees' request through
+  podiumd-tests, which crawls it in an e2e test. kiss-chart 3.2.0's
+  crawler-index-template Job is a pre-install,pre-upgrade hook that PUTs to
+  kiss-es-http: on a fresh install Elasticsearch does not exist yet, so the
+  install fails (podiumd-infra kees00 adds the website only after the first
+  install). An upgrade works.
