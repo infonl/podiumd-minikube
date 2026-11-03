@@ -9554,4 +9554,5 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   crawler-index-template Job is a pre-install,pre-upgrade hook that PUTs to
   kiss-es-http: on a fresh install Elasticsearch does not exist yet, so the
   install fails (podiumd-infra kees00 adds the website only after the first
-  install). An upgrade works.
+  install). An upgrade works. Known issue kiss-3 (podiumd-known-issues
+  0947286); podiumd-20 documents the workaround in helm-charts' install docs.
