@@ -9536,3 +9536,7 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   Helm history, not a leak. Not changed: `--history-max` below 10 would be
   a deviation from ExternalsPodiumD (about 120-140 MB saved at 2-3); the
   OpenAPI v2 spec cannot be dropped while a client asks for it.
+- `--history-max 2` on the three releases (f581886, Kees' call): a
+  deviation from ExternalsPodiumD (Helm's default 10) for kube-apiserver
+  memory, one rollback still possible. Live 10:40 CET: `deploy --full
+  --every-release` pruned each release to revisions v3 and v4.
