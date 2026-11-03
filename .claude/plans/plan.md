@@ -9578,3 +9578,7 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
 - Open for Kees: values.yaml lacks the IN-2784 permission (Open
   Archiefbeheer read_and_write on the productaanvraag objecttype), and
   keeps ZAC's 150 MB (ExternalsPodiumD on 4.9.1; the 4.10.1 guide removes it).
+- ZAC upload size: chart default (maxFileSizeMB 500, nginx
+  client_max_body_size 600M), as the 4.10.1 guide's B2 (Kees). A deviation
+  from ExternalsPodiumD while it runs 4.9.1 with 150. Live since the #694
+  upgrade (set there with --set).

@@ -415,12 +415,11 @@ podiumd:
     enabled: true
     replicaCount: 1
     # As ExternalsPodiumD: ZAC's nginx in front of WildFly (podiumd enables
-    # it), which adds HSTS and nosniff; 150 MB documents (chart 4.10: 500/600M).
-    maxFileSizeMB: 150
+    # it), which adds HSTS and nosniff. Upload size: the chart default (500 MB, 600M),
+    # as the 4.10.1 upgrade guide; ExternalsPodiumD (on 4.9.1) still sets 150.
     nginx:
       useXForwardedHost: true
       allowedHosts: zac.local,zac.podiumd
-      client_max_body_size: 150M
     autoscaling:
       enabled: false
     # Laptop budget: ExternalsPodiumD runs -Xmx1024m -Xms1024m. A small -Xms and a
