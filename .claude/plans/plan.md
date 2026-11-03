@@ -9512,3 +9512,27 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   test traffic and shows no leak; the 325 -> 687 MiB after a restart
   more likely comes with the deploys (not measured: it would need a
   profile before and after one install). No change.
+- kube-apiserver heap before and after deploys, 2026-11-03 (host reboot,
+  `start-cluster` 09:20 CET, RC2 30c49de8 unchanged): profile A 09:35 CET
+  (10 minutes after the restart, no deploy), then `deploy --full
+  --every-release` 09:35-09:38, profile B 09:48, a second identical
+  upgrade 09:51, profile C 10:01. pprof in use 365 -> 505 -> 531 MB
+  (go_memstats_heap_alloc_bytes 415 -> 574 -> 664 MB). Growth by call path
+  (`pprof -traces -base`):
+  - A -> B +141 MB: 99 MB the aggregated OpenAPI v2 spec
+    (kube-aggregator's Downloader and cached.listMerger, built from a
+    request's ServeHTTP). kube-apiserver builds the merged v2 spec only
+    when a client first asks for /openapi/v2 and keeps it (LastSuccess); no
+    CRD changed (apiextensions_openapi_v2_regeneration_count 0 for every
+    CRD). B -> C: +0.5 MB, so it is paid once per kube-apiserver start, at
+    the first deploy.
+  - Helm release Secrets: +17 MB of decoded Secrets per upgrade (etcd
+    watch decode and the update requests). Each upgrade of the three
+    releases adds revisions of 989 + 444 + 430 KiB (base64); Helm keeps 10
+    per release (default `--history-max`; ExternalsPodiumD's pipelines set
+    none), so this levels off after about 10 upgrades at roughly 170 MB
+    above a fresh install.
+  So the 325 -> 687 MiB after a restart is the OpenAPI v2 spec plus the
+  Helm history, not a leak. Not changed: `--history-max` below 10 would be
+  a deviation from ExternalsPodiumD (about 120-140 MB saved at 2-3); the
+  OpenAPI v2 spec cannot be dropped while a client asks for it.
