@@ -9602,3 +9602,15 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   version (with roltype Behandelaar) leaves ZAC on the old version. Ours
   hid that on fresh installs: templates/zac's seed Job ran before the
   catalogi Job on the upgrade and does not rerun. Both Jobs rerun by hand.
+- After the #694 run: OMC token fix live 16:26 CET (revision 7);
+  podiumd-tests smoke 177/0, OMC 2 passed + omc-1 xfail, its new
+  test_destruction_deletes_the_productaanvraag_of_the_zaak passed (ce743b2
+  works). Known issues filed: podiumd-chart-37 (ZAC keeps the old e2e
+  zaaktype version; keep the catalogi Job's and ZAC's logs on a repeat) and
+  podiumd-chart-38 (openbeheer-config not rerun).
+- The website back on #694 + tip 88e18ae9 (local merge 07cbe7a4, with
+  #690): in one deploy with #690 the crawler hook met the old
+  podiumd-elasticsearch policy (curl 28 to kiss-es-http:9200, the 15m
+  timeout), as #690's upgrade note says. A deploy without the website, then
+  one with it: `{"acknowledged":true}` 16:49 CET. So a first install and
+  the deploy that brings #690 both go without the website (kiss-3).
