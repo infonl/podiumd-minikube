@@ -9614,3 +9614,10 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   timeout), as #690's upgrade note says. A deploy without the website, then
   one with it: `{"acknowledged":true}` 16:49 CET. So a first install and
   the deploy that brings #690 both go without the website (kiss-3).
+- manifests.keep_finished_jobs removed (Kees): it dropped every Job's
+  ttlSecondsAfterFinished, from the kubectl-apply era when deploy deleted
+  and reran every Job itself (deploy._rerun_jobs, gone with the Helm
+  releases switch f13453f). Since then fixed-name Jobs stayed forever and
+  helm upgrade never reran them (openbeheer-config on the #694 run: most of
+  chart-38 on minikube). The chart's 600 s TTL now applies as on the
+  estates; deploy's wait counts a Job the TTL deleted as finished.

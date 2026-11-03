@@ -335,14 +335,6 @@ def test_mount_zaakbrug_role_mapping_mounts_both_files_only_with_the_configmap()
     assert "volumes" not in untouched["spec"]["template"]["spec"]
 
 
-def test_keep_finished_jobs_drops_only_the_jobs_ttl():
-    job: manifests.Doc = {"kind": "Job", "spec": {"ttlSecondsAfterFinished": 60, "backoffLimit": 6}}
-    cron: manifests.Doc = {"kind": "CronJob", "spec": {"jobTemplate": {"spec": {"ttlSecondsAfterFinished": 60}}}}
-    manifests.keep_finished_jobs([job, cron])
-    assert job["spec"] == {"backoffLimit": 6}
-    assert cron["spec"]["jobTemplate"]["spec"] == {"ttlSecondsAfterFinished": 60}
-
-
 def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
     resources: manifests.Doc = {"limits": {"memory": "768Mi"}}
     builder: manifests.Doc = {"name": "keycloak-builder"}

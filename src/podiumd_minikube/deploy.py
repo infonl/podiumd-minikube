@@ -343,14 +343,19 @@ def rolled_out(workload: dict[str, Any]) -> bool:
 
 
 def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
-    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live."""
+    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live.
+
+    A missing Job counts as finished: helm upgrade creates every rendered Job, and the chart's
+    ttlSecondsAfterFinished deletes it once done.
+    """
     outcomes: dict[str, str] = {}
+    present = {job["metadata"]["name"] for job in live}
     for job in live:
         conditions: list[dict[str, Any]] = job.get("status", {}).get("conditions") or []
         done = {c["type"] for c in conditions if c.get("status") == "True"} & {"Complete", "Failed"}
         if done:
             outcomes[job["metadata"]["name"]] = "Failed" if "Failed" in done else "Complete"
-    running = [name for name in names if name not in outcomes]
+    running = [name for name in names if name in present and name not in outcomes]
     failed = [name for name in names if outcomes.get(name) == "Failed"]
     return running, failed
 

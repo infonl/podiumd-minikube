@@ -83,7 +83,7 @@ def test_unfinished_jobs_splits_running_and_failed():
 
     jobs = [job("done", "Complete"), job("broken", "Failed"), job("busy", None)]
     names = ["done", "broken", "busy", "missing"]
-    assert deploy.unfinished_jobs(jobs, names) == (["busy", "missing"], ["broken"])
+    assert deploy.unfinished_jobs(jobs, names) == (["busy"], ["broken"])
 
 
 def test_rolled_out_needs_current_generation_and_ready_replicas():
@@ -279,7 +279,7 @@ def test_deploy_fails_on_a_failed_job(called: list[str], live: dict[str, Any]):
 def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(
     called: list[str], live: dict[str, Any], poll_once: None
 ):
-    live["job"]["items"] = []
+    live["job"]["items"] = [{"metadata": {"name": "openzaak-config"}, "status": {}}]
     live["deployment"]["items"][0]["status"]["readyReplicas"] = 0
     with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac; running: openzaak-config$"):
         _deploy()
@@ -291,7 +291,7 @@ def test_deploy_names_a_held_zac_on_timeout(
     zac = {**_doc("Deployment", "zac"), "spec": {"replicas": 1}}
     renders[releases.PODIUMD] = manifests.Render(docs=[zac, _doc("Job", "openzaak-config")], large_configmaps=[])
     fake_run.on("kubectl", "get", "deployment/zac", returncode=1)
-    live["job"]["items"] = []
+    live["job"]["items"] = [{"metadata": {"name": "openzaak-config"}, "status": {}}]
     with pytest.raises(process.UserError, match=r"running: openzaak-config; deployment/zac still at 0 replicas"):
         _deploy()
 

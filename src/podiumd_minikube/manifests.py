@@ -424,16 +424,6 @@ def is_unused_zac_collector(doc: Doc) -> bool:
     return doc.get("kind") == "Deployment" and name_of(doc) == ZAC_COLLECTOR
 
 
-def keep_finished_jobs(docs: list[Doc]) -> None:
-    """Drops ttlSecondsAfterFinished from Jobs, so deploy sees their outcome after its slower steps.
-
-    deploy deletes and re-runs every rendered Job (deploy._rerun_jobs), so none piles up.
-    """
-    for doc in docs:
-        if doc.get("kind") == "Job":
-            section(doc, "spec").pop("ttlSecondsAfterFinished", None)
-
-
 def tune_keycloak(docs: list[Doc]) -> None:
     """Sets the JVM flags of Keycloak and its operator, and the Keycloak resource's resources on its container.
 
@@ -804,7 +794,6 @@ def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool, hold_
     route_outbound(docs)
     limit_nginx_workers(docs)
     route_through_nginx(docs)
-    keep_finished_jobs(docs)
     tune_keycloak(docs)
     tune_kcadm(docs)
     speed_up_keycloak_start(docs)
