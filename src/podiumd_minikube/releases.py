@@ -41,6 +41,9 @@ UPGRADE_ARGS = ["--timeout", "15m", "--server-side=true", "--force-conflicts", "
 # --skip-crds: crds.apply_monitoring_logging_crds applies the CRDs it needs, without the 12 unused ones
 # (crds.UNUSED_MONITORING_LOGGING_CRDS: kube-apiserver memory); Helm would install them all.
 MONITORING_ARGS = ["--timeout", "10m", "--wait", "--reset-values", "--skip-crds"]
+# Deviation from ExternalsPodiumD (Helm's default 10): kube-apiserver keeps every revision's Secret decoded,
+# about 17 MB of heap per upgrade of the three releases. 2 still allows one rollback.
+HISTORY_ARGS = ["--history-max", "2"]
 
 
 @dataclass
@@ -154,7 +157,7 @@ def upgrade(release: Release, post_render: list[str]) -> None:
     flags = MONITORING_ARGS if release.name == MONITORING else UPGRADE_ARGS
     with values_file(release) as values:
         args = ["upgrade", "--install", release.name, str(release.chart), "--namespace", release.namespace]
-        args += ["--create-namespace", "--values", values, *release.sets, *flags, *post_render]
+        args += ["--create-namespace", "--values", values, *release.sets, *flags, *HISTORY_ARGS, *post_render]
         print(f"\nhelm upgrade --install {release.name} (namespace {release.namespace})...")
         process.run(helm(*args), capture=False)
 

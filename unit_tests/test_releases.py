@@ -80,8 +80,9 @@ def test_upgrade_runs_helm_with_the_repository_plugins(fake_run: FakeRun):
     argv = fake_run.calls[0]
     assert argv[:3] == ["env", f"HELM_PLUGINS={releases.HELM_PLUGINS}", "helm"]
     assert argv[3:7] == ["upgrade", "--install", releases.PODIUMD, "podiumd.tgz"]
-    assert argv[-len(releases.UPGRADE_ARGS) - 2 :] == [
+    assert argv[-len(releases.UPGRADE_ARGS) - len(releases.HISTORY_ARGS) - 2 :] == [
         *releases.UPGRADE_ARGS,
+        *releases.HISTORY_ARGS,
         "--post-renderer",
         releases.POST_RENDERER,
     ]
