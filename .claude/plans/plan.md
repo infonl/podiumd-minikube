@@ -9556,3 +9556,25 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   install fails (podiumd-infra kees00 adds the website only after the first
   install). An upgrade works. Known issue kiss-3 (podiumd-known-issues
   0947286); podiumd-20 documents the workaround in helm-charts' install docs.
+- 4.9.6 -> 4.10.1 side-path guide (helm-charts #694, b032712e) for
+  podiumd-tests, 2026-11-03. Fresh published 4.9.6 `--full` without the
+  KISS website (kiss-3), 14:49-14:59 CET; Frank!Gateway and OpenBao off on
+  4.9.6 (no openbao-activate.sh before 4.10.0). Guide steps A1-A3, C1, C4,
+  C5, C8, D1-D3 run by hand as an estate would, then `deploy --full`
+  15:08-15:25 with the IN-2784 permission in objecten's data
+  (`--set-file`). Findings sent to podiumd-tests for podiumd-20:
+  install-redis-operator-crds.sh not executable (mode 100644); the
+  openarchiefbeheer permission script always writes the SSC placeholder
+  REP_ZAC_PRODUCTAANVRAAG_UUID_REP; keycloak-update-job fails on every
+  upgrade from a builder-era Keycloak (the operator's "actual" container
+  runs 26.7.3 `--optimized` without the build: NoSuchFileException
+  quarkus-application.dat; recreate fallback, Keycloak Ready), not in the
+  guide. Our values.yaml is already 4.10.1-shaped, so
+  migrate-objecten-4.1.0.py stops on it (DuplicateKeyError); on
+  ExternalsPodiumD dimp test it migrates and a second run is unchanged.
+  Ours, a mistake: `--set podiumd.zac.maxFileSizeMB=null` also drops the
+  chart default (zac-nginx `client_max_body_size ;`); to imitate removing
+  a key, set the chart default.
+- Open for Kees: values.yaml lacks the IN-2784 permission (Open
+  Archiefbeheer read_and_write on the productaanvraag objecttype), and
+  keeps ZAC's 150 MB (ExternalsPodiumD on 4.9.1; the 4.10.1 guide removes it).
