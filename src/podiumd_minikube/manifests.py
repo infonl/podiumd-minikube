@@ -696,12 +696,6 @@ REQUIRED_OBJECTTYPEN_TOKEN: Doc = {
 }
 
 
-# The Objecttypen service of each client -> the token Open Object knows for that client:
-# merged, one token table serves both APIs (helm-charts #627).
-MERGED_OBJECTTYPEN_TOKENS = {
-    "openformulieren-configuration": ("objecttypen-api", "objectenFormulierToken"),
-    "openbeheer-configuration": ("objecttypen-service", "objectenOpenbeheerToken"),
-}
 # objecten's own Objecttypen service: its header's token is added to Open Object's tokens.
 OBJECTEN_SELF_SERVICE = "objecttypen-api"
 
@@ -711,9 +705,8 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
     """Merged objecten shape only: removes what only the classic shape accepts.
 
     objecten's setup_configuration rejects objecttypes service_identifier
-    (Pydantic extra_forbidden), and the clients' classic objecttypen tokens
-    only exist in classic objecttypen's token table. podiumd's
-    create-required-objecttypen Job needs a superuser token on objecten.
+    (Pydantic extra_forbidden). podiumd's create-required-objecttypen Job
+    needs a superuser token on objecten.
     """
     for doc in docs:
         objecten = _configuration_yaml(doc, "objecten-configuration")
@@ -730,14 +723,6 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
                         "email": "objecten@example.com",
                     })  # fmt: skip
             doc["data"]["configuration.yaml"] = yaml.safe_dump(objecten, sort_keys=False)
-        for configmap, (identifier, token) in MERGED_OBJECTTYPEN_TOKENS.items():
-            client = _configuration_yaml(doc, configmap)
-            if client is None:
-                continue
-            for service in client.get("zgw_consumers", {}).get("services", []):
-                if service.get("identifier") == identifier:
-                    service["header_value"] = f"Token {token}"
-            doc["data"]["configuration.yaml"] = yaml.safe_dump(client, sort_keys=False)
 
 
 def _is_large_configmap(doc: Doc) -> bool:

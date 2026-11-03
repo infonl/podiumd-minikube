@@ -1701,6 +1701,8 @@ podiumd:
               name: Objecttypen
 
         tokenauth_config_enable: true
+        # Each client's token is its objecten token: Open Object (podiumd >= 4.10) has one
+        # token per identifier, where objecten's wins.
         tokenauth:
           items:
             - identifier: objecten
@@ -1709,25 +1711,25 @@ podiumd:
               email: objecten@example.com
               application: Objects API
             - identifier: formulier
-              token: openFormulierenToObjecttypenToken
+              token: objectenFormulierToken
               contact_person: Open Formulieren
               email: openformulieren@example.com
               application: Open Formulieren
             - identifier: integratieteam
-              token: objecttypenIntegratieteamToken
+              token: objectenIntegratieteamToken
               contact_person: Integratieteam
               email: integratieteam@example.com
             - identifier: omc
-              token: objecttypenOmcToken
+              token: objectenOmcToken
               contact_person: OMC
               email: omc@example.com
             # As ExternalsPodiumD.
             - identifier: zaak
-              token: objecttypenZaakToken
+              token: objectenZaakToken
               contact_person: Open Zaak
               email: zaak@example.com
             - identifier: openbeheer-token
-              token: objecttypenOpenbeheerToken
+              token: objectenOpenbeheerToken
               contact_person: Open Beheer
               email: openbeheer@example.com
               organization: Open Beheer
@@ -1779,7 +1781,7 @@ podiumd:
                 sync: true
       # For create_required_objecttypen_job.
       oidcUrl: https://objecttypen.local
-      token: objecttypenIntegratieteamToken
+      token: objectenIntegratieteamToken
     # The KISS/ITA objecttypes, as podiumd; downloads each schema from
     # GitHub only when it creates that objecttype.
     create_required_objecttypen_job:
@@ -2391,7 +2393,7 @@ podiumd:
               api_type: orc
               auth_type: api_key
               header_key: Authorization
-              header_value: Token openFormulierenToObjecttypenToken
+              header_value: Token objectenFormulierToken
 
             # As ExternalsPodiumD. Its "pdok" service is left out: Open
             # Formulieren's own migrations already create a service with that
@@ -2700,7 +2702,7 @@ podiumd:
               api_type: orc
               auth_type: api_key
               header_key: Authorization
-              header_value: Token objecttypenOpenbeheerToken
+              header_value: Token objectenOpenbeheerToken
             - identifier: objecten-service
               label: Objecten API
               api_root: https://objecten.local/api/v2/
@@ -2858,7 +2860,7 @@ podiumd:
           key:
             openklant: openklantOmcToken
             objecten: objectenOmcToken
-            objectTypen: objecttypenOmcToken
+            objectTypen: objectenOmcToken
             # Open VTB's API token for OMC; templates/openvtb's Job creates it.
             openvtb: omcOpenvtbToken
         endpoint:

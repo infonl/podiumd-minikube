@@ -9588,3 +9588,17 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   script, which our values never got (only kiss-2 was applied by hand,
   0ac4f42). Live since the #694 upgrade (--set-file); the values now render
   the same data.
+- One token per objecttypen client (Kees: Open Object merges objecttypen
+  into objecten, so there is one token): objecttypen's tokenauth and every
+  client's Objecttypen service use the client's objecten token (formulier,
+  integratieteam, omc, zaak, openbeheer-token). Found on the #694 upgrade:
+  OMC sent objecttypenOmcToken, which Open Object does not know, also on
+  fresh 4.10.1 installs. manifests.MERGED_OBJECTTYPEN_TOKENS (rewrote Open
+  Formulieren's and Open Beheer's header on the merged shape) removed: the
+  values give the same token now. On 4.9.x both tables hold the same value.
+- Same upgrade, filed through podiumd-tests: openbeheer-config is a
+  fixed-name plain Job, never rerun by helm upgrade (Open Beheer kept the
+  objecttypen token: 401); the 4.10.1 catalogi Job's new e2e zaaktype
+  version (with roltype Behandelaar) leaves ZAC on the old version. Ours
+  hid that on fresh installs: templates/zac's seed Job ran before the
+  catalogi Job on the upgrade and does not rerun. Both Jobs rerun by hand.
