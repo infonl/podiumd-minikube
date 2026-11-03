@@ -9582,3 +9582,9 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   client_max_body_size 600M), as the 4.10.1 guide's B2 (Kees). A deviation
   from ExternalsPodiumD while it runs 4.9.1 with 150. Live since the #694
   upgrade (set there with --set).
+- Open Archiefbeheer's objecten token gets read_and_write on the
+  productaanvraag objecttype 11a5f7fd (IN-2784, helm-charts #673; Kees).
+  #673 cannot change an environment's objecten data: it ships the migration
+  script, which our values never got (only kiss-2 was applied by hand,
+  0ac4f42). Live since the #694 upgrade (--set-file); the values now render
+  the same data.

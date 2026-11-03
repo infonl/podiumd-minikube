@@ -1546,11 +1546,15 @@ podiumd:
               contact_person: Integratieteam
               email: integratieteam@example.com
               is_superuser: true
-            # As ExternalsPodiumD: Open Archiefbeheer's Objecten plugin, no object type permissions.
+            # Open Archiefbeheer's Objecten plugin: destroying a zaak deletes its productaanvraag
+            # object (IN-2784, migrate-objecten-openarchiefbeheer-permissions-4.10.1.py).
             - identifier: openarchiefbeheer
               token: objectenOpenarchiefbeheerToken
               contact_person: Open Archiefbeheer
               email: openarchiefbeheer@example.com
+              permissions:
+                - object_type: "11a5f7fd-013e-4e29-9cd1-738249fc3479"
+                  mode: read_and_write
 
         # As ExternalsPodiumD: admin login through Keycloak, with its claim and group settings.
         oidc_db_config_enable: true
