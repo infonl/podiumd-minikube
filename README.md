@@ -276,6 +276,12 @@ hooks create the PV/PVC pairs podiumd's storage templates look up. Before the
 upgrades it deletes ExternalsPodiumD's 13 one-shot Jobs (`upgrade.EXTERNALS_DELETED_JOBS`)
 and this chart's own Jobs, so they run again.
 
+KISS's website crawler has a pre-install/pre-upgrade hook that calls
+Elasticsearch before Helm creates it (known issue kiss-3). While the hook
+cannot reach Elasticsearch (a first install, or a NetworkPolicy that does not
+admit it yet), `deploy` installs without the website first, then deploys again
+with it, as podiumd-infra adds the website after its first install.
+
 Every release goes through the post-renderer plugin
 `helm-plugins/podiumd-minikube` (`HELM_PLUGINS` points at it; nothing is
 installed in your Helm). It applies the fixups that keep minikube small, fast

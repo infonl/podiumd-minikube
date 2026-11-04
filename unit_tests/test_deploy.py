@@ -20,6 +20,7 @@ from podiumd_minikube import dns
 from podiumd_minikube import gateway
 from podiumd_minikube import hosts
 from podiumd_minikube import keycloak
+from podiumd_minikube import kiss
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import memory
@@ -261,6 +262,18 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         ["kubectl", "get", "deployment/zac", "-n", NAMESPACE],
     ]
     assert fake_run.stdins[2] == "kind: Namespace\n"
+
+
+def test_deploy_installs_without_kiss_website_first_while_its_hook_is_blocked(
+    called: list[str], monkeypatch: pytest.MonkeyPatch
+):
+    reasons = iter(["Service kiss-es-http does not exist yet"])
+    monkeypatch.setattr(kiss, "website_hook_blocked", lambda _render: next(reasons, ""))
+    helm_args: list[list[str]] = []
+    monkeypatch.setattr(releases, "releases", lambda args: helm_args.append(args) or RELEASES)
+    _deploy()
+    assert [kiss.WEBSITE_OFF[1] in args for args in helm_args] == [False, True, False]
+    assert called.count(f"upgrade {releases.PODIUMD} --ca-trust") == 2
 
 
 def test_deploy_refuses_the_namespace_of_the_kubectl_apply_deploys(fake_run: FakeRun, called: list[str]):

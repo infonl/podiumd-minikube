@@ -9643,3 +9643,19 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   refreshed after podiumd-tests' next full tier.
 - Solr's Collections API needs the operator's basic auth (Secret
   zac-solr-solrcloud-basic-auth); anonymous calls get 401.
+
+## kiss-3 in deploy: the website after the first install (2026-11-04)
+
+- Kees chose option 1: deploy does the two steps itself. `kiss.website_hook_blocked`
+  reads the rendered crawler hook (`contact-crawler-index-template`, its
+  ELASTIC_BASE_URL host `kiss-es-http`) and says why it cannot reach
+  Elasticsearch now: the Service does not exist (first install), or a rendered
+  NetworkPolicy admits the hook's `batch.kubernetes.io/job-name` peer while
+  the live one does not (the deploy that first brings helm-charts #690). Then
+  deploy runs once with `--set podiumd.kiss.settings.syncJobs.website=null`
+  (chart default `[]`: no hook; podiumd still renders the policy peer), and
+  once more without it. podiumd-infra (kees00) does the same by hand: the
+  website only after its first install.
+- Checked against the real 4.10.1 --full render on the live cluster: hook
+  found, not blocked (Service and peer present); with website=null the hook
+  is gone and the policy peer stays. A fresh install with it is not run yet.

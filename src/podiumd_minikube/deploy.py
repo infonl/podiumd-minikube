@@ -6,6 +6,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from dataclasses import field
+from dataclasses import replace
 from typing import Any
 
 from podiumd_minikube import chart
@@ -17,6 +18,7 @@ from podiumd_minikube import dns
 from podiumd_minikube import gateway
 from podiumd_minikube import hosts
 from podiumd_minikube import keycloak
+from podiumd_minikube import kiss
 from podiumd_minikube import kube
 from podiumd_minikube import lock
 from podiumd_minikube import manifests
@@ -278,7 +280,10 @@ def _upgrade(
 
 @lock.holding("deploy")
 def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool = False) -> None:
-    """Syncs dependencies, then the Helm releases with the steps around them; every: also unchanged releases."""
+    """Syncs dependencies, then the Helm releases with the steps around them; every: also unchanged releases.
+
+    Twice while KISS's crawler hook cannot reach Elasticsearch: first without the website (kiss.website_hook_blocked).
+    """
     kube.require_minikube_context()
     disk.check(disk.DEPLOY)
     memory.check(full=full)
@@ -288,11 +293,19 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool
     if not pki.CA_CERT.is_file():
         msg = f"no local CA in {pki.PKI_DIR}: run podiumd-minikube provision-cluster (it creates the CA and its issuer)"
         raise process.UserError(msg)
+    if _deploy(selected, command, every=every, defer_website=True):
+        print("\nDeploying again, with KISS's website...")
+        _deploy(selected, command, every=every, defer_website=False)
 
-    found = releases.releases(selected.helm_args)
-    for namespace in dict.fromkeys(release.namespace for release in found):
-        _ensure_namespace(namespace)
-    renders = {release.name: selected.render_release(release) for release in found}
+
+def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool) -> bool:
+    """One deploy of the releases; defer_website: without KISS's website while its hook is blocked (then True)."""
+    found, renders = _rendered(selected)
+    blocked = kiss.website_hook_blocked(renders[releases.PODIUMD]) if defer_website else ""
+    if blocked:
+        print(f"\nKISS's crawler index-template hook cannot reach Elasticsearch ({blocked}): first without the website")
+        selected = replace(selected, helm_args=[*selected.helm_args, *kiss.WEBSITE_OFF])
+        found, renders = _rendered(selected)
     # The podiumd namespace's objects; monitoring-logging's `helm upgrade --wait` covers its own.
     render = combined([renders[RELEASE_NAME], renders[releases.PODIUMD]])
     postgres.migrate_major(render)
@@ -323,6 +336,15 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool
     _wait_ready(live, upgraded.held)
     print("\nDeployed.")
     tunnel.setup_tunnel(ask=False)
+    return bool(blocked)
+
+
+def _rendered(selected: Options) -> tuple[list[releases.Release], dict[str, manifests.Render]]:
+    """The releases selected installs, and each one's render; their namespaces exist."""
+    found = releases.releases(selected.helm_args)
+    for namespace in dict.fromkeys(release.namespace for release in found):
+        _ensure_namespace(namespace)
+    return found, {release.name: selected.render_release(release) for release in found}
 
 
 def rolled_out(workload: dict[str, Any]) -> bool:
