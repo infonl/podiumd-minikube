@@ -165,8 +165,8 @@ podiumd:
         fromDisplayName: PodiumD minikube
         starttls: "false"
       clients:
-        # Grafana keeps anonymous access (monitoring-logging.grafana's grafana.ini).
-        # Enabled by the metrics profile (chart.METRICS_SETS): no Grafana, no client.
+        # Grafana's Keycloak login (monitoring-logging.grafana's grafana.ini). Enabled
+        # by the metrics profile (chart.METRICS_SETS): no Grafana, no client.
         monitoring:
           enabled: false
           secret: keycloakMonitoringClientSecret
@@ -3231,13 +3231,39 @@ monitoring-logging:
             secureJsonData:
               httpHeaderValue1: "1"
     grafana.ini:
+      # Keycloak login as ExternalsPodiumD (dim1/mayk/info monitoring.yml), realm podiumd, client
+      # monitoring. Deviation: anonymous admin access stays beside it, a debug facility.
       auth.generic_oauth:
-        enabled: false # no Keycloak client wired up for this dev tool - anonymous admin access instead, as a dev tool
+        enabled: true
+        name: Keycloak-podiumd
+        allow_sign_up: true
+        allow_assign_grafana_admin: true
+        client_id: monitoring
+        client_secret: keycloakMonitoringClientSecret # podiumd.keycloak.config.clients.monitoring.secret
+        scopes: openid email profile roles
+        email_attribute_path: email
+        login_attribute_path: username
+        name_attribute_path: name
+        auth_url: https://keycloak.local/realms/podiumd/protocol/openid-connect/auth
+        token_url: https://keycloak.local/realms/podiumd/protocol/openid-connect/token
+        api_url: https://keycloak.local/realms/podiumd/protocol/openid-connect/userinfo
+        role_attribute_path: "contains(monitoring_roles[*], 'admin') && 'Admin' || contains(monitoring_roles[*], 'editor') && 'Editor' || 'Viewer'"
+        role_attribute_strict: false
+        org_mapping: "*:Viewer"
+        skip_org_role_sync: false
+        groups_attribute_path: groups
+        use_refresh_token: true
+        sync_ttl: 60
+        use_pkce: true
       auth.anonymous:
         enabled: true
         org_role: Admin
       auth:
+        oauth_skip_org_role_update_sync: false
+        oauth_auto_login: true
         disable_login_form: true
+        disable_signout_menu: false
+        allow_sign_up: true
       server:
         domain: grafana.local
         enforce_domain: false # avoids a redirect loop if reached by IP or a different hostname

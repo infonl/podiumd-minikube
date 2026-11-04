@@ -9708,3 +9708,19 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   openzaak-config 5 failed pods, objecten-config 3 restarts, the other
   config Jobs none. Recorded every 10 s by a scratch script (the chart's
   600 s TTL deletes finished Jobs).
+
+## Grafana's Keycloak login (2026-11-04)
+
+- podiumd-tests (handoff 982b129, Kees's 4.10.1 verification via podiumd-70),
+  for monitoring-logging 1.0.19's #697 (relink of a recreated Keycloak
+  user): grafana.ini auth.generic_oauth as ExternalsPodiumD's dim1, mayk and
+  info monitoring.yml (origin aedfa87): realm podiumd, client monitoring
+  (the chart's realm config, enabled by the metrics profile, secret
+  keycloakMonitoringClientSecret), PKCE, monitoring_roles role mapping,
+  oauth_auto_login. URLs on https://keycloak.local. Deviation: anonymous
+  admin access stays (ExternalsPodiumD: off), a debug facility;
+  enforce_domain stays false.
+- Live 14:58 CET (monitoring-logging upgraded only): /login/generic_oauth
+  redirects to keycloak.local's auth endpoint with client_id=monitoring and
+  a code_challenge; Grafana trusts the local CA through SSL_CERT_FILE
+  (manifests' CA trust). The login itself is podiumd-tests' test.
