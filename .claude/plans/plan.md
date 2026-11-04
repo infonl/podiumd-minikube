@@ -9759,3 +9759,11 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   run): 49 pinned images, 0 stale, 32 matched through the host; Open
   Inwoner's old a14a626c is reported stale. The first deploy with this
   restarts every annotated workload once.
+- Live 17:16 CET, `deploy --full` after podiumd-tests' full tier: 0 stale
+  images; podiumd upgraded (revision 4) only for the new annotations, 56 of
+  77 Deployments/StatefulSets/DaemonSets annotated (the rest pin no
+  digest), Open Inwoner's with 079c98ce; monitoring-logging's render
+  unchanged (it pins no digests), not upgraded. All pods ready. The one-time
+  restart of everything made openzaak-config fail once and
+  frankgateway-outway-seed twice (APISIX: "has no healthy etcd endpoint
+  available" while its etcd restarted); both succeeded on retry.
