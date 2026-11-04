@@ -1,7 +1,7 @@
 {
   "measured": "2026-11-04T18:52:09+00:00",
   "node_mib": 16200,
-  "containers_mib": 14215,
+  "containers_mib": 14345,
   "containers": {
     "ingress-basic/cert-manager-cainjector/cert-manager-cainjector": 47,
     "ingress-basic/cert-manager-webhook/cert-manager-webhook": 20,
@@ -23,7 +23,7 @@
     "monitoring/monitoring-logging-grafana/grafana-sc-dashboard": 71,
     "monitoring/monitoring-logging-grafana/grafana-sc-datasources": 71,
     "monitoring/monitoring-logging-loki-gateway/nginx": 12,
-    "monitoring/monitoring-logging-loki/loki": 231,
+    "monitoring/monitoring-logging-loki/loki": 362,
     "monitoring/monitoring-logging-loki/loki-sc-rules": 87,
     "monitoring/monitoring-logging-opentelemetry-collector/opentelemetry-collector": 36,
     "monitoring/prometheus-kube-prometheus-prometheus/config-reloader": 13,

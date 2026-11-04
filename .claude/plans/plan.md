@@ -9815,3 +9815,20 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   about 210 MiB live (152 in use at the last check), only 223 in-memory
   chunks. Growth of live data over a day of tiers, cause not found yet;
   not taken into the baseline to keep it visible.
+
+### Loki after a full tier: the pattern ingester, not a leak
+
+- At 21:15 CET (85 min after the tier): working set 244 MiB, next GC at
+  187 MB, so about 125 MB live (210 right after the tier): the live heap
+  falls back once the tier's logs age out.
+- Heap profile (`/debug/pprof/heap` through the API server's pod proxy,
+  read with `go tool pprof` in `golang:1.25-alpine`): 121 MB in use, of
+  which 51 MB the pattern ingester (`pkg/pattern/drain`, log patterns for
+  Grafana's Logs Drilldown), 30 MB the ingester, 10 MB the log buffer, 8 MB
+  the query frontend. 58 streams and 59 chunks in memory.
+- The pattern ingester is on in the chart, ExternalsPodiumD and
+  podiumd-infra (`pattern_ingester.enabled: true`), so it stays. Its
+  patterns grow with the tier's log lines and age out, so Loki peaks right
+  after a full tier: the 362 MiB measured at the 19:52 refresh is the
+  post-tier value the baseline rule asks for, now in the baseline (231 ->
+  362 MiB).
