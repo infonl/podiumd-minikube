@@ -9784,3 +9784,20 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
 - Live 19:22 CET (revision 5): the openinwoner container's env has only
   UWSGI_PROCESSES=1, so /start.sh's defaults apply (8 threads, recycle
   every 100); all pods ready.
+
+### uWSGI threads as ExternalsPodiumD for four more apps
+
+- podiumd-tests' handoff (d534e86, Kees, 2026-11-04): Objecten, Open
+  Notificaties, Open Formulieren (`settings.uwsgi.threads: 2`) and Open
+  Archiefbeheer (`UWSGI_THREADS=2`) run their image's threads; ExternalsPodiumD
+  and kees00 set none. Image defaults (/start.sh, checked in the pods):
+  Objecten and Open Notificaties 4 x 4, Open Formulieren and Open
+  Archiefbeheer 4 x 1. With `processes: 1` the last two would be 1 x 1;
+  Kees chose 2 processes x 1 thread (same threading as the estates,
+  concurrency 2) over 1 x 1 or keeping 2 threads.
+- Live 19:38 CET (revision 6): Objecten and Open Notificaties `--processes 1
+  --threads 4`; Open Formulieren UWSGI_PROCESSES=2 (master, http, 2
+  workers), Open Archiefbeheer `--processes 2 --threads 1`. Web containers
+  (2 h warm before, 2 min after): Open Formulieren 428 -> 521, Open
+  Archiefbeheer 142 -> 194, Objecten 241 -> 235, Open Notificaties 196 ->
+  194 MiB. Memory baseline to refresh after podiumd-tests' next full tier.
