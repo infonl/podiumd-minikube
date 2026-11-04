@@ -9724,3 +9724,6 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   redirects to keycloak.local's auth endpoint with client_id=monitoring and
   a code_challenge; Grafana trusts the local CA through SSL_CERT_FILE
   (manifests' CA trust). The login itself is podiumd-tests' test.
+- podiumd-tests' test_recreated_keycloak_user_logs_in_to_the_same_grafana_user
+  passed (run 20261104-135810): Keycloak login, user recreated, same Grafana
+  user, role from the new token. The full login works with the CA trust.
