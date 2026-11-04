@@ -9801,3 +9801,17 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   (2 h warm before, 2 min after): Open Formulieren 428 -> 521, Open
   Archiefbeheer 142 -> 194, Objecten 241 -> 235, Open Notificaties 196 ->
   194 MiB. Memory baseline to refresh after podiumd-tests' next full tier.
+
+### Memory baseline after the uWSGI changes
+
+- Refreshed after podiumd-tests' full tier (19:44-19:52 CET, revision 6,
+  619 passed): Open Formulieren 432 -> 595 MiB and Open Archiefbeheer
+  139 -> 219 (2 processes x 1 thread); Open Inwoner 414 -> 268 (fresh pod,
+  8 threads); node 15770 -> 16200 MiB, under the 17 GiB budget.
+- Office converter kept at 89 MiB (217 measured): LibreOffice holds memory
+  after conversions, as at the last refresh; pod restarted (stateless).
+- Loki kept at 231 MiB, so test_memory.py flags it (370 measured, pod up
+  since 14:29 CET): GOGC 50 applies, heap in use 307 MiB, next GC 317, so
+  about 210 MiB live (152 in use at the last check), only 223 in-memory
+  chunks. Growth of live data over a day of tiers, cause not found yet;
+  not taken into the baseline to keep it visible.
