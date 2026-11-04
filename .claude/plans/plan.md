@@ -9743,3 +9743,19 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   Inwoner Deployments sufficed (16:57). Its config Jobs ran on a14a626c.
   Not fixed in code yet: deploy does not notice a digest change behind an
   unchanged tag.
+- Fixed (Kees: "digests change more often than versions"): deploy now acts
+  on a digest change as on a version change. `manifests._loaded` records
+  the digests it strips in pod-template annotation
+  `podiumd-minikube/image-digests` (Deployments, StatefulSets, DaemonSets,
+  CronJobs; Keycloak's and ECK's podTemplates, SolrCloud's podOptions;
+  other resources on their metadata), so the release digest changes and
+  the pods roll. Not on Jobs: fixed-name release Jobs (openklant-create-
+  superuser, pabc-migrations-3, ...) stay, and their pod template is
+  immutable. Before the upgrades `provision.stale_images` compares each
+  pinned image with the node's digest for its tag (crictl repoDigests;
+  for an image loaded from the host, which has none on the node, the
+  host's RepoDigests), and `refresh_images` pulls the stale ones by digest
+  on the host, tags and loads them. Live (read-only, during podiumd-tests'
+  run): 49 pinned images, 0 stale, 32 matched through the host; Open
+  Inwoner's old a14a626c is reported stale. The first deploy with this
+  restarts every annotated workload once.

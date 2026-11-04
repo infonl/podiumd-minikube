@@ -123,6 +123,39 @@ def strip_image_digests(text: str) -> str:
     return _DIGEST_SUFFIX.sub(r"\1", text)
 
 
+def pinned_images(text: str) -> list[str]:
+    """Sorted unique tagged images with a digest (repository:tag@sha256:...) in rendered text."""
+    return [image for image in images(text) if _DIGEST_SUFFIX.search(image)]
+
+
+# The digests strip_image_digests drops: a rebuilt image under the same tag changes the pod template.
+IMAGE_DIGESTS_ANNOTATION = "podiumd-minikube/image-digests"
+
+
+def _record_digests(doc: Doc, chunk: str) -> None:
+    """Annotates doc's pod templates (else doc) with the digests of chunk's tagged images.
+
+    Not a Job's: its pod template is immutable, and a Job that runs again starts from the node's image.
+    """
+    digests = sorted({match[0].rpartition("@")[2] for match in _DIGEST_SUFFIX.finditer(chunk)})
+    kind, body = doc.get("kind", ""), section(doc, "spec")
+    if not digests or kind in ("Job", "Pod"):
+        return
+    if kind in _POD_SPEC_PATHS:
+        templates = [_mapping(doc, *_POD_SPEC_PATHS[kind][:-1])]
+    elif kind == "Keycloak":
+        templates = [_mapping(body, "unsupported", "podTemplate")]
+    elif kind == "Elasticsearch":
+        node_sets: list[Doc] = body.get("nodeSets") or []
+        templates = [_mapping(node_set, "podTemplate") for node_set in node_sets]
+    else:
+        templates = [doc]
+    # SolrCloud's podOptions carry the annotations without metadata.
+    found = [_mapping(body, "customSolrKubeOptions", "podOptions", "annotations")] if kind == "SolrCloud" else []
+    for annotations in found or [_mapping(template, "metadata", "annotations") for template in templates]:
+        annotations[IMAGE_DIGESTS_ANNOTATION] = " ".join(digests)
+
+
 # helm template's comment before each document: "# Source: <chart>/[charts/<dependency>/]<path>".
 _SOURCE = re.compile(r"^# Source: ([^/]+)/(?:charts/([^/]+)/)?", re.MULTILINE)
 # A template's output, which the release owns; a chart's crds/ files belong to no release.
@@ -740,6 +773,8 @@ class Render:
     templated_crds: list[str] = field(default_factory=list[str])
     # "Kind/name" -> the dependency that renders it, or this chart.
     charts: dict[str, str] = field(default_factory=dict[str, str])
+    # Images with a digest (pinned_images), before strip_image_digests.
+    pinned_images: list[str] = field(default_factory=list[str])
 
     @property
     def jobs(self) -> list[str]:
@@ -752,14 +787,20 @@ class Render:
         return dump(self.docs)
 
 
-def _chunks(text: str) -> list[str]:
-    """The YAML documents of rendered text, image digests stripped."""
-    return re.split(r"^---$", strip_image_digests(text), flags=re.MULTILINE)
+def _loaded(text: str) -> list[tuple[Doc | None, str]]:
+    """The YAML documents of rendered text with their text: image digests stripped, in IMAGE_DIGESTS_ANNOTATION."""
+    loaded: list[tuple[Doc | None, str]] = []
+    for chunk in re.split(r"^---$", text, flags=re.MULTILINE):
+        doc: Doc | None = _load(strip_image_digests(chunk))
+        if isinstance(doc, dict):
+            _record_digests(doc, chunk)
+        loaded.append((doc, chunk))
+    return loaded
 
 
 def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
     """Applies every local fixup to `helm template` output."""
-    loaded: list[tuple[Doc | None, str]] = [(_load(c), c) for c in _chunks(text)]
+    loaded = _loaded(text)
     sources = [(doc, _SOURCE.search(chunk)) for doc, chunk in loaded]
     charts = {key_of(doc): source[2] or source[1] for doc, source in sources if doc and source}
     templated_crds = [
@@ -775,6 +816,7 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
         crds=[doc for doc in docs if doc.get("kind") == "CustomResourceDefinition"],
         templated_crds=templated_crds,
         charts=charts,
+        pinned_images=pinned_images(text),
     )
 
 
@@ -812,7 +854,7 @@ def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool, hold_
 
 def documents(text: str) -> list[Doc]:
     """The objects of a rendered manifest, image digests stripped."""
-    return [doc for doc in map(_load, _chunks(text)) if doc]
+    return [doc for doc, _ in _loaded(text) if doc]
 
 
 def post_render_text(text: str, *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> str:

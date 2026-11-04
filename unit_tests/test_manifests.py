@@ -42,6 +42,31 @@ def test_strip_image_digests_from_a_separate_tag_field():
     )
 
 
+def test_documents_record_stripped_digests_on_the_pod_templates():
+    text = (
+        f"kind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n      - image: a/app:1@sha256:{DIGEST}\n"
+        f"---\nkind: Elasticsearch\nspec:\n  image: es:8@sha256:{DIGEST}\n  nodeSets:\n  - name: default\n"
+        f"---\nkind: SolrCloud\nspec:\n  solrImage:\n    repository: solr\n    tag: 9@sha256:{DIGEST}\n"
+        f"---\nkind: RedisReplication\nspec:\n  kubernetesConfig:\n    image: redis:8@sha256:{DIGEST}\n"
+        "---\nkind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n      - image: b/app:2\n"
+        f"---\nkind: Job\nspec:\n  template:\n    spec:\n      containers:\n      - image: a/app:1@sha256:{DIGEST}\n"
+    )
+    deployment, elasticsearch, solr, redis, unpinned, job = manifests.documents(text)
+    expected = {manifests.IMAGE_DIGESTS_ANNOTATION: f"sha256:{DIGEST}"}
+    assert deployment["spec"]["template"]["metadata"]["annotations"] == expected
+    assert deployment["spec"]["template"]["spec"]["containers"][0]["image"] == "a/app:1"
+    assert elasticsearch["spec"]["nodeSets"][0]["podTemplate"]["metadata"]["annotations"] == expected
+    assert solr["spec"]["customSolrKubeOptions"]["podOptions"]["annotations"] == expected
+    assert redis["metadata"]["annotations"] == expected
+    assert "metadata" not in unpinned["spec"]["template"]
+    assert "metadata" not in job["spec"]["template"]
+
+
+def test_pinned_images_are_the_tagged_images_with_a_digest():
+    text = f"image: a/app:1@sha256:{DIGEST}\nimage: b/app:2\nimage: untagged@sha256:{DIGEST}\n"
+    assert manifests.pinned_images(text) == [f"a/app:1@sha256:{DIGEST}"]
+
+
 def test_images_include_those_operators_start():
     text = """\
 kind: StatefulSet

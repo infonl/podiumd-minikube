@@ -217,6 +217,38 @@ def test_load_images_pulls_only_what_the_host_lacks_for_the_platform(fake_run: F
     assert sorted(call[4] for call in fake_run.ran("docker", "save")) == ["a/app:1.0", "b/db:2", "c/new:3"]
 
 
+A_DIGEST = "sha256:" + "a" * 64
+B_DIGEST = "sha256:" + "b" * 64
+
+
+def _node_and_host(fake_run: FakeRun, node: list[dict[str, list[str]]], host: str) -> None:
+    fake_run.on("docker", "exec", "minikube", "crictl", stdout=json.dumps({"images": node}))
+    fake_run.on("docker", "images", "--digests", stdout=host)
+
+
+def test_stale_images_compare_the_nodes_digest_else_the_hosts_for_a_loaded_image(fake_run: FakeRun):
+    node = [
+        {"repoTags": ["docker.io/a/pulled:1"], "repoDigests": [f"docker.io/a/pulled@{A_DIGEST}"]},
+        {"repoTags": ["docker.io/library/loaded:2"], "repoDigests": []},
+        {"repoTags": ["docker.io/c/rebuilt:3"], "repoDigests": [f"docker.io/c/rebuilt@{A_DIGEST}"]},
+    ]
+    _node_and_host(fake_run, node, f"loaded:2 loaded@{A_DIGEST}\n")
+    pinned = [f"a/pulled:1@{A_DIGEST}", f"loaded:2@{B_DIGEST}", f"c/rebuilt:3@{B_DIGEST}", f"d/absent:4@{B_DIGEST}"]
+    assert provision.stale_images(pinned) == [f"loaded:2@{B_DIGEST}", f"c/rebuilt:3@{B_DIGEST}"]
+
+
+def test_stale_images_none_without_pinned_images(fake_run: FakeRun):
+    assert provision.stale_images([]) == []
+    assert not fake_run.calls
+
+
+def test_refresh_images_pulls_by_digest_and_loads_under_the_tag(fake_run: FakeRun):
+    provision.refresh_images([f"c/rebuilt:3@{B_DIGEST}"])
+    assert fake_run.ran("docker", "pull")[0][-1] == f"c/rebuilt@{B_DIGEST}"
+    assert fake_run.ran("docker", "tag") == [["docker", "tag", f"c/rebuilt@{B_DIGEST}", "c/rebuilt:3"]]
+    assert fake_run.ran("docker", "save")[0][4] == "c/rebuilt:3"
+
+
 def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     calls: list[str] = []
     monkeypatch.setattr(disk, "check", lambda need: calls.append(f"disk {need.fail_gib}"))

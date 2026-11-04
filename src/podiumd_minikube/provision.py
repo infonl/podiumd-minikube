@@ -6,6 +6,7 @@ reference: minikube's inner Docker has no internet access.
 """
 
 import functools
+import json
 import os
 import sys
 import tempfile
@@ -349,6 +350,66 @@ def _in_batches(
     return done
 
 
+def _import(images: list[str]) -> None:
+    """Loads the host's images into minikube."""
+    print(f"Loading batch into minikube: {' '.join(images)}")
+    with tempfile.TemporaryDirectory() as directory:
+        # Saves in parallel: 6 s for 701 MB each.
+        saved = _in_batches(images, "saving", functools.partial(_save, directory))
+        _in_batches(saved, "loading", functools.partial(_load, directory), workers=IMPORT_WORKERS)
+
+
+def _digests_by_tag(lines: list[tuple[list[str], list[str]]]) -> dict[str, set[str]]:
+    """repository:tag (as _repository) -> its sha256 digests, from (tags, repository@digest references) pairs."""
+    found: dict[str, set[str]] = {}
+    for tags, references in lines:
+        for tag in tags:
+            key = f"{_repository(tag)}:{tag.rpartition(':')[2]}"
+            found.setdefault(key, set()).update(reference.rpartition("@")[2] for reference in references)
+    return found
+
+
+def stale_images(pinned: list[str]) -> list[str]:
+    """The pinned images (repository:tag@sha256:...) whose tag the node holds for another digest.
+
+    An image loaded from the host has no digest on the node: the host's tag tells which one it was.
+    """
+    if not pinned:
+        return []
+    listed = json.loads(process.output(["docker", "exec", PROFILE, "crictl", "images", "--digests", "-o", "json"]))
+    node = _digests_by_tag([(image["repoTags"], image.get("repoDigests") or []) for image in listed["images"]])
+    host_lines = process.output(
+        ["docker", "images", "--digests", "--format", "{{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}}"]
+    )
+    host = _digests_by_tag(
+        [([tag], [reference]) for tag, reference in (line.split() for line in host_lines.splitlines())]
+    )
+    stale: list[str] = []
+    for image in pinned:
+        tagged, _, digest = image.partition("@")
+        key = f"{_repository(tagged)}:{tagged.rpartition(':')[2]}"
+        # A tag the node lacks: the kubelet pulls it.
+        if key in node and digest not in (node[key] or host.get(key, set())):
+            stale.append(image)
+    return stale
+
+
+def refresh_images(stale: list[str]) -> None:
+    """Pulls stale (repository:tag@sha256:...) on the host by digest and loads them into minikube under their tag."""
+    if not stale:
+        return
+    print(f"{len(stale)} image(s) changed digest under the same tag: {' '.join(stale)}")
+    by_digest = {
+        f"{tagged.rpartition(':')[0]}@{digest}": tagged for tagged, _, digest in (i.partition("@") for i in stale)
+    }
+    references = list(by_digest)
+    for start in range(0, len(references), BATCH_SIZE):
+        pulled = _in_batches(references[start : start + BATCH_SIZE], "pulling", _pull)
+        for reference in pulled:
+            process.run(["docker", "tag", reference, by_digest[reference]])
+        _import([by_digest[reference] for reference in pulled])
+
+
 def load_images(images: list[str]) -> None:
     """Pulls images on the host and loads them into minikube, BATCH_SIZE at a time."""
     loaded = process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines()
@@ -363,11 +424,7 @@ def load_images(images: list[str]) -> None:
             # A docker pull of a cached image still asks the registry: 212 s for 60 images.
             print(f"Pulling batch: {' '.join(to_pull)}")
             _in_batches(to_pull, "pulling", _pull)
-        print(f"Loading batch into minikube: {' '.join(batch)}")
-        with tempfile.TemporaryDirectory() as directory:
-            # Saves in parallel: 6 s for 701 MB each.
-            saved = _in_batches(batch, "saving", functools.partial(_save, directory))
-            _in_batches(saved, "loading", functools.partial(_load, directory), workers=IMPORT_WORKERS)
+        _import(batch)
     still_missing = missing_images(images, process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines())
     if still_missing:
         print(f"WARNING: not in minikube after loading: {' '.join(still_missing)}", file=sys.stderr)

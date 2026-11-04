@@ -3,6 +3,7 @@
 import argparse
 import json
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from podiumd_minikube import openbao
 from podiumd_minikube import pki
 from podiumd_minikube import postgres
 from podiumd_minikube import process
+from podiumd_minikube import provision
 from podiumd_minikube import releases
 from podiumd_minikube import tunnel
 from podiumd_minikube.paths import CHART_DIR
@@ -274,6 +276,17 @@ def test_deploy_installs_without_kiss_website_first_while_its_hook_is_blocked(
     _deploy()
     assert [kiss.WEBSITE_OFF[1] in args for args in helm_args] == [False, True, False]
     assert called.count(f"upgrade {releases.PODIUMD} --ca-trust") == 2
+
+
+def test_deploy_refreshes_images_with_a_changed_digest_before_the_upgrades(
+    called: list[str], monkeypatch: pytest.MonkeyPatch, renders: dict[str, manifests.Render]
+):
+    pinned = "a/app:1@sha256:" + "b" * 64
+    renders[releases.PODIUMD] = replace(RENDER, pinned_images=[pinned])
+    monkeypatch.setattr(provision, "stale_images", lambda images: images)
+    monkeypatch.setattr(provision, "refresh_images", lambda images: called.append(f"refresh {' '.join(images)}"))
+    _deploy()
+    assert called.index(f"refresh {pinned}") < called.index(f"upgrade {releases.PODIUMD} --ca-trust")
 
 
 def test_deploy_refuses_the_namespace_of_the_kubectl_apply_deploys(fake_run: FakeRun, called: list[str]):

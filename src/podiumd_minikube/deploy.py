@@ -29,6 +29,7 @@ from podiumd_minikube import pki
 from podiumd_minikube import polling
 from podiumd_minikube import postgres
 from podiumd_minikube import process
+from podiumd_minikube import provision
 from podiumd_minikube import releases
 from podiumd_minikube import tunnel
 from podiumd_minikube import upgrade
@@ -323,6 +324,10 @@ def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool
         objecten.import_objecttypes()
     gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
     dns.apply_hosts(chart_hosts)
+    # Before the upgrades: IfNotPresent pods start from the node's image under their tag.
+    provision.refresh_images(
+        provision.stale_images(sorted({i for done in renders.values() for i in done.pinned_images}))
+    )
     upgraded = _upgrade(selected, found, renders, before, every=every)
     # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
     installed = {release.name: releases.installed(release) for release in found}
