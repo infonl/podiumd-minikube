@@ -9781,3 +9781,6 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   processes, 8 threads, max-requests 100 (checked in the pod). Removed both
   overrides; `processes: 1` stays (laptop budget). Cost: a recycled worker's
   first request takes 2.5-6 s every 100 requests, as on the estates.
+- Live 19:22 CET (revision 5): the openinwoner container's env has only
+  UWSGI_PROCESSES=1, so /start.sh's defaults apply (8 threads, recycle
+  every 100); all pods ready.
