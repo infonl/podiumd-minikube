@@ -1608,10 +1608,9 @@ podiumd:
         mountPath: /app/src/objects/conf/docker_no_solo_cache.py
         readOnly: true
     settings:
-      # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
+      # Laptop budget: 1 web process (image default 4); its 4 threads stay the image's, as ExternalsPodiumD.
       uwsgi:
         processes: 1
-        threads: 2
       secretKey: objectenApiSecretKey
       # As ExternalsPodiumD: also its internal Service, which KISS calls. The
       # objecttypen names reach Open Object (podiumd >= 4.10), which serves both APIs.
@@ -2030,10 +2029,9 @@ podiumd:
     settings:
       # As ExternalsPodiumD (admins sign in through Keycloak).
       disable2fa: true
-      # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
+      # Laptop budget: 1 web process (image default 4); its 4 threads stay the image's, as ExternalsPodiumD.
       uwsgi:
         processes: 1
-        threads: 2
       secretKey: opennotificatiesApiSecretKey
       allowedHosts: opennotificaties.local
       # See openzaak's isHttps comment.
@@ -2100,12 +2098,10 @@ podiumd:
   # --- openarchiefbeheer ---
   openarchiefbeheer:
     enabled: false
-    # Laptop budget: 1 web process with 2 threads (image default 4 x 1); the
-    # chart ignores settings.uwsgi.
+    # Laptop budget: 2 web processes, 1 thread each (image default 4 x 1); not
+    # 1 x 1, see openformulieren. The chart ignores settings.uwsgi.
     extraEnvVars:
       - name: UWSGI_PROCESSES
-        value: "1"
-      - name: UWSGI_THREADS
         value: "2"
     # replicaCount, worker, beat and nginx already default to 1.
     tags:
@@ -2494,10 +2490,10 @@ podiumd:
       - name: DISABLE_2FA
         value: "True"
     settings:
-      # Laptop budget: 1 web process (image default 4); 2 threads keep requests concurrent.
+      # Laptop budget: 2 web processes (image default 4); 1 thread each, as the image and ExternalsPodiumD.
+      # Not 1 x 1: a request that calls the app itself would block.
       uwsgi:
-        processes: 1
-        threads: 2
+        processes: 2
       secretKey: openFormulierenSecretKey
       allowedHosts: openformulieren-nginx.local,openformulieren-nginx.podiumd.svc.cluster.local
       # As ExternalsPodiumD and podiumd-infra: the public host. Mails drop links
