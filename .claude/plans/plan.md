@@ -9672,3 +9672,18 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   LibreOffice keeps until Gotenberg restarts it (after a number of
   conversions); a full tier does not reach it. Pod restarted (rollout restart, stateless)
   so test_memory.py passes; node 15.0 GiB after it.
+- Fresh install 12:01-12:17 CET (Kees: 4.10.1 + all open PRs: local merge
+  f8d3fc67 = feature/podiumd-4.10.1 695929e2 with #695, plus #698 7f17e0fa,
+  #699 e1d4a821, #700 43742bc3; docs-only conflicts in
+  4.10.0-to-4.10.1-upgrade.md and images-4.10.1.yaml, branch tip's side).
+  `reset-namespace -y`, then `deploy --full`: deploy printed "Service
+  kiss-es-http does not exist yet: first without the website" and installed
+  without the hook. That first pass then failed on openklant-config (Admin
+  OIDC step: oidc_op_discovery_endpoint "Something went wrong while
+  retrieving the configuration"): keycloak-0 waited 4 min for its image pull
+  behind #699's new images, Ready 12:09, the Job gave up at 12:10. Not the
+  kiss change; a fresh install with cached images did not show it. So the
+  automatic second pass did not run; a second `deploy --full` (not blocked:
+  Service and peer live) ran the hook: Job completed in 2 s, index template
+  kiss-crawler-website present. A failed first pass leaves the website off
+  until the next deploy, which brings it; left as is.
