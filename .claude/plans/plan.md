@@ -9767,3 +9767,5 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   restart of everything made openzaak-config fail once and
   frankgateway-outway-seed twice (APISIX: "has no healthy etcd endpoint
   available" while its etcd restarted); both succeeded on retry.
+- podiumd-tests' full tier on 227d8510 after the digest-aware deploy
+  (revision 4): 619 passed, 0 failed (2026-11-04, evening).
