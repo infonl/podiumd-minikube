@@ -9687,3 +9687,24 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   Service and peer live) ran the hook: Job completed in 2 s, index template
   kiss-crawler-website present. A failed first pass leaves the website off
   until the next deploy, which brings it; left as is.
+- Node killed at 12:36:09 CET during a fresh #703 install: not memory. A
+  PackageKit update (kvv, 12:35:51-12:36:11, /var/log/apt/history.log)
+  upgraded docker-ce 29.9.2 -> 29.9.3; dockerd restarted at 12:36:09
+  (process start time) and, without live-restore, killed every container
+  (exit 137). Docker's `OOMKilled=true` misled: it reflects the node
+  cgroup's oom_kill counter, which the office converter's pod-level OOM
+  (podiumd-chart-39, before #698) had raised; the host kernel logged no
+  other OOM since boot (`dmesg`, read by Kees). Docker's event log starts
+  at the daemon restart. Prometheus here scrapes no container or node
+  memory, and the node's journal (tmpfs) is lost with the node. Proposed to
+  composers-ansible (manages chopin's daemon.json): `"live-restore": true`.
+- kiss-3 two-pass, live on the next fresh install (13:38-13:56 CET,
+  8437fc15 = f8d3fc67 + helm-charts #703): deploy ran without the website,
+  then "Deploying again, with KISS's website", exit 0.
+- #703 (Maykin config Jobs backoffLimit 6 -> 12, podiumd-chart-31), for
+  podiumd-tests: 16 of the 4.10.1 images removed from the node first;
+  keycloak-0 waited 4m59.9s for its pull, Ready 13:48:36. openklant-config
+  needed 7 restarts (Complete 13:53:54), more than backoffLimit 6 allows;
+  openzaak-config 5 failed pods, objecten-config 3 restarts, the other
+  config Jobs none. Recorded every 10 s by a scratch script (the chart's
+  600 s TTL deletes finished Jobs).
