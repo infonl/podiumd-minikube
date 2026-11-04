@@ -1055,10 +1055,6 @@ podiumd:
     extraEnvVars:
       - name: CELERY_WORKER_CONCURRENCY
         value: "1"
-      # With 1 web process: the first request on a recycled worker takes 2.5-6 s
-      # (Django warm-up, --lazy-apps); the image recycles every 100 requests.
-      - name: UWSGI_MAX_REQUESTS
-        value: "1000" # as Open Zaak, Objecten and Open Formulieren
       # As ExternalsPodiumD (settings.extraEnvVars there; this chart merges both).
       - name: DIGID_METADATA
         value: /app/media/metadata
@@ -1192,10 +1188,10 @@ podiumd:
             - domain: openinwoner.local
               name: Open Inwoner
     settings:
-      # Laptop budget: 1 web process (image default 4); see UWSGI_MAX_REQUESTS above.
+      # Laptop budget: 1 web process (image default 4). Threads (8) and the recycle
+      # every 100 requests stay the image's, as ExternalsPodiumD: fewer hid a hang.
       uwsgi:
         processes: 1
-        threads: 2
       secretKey: openInwonerSecretKey
       allowedHosts: openinwoner.local,openinwoner-nginx.podiumd.svc.cluster.local
       isHttps: true

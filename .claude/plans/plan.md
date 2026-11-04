@@ -9769,3 +9769,15 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   available" while its etcd restarted); both succeeded on retry.
 - podiumd-tests' full tier on 227d8510 after the digest-aware deploy
   (revision 4): 619 passed, 0 failed (2026-11-04, evening).
+
+### Open Inwoner: uWSGI threads and recycle as ExternalsPodiumD
+
+- podiumd-tests' handoff (d5bc3a8, Kees, 2026-11-04): on kees00 Open
+  Inwoner requests hung until uWSGI killed the worker ("NO MERCY"); the
+  leading hypothesis is a thread deadlock under the image's 8 threads,
+  which minikube's `threads: 2` and `UWSGI_MAX_REQUESTS=1000` hid.
+  ExternalsPodiumD sets no uWSGI values for any app (checked); podiumd-infra
+  neither for Open Inwoner (values/kees00). The image's /start.sh: 4
+  processes, 8 threads, max-requests 100 (checked in the pod). Removed both
+  overrides; `processes: 1` stays (laptop budget). Cost: a recycled worker's
+  first request takes 2.5-6 s every 100 requests, as on the estates.
