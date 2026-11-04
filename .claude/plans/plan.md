@@ -9621,3 +9621,25 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   helm upgrade never reran them (openbeheer-config on the #694 run: most of
   chart-38 on minikube). The chart's 600 s TTL now applies as on the
   estates; deploy's wait counts a Job the TTL deleted as finished.
+
+## ZAC's Solr with 3 nodes (2026-11-04)
+
+- podiumd-tests (Kees's choice over keeping 1 node, handoff de14870):
+  `podiumd.zac.solr-operator.solr.replicas: 1` removed, so the chart
+  default of 3 Solr nodes applies, as ExternalsPodiumD (no value set).
+  ZAC's init-solr-zac-core creates `zac` with numShards 2 and
+  replicationFactor 2; on one node both replicas of a shard shared the
+  node, and at 09:55 CET Solr rejected updates ("Request says it is coming
+  from leader, but we are the leader", zac_shard2_replica_n6) while ZAC
+  answered a zaak create with HTTP 500 msg.error.search.indexing.exception.
+  That colocation caused it is podiumd-tests' reading; not reproduced here.
+- Live 11:26 CET (podiumd revision 13, helm-charts 0286636c). No
+  MOVEREPLICA needed: the solr-operator's scale-up balancing moved one
+  replica of each shard to the new nodes (shard1 on -0 and -2, shard2 on
+  -0 and -1; leaders on -0).
+- Per-node heap and resources unchanged (-Xmx512m, 512Mi/768Mi). Measured
+  right after: the three nodes 816 MiB together (one node 387 in the
+  baseline), node 14.5 -> 15.2 GiB of the 17.0 budget. The baseline is
+  refreshed after podiumd-tests' next full tier.
+- Solr's Collections API needs the operator's basic auth (Secret
+  zac-solr-solrcloud-basic-auth); anonymous calls get 401.

@@ -523,8 +523,9 @@ podiumd:
     # init-solr-zac-core container creates the zac collection.
     solr-operator:
       watchNamespaces: podiumd
+      # Chart default 3 nodes, as ExternalsPodiumD: with both replicas of a zac shard on
+      # one node, Solr rejected updates ("we are the leader") and ZAC answered HTTP 500.
       solr:
-        replicas: 1 # chart 3
         # Laptop budget: chart -Xms512m -Xmx768m, 1Gi/2Gi. The GC is in manifests.tune_solr.
         javaMem: "-Xms64m -Xmx512m -XX:ActiveProcessorCount=2"
         resources:

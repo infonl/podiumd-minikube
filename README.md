@@ -295,7 +295,7 @@ that leaves untested here (podiumd-tests then needs a real environment).
 | Area | minikube | Estates | Untested here |
 |---|---|---|---|
 | Nodes | 1 node; required pod anti-affinity dropped (`manifests.allow_rolling_updates`) | several nodes | scheduling and spreading, node failure, zone outages |
-| Replicas | 1 everywhere: Redis, Keycloak (`instances: 1`), Elasticsearch, Solr, ZooKeeper, web pods | Redis 3 (ExternalsPodiumD relabels the master in office hours), Keycloak 2 (kees00 with a PDB), Open Inwoner ES 2, KISS ES 3 | failover, Redis master switch, Keycloak cluster cache, PDBs |
+| Replicas | 1 everywhere: Redis, Keycloak (`instances: 1`), Elasticsearch, ZooKeeper, web pods; Solr 3 as ExternalsPodiumD (ZAC's collection needs its shard replicas on separate nodes) | Redis 3 (ExternalsPodiumD relabels the master in office hours), Keycloak 2 (kees00 with a PDB), Open Inwoner ES 2, KISS ES 3 | failover, Redis master switch, Keycloak cluster cache, PDBs |
 | Storage | hostPath ReadWriteOnce (`templates/storage-hooks.yaml`) | Azure Files SMB/NFS, shared between pods | multi-pod shared media, Azure Files permissions and latency |
 | Postgres | in-cluster PostGIS 15, owned by postgres with grants and the Azure extension allow-list | Azure Flexible Server 15 | Azure TLS and network rules, connection limits, server parameters |
 | Edge | NGINX Gateway Fabric with HTTPRoutes generated from the chart's Ingresses (`podiumd_minikube.gateway`); local CA | ExternalsPodiumD: hand-written HTTPRoutes with `X-Forwarded-*`; public certificates (kees00: NGF since 2026-10-20) | a route the generator derives but the estates write differently, public TLS |
