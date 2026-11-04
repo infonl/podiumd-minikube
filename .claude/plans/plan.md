@@ -9727,3 +9727,19 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
 - podiumd-tests' test_recreated_keycloak_user_logs_in_to_the_same_grafana_user
   passed (run 20261104-135810): Keycloak login, user recreated, same Grafana
   user, role from the new token. The full login works with the CA trust.
+
+### Upgrade to the latest 4.10.1 (227d8510)
+
+- 2026-11-04 16:51 CET, Kees via podiumd-tests: podiumd worktree to
+  origin/feature/podiumd-4.10.1 227d8510 (#699 merged after #700, #701,
+  #704; branch podiumd-4.10.1-227d8510), `deploy --full`: revision 3, all
+  workloads and Jobs ready at 16:54. Against 3619dde1 the render differed
+  only in Open Inwoner's 2.5.0 digest (a14a626c -> 079c98ce, a rebuilt
+  image) and the validations.yaml guard for a templated extraEnvVars.
+- Gap found: `manifests.strip_image_digests` drops the digest, so a
+  rebuilt image under the same tag changes no pod spec; with
+  IfNotPresent the pods kept a14a626c. The node's tag already resolved to
+  079c98ce (`crictl inspecti`), so a `rollout restart` of the 5 Open
+  Inwoner Deployments sufficed (16:57). Its config Jobs ran on a14a626c.
+  Not fixed in code yet: deploy does not notice a digest change behind an
+  unchanged tag.
