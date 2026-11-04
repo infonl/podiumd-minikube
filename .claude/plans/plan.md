@@ -9659,3 +9659,16 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
 - Checked against the real 4.10.1 --full render on the live cluster: hook
   found, not blocked (Service and peer present); with website=null the hook
   is gone and the policy peer stays. A fresh install with it is not run yet.
+
+## Memory baseline after Solr 3 nodes (2026-11-04 11:55 CET)
+
+- Refreshed after podiumd-tests' full tier (20261104-102646, 599/0) and its
+  large-document runs (490 MiB ZAC upload, Open Formulieren 45 MB
+  attachments, office converter conversions; last run 11:48). Node 16271 ->
+  15770 MiB; Solr 387 -> 891 MiB (3 nodes); Loki 169 -> 231; Postgres 450 ->
+  408; ZaakBrug 693 -> 647.
+- Office converter kept at 89 MiB, not the 471 measured: after the large
+  documents soffice.bin held about 600 MiB RSS (anon 462 MiB), which
+  LibreOffice keeps until Gotenberg restarts it (after a number of
+  conversions); a full tier does not reach it. Pod restarted (rollout restart, stateless)
+  so test_memory.py passes; node 15.0 GiB after it.
