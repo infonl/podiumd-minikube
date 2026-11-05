@@ -44,8 +44,8 @@ def test_problems_list_unready_pods_recent_restarts_and_failed_jobs():
     recent = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
     old = (datetime.now(UTC) - timedelta(hours=3)).isoformat()
 
-    def pod(name: str, *, ready: bool, finished: str | None) -> dict[str, object]:
-        last = {"terminated": {"finishedAt": finished}} if finished else {}
+    def pod(name: str, *, ready: bool, finished: str | None, **terminated: object) -> dict[str, object]:
+        last = {"terminated": {"finishedAt": finished, **terminated}} if finished else {}
         container = {"name": "app", "ready": ready, "lastState": last}
         return {
             "metadata": {"namespace": "ns", "name": name},
@@ -56,6 +56,7 @@ def test_problems_list_unready_pods_recent_restarts_and_failed_jobs():
         pod("ok", ready=True, finished=None),
         pod("rebooted", ready=True, finished=old),
         pod("flapping", ready=True, finished=recent),
+        pod("node-stopped", ready=True, finished=recent, reason="Unknown", exitCode=255),
         pod("down", ready=False, finished=None),
     ]
     jobs = [{"metadata": {"name": "openzaak-config"}, "status": {"conditions": [{"type": "Failed", "status": "True"}]}}]

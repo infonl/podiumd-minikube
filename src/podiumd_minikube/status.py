@@ -34,6 +34,8 @@ GROWTH_SLACK_MIB = 64
 SETTLE_SECONDS = 300
 # Restarts older than this (a reboot, a deploy) are history, not a problem.
 RECENT_RESTART_SECONDS = 3600
+# What the kubelet records for a container that a node stop or host reboot ended.
+NODE_STOPPED = ("Unknown", 255)
 # Seconds between the two CPU samples (crictl reports cumulative CPU time).
 CPU_SAMPLE_SECONDS = 1.0
 _UNITS = {"B": 1, "KiB": 1024, "MiB": MIB, "GiB": 1024 * MIB}
@@ -172,12 +174,15 @@ def budget_mib(profiles: dict[str, bool]) -> int:
 
 
 def _recently_restarted(container: dict[str, Any], now: datetime) -> bool:
-    finished = container.get("lastState", {}).get("terminated", {}).get("finishedAt")
-    return bool(finished) and (now - datetime.fromisoformat(finished)).total_seconds() < RECENT_RESTART_SECONDS
+    terminated = container.get("lastState", {}).get("terminated", {})
+    finished = terminated.get("finishedAt")
+    if not finished or (terminated.get("reason"), terminated.get("exitCode")) == NODE_STOPPED:
+        return False
+    return (now - datetime.fromisoformat(finished)).total_seconds() < RECENT_RESTART_SECONDS
 
 
 def problems(items: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> list[str]:
-    """Pods not Ready or restarted in the last hour, and failed Jobs, one line each."""
+    """Pods not Ready or restarted in the last hour (not by a node stop), and failed Jobs, one line each."""
     found: list[str] = []
     now = datetime.now(UTC)
     for pod in items:
