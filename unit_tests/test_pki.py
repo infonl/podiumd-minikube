@@ -33,7 +33,8 @@ def test_ensure_ca_creates_a_ca_once_with_a_private_key(pki_dir: Path):
     assert not pki.ensure_ca()
 
 
-def test_issuer_manifests_carry_the_ca(pki_dir: Path, fake_run: FakeRun):
+@pytest.mark.usefixtures("fake_run")
+def test_issuer_manifests_carry_the_ca(pki_dir: Path):
     pki_dir.mkdir()
     (pki_dir / "ca.crt").write_text("CERT", encoding="utf-8")
     (pki_dir / "ca.key").write_text("KEY", encoding="utf-8")
@@ -95,8 +96,9 @@ def test_cert_manager_template_renders_the_installed_values(fake_run: FakeRun):
 
 
 @pytest.mark.parametrize("returncode", [0, 1])
+@pytest.mark.usefixtures("poll_once")
 def test_install_issuer_creates_the_ca_and_applies_until_the_webhook_answers(
-    pki_dir: Path, openssl: FakeRun, poll_once: None, returncode: int
+    pki_dir: Path, openssl: FakeRun, returncode: int
 ):
     openssl.on("kubectl", "apply", returncode=returncode)
     if returncode == 0:

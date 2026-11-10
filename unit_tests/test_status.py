@@ -223,9 +223,8 @@ def cluster(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     return fake_run
 
 
-def test_report_shows_node_profiles_access_and_containers_against_the_baseline(
-    cluster: FakeRun, capsys: pytest.CaptureFixture[str]
-):
+@pytest.mark.usefixtures("cluster")
+def test_report_shows_node_profiles_access_and_containers_against_the_baseline(capsys: pytest.CaptureFixture[str]):
     status.report(top=2)
     out = capsys.readouterr().out
     assert "Node        memory 4.0 / 16.0 GiB cap, budget 17.0 GiB, containers 0.3 GiB" in out

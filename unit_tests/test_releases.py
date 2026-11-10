@@ -56,7 +56,8 @@ def test_releases_split_the_values_and_sets(fetched: Path):
     assert (zac["image"], zac["db"]["port"], zac["db"]["host"]) == ({"tag": "1"}, 5432, "postgres")
 
 
-def test_monitoring_logging_only_with_the_metrics_profile(fetched: Path):
+@pytest.mark.usefixtures("fetched")
+def test_monitoring_logging_only_with_the_metrics_profile():
     assert [release.name for release in releases.releases(ARGS[:4])] == [RELEASE_NAME, releases.PODIUMD]
 
 
@@ -88,7 +89,8 @@ def test_upgrade_runs_helm_with_the_repository_plugins(fake_run: FakeRun):
     ]
 
 
-def test_the_seal_key_stays_out_of_this_charts_release(fetched: Path):
+@pytest.mark.usefixtures("fetched")
+def test_the_seal_key_stays_out_of_this_charts_release():
     seal = ["--set-file", "podiumd.openbao.seal.static.key=/k"]
     own, podiumd = releases.releases([*ARGS[:4], *seal])
     assert seal[1] not in own.sets
@@ -96,7 +98,8 @@ def test_the_seal_key_stays_out_of_this_charts_release(fetched: Path):
 
 
 @pytest.mark.parametrize("args", [["--set=a=1"], ["--set", "a"], ["-f", "x.yaml"]])
-def test_releases_refuse_arguments_they_cannot_route(fetched: Path, args: list[str]):
+@pytest.mark.usefixtures("fetched")
+def test_releases_refuse_arguments_they_cannot_route(args: list[str]):
     with pytest.raises(UserError, match="pairs to helm"):
         releases.releases(args)
 

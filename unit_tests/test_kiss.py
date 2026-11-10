@@ -38,16 +38,18 @@ def _render(*docs: manifests.Doc) -> manifests.Render:
 def cluster(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Live objects by "kind/name"; kube.exists and kube.get_json read them."""
     live: dict[str, Any] = {}
-    monkeypatch.setattr(kube, "exists", lambda resource, namespace="": resource in live)
+    monkeypatch.setattr(kube, "exists", lambda resource, *_args, **_kwargs: resource in live)
     monkeypatch.setattr(kube, "get_json", lambda kind, name, *_args: live[f"{kind}/{name}"])
     return live
 
 
-def test_no_hook_without_a_website(cluster: dict[str, Any]):
+@pytest.mark.usefixtures("cluster")
+def test_no_hook_without_a_website():
     assert kiss.website_hook_blocked(_render(_policy(PEER))) == ""
 
 
-def test_blocked_before_elasticsearch_exists(cluster: dict[str, Any]):
+@pytest.mark.usefixtures("cluster")
+def test_blocked_before_elasticsearch_exists():
     assert kiss.website_hook_blocked(_render(_hook(), _policy(PEER))) == "Service kiss-es-http does not exist yet"
 
 

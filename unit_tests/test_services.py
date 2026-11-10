@@ -15,8 +15,11 @@ EXEC = ["kubectl", "exec", "-n", "podiumd"]
 
 
 @pytest.fixture
-def cluster(fake_run: FakeRun, poll_once: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeRun:
+def cluster(
+    request: pytest.FixtureRequest, fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> FakeRun:
     """minikube context, a pod per selector and a port-forward log in tmp_path."""
+    request.getfixturevalue("poll_once")
     monkeypatch.setattr(kube, "require_minikube_context", lambda: None)
     monkeypatch.setattr(kube, "first_pod", lambda selector: f"pod-{selector}")
     monkeypatch.setattr(services, "FORWARD_LOG", tmp_path / "forward.log")
@@ -48,7 +51,7 @@ def test_expose_postgres_starts_a_forward(cluster: FakeRun, monkeypatch: pytest.
 
 def test_expose_postgres_fails_when_the_forward_does_not_come_up(cluster: FakeRun, monkeypatch: pytest.MonkeyPatch):
     cluster.on("pgrep", returncode=1)
-    monkeypatch.setattr(process, "spawn", lambda args, log: None)
+    monkeypatch.setattr(process, "spawn", lambda *_args: None)
     with pytest.raises(UserError, match="port-forward did not come up within 10s"):
         services.expose_postgres(5432)
 

@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from conftest import EDGE_NAMESPACE
 from conftest import kubectl
 
@@ -27,14 +29,16 @@ def _route_conditions():
     }
 
 
-def test_every_ingress_host_has_a_route(edge_ip):
+@pytest.mark.usefixtures("edge_ip")
+def test_every_ingress_host_has_a_route():
     missing = _ingress_hosts() - set(_route_conditions())
     assert not missing, (
         f"no HTTPRoute in {EDGE_NAMESPACE} for {sorted(missing)}: redeploy (podiumd_minikube.gateway.apply)"
     )
 
 
-def test_every_route_is_accepted_with_resolved_backends(edge_ip):
+@pytest.mark.usefixtures("edge_ip")
+def test_every_route_is_accepted_with_resolved_backends():
     refused = {
         host: [f"{c['type']}={c['status']} ({c.get('reason')})" for c in conditions if c["status"] != "True"]
         for host, conditions in _route_conditions().items()

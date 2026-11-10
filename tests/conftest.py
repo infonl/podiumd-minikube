@@ -89,8 +89,9 @@ def _pods(namespace):
 
 
 @pytest.fixture(scope="session")
-def pods(edge_ip):
+def pods(request):
     """All pods in the releases' namespaces: name, phase, container_statuses, from_job, job (its Job's name or None)."""
+    request.getfixturevalue("edge_ip")
     items = [item for ns in (NAMESPACE, MONITORING_NAMESPACE) for item in _pods(ns)]
     return [
         {

@@ -155,8 +155,7 @@ known-first-party = ["podiumd_minikube"]
 check-typed-exception = true  # Enable additional checks for try-except-pass
 
 [tool.ruff.lint.per-file-ignores]
-# tests/ and unit_tests/: pytest asserts, fixture/mock params (ARG), no
-# __init__.py (INP001), unused unpacked vars (RUF059), fixed-argv
+# tests/ and unit_tests/: pytest asserts, no __init__.py (INP001), unused unpacked vars (RUF059), fixed-argv
 # kubectl/helm calls (S603/S607), dev passwords (S105), unannotated returns
 # (ANN201/ANN202). bandit does not
 # scan them either. Test values in asserts (PLR2004), fixtures and fakes
@@ -164,7 +163,7 @@ check-typed-exception = true  # Enable additional checks for try-except-pass
 # setup and assert together in a try (PLW0717), many tests (PLR0904) and
 # locals (PLR0914).
 "{tests,unit_tests}/**" = [
-    "S101", "ARG001", "ARG005", "INP001", "RUF059", "S603", "S607", "S105", "ANN201", "ANN202",
+    "S101", "INP001", "RUF059", "S603", "S607", "S105", "ANN201", "ANN202",
     "PLR2004", "PLR0913", "PLR0917", "PLC0415", "PLW0717", "PLR0904", "PLR0914",
 ]
 # files/: scripts an app's `manage.py shell` runs, not a package.
@@ -312,6 +311,7 @@ reportCallInDefaultInitializer = "error"
 reportInvalidCast = "error"
 reportPrivateLocalImportUsage = "error"
 reportUnannotatedClassAttribute = "error"
+reportUnusedParameter = "error"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "unit_tests"

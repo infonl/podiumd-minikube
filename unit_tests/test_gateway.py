@@ -91,8 +91,10 @@ EXTERNAL_IP = (
 
 
 @pytest.fixture
-def edge(fake_run: FakeRun, poll_once: None, monkeypatch: pytest.MonkeyPatch) -> FakeRun:
+def edge(request: pytest.FixtureRequest, fake_run: FakeRun) -> FakeRun:
     """NGF installed with the pinned ClusterIP; each wait probes once; only a stale route is live."""
+    request.getfixturevalue("poll_once")
+    request.getfixturevalue("monkeypatch")
     fake_run.on(*CLUSTER_IP, stdout=gateway.EDGE_CLUSTER_IP)
     fake_run.on(*EXTERNAL_IP, stdout="10.96.0.200")
     for kind in ("service", "proxysettingspolicy", "clientsettingspolicy"):

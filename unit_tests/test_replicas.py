@@ -40,14 +40,15 @@ def test_changes_patch_the_differing_object_and_create_or_delete_the_rest():
 
 
 @pytest.fixture
-def switched(monkeypatch: pytest.MonkeyPatch, poll_once: None) -> list[str]:
+def switched(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """kubectl calls of replicas.switch against fake renders and StatefulSets at the wanted count."""
+    request.getfixturevalue("poll_once")
     calls: list[str] = []
     counts = {"redis-ha": 3, "keycloak": 2}
     monkeypatch.setattr(kube, "require_minikube_context", lambda: None)
     monkeypatch.setattr(deploy, "options", lambda **_: deploy.Options())
     monkeypatch.setattr(deploy.Options, "render", lambda _self, *args: manifests.Render(SEVERAL if args else ONE, []))
-    monkeypatch.setattr(kube, "kubectl_shown", lambda *args, stdin=None: calls.append(" ".join(args)))
+    monkeypatch.setattr(kube, "kubectl_shown", lambda *args, **_kwargs: calls.append(" ".join(args)))
     monkeypatch.setattr(
         kube,
         "get_json",

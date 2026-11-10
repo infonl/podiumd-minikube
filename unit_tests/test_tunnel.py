@@ -28,8 +28,11 @@ class Terminal(io.StringIO):
 
 
 @pytest.fixture
-def machine(fake_run: FakeRun, poll_once: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeRun:
+def machine(
+    request: pytest.FixtureRequest, fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> FakeRun:
     """minikube context, no tunnel, no route, an edge IP; /etc/hosts and the log in tmp_path."""
+    request.getfixturevalue("poll_once")
     patch_all(
         monkeypatch,
         {
@@ -113,7 +116,8 @@ def test_stop_tunnel_removes_only_an_existing_route(machine: FakeRun, pgrep: int
     assert not machine.ran("minikube", "ip")
 
 
-def test_hosts_hint_is_quiet_when_etc_hosts_is_current(machine: FakeRun):
+@pytest.mark.usefixtures("machine")
+def test_hosts_hint_is_quiet_when_etc_hosts_is_current():
     assert tunnel.hosts_hint(EDGE_IP).startswith("Run podiumd-minikube update-hosts")
     tunnel.ETC_HOSTS.write_text(f"127.0.0.1 localhost\n{LINE}\n", encoding="utf-8")
     assert tunnel.hosts_hint(EDGE_IP) == "/etc/hosts already points the *.local hosts at it."

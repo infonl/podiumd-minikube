@@ -141,7 +141,8 @@ def test_show_cluster_status_checks_the_context_first(args: list[str], top: int,
     assert calls == ["context", top]
 
 
-def test_cluster_lock_take_status_release(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.usefixtures("monkeypatch")
+def test_cluster_lock_take_status_release(capsys: pytest.CaptureFixture[str]):
     assert cli.run(["cluster-lock", "status"]) == 0
     assert capsys.readouterr().out == f"free ({lock.LOCK_FILE})\n"
     cli.run(["cluster-lock", "--who", "kees", "take", "upgrade"])
@@ -156,9 +157,8 @@ def test_cluster_lock_take_status_release(capsys: pytest.CaptureFixture[str], mo
     assert capsys.readouterr().out == "not held by kees: free\n"
 
 
-def test_cluster_lock_take_by_the_current_user_needs_no_who(
-    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-):
+@pytest.mark.usefixtures("monkeypatch")
+def test_cluster_lock_take_by_the_current_user_needs_no_who(capsys: pytest.CaptureFixture[str]):
     cli.run(["cluster-lock", "take", "upgrade"])
     assert capsys.readouterr().out == "taken; release with: podiumd-minikube cluster-lock release\n"
     hold = lock.current()

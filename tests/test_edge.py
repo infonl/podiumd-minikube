@@ -1,5 +1,6 @@
 """The edge's request-body limit, as ExternalsPodiumD's NGINX Gateway Fabric has it."""
 
+import pytest
 import requests
 
 from conftest import host_url
@@ -8,7 +9,8 @@ from conftest import host_url
 BODY = b"x" * (2 * 1024 * 1024)
 
 
-def test_two_megabyte_request_passes_the_gateway(edge_ip):
+@pytest.mark.usefixtures("edge_ip")
+def test_two_megabyte_request_passes_the_gateway():
     """nginx passes the request to Open Zaak, which answers it, instead of rejecting it with 413."""
     response = requests.post(
         host_url("openzaak.local", "/documenten/api/v1/enkelvoudiginformatieobjecten"),

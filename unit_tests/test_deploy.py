@@ -49,7 +49,8 @@ def fixed_sets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(openbao, "seal_key_args", lambda: SEAL)
 
 
-def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.MonkeyPatch, fixed_sets: None):
+@pytest.mark.usefixtures("fixed_sets")
+def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(chart, "objecten_shape", lambda: chart.ObjectenShape(merged=True, sets=[]))
     monkeypatch.setattr(chart, "full_profile_sets", lambda: ["--set", "full=1"])
     selected = deploy.options(full=True, extra=["--set", "x=y"])
@@ -57,7 +58,8 @@ def test_options_full_adds_profiles_shape_and_extra_args(monkeypatch: pytest.Mon
     assert selected.helm_args == ["--set", "full=1", *SEAL, "--set", "x=y"]
 
 
-def test_options_core_has_no_profile_sets(fixed_sets: None):
+@pytest.mark.usefixtures("fixed_sets")
+def test_options_core_has_no_profile_sets():
     selected = deploy.options(full=False, extra=[])
     assert not selected.objecten_merged
     assert selected.helm_args == SEAL
@@ -205,20 +207,21 @@ def renders(monkeypatch: pytest.MonkeyPatch) -> dict[str, manifests.Render]:
 
 @pytest.fixture
 def called(
+    request: pytest.FixtureRequest,
     fake_run: FakeRun,
     monkeypatch: pytest.MonkeyPatch,
-    fixed_sets: None,
     tmp_path: Path,
-    live: dict[str, Any],
-    renders: dict[str, manifests.Render],
 ) -> list[str]:
     """deploy()'s steps outside this module, its shown kubectl commands and its upgrades, in order; the CA exists."""
+    request.getfixturevalue("fixed_sets")
+    request.getfixturevalue("live")
+    request.getfixturevalue("renders")
     steps: list[str] = []
     patch_all(monkeypatch, {(module, name): recorder(steps, name) for module, name in STEPS})
     patch_all(
         monkeypatch,
         {
-            (kube, "kubectl_shown"): lambda *args, stdin=None: steps.append(" ".join(args)),
+            (kube, "kubectl_shown"): lambda *args, **_kwargs: steps.append(" ".join(args)),
             (releases, "upgrade"): lambda release, post: steps.append(f"upgrade {release.name} {post[-1]}"),
             (hosts, "chart_hosts"): lambda: ["zac.local"],
             (pki, "CA_CERT"): tmp_path / "ca.crt",
@@ -302,23 +305,24 @@ def test_deploy_refuses_the_namespace_of_the_kubectl_apply_deploys(fake_run: Fak
     assert "apply_trust" not in called
 
 
-def test_deploy_fails_on_a_failed_job(called: list[str], live: dict[str, Any]):
+@pytest.mark.usefixtures("called")
+def test_deploy_fails_on_a_failed_job(live: dict[str, Any]):
     live["job"]["items"] = [_job_status("Failed")]
     with pytest.raises(process.UserError, match=r"^Job\(s\) failed: openzaak-config: "):
         _deploy()
 
 
-def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(
-    called: list[str], live: dict[str, Any], poll_once: None
-):
+@pytest.mark.usefixtures("called", "poll_once")
+def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(live: dict[str, Any]):
     live["job"]["items"] = [{"metadata": {"name": "openzaak-config"}, "status": {}}]
     live["deployment"]["items"][0]["status"]["readyReplicas"] = 0
     with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac; running: openzaak-config$"):
         _deploy()
 
 
+@pytest.mark.usefixtures("called", "poll_once")
 def test_deploy_names_a_held_zac_on_timeout(
-    fake_run: FakeRun, called: list[str], live: dict[str, Any], poll_once: None, renders: dict[str, manifests.Render]
+    fake_run: FakeRun, live: dict[str, Any], renders: dict[str, manifests.Render]
 ):
     zac = {**_doc("Deployment", "zac"), "spec": {"replicas": 1}}
     renders[releases.PODIUMD] = manifests.Render(docs=[zac, _doc("Job", "openzaak-config")], large_configmaps=[])
@@ -364,7 +368,8 @@ def test_render_without_lookup_runs_one_plain_helm_template(fake_run: FakeRun):
     assert "--dry-run=server" not in calls[0]
 
 
-def test_deploy_names_a_workload_not_created_yet_as_stuck(called: list[str], live: dict[str, Any], poll_once: None):
+@pytest.mark.usefixtures("called", "poll_once")
+def test_deploy_names_a_workload_not_created_yet_as_stuck(live: dict[str, Any]):
     live["deployment"]["items"] = []
     with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac;"):
         _deploy()
@@ -382,9 +387,8 @@ def test_zac_state(fake_run: FakeRun, ready: int, log: str, state: str | None):
     assert deploy.zac_state() == state
 
 
-def test_deploy_restarts_zac_once_when_its_boot_failed(
-    called: list[str], live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-):
+@pytest.mark.usefixtures("called")
+def test_deploy_restarts_zac_once_when_its_boot_failed(live: dict[str, Any], monkeypatch: pytest.MonkeyPatch):
     zac = live["deployment"]["items"][0]
     zac["status"]["readyReplicas"] = 0
     restarts: list[str] = []
@@ -401,8 +405,8 @@ def test_deploy_restarts_zac_once_when_its_boot_failed(
 
 
 @pytest.mark.parametrize("name", deploy.ZAC_JOBS)
+@pytest.mark.usefixtures("called")
 def test_deploy_restarts_zac_only_after_its_jobs_completed(
-    called: list[str],
     live: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
     renders: dict[str, manifests.Render],

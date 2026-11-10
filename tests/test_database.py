@@ -59,7 +59,8 @@ def _postgres_pod_name():
 
 
 @pytest.fixture(scope="module")
-def existing_databases(pods):
+def existing_databases(request):
+    request.getfixturevalue("pods")
     raw = psql("postgres", "SELECT datname FROM pg_database WHERE datistemplate = false;")
     return set(raw.splitlines())
 
@@ -70,14 +71,16 @@ def test_all_expected_databases_exist(existing_databases):
 
 
 @pytest.mark.parametrize("database", sorted(POSTGIS_DATABASES))
-def test_postgis_extension_installed(pods, database, existing_databases):
+@pytest.mark.usefixtures("pods")
+def test_postgis_extension_installed(database, existing_databases):
     if database not in existing_databases:
         pytest.skip(f"database {database!r} does not exist (profile not deployed)")
     result = psql(database, "SELECT extname FROM pg_extension WHERE extname = 'postgis';")
     assert result == "postgis", f"postgis extension missing from {database!r}"
 
 
-def test_openzaak_knows_zacs_client(pods, existing_databases):
+@pytest.mark.usefixtures("pods")
+def test_openzaak_knows_zacs_client(existing_databases):
     """Open Zaak's setup_configuration registers ZAC's zgwApis client and secret."""
     if "openzaak" not in existing_databases:
         pytest.skip("openzaak database does not exist")

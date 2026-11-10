@@ -77,7 +77,7 @@ def test_main_exits_with_the_entrys_code(entry, code: int, stderr: str, capsys: 
 def test_fetch_retries_a_network_error_until_it_answers(monkeypatch: pytest.MonkeyPatch):
     answers = iter([ProcessError(["helm"], 1, "lookup helm.cilium.io: i/o timeout"), "index"])
 
-    def run(args: list[str], *, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+    def run(args: list[str], **_options: str | None) -> subprocess.CompletedProcess[str]:
         answer = next(answers)
         if isinstance(answer, ProcessError):
             raise answer
@@ -88,9 +88,8 @@ def test_fetch_retries_a_network_error_until_it_answers(monkeypatch: pytest.Monk
     assert process.fetch(["helm"]) == "index"
 
 
-def test_fetch_raises_other_errors_at_once_and_the_last_network_error_at_the_deadline(
-    fake_run: FakeRun, poll_once: None
-):
+@pytest.mark.usefixtures("poll_once")
+def test_fetch_raises_other_errors_at_once_and_the_last_network_error_at_the_deadline(fake_run: FakeRun):
     fake_run.on("helm", "template", returncode=1, stderr="Error: chart not found")
     with pytest.raises(ProcessError, match="chart not found"):
         process.fetch(["helm", "template"])

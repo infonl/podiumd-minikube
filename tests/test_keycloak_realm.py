@@ -28,8 +28,9 @@ def _env(kind, name):
 
 
 @pytest.fixture(scope="module")
-def live_clients(edge_ip):
+def live_clients(request):
     """The realm's clients by clientId, through the Admin API with the chart's bootstrap admin."""
+    request.getfixturevalue("edge_ip")
     secret = json.loads(kubectl("get", "secret", "keycloak-podiumd-admin", "-n", NAMESPACE, "-o", "json"))["data"]
     token = requests.post(
         host_url("keycloak.local", "/realms/master/protocol/openid-connect/token"),
@@ -59,7 +60,8 @@ def _pkce(client):
     ("realm", "issuer"),
     [(REALM, "https://keycloak.local/realms/podiumd"), ("master", "https://keycloak-admin.local/realms/master")],
 )
-def test_issuer_follows_the_frontend_urls(edge_ip, realm, issuer):
+@pytest.mark.usefixtures("edge_ip")
+def test_issuer_follows_the_frontend_urls(realm, issuer):
     response = requests.get(host_url("keycloak.local", f"/realms/{realm}/.well-known/openid-configuration"), timeout=10)
     response.raise_for_status()
     assert response.json()["issuer"] == issuer
@@ -73,7 +75,8 @@ def test_pkce_requirements(live_clients):
     assert bool(_pkce(live_clients["zac"])) == (sends == "true")
 
 
-def test_jvm_flags_reach_the_operator_built_pod(edge_ip):
+@pytest.mark.usefixtures("edge_ip")
+def test_jvm_flags_reach_the_operator_built_pod():
     assert _env("statefulset", "keycloak").get("JAVA_OPTS_APPEND") == manifests.KEYCLOAK_JAVA_OPTS
     operator = _env("deployment", manifests.KEYCLOAK_OPERATOR)
     assert {key: operator.get(key) for key in manifests.KEYCLOAK_OPERATOR_ENV} == manifests.KEYCLOAK_OPERATOR_ENV

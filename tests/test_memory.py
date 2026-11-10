@@ -23,8 +23,9 @@ def _measure():
 
 
 @pytest.fixture(scope="module")
-def measured(edge_ip, request):
+def measured(request):
     """Node and per-container memory now; written to the baseline with --update-memory-baseline."""
+    request.getfixturevalue("edge_ip")
     try:
         items, node, containers = _measure()
     except (process.ProcessError, FileNotFoundError) as exc:

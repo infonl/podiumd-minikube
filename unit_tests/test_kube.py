@@ -24,7 +24,7 @@ def test_edge_ip_is_empty_without_the_service(fake_run: FakeRun, returncode: int
 def test_first_pod_waits_for_a_ready_pod(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, ready: str, name: str):
     timeouts: list[float] = []
 
-    def once(probe: Callable[[], str], *, timeout: float, interval: float) -> str | None:
+    def once(probe: Callable[[], str], *, timeout: float, **_options: float) -> str | None:
         timeouts.append(timeout)
         return probe() or None
 

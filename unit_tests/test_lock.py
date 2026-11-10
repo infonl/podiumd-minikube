@@ -13,7 +13,8 @@ from podiumd_minikube import lock
 from podiumd_minikube.process import UserError
 
 
-def test_take_writes_who_what_and_time_and_release_removes_it(private_lock: Path):
+@pytest.mark.usefixtures("private_lock")
+def test_take_writes_who_what_and_time_and_release_removes_it():
     assert lock.take("deploy --full")
     hold = lock.current()
     assert hold is not None
@@ -51,7 +52,8 @@ def test_describe_shows_the_age_and_hints_at_a_stale_lock():
     assert lock.describe(old, now).endswith("for 3h00m; if its holder is gone: podiumd-minikube cluster-lock break")
 
 
-def test_run_marks_the_hold_for_its_child(private_lock: Path):
+@pytest.mark.usefixtures("private_lock")
+def test_run_marks_the_hold_for_its_child():
     child = [sys.executable, "-c", f"import os; assert os.environ[{lock.HOLD_ENV!r}].startswith('kees rebuild ')"]
     assert lock.run("rebuild", child, who="kees") == 0
     assert lock.current() is None

@@ -23,7 +23,8 @@ def test_kiss_elasticsearch_green(enabled_profiles):
     assert health.get("health") == "green"
 
 
-def test_chunked_post_reaches_objecten(edge_ip, enabled_profiles):
+@pytest.mark.usefixtures("edge_ip")
+def test_chunked_post_reaches_objecten(enabled_profiles):
     """ITA posts its logboek chunked; the edge must forward the body (403 means Objecten got none)."""
     if not enabled_profiles.get("ita"):
         pytest.skip("'ita' profile is not deployed")

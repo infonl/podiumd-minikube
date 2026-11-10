@@ -64,10 +64,11 @@ def _generate_root(cluster: FakeRun) -> None:
 
 
 @pytest.fixture
-def cluster(
-    fake_run: FakeRun, vault_dir: Path, chart_dir: Path, poll_once: None, monkeypatch: pytest.MonkeyPatch
-) -> FakeRun:
+def cluster(request: pytest.FixtureRequest, fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch) -> FakeRun:
     """fake_run with an answering OpenBao and the outway; polling asks once."""
+    request.getfixturevalue("vault_dir")
+    request.getfixturevalue("chart_dir")
+    request.getfixturevalue("poll_once")
     monkeypatch.setattr(values, "kvk_test_api_key", lambda: "kvk-key")
     fake_run.on(*BAO, "status", stdout=json.dumps({"initialized": True}))
     _generate_root(fake_run)
@@ -110,7 +111,8 @@ def test_activate_runs_the_charts_script_with_the_keyvault_stand_in(cluster: Fak
     assert settings["PATH"].split(os.pathsep, 1)[1] == os.environ["PATH"]
 
 
-def test_activate_keeps_a_stored_key(cluster: FakeRun):
+@pytest.mark.usefixtures("cluster")
+def test_activate_keeps_a_stored_key():
     keyvault.write(openbao.KEY_ITEM, "recovery")
     openbao.activate(RENDER)
     assert keyvault.item(openbao.KEY_ITEM).read_text(encoding="utf-8") == "recovery"

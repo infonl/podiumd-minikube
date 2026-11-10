@@ -117,9 +117,8 @@ def test_cluster_leftovers_match_the_instance_label_or_the_release_annotation():
     assert teardown.cluster_leftovers(items) == ["clusterrole/a", "clusterrole/b", "customresourcedefinition/d"]
 
 
-def test_empty_names_a_namespace_that_stays_terminating(
-    fake_run: FakeRun, poll_once: None, monkeypatch: pytest.MonkeyPatch
-):
+@pytest.mark.usefixtures("poll_once")
+def test_empty_names_a_namespace_that_stays_terminating(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(kube, "exists", lambda *_args: True)
     fake_run.on("kubectl", "config", "current-context", stdout=f"{PROFILE}\n")
     with pytest.raises(UserError, match=f"still Terminating after {teardown.NAMESPACE_TIMEOUT}s"):
