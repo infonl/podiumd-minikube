@@ -27,6 +27,9 @@ dev = [
     "jscpd",
     "types-PyYAML",
     "types-requests",
+    "flake8-pyproject",  # flake8 reads [tool.flake8] in pyproject.toml
+    "wemake-python-styleguide",  # flake8 plugin, brings its own pinned flake8
+    "pip-audit",
 ]
 
 [project.scripts]
@@ -38,7 +41,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 podiumd_minikube = ["py.typed"]
 
-# ruff, pylint, isort, vulture, bandit, basedpyright, pymarkdown and pytest
+# ruff, flake8, pylint, isort, vulture, bandit, basedpyright, pymarkdown and pytest
 # config for all Python code in this repository: src/, unit_tests/ and the
 # live-cluster suite in tests/. vendor/ holds verbatim upstream copies and is
 # not checked.
@@ -87,6 +90,7 @@ select = [
     "PERF", # perflint
     "PGH",
     "PIE",  # flake8-pie
+    "PL",   # pylint: ruff owns the pylint checks it has (pylint drops them, see [tool.pylint."messages control"])
     "PT",   # flake8-pytest-style
     "PTH",  # flake8-use-pathlib
     "PYI",
@@ -106,7 +110,16 @@ select = [
     "UP",   # pyupgrade
     "W",    # pycodestyle
     "YTT",  # flake8-2020
+    # Preview rules, each selected by its code (explicit-preview-rules):
+    "PLR0904",  # too many public methods
+    "PLR0914",  # too many locals
+    "PLR6201",  # membership test on a list or tuple literal, a set is meant
+    "PLW0717",  # too many statements in a try body: the except catches only what it is meant for
+    "PLW1514",  # text mode open without an explicit encoding
 ]
+# Only the preview rules selected by code above, not every preview rule of a selected group.
+preview = true
+explicit-preview-rules = true
 ignore = [
     "COM812", # Conflicts when used with the formatter
     "ISC001", # Rule may cause conflicts when used with the formatter, disable is recommended by ruff
@@ -115,6 +128,8 @@ ignore = [
     "E501", # line-too-long: pylint's job now (C0301), avoid flagging the same line twice
     "ERA001", # commented-out-code: current hits are prose that resembles code
 ]
+# The WPS codes in noqa comments belong to flake8 (wemake-python-styleguide), not to ruff.
+external = ["WPS"]
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
 unfixable = []
@@ -137,8 +152,14 @@ check-typed-exception = true  # Enable additional checks for try-except-pass
 # private-helper access (SLF001), no __init__.py (INP001), composite asserts
 # (PT018), unused unpacked vars (RUF059), fixed-argv kubectl/helm calls
 # (S603/S607), fake tokens and dev passwords (S105/S106). bandit does not
-# scan them either.
-"{tests,unit_tests}/**" = ["S101", "ARG001", "ARG005", "SLF001", "INP001", "PT018", "RUF059", "S603", "S607", "S105", "S106"]
+# scan them either. Test values in asserts (PLR2004), fixtures and fakes
+# with many parameters (PLR0913, PLR0917), imports inside a test (PLC0415),
+# setup and assert together in a try (PLW0717), many tests (PLR0904) and
+# locals (PLR0914).
+"{tests,unit_tests}/**" = [
+    "S101", "ARG001", "ARG005", "SLF001", "INP001", "PT018", "RUF059", "S603", "S607", "S105", "S106",
+    "PLR2004", "PLR0913", "PLR0917", "PLC0415", "PLW0717", "PLR0904", "PLR0914",
+]
 # files/: scripts an app's `manage.py shell` runs, not a package.
 "files/**" = ["INP001"]
 
@@ -151,6 +172,21 @@ line-ending = "auto"
 # pylint covers checks ruff lacks; overlapping rules are owned by one tool.
 # tests/ and unit_tests/ also disable [tool.podiumd-minikube.pylint-tests]:
 # pylint has no per-directory config.
+
+[tool.pylint."messages control"]
+# Owned by ruff (PL rules, [tool.ruff.lint]), which also reads the noqa comments that suppress them.
+disable = [
+    "too-many-arguments",             # PLR0913
+    "too-many-positional-arguments",  # PLR0917
+    "too-many-return-statements",     # PLR0911
+    "too-many-branches",              # PLR0912
+    "too-many-statements",            # PLR0915
+    "too-many-locals",                # PLR0914
+    "too-many-public-methods",        # PLR0904
+    "too-many-boolean-expressions",   # PLR0916
+    "import-outside-toplevel",        # PLC0415
+    "unspecified-encoding",           # PLW1514
+]
 
 [tool.pylint.format]
 # Matches [tool.ruff] line-length.
@@ -168,12 +204,8 @@ disable = [
     "redefined-outer-name",
     "duplicate-code",
     # Not enforced for tests:
-    "import-outside-toplevel",
     "consider-using-from-import",
     "use-implicit-booleaness-not-comparison",
-    "too-many-positional-arguments",
-    "too-many-arguments",
-    "too-many-locals",
     "import-error",
     "superfluous-parens",
     "too-many-lines",
@@ -184,6 +216,53 @@ disable = [
     "too-few-public-methods",
     "line-too-long",
     "comparison-of-constants",
+]
+
+[tool.flake8]
+# Only the WPS rules (wemake-python-styleguide) that ruff and pylint lack.
+select = ["WPS"]
+max-line-length = 120
+# Jones complexity of a line (default 14): only the really dense lines
+max-line-complexity = 20
+ignore = [
+    # done by ruff or pylint
+    "WPS210",  # too many locals: PLR0914
+    "WPS211",  # too many arguments: PLR0913, PLR0917
+    "WPS212",  # too many returns: PLR0911
+    "WPS213",  # too many expressions: PLR0915
+    "WPS214",  # too many methods: PLR0904
+    "WPS229",  # too long try body: PLW0717
+    "WPS231",  # cognitive complexity: C901, PLR0912
+    "WPS421",  # print: T201, off on purpose (the commands print)
+    "WPS426",  # lambda in a loop: B023 checks the actual late binding
+    "WPS432",  # magic number: PLR2004 (comparisons), elsewhere a named constant is not clearer
+    "WPS441",  # control variable used after its loop: B020, PLW2901 (a comprehension reusing names is no bug)
+    # opinion, or in conflict with this code base
+    "WPS110",  # names like result, data, value: clear in their context
+    "WPS201",  # too many imports: isort force-single-line gives one import per line
+    "WPS202",  # too many module members: a module groups one concept
+    "WPS204",  # overused expression: flags raise X(msg), the pattern ruff EM asks for
+    "WPS226",  # string constant overuse: YAML and JSON keys are data
+    "WPS237",  # complex f-string: a subscript or call in an f-string reads fine
+    "WPS238",  # too many raises: a validating function raises per check
+    "WPS332",  # walrus outside a comprehension: used on purpose (if match := RE.match(...))
+    "WPS407",  # mutable module constant: freezing nested dicts breaks json and yaml dumps
+    "WPS420",  # del, pass, global: normal python
+    "WPS430",  # nested function: closures on purpose (callbacks, fakes)
+    "WPS501",  # finally without except: a try/finally cleanup is normal python
+    "WPS504",  # negated condition: flags x if y is not None else None, the natural order
+    "WPS529",  # implicit .get(): flags a dispatch on which keys a dict has; SIM401 catches the if/else default case
+    "WPS602",  # staticmethod: a method that needs no instance
+    "WPS615",  # get_x/set_x: names of the data they read and write
+]
+# flake8 applies only the longest pattern that matches a file (* matches / too).
+per-file-ignores = [
+    # tests: counts and sizes (asserts, comparisons, line complexity, annotations of fixtures), test idioms (short
+    # names, == [] in an assert, nested classes for fakes, list multiplication, slices, float values). Also here:
+    # unpacking the documents of a render (WPS236), `(item,) = ...` and `[item] = ...` asserting exactly one
+    # (WPS359, WPS460), `assert not [...]` (WPS444), an expected value chosen by a parameter (WPS509).
+    "tests/*:WPS111,WPS114,WPS118,WPS218,WPS219,WPS221,WPS228,WPS230,WPS234,WPS236,WPS301,WPS324,WPS358,WPS359,WPS362,WPS431,WPS435,WPS444,WPS458,WPS460,WPS509,WPS520",
+    "unit_tests/*:WPS111,WPS114,WPS118,WPS218,WPS219,WPS221,WPS228,WPS230,WPS234,WPS236,WPS301,WPS324,WPS358,WPS359,WPS362,WPS431,WPS435,WPS444,WPS458,WPS460,WPS509,WPS520",
 ]
 
 [tool.isort]
@@ -221,6 +300,7 @@ exclude = [
     ".venv",
     "vendor",
 ]
+pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportUnusedImport = false  # done by ruff F401
 reportUntypedBaseClass = false # done by ruff N801
@@ -259,7 +339,8 @@ plugins.md013.enabled = false
 testpaths = ["unit_tests"]
 # Test modules import their fakes from unit_tests/conftest.py.
 pythonpath = ["unit_tests"]
-addopts = "-ra"
+# --tb=short: long tracebacks print the arguments of each frame, tokens included.
+addopts = "-ra --tb=short"
 
 [tool.coverage.run]
 source = ["src/podiumd_minikube"]

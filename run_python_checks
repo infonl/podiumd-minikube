@@ -9,11 +9,13 @@ usage() {
     cat <<'HELP'
 Usage: run_python_checks [-h|--help]
 
-Runs ruff check, shellcheck, ruff format --check, jscpd, pymarkdown,
-vulture, bandit, basedpyright, pylint and pytest (unit_tests/ only, with
-the coverage threshold from pyproject.toml; tests/ needs a live cluster)
-on src/, unit_tests/ and tests/, fastest first. Stops at the first failure. Upgrades .venv first when it was last
-upgraded over a day ago or pyproject.toml changed since.
+Runs ruff check, shellcheck, ruff format --check, flake8
+(wemake-python-styleguide), jscpd, pymarkdown, vulture, bandit,
+basedpyright, pylint and pytest (unit_tests/ only, with the coverage
+threshold from pyproject.toml; tests/ needs a live cluster) on src/,
+unit_tests/ and tests/, fastest first, then pip-audit on the packages of
+.venv. Stops at the first failure. Upgrades pip and .venv first when it was
+last upgraded over a day ago or pyproject.toml changed since.
 HELP
 }
 
@@ -30,7 +32,7 @@ if [[ -x .venv/bin/python3 ]]; then
     stamp=.venv/.dev-upgraded
     if [[ ! -e "$stamp" || pyproject.toml -nt "$stamp" || -z "$(find "$stamp" -mmin -1440)" ]]; then
         echo "=== upgrading .venv ==="
-        python3 -m pip install -q -U --upgrade-strategy eager -e '.[dev]'
+        python3 -m pip install -q -U --upgrade-strategy eager pip -e '.[dev]'
         touch "$stamp"
     fi
 fi
@@ -73,6 +75,8 @@ if ((${#shell_scripts[@]})); then
     step "shellcheck (${#shell_scripts[@]} shell script(s))" shellcheck "${shell_scripts[@]}"
 fi
 step "ruff format --check" ruff format --check .
+# Settings in pyproject.toml [tool.flake8] (flake8-pyproject).
+step "flake8 (wemake-python-styleguide)" flake8 "${code[@]}" unit_tests tests
 step "jscpd (duplicate code)" jscpd "${code[@]}"
 step "pymarkdown (${#markdown_files[@]} file(s))" pymarkdown --config pyproject.toml scan "${markdown_files[@]}"
 step "vulture (dead code)" vulture "${code[@]}"
@@ -86,5 +90,12 @@ step "pylint (unit_tests)" env PYTHONPATH=unit_tests pylint --disable="$tests_py
 step "pylint (tests)" env PYTHONPATH=tests pylint --disable="$tests_pylint_disable" "${live_test_files[@]}"
 # Coverage source and threshold: [tool.coverage] in pyproject.toml.
 step "pytest (unit_tests, with coverage)" python3 -m pytest -q --cov --cov-report=term-missing:skip-covered
+# Last: it can fail without a code change (a new advisory) and needs the
+# PyPI vulnerability service.
+if getent ahosts pypi.org >/dev/null; then
+    step "pip-audit (.venv packages)" pip-audit --progress-spinner off
+else
+    echo "=== pip-audit: pypi.org not reachable, skipped ==="
+fi
 
 echo "=== all checks passed ==="
