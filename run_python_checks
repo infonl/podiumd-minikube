@@ -13,9 +13,10 @@ Runs ruff check, shellcheck, ruff format --check, flake8
 (wemake-python-styleguide), jscpd, pymarkdown, vulture, deptry, bandit,
 basedpyright, pylint and pytest (unit_tests/ only, with the coverage
 threshold from pyproject.toml; tests/ needs a live cluster) on src/,
-unit_tests/ and tests/, fastest first, then pip-audit on the packages of
-.venv. Stops at the first failure. Upgrades pip and .venv first when it was
-last upgraded over a day ago or pyproject.toml changed since.
+unit_tests/ and tests/, fastest first. Stops at the first failure. Then
+pip-audit on the packages of .venv, which only warns. Upgrades pip and
+.venv first when it was last upgraded over a day ago or pyproject.toml
+changed since.
 HELP
 }
 
@@ -91,12 +92,16 @@ step "pylint (unit_tests)" env PYTHONPATH=unit_tests pylint --disable="$tests_py
 step "pylint (tests)" env PYTHONPATH=tests pylint --disable="$tests_pylint_disable" "${live_test_files[@]}"
 # Coverage source and threshold: [tool.coverage] in pyproject.toml.
 step "pytest (unit_tests, with coverage)" python3 -m pytest -q --cov --cov-report=term-missing:skip-covered
-# Last: it can fail without a code change (a new advisory) and needs the
-# PyPI vulnerability service.
-if getent ahosts pypi.org >/dev/null; then
-    step "pip-audit (.venv packages)" pip-audit --progress-spinner off
+
+# Known vulnerabilities in the packages of .venv, as a warning: a new advisory appears without a code change and must
+# not block a commit; the pip-audit workflow reports it. --skip-editable: podiumd-minikube itself is not on PyPI. Own
+# cache: pip-audit cannot read the cache entries of a newer pip.
+echo "=== pip-audit (.venv packages, warning only) ==="
+if python3 -c 'import socket; socket.create_connection(("pypi.org", 443), 5).close()' 2> /dev/null; then
+    pip-audit --progress-spinner off --skip-editable --cache-dir .venv/.pip-audit-cache ||
+        echo "WARNING: pip-audit found known vulnerabilities: upgrade the package named above"
 else
-    echo "=== pip-audit: pypi.org not reachable, skipped ==="
+    echo "WARNING: pypi.org not reachable, pip-audit skipped"
 fi
 
 echo "=== all checks passed ==="

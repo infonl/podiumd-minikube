@@ -1,0 +1,29 @@
+---
+# Known vulnerabilities in the installed packages. A separate job: a new advisory needs no code change, so it reports
+# here instead of blocking every commit (run_python_checks only warns).
+name: pip-audit
+
+"on":
+  schedule:
+    - cron: "0 6 * * 1"
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+  pull_request:
+    paths: [pyproject.toml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - run: pip-audit --progress-spinner off --skip-editable
