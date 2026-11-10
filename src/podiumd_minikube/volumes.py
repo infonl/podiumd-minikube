@@ -15,21 +15,23 @@ def wanted(docs: list[manifests.Doc]) -> dict[str, int]:
     """PVC name, or StatefulSet claim prefix ending in "-", -> the fsGroup of the pod template that mounts it."""
     found: dict[str, int] = {}
     for doc in docs:
-        if doc.get("kind") not in _WORKLOADS:
-            continue
-        spec = manifests.section(doc, "spec")
-        pod = manifests.section(manifests.section(spec, "template"), "spec")
-        group = manifests.section(pod, "securityContext").get("fsGroup")
-        if group is None:
-            continue
-        mounted: list[manifests.Doc] = pod.get("volumes") or []
-        for volume in mounted:
-            if claim := str(manifests.section(volume, "persistentVolumeClaim").get("claimName") or ""):
-                found[claim] = int(group)
-        templates: list[manifests.Doc] = spec.get("volumeClaimTemplates") or []
-        for template in templates:
-            found[f"{manifests.name_of(template)}-{manifests.name_of(doc)}-"] = int(group)
+        if doc.get("kind") in _WORKLOADS:
+            found.update(_claim_groups(doc))
     return found
+
+
+def _claim_groups(workload: manifests.Doc) -> dict[str, int]:
+    """The claims and claim prefixes workload mounts -> its pod template's fsGroup; {} without one."""
+    spec = manifests.section(workload, "spec")
+    pod = manifests.section(manifests.section(spec, "template"), "spec")
+    group = manifests.section(pod, "securityContext").get("fsGroup")
+    if group is None:
+        return {}
+    mounted: list[manifests.Doc] = pod.get("volumes") or []
+    claims = [str(manifests.section(volume, "persistentVolumeClaim").get("claimName") or "") for volume in mounted]
+    templates: list[manifests.Doc] = spec.get("volumeClaimTemplates") or []
+    prefixes = [f"{manifests.name_of(template)}-{manifests.name_of(workload)}-" for template in templates]
+    return dict.fromkeys([*filter(None, claims), *prefixes], int(group))
 
 
 def _group_of(claim: str, groups: dict[str, int]) -> int | None:

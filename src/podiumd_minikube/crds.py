@@ -4,6 +4,7 @@ monitoring-logging's sit in subcharts `helm template --include-crds` does not re
 them every Prometheus/ServiceMonitor/PodMonitor in the render fails to apply.
 """
 
+import operator
 import re
 import tarfile
 
@@ -78,14 +79,16 @@ def crd_documents(tgz_path: str) -> list[Doc]:
     """
     newest: dict[str, Doc] = {}
     with tarfile.open(tgz_path) as archive:
-        for member in sorted(archive.getmembers(), key=lambda member: member.name):
-            if not member.name.endswith(".yaml"):
-                continue
+        members = sorted(
+            (member for member in archive.getmembers() if member.name.endswith(".yaml")),
+            key=operator.attrgetter("name"),
+        )
+        for member in members:
             stream = archive.extractfile(member)
             for doc in _crds_in(stream.read().decode() if stream else ""):
-                name = name_of(doc)
-                if name not in newest or _version(doc) > _version(newest[name]):
-                    newest[name] = doc
+                kept = newest.get(name_of(doc))
+                if kept is None or _version(doc) > _version(kept):
+                    newest[name_of(doc)] = doc
     return [newest[name] for name in sorted(newest)]
 
 

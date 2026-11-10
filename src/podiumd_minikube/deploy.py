@@ -434,6 +434,41 @@ def restart_zac() -> None:
     kube.kubectl_shown("rollout", "restart", f"deployment/{ZAC}", "-n", NAMESPACE)
 
 
+@dataclass
+class _Rollout:
+    """What _wait_ready polls: the workloads ("kind/name") and Jobs, and ZAC's held replicas."""
+
+    workloads: list[str]
+    jobs: list[str]
+    held: list[int]
+    restarted: list[str] = field(default_factory=list[str])
+
+    def job_state(self) -> tuple[list[str], list[str]]:
+        """(running, failed) among the Jobs."""
+        return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], self.jobs)
+
+    def stuck(self) -> list[str]:
+        """The workloads that have not rolled out."""
+        kinds = ",".join(sorted({workload.split("/")[0] for workload in self.workloads}))
+        # One kubectl call per poll: one per workload took 2.4 s with --full.
+        found: list[dict[str, Any]] = kube.get_json(kinds, "-n", NAMESPACE)["items"] if kinds else []
+        live = {f"{item['kind'].lower()}/{manifests.name_of(item)}": item for item in found}
+        return [workload for workload in self.workloads if workload not in live or not rolled_out(live[workload])]
+
+    def settled(self) -> tuple[list[str]] | None:
+        """(failed Jobs,) once nothing runs or waits; starts a held ZAC and restarts a failed ZAC boot once."""
+        running, failed = self.job_state()
+        prepared = not set(ZAC_JOBS) & set(running)
+        if self.held and prepared:
+            print("ZAC's Jobs have finished; starting ZAC.")
+            kube.kubectl_shown("scale", f"deployment/{ZAC}", f"--replicas={self.held.pop()}", "-n", NAMESPACE)
+        waiting = self.stuck()
+        if f"deployment/{ZAC}" in waiting and prepared and not self.restarted and zac_boot_failed():
+            restart_zac()
+            self.restarted.append(ZAC)
+        return None if running or waiting else (failed,)
+
+
 def _wait_ready(render: manifests.Render, held: list[int]) -> None:
     """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs.
 
@@ -445,40 +480,15 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
         for doc in render.docs
         if doc.get("kind") in {"Deployment", "StatefulSet", *manifests.ECK_KINDS}
     ]
-    kinds = ",".join(sorted({workload.split("/")[0] for workload in workloads}))
-    names = render.jobs
-
-    def job_state() -> tuple[list[str], list[str]]:
-        return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], names)
-
-    def stuck() -> list[str]:
-        # One kubectl call per poll: one per workload took 2.4 s with --full.
-        found: list[dict[str, Any]] = kube.get_json(kinds, "-n", NAMESPACE)["items"] if kinds else []
-        live = {f"{item['kind'].lower()}/{manifests.name_of(item)}": item for item in found}
-        return [workload for workload in workloads if workload not in live or not rolled_out(live[workload])]
-
+    rollout = _Rollout(workloads, render.jobs, held)
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
-    restarted: list[str] = []
-
-    def settled() -> tuple[list[str]] | None:
-        running, failed = job_state()
-        prepared = not set(ZAC_JOBS) & set(running)
-        if held and prepared:
-            print("ZAC's Jobs have finished; starting ZAC.")
-            kube.kubectl_shown("scale", f"deployment/{ZAC}", f"--replicas={held.pop()}", "-n", NAMESPACE)
-        waiting = stuck()
-        if f"deployment/{ZAC}" in waiting and prepared and not restarted and zac_boot_failed():
-            restart_zac()
-            restarted.append(ZAC)
-        return None if running or waiting else (failed,)
-
-    result = polling.wait_until(settled, timeout=READY_TIMEOUT, interval=10)
+    result = polling.wait_until(rollout.settled, timeout=READY_TIMEOUT, interval=10)
     if result is None:
-        running, _ = job_state()
+        running, _ = rollout.job_state()
         zac_hint = f"; deployment/{ZAC} still at 0 replicas: the next deploy starts it" if held else ""
         msg = (
-            f"after {READY_TIMEOUT}s: not rolled out: {', '.join(stuck()) or '-'}; "
+            f"after {READY_TIMEOUT}s: not rolled out: {', '.join(rollout.stuck()) or '-'}; "
             f"running: {', '.join(running) or '-'}{zac_hint}"
         )
         raise process.UserError(msg)

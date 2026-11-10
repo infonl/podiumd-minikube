@@ -6,6 +6,8 @@ deploy keeps it in a ConfigMap without this chart's labels, so prune leaves it a
 import json
 
 from collections import Counter
+from dataclasses import dataclass
+from dataclasses import field
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
@@ -79,28 +81,37 @@ def _running(pod: dict[str, Any]) -> int:
 
 def running_containers(items: list[dict[str, Any]], charts: dict[str, str]) -> Counter[str]:
     """Running containers per chart in NAMESPACES: the chart of a pod's nearest rendered owner, else OTHER."""
-    live: dict[str, dict[str, Any]] = {}
-
-    def owner(reference: dict[str, str]) -> dict[str, Any] | None:
-        kinds = kube.reference(reference["apiVersion"], reference["kind"])
-        if kinds not in live:
-            found = [item for ns in NAMESPACES for item in kube.get_json(kinds, "-n", ns)["items"]]
-            live[kinds] = {item["metadata"]["name"]: item["metadata"] for item in found}
-        return live[kinds].get(reference["name"])
-
-    def chart_of(metadata: dict[str, Any] | None) -> str:
-        while metadata and (references := metadata.get("ownerReferences")):
-            reference = references[0]
-            if chart := charts.get(f"{reference['kind']}/{reference['name']}"):
-                return chart
-            metadata = owner(reference)
-        return OTHER
-
+    owners = _Owners(charts)
     counts: Counter[str] = Counter()
     for pod in items:
         if pod["metadata"]["namespace"] in NAMESPACES and (running := _running(pod)):
-            counts[chart_of(pod["metadata"])] += running
+            counts[owners.chart_of(pod["metadata"])] += running
     return counts
+
+
+@dataclass
+class _Owners:
+    """The live owners of pods in NAMESPACES, fetched once per kind; charts: "Kind/name" -> chart."""
+
+    charts: dict[str, str]
+    live: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+
+    def owner(self, reference: dict[str, str]) -> dict[str, Any] | None:
+        """The metadata of the object reference names."""
+        kinds = kube.reference(reference["apiVersion"], reference["kind"])
+        if kinds not in self.live:
+            found = [item for ns in NAMESPACES for item in kube.get_json(kinds, "-n", ns)["items"]]
+            self.live[kinds] = {item["metadata"]["name"]: item["metadata"] for item in found}
+        return self.live[kinds].get(reference["name"])
+
+    def chart_of(self, metadata: dict[str, Any] | None) -> str:
+        """The chart of metadata's nearest rendered owner, else OTHER."""
+        while metadata and (references := metadata.get("ownerReferences")):
+            reference = references[0]
+            if chart := self.charts.get(f"{reference['kind']}/{reference['name']}"):
+                return chart
+            metadata = self.owner(reference)
+        return OTHER
 
 
 def lines(items: list[dict[str, Any]]) -> list[str]:

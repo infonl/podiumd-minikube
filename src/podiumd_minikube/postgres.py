@@ -71,23 +71,27 @@ def missing_sql(init_sql: str, databases: set[str], roles: set[str]) -> tuple[li
     """
     statements = [line for line in init_sql.splitlines() if line.strip() and not line.startswith("--")]
     role_lines = {match.group(1): line for line in statements if (match := _ROLE.match(line))}
-    missing: list[str] = []
+    created = {match.group(1): line for line in statements if (match := _DATABASE.match(line))}
+    missing = [name for name in created if name not in databases]
     script: list[str] = []
-    for line in statements:
-        if (match := _DATABASE.match(line)) and match.group(1) not in databases:
-            missing.append(match.group(1))
-            if match.group(1) not in roles:
-                script.append(role_lines[match.group(1)])
-            script.append(line)
-    connected = ""
+    for name in missing:
+        if name not in roles:
+            script.append(role_lines[name])
+        script.append(created[name])
+    script.extend(line for line, database in _connected(statements) if database in missing)
+    return missing, "".join(f"{line}\n" for line in script)
+
+
+def _connected(statements: list[str]) -> list[tuple[str, str]]:
+    r"""Each statement from the first `\c` line on, with the database the last `\c` line before it names."""
+    database = ""
+    found: list[tuple[str, str]] = []
     for line in statements:
         if line.startswith(r"\c "):
-            connected = line.split()[1]
-            if connected in missing:
-                script.append(line)
-        elif connected in missing:
-            script.append(line)
-    return missing, "".join(f"{line}\n" for line in script)
+            database = line.split()[1]
+        if database:
+            found.append((line, database))
+    return found
 
 
 def _names(query: str) -> set[str]:
@@ -260,14 +264,19 @@ def rename_rows() -> None:
         psql = ["exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-d", database, "-tA"]
         for (table, column), renames in tables.items():
             # A database created this deploy has no tables until its app migrates.
-            if not kube.kubectl(*psql, "-c", f"select to_regclass({table!r});").strip():
-                continue
-            names = ["-v", f"table={table}", "-v", f"column={column}"]
-            values = kube.kubectl(*psql, *names, "-f", "-", stdin='select :"column" from :"table";\n').split()
-            for old, new in renames.items():
-                if old in values and new not in values:
-                    kube.kubectl(
-                        *psql, *names, "-v", "ON_ERROR_STOP=1", "-v", f"old={old}", "-v", f"new={new}", "-f", "-",
-                        stdin='UPDATE :"table" SET :"column" = :\'new\' WHERE :"column" = :\'old\';\n',
-                    )  # fmt: skip
-                    print(f"Renamed {table}.{column} {old} to {new} in {database}.")
+            if kube.kubectl(*psql, "-c", f"select to_regclass({table!r});").strip():
+                _rename_values(psql, (table, column), renames, database)
+
+
+def _rename_values(psql: list[str], target: tuple[str, str], renames: dict[str, str], database: str) -> None:
+    """Applies renames to target's (table, column) values through psql; an old value whose new one exists stays."""
+    table, column = target
+    names = ["-v", f"table={table}", "-v", f"column={column}"]
+    values = kube.kubectl(*psql, *names, "-f", "-", stdin='select :"column" from :"table";\n').split()
+    for old, new in renames.items():
+        if old in values and new not in values:
+            kube.kubectl(
+                *psql, *names, "-v", "ON_ERROR_STOP=1", "-v", f"old={old}", "-v", f"new={new}", "-f", "-",
+                stdin='UPDATE :"table" SET :"column" = :\'new\' WHERE :"column" = :\'old\';\n',
+            )  # fmt: skip
+            print(f"Renamed {table}.{column} {old} to {new} in {database}.")

@@ -160,12 +160,12 @@ def _service_port(docs: list[manifests.Doc], service: str, port: Any) -> int:
     """The number of a backend port, which may be a Service port name."""
     if isinstance(port, int):
         return port
-    for doc in docs:
-        if doc.get("kind") == "Service" and manifests.name_of(doc) == service:
-            entries: list[manifests.Doc] = manifests.section(doc, "spec").get("ports") or []
-            for entry in entries:
-                if entry.get("name") == port:
-                    return int(entry["port"])
+    services = [doc for doc in docs if doc.get("kind") == "Service" and manifests.name_of(doc) == service]
+    port_lists: list[list[manifests.Doc]] = [manifests.section(doc, "spec").get("ports") or [] for doc in services]
+    entries = [entry for ports in port_lists for entry in ports]
+    named = next((entry for entry in entries if entry.get("name") == port), None)
+    if named is not None:
+        return int(named["port"])
     msg = f"Ingress backend {service}:{port}: no such Service port in the render"
     raise process.UserError(msg)
 
@@ -184,47 +184,73 @@ def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
         annotations: manifests.Doc = manifests.section(manifests.section(doc, "metadata"), "annotations")
         namespace = manifests.section(doc, "metadata").get("namespace", NAMESPACE)
         for rule in rules:
-            host = str(rule["host"])
-            forwarded = str(annotations.get(FORWARDED_HOST_ANNOTATION, host))
-            paths: list[manifests.Doc] = manifests.section(rule, "http").get("paths") or []
-            backend: manifests.Doc = manifests.section(manifests.section(paths[0], "backend"), "service")
-            ports = manifests.section(backend, "port")
-            port = _service_port(docs, str(backend["name"]), ports.get("number", ports.get("name")))
-            services[backend["name"]] = {
-                "apiVersion": "v1",
-                "kind": "Service",
-                "metadata": {"name": backend["name"], "namespace": EDGE_NAMESPACE, "labels": LABELS},
-                "spec": {
-                    "type": "ExternalName",
-                    "externalName": f"{backend['name']}.{namespace}.svc.cluster.local",
-                    "ports": [{"port": port, "targetPort": port}],
-                },
-            }
-            headers = [
-                {"name": "X-Forwarded-Host", "value": forwarded},
-                {"name": "X-Forwarded-Proto", "value": "https"},
-                {"name": "X-Forwarded-Port", "value": "443"},
-            ]
-            routes.append({
-                "apiVersion": "gateway.networking.k8s.io/v1",
-                "kind": "HTTPRoute",
-                "metadata": {
-                    "name": f"hr-{host.removesuffix('.local')}", "namespace": EDGE_NAMESPACE, "labels": LABELS,
-                },
-                "spec": {
-                    "parentRefs": [{"name": GATEWAY, "namespace": EDGE_NAMESPACE}],
-                    "hostnames": [host],
-                    "rules": [{
-                        "matches": [{"path": {"type": "PathPrefix", "value": "/"}}],
-                        "filters": [
-                            {"type": "URLRewrite", "urlRewrite": {"hostname": forwarded}},
-                            {"type": "RequestHeaderModifier", "requestHeaderModifier": {"set": headers}},
-                        ],
-                        "backendRefs": [{"name": backend["name"], "port": port}],
-                    }],
-                },
-            })  # fmt: skip
+            forwarded = str(annotations.get(FORWARDED_HOST_ANNOTATION, rule["host"]))
+            service, route = _service_and_route(docs, rule, forwarded, namespace)
+            services[manifests.name_of(service)] = service
+            routes.append(route)
     return [*services.values(), *routes]
+
+
+def _service_and_route(
+    docs: list[manifests.Doc], rule: manifests.Doc, forwarded: str, namespace: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The ExternalName Service and the HTTPRoute for an Ingress rule of namespace."""
+    host = str(rule["host"])
+    paths: list[manifests.Doc] = manifests.section(rule, "http").get("paths") or []
+    backend: manifests.Doc = manifests.section(manifests.section(paths[0], "backend"), "service")
+    ports = manifests.section(backend, "port")
+    port = _service_port(docs, str(backend["name"]), ports.get("number", ports.get("name")))
+    service = {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {"name": backend["name"], "namespace": EDGE_NAMESPACE, "labels": LABELS},
+        "spec": {
+            "type": "ExternalName",
+            "externalName": f"{backend['name']}.{namespace}.svc.cluster.local",
+            "ports": [{"port": port, "targetPort": port}],
+        },
+    }
+    headers = [
+        {"name": "X-Forwarded-Host", "value": forwarded},
+        {"name": "X-Forwarded-Proto", "value": "https"},
+        {"name": "X-Forwarded-Port", "value": "443"},
+    ]
+    route = {
+        "apiVersion": "gateway.networking.k8s.io/v1",
+        "kind": "HTTPRoute",
+        "metadata": {
+            "name": f"hr-{host.removesuffix('.local')}", "namespace": EDGE_NAMESPACE, "labels": LABELS,
+        },
+        "spec": {
+            "parentRefs": [{"name": GATEWAY, "namespace": EDGE_NAMESPACE}],
+            "hostnames": [host],
+            "rules": [{
+                "matches": [{"path": {"type": "PathPrefix", "value": "/"}}],
+                "filters": [
+                    {"type": "URLRewrite", "urlRewrite": {"hostname": forwarded}},
+                    {"type": "RequestHeaderModifier", "requestHeaderModifier": {"set": headers}},
+                ],
+                "backendRefs": [{"name": backend["name"], "port": port}],
+            }],
+        },
+    }  # fmt: skip
+    return service, route
+
+
+def _delete_stale(wanted: dict[tuple[str, str], manifests.Doc]) -> None:
+    """Deletes the edge's labelled objects not in wanted ((kind, name) -> spec) or with another externalName."""
+    kinds = ("HTTPRoute", "Service", "ProxySettingsPolicy", "ClientSettingsPolicy")
+    live = [
+        (kind, item)
+        for kind in kinds
+        for item in kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]
+    ]
+    for kind, item in live:
+        spec = wanted.get((kind, item["metadata"]["name"]))
+        target = manifests.section(item, "spec").get("externalName")
+        if spec is None or target != spec.get("externalName"):
+            kube.kubectl("delete", kind.lower(), item["metadata"]["name"], "-n", EDGE_NAMESPACE)
+            print(f"  deleted {kind} {item['metadata']['name']} ({'retargeted' if spec else 'no longer rendered'})")
 
 
 def _pin_cluster_ip() -> None:
@@ -261,15 +287,7 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         *route_manifests(docs),
     ]
     # NGF keeps an ExternalName Service's old target when it changes in place: such a Service is recreated.
-    wanted = {(doc["kind"], manifests.name_of(doc)): manifests.section(doc, "spec") for doc in objects}
-    for kind in ("HTTPRoute", "Service", "ProxySettingsPolicy", "ClientSettingsPolicy"):
-        live = kube.get_json(kind.lower(), "-n", EDGE_NAMESPACE, "-l", _SELECTOR)["items"]
-        for item in live:
-            spec = wanted.get((kind, item["metadata"]["name"]))
-            target = manifests.section(item, "spec").get("externalName")
-            if spec is None or target != spec.get("externalName"):
-                kube.kubectl("delete", kind.lower(), item["metadata"]["name"], "-n", EDGE_NAMESPACE)
-                print(f"  deleted {kind} {item['metadata']['name']} ({'retargeted' if spec else 'no longer rendered'})")
+    _delete_stale({(doc["kind"], manifests.name_of(doc)): manifests.section(doc, "spec") for doc in objects})
     kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
     if not polling.wait_until(lambda: kube.exists(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3):
         msg = f"NGF created no Service {EDGE_NAMESPACE}/{EDGE_SERVICE} for Gateway {GATEWAY} within 120s"

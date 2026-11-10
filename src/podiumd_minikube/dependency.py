@@ -100,16 +100,17 @@ def set_chart_dependency(text: str, name: str, repository: str, version: str) ->
     "@dimpact" repository string.
     """
     lines = text.splitlines(keepends=True)
-    in_block = False
-    for index, line in enumerate(lines):
-        if re.search(rf"- name: {re.escape(name)}$", line.rstrip("\n")):
-            in_block = True
-        elif line.startswith("  - name: "):
-            in_block = False
-        elif in_block and "repository:" in line:
-            lines[index] = re.sub(r'repository: "[^"]*"', f"repository: {json.dumps(repository)}", line)
-        elif in_block:
-            lines[index] = re.sub(r'version:\s*"[^"]*"', f"version: {json.dumps(version)}", line)
+    header = re.compile(rf"- name: {re.escape(name)}$")
+    start = next((index for index, line in enumerate(lines) if header.search(line)), None)
+    if start is None:
+        return text
+    following = (index for index in range(start + 1, len(lines)) if lines[index].startswith("  - name: "))
+    end = next(following, len(lines))
+    for index in range(start + 1, end):
+        if "repository:" in lines[index]:
+            lines[index] = re.sub(r'repository: "[^"]*"', f"repository: {json.dumps(repository)}", lines[index])
+        else:
+            lines[index] = re.sub(r'version:\s*"[^"]*"', f"version: {json.dumps(version)}", lines[index])
     return "".join(lines)
 
 

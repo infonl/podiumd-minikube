@@ -137,9 +137,18 @@ def _record_digests(doc: Doc, chunk: str) -> None:
     Not a Job's: its pod template is immutable, and a Job that runs again starts from the node's image.
     """
     digests = sorted({match[0].rpartition("@")[2] for match in _DIGEST_SUFFIX.finditer(chunk)})
-    kind, body = doc.get("kind", ""), section(doc, "spec")
-    if not digests or kind in {"Job", "Pod"}:
+    if not digests or doc.get("kind") in {"Job", "Pod"}:
         return
+    for annotations in _pod_annotations(doc):
+        annotations[IMAGE_DIGESTS_ANNOTATION] = " ".join(digests)
+
+
+def _pod_annotations(doc: Doc) -> list[Doc]:
+    """The annotations of doc's pod templates (else of doc), created when missing."""
+    kind, body = doc.get("kind", ""), section(doc, "spec")
+    # SolrCloud's podOptions carry the annotations without metadata.
+    if kind == "SolrCloud":
+        return [_mapping(body, "customSolrKubeOptions", "podOptions", "annotations")]
     if kind in _POD_SPEC_PATHS:
         templates = [_mapping(doc, *_POD_SPEC_PATHS[kind][:-1])]
     elif kind == "Keycloak":
@@ -149,10 +158,7 @@ def _record_digests(doc: Doc, chunk: str) -> None:
         templates = [_mapping(node_set, "podTemplate") for node_set in node_sets]
     else:
         templates = [doc]
-    # SolrCloud's podOptions carry the annotations without metadata.
-    found = [_mapping(body, "customSolrKubeOptions", "podOptions", "annotations")] if kind == "SolrCloud" else []
-    for annotations in found or [_mapping(template, "metadata", "annotations") for template in templates]:
-        annotations[IMAGE_DIGESTS_ANNOTATION] = " ".join(digests)
+    return [_mapping(template, "metadata", "annotations") for template in templates]
 
 
 # helm template's comment before each document: "# Source: <chart>/[charts/<dependency>/]<path>".
@@ -210,15 +216,8 @@ def disable_service_links(docs: list[Doc]) -> None:
     immutable, so a change would make apply fail on existing Jobs.
     """
     for doc in docs:
-        path = _POD_SPEC_PATHS.get(doc.get("kind", ""))
-        if not path:
-            continue
-        node: Doc | None = doc
-        for key in path:
-            value = None if node is None else node.get(key)
-            node = cast("Doc", value) if isinstance(value, dict) else None
-        if node is not None:
-            node["enableServiceLinks"] = False
+        if doc.get("kind") in _POD_SPEC_PATHS and (spec := _pod_spec(doc)) is not None:
+            spec["enableServiceLinks"] = False
 
 
 def route_outbound(docs: list[Doc]) -> None:
@@ -234,16 +233,16 @@ def route_outbound(docs: list[Doc]) -> None:
 
 def _replace_in_configmaps(docs: list[Doc], old: str, new: str) -> set[str]:
     """Replaces old by new in every ConfigMap value; returns the names of the ConfigMaps that had it."""
-    changed: set[str] = set()
-    for doc in docs:
-        if doc.get("kind") != "ConfigMap":
-            continue
-        data: Doc = doc.get("data") or {}
-        for key, value in data.items():
-            if isinstance(value, str) and old in value:
-                data[key] = value.replace(old, new)
-                changed.add(name_of(doc))
-    return changed
+    configmaps = [doc for doc in docs if doc.get("kind") == "ConfigMap"]
+    return {name_of(doc) for doc in configmaps if _replace_in(doc.get("data") or {}, old, new)}
+
+
+def _replace_in(data: Doc, old: str, new: str) -> bool:
+    """Replaces old by new in data's string values; whether one had it."""
+    keys = [key for key, value in data.items() if isinstance(value, str) and old in value]
+    for key in keys:
+        data[key] = data[key].replace(old, new)
+    return bool(keys)
 
 
 def _roll_readers(docs: list[Doc], configmaps: set[str], annotation: str, value: str) -> None:
@@ -320,13 +319,11 @@ def drop_duplicate_env(docs: list[Doc]) -> None:
     low-latency worker: CELERY_WORKER_CONCURRENCY); kubectl apply warns that
     the earlier one may be dropped.
     """
-    for doc in docs:
-        for spec in _runtime_pod_specs(doc):
-            for container in _containers(spec):
-                env: list[Doc] = container.get("env") or []
-                last = {item["name"]: index for index, item in enumerate(env)}
-                if len(last) < len(env):
-                    container["env"] = [item for index, item in enumerate(env) if last[item["name"]] == index]
+    for container in _all_containers(docs):
+        env: list[Doc] = container.get("env") or []
+        last = {item["name"]: index for index, item in enumerate(env)}
+        if len(last) < len(env):
+            container["env"] = [item for index, item in enumerate(env) if last[item["name"]] == index]
 
 
 def allow_rolling_updates(docs: list[Doc]) -> None:
@@ -461,24 +458,27 @@ def tune_keycloak(docs: list[Doc]) -> None:
     """
     for doc in docs:
         if doc.get("kind") == "Keycloak":
-            resources = section(doc, "spec").get("resources")
-            for container in _runtime_containers(doc):
-                add_env(container, {"JAVA_OPTS_APPEND": KEYCLOAK_JAVA_OPTS})
-                if container.get("name") == "keycloak" and resources:
-                    container["resources"] = resources
-        elif doc.get("kind") == "Deployment" and name_of(doc) == KEYCLOAK_OPERATOR:
-            for container in _containers(_pod_spec(doc) or {}):
-                add_env(container, KEYCLOAK_OPERATOR_ENV)
+            _tune_keycloak_resource(doc)
+    operators = [doc for doc in docs if doc.get("kind") == "Deployment" and name_of(doc) == KEYCLOAK_OPERATOR]
+    for container in _all_containers(operators):
+        add_env(container, KEYCLOAK_OPERATOR_ENV)
+
+
+def _tune_keycloak_resource(keycloak: Doc) -> None:
+    resources = section(keycloak, "spec").get("resources")
+    for container in _runtime_containers(keycloak):
+        add_env(container, {"JAVA_OPTS_APPEND": KEYCLOAK_JAVA_OPTS})
+        if container.get("name") == "keycloak" and resources:
+            container["resources"] = resources
 
 
 # podiumd<4.10.1: podiumd.kcadmLogin exports the same KC_OPTS since.
 def tune_kcadm(docs: list[Doc]) -> None:
     """Sets KCADM_ENV on the containers of Jobs that run the Keycloak image (kcadm.sh)."""
-    for doc in docs:
-        if doc.get("kind") == "Job":
-            for container in _containers(_pod_spec(doc) or {}):
-                if "/keycloak/keycloak:" in str(container.get("image")):
-                    add_env(container, KCADM_ENV)
+    jobs = [doc for doc in docs if doc.get("kind") == "Job"]
+    for container in _all_containers(jobs):
+        if "/keycloak/keycloak:" in str(container.get("image")):
+            add_env(container, KCADM_ENV)
 
 
 # Start-up timing only; start-cluster waited for each. Keycloak's startup probe already holds readiness
@@ -494,15 +494,13 @@ KEYCLOAK_BUILDER_CPU = "2"
 
 def speed_up_keycloak_start(docs: list[Doc]) -> None:
     """Sets KEYCLOAK_PROBES on the Keycloak container and KEYCLOAK_BUILDER_CPU on keycloak-builder."""
-    for doc in docs:
-        if doc.get("kind") != "Keycloak":
-            continue
-        for container in _runtime_containers(doc):
-            for probe, settings in KEYCLOAK_PROBES.items():
-                if isinstance(container.get(probe), dict):
-                    container[probe].update(settings)
-            if container.get("name") == "keycloak-builder":
-                _mapping(container, "resources", "limits")["cpu"] = KEYCLOAK_BUILDER_CPU
+    keycloaks = [doc for doc in docs if doc.get("kind") == "Keycloak"]
+    for container in _all_containers(keycloaks):
+        probes = [probe for probe in KEYCLOAK_PROBES if isinstance(container.get(probe), dict)]
+        for probe in probes:
+            container[probe].update(KEYCLOAK_PROBES[probe])
+        if container.get("name") == "keycloak-builder":
+            _mapping(container, "resources", "limits")["cpu"] = KEYCLOAK_BUILDER_CPU
 
 
 ZAC_SOLR_INIT = "init-solr-zac-core"
@@ -551,18 +549,24 @@ def _retried(kind: str, name: str, container: str) -> bool:
 
 def retry_in_container(docs: list[Doc]) -> None:
     """Makes RETRIED_CONTAINERS rerun their command every 2 s, RETRY_ATTEMPTS times, instead of failing."""
-    retry = f'i=0; until "$@"; do i=$((i + 1)); [ "$i" -ge {RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
     for doc in docs:
         for container in _containers(_pod_spec(doc) or {}):
-            if not _retried(str(doc.get("kind")), name_of(doc), str(container.get("name"))):
-                continue
-            command = container.get("command") or IMAGE_ENTRYPOINTS[str(container["name"])]
-            # podiumd<4.10.1: podiumd's own retry (podiumd.retryCommand) wraps the same way.
-            if len(command) > SCRIPT_ARG and 'until "$@"' in str(command[SCRIPT_ARG]):
-                continue
-            # A process of its own: an until condition would turn off a script's `set -e`.
-            argv: list[str] = [*command, *(container.pop("args", None) or [])]
-            container["command"] = ["sh", "-c", retry, "retry", *argv]
+            if _retried(str(doc.get("kind")), name_of(doc), str(container.get("name"))):
+                _retry(container)
+
+
+RETRY_SCRIPT = f'i=0; until "$@"; do i=$((i + 1)); [ "$i" -ge {RETRY_ATTEMPTS} ] && exit 1; sleep 2; done'
+
+
+def _retry(container: Doc) -> None:
+    """Wraps container's command in RETRY_SCRIPT, unless it retries itself."""
+    command = container.get("command") or IMAGE_ENTRYPOINTS[str(container["name"])]
+    # podiumd<4.10.1: podiumd's own retry (podiumd.retryCommand) wraps the same way.
+    if len(command) > SCRIPT_ARG and 'until "$@"' in str(command[SCRIPT_ARG]):
+        return
+    # A process of its own: an until condition would turn off a script's `set -e`.
+    argv: list[str] = [*command, *(container.pop("args", None) or [])]
+    container["command"] = ["sh", "-c", RETRY_SCRIPT, "retry", *argv]
 
 
 def tune_solr(docs: list[Doc]) -> None:
@@ -640,18 +644,19 @@ def mount_zaakbrug_role_mapping(docs: list[Doc]) -> None:
     """
     if not any(doc.get("kind") == "ConfigMap" and name_of(doc) == ZAAKBRUG_ROLE_MAPPING for doc in docs):
         return
-    for doc in docs:
-        spec = _pod_spec(doc)
-        if doc.get("kind") != "Deployment" or name_of(doc) != "zaakbrug" or spec is None:
-            continue
-        volumes: list[Doc] = spec.get("volumes") or []
-        spec["volumes"] = [*volumes, {"name": ZAAKBRUG_ROLE_MAPPING, "configMap": {"name": ZAAKBRUG_ROLE_MAPPING}}]
-        for container in _containers(spec):
-            mounts: list[Doc] = container.get("volumeMounts") or []
-            container["volumeMounts"] = mounts + [
-                {"name": ZAAKBRUG_ROLE_MAPPING, "mountPath": f"{_ZAAKBRUG_RESOURCES}/{key}", "subPath": key}
-                for key in ("oauth-role-mapping.properties", "RoutingProfiles.json")
-            ]
+    spec = next(
+        (_pod_spec(doc) for doc in docs if doc.get("kind") == "Deployment" and name_of(doc) == "zaakbrug"), None
+    )
+    if spec is None:
+        return
+    volumes: list[Doc] = spec.get("volumes") or []
+    spec["volumes"] = [*volumes, {"name": ZAAKBRUG_ROLE_MAPPING, "configMap": {"name": ZAAKBRUG_ROLE_MAPPING}}]
+    added = [
+        {"name": ZAAKBRUG_ROLE_MAPPING, "mountPath": f"{_ZAAKBRUG_RESOURCES}/{key}", "subPath": key}
+        for key in ("oauth-role-mapping.properties", "RoutingProfiles.json")
+    ]
+    for container in _containers(spec):
+        container["volumeMounts"] = [*(container.get("volumeMounts") or []), *added]
 
 
 def limit_runtimes(docs: list[Doc]) -> None:
@@ -673,6 +678,11 @@ def limit_runtimes(docs: list[Doc]) -> None:
 
 def _containers(spec: Doc) -> list[Doc]:
     return [*(spec.get("initContainers") or []), *(spec.get("containers") or [])]
+
+
+def _all_containers(docs: list[Doc]) -> list[Doc]:
+    """The containers of every doc's pod specs (_runtime_pod_specs)."""
+    return [container for doc in docs for container in _runtime_containers(doc)]
 
 
 def _runtime_containers(doc: Doc) -> list[Doc]:
@@ -738,18 +748,26 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
     for doc in docs:
         objecten = _configuration_yaml(doc, "objecten-configuration")
         if objecten is not None:
-            for item in objecten.get("objecttypes", {}).get("items", []):
-                item.pop("service_identifier", None)
-            objecten["tokenauth"]["items"].append(REQUIRED_OBJECTTYPEN_TOKEN)
-            for service in objecten.get("zgw_consumers", {}).get("services", []):
-                if service.get("identifier") == OBJECTEN_SELF_SERVICE:
-                    objecten["tokenauth"]["items"].append({
-                        "identifier": "objecten-objecttypen",
-                        "token": str(service["header_value"]).removeprefix("Token "),
-                        "contact_person": "podiumd-minikube",
-                        "email": "objecten@example.com",
-                    })  # fmt: skip
+            _fix_objecten_configuration(objecten)
             doc["data"]["configuration.yaml"] = yaml.safe_dump(objecten, sort_keys=False)
+
+
+def _fix_objecten_configuration(objecten: Doc) -> None:
+    for item in objecten.get("objecttypes", {}).get("items", []):
+        item.pop("service_identifier", None)
+    tokens: list[Doc] = objecten["tokenauth"]["items"]
+    tokens.append(REQUIRED_OBJECTTYPEN_TOKEN)
+    services: list[Doc] = objecten.get("zgw_consumers", {}).get("services", [])
+    tokens.extend(
+        {
+            "identifier": "objecten-objecttypen",
+            "token": str(service["header_value"]).removeprefix("Token "),
+            "contact_person": "podiumd-minikube",
+            "email": "objecten@example.com",
+        }
+        for service in services
+        if service.get("identifier") == OBJECTEN_SELF_SERVICE
+    )
 
 
 def _is_large_configmap(doc: Doc) -> bool:
