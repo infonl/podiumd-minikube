@@ -120,7 +120,8 @@ def _root_token() -> str:
     )
     encoded = json.loads(update.stdout)["data"]["encoded_token"]
     raw = base64.b64decode(encoded + "=" * (-len(encoded) % 4))
-    return bytes(left ^ right for left, right in zip(raw, otp.encode(), strict=False)).decode()
+    pairs = zip(raw, otp.encode(), strict=False)
+    return bytes(left ^ right for left, right in pairs).decode()
 
 
 def _write_outway_keys() -> None:

@@ -194,6 +194,12 @@ def _mapping(node: Doc, *keys: str) -> Doc:
     return node
 
 
+def find(docs: list[Doc], kind: str, name: str) -> Doc | None:
+    """The doc of kind called name, or None."""
+    of_kind = (doc for doc in docs if doc.get("kind") == kind)
+    return next((doc for doc in of_kind if name_of(doc) == name), None)
+
+
 def name_of(doc: Doc) -> str:
     """metadata.name, or ""."""
     return str(section(doc, "metadata").get("name") or "")
@@ -227,7 +233,7 @@ def route_outbound(docs: list[Doc]) -> None:
     Their pods are annotated with the target: a pod reads ConfigMap env only at
     its start, so toggling the outway must roll them.
     """
-    outway = any(doc.get("kind") == "Service" and name_of(doc) == OUTWAY_SERVICE for doc in docs)
+    outway = find(docs, "Service", OUTWAY_SERVICE) is not None
     target = OUTWAY_URL if outway else API_PROXY_URL
     _roll_readers(docs, _replace_in_configmaps(docs, API_PROXY_URL, target), OUTBOUND_ANNOTATION, target)
 
@@ -324,7 +330,8 @@ def drop_duplicate_env(docs: list[Doc]) -> None:
         env: list[Doc] = container.get("env") or []
         last = {item["name"]: index for index, item in enumerate(env)}
         if len(last) < len(env):
-            container["env"] = [item for index, item in enumerate(env) if last[item["name"]] == index]
+            kept = set(last.values())
+            container["env"] = [item for index, item in enumerate(env) if index in kept]
 
 
 def allow_rolling_updates(docs: list[Doc]) -> None:
@@ -644,11 +651,10 @@ def mount_zaakbrug_role_mapping(docs: list[Doc]) -> None:
     The zaakbrug chart has no extraVolumes; ExternalsPodiumD mounts it with a
     post-deploy `kubectl patch` (podiumd's zaakbrug-deploy.md, step 5c).
     """
-    if not any(doc.get("kind") == "ConfigMap" and name_of(doc) == ZAAKBRUG_ROLE_MAPPING for doc in docs):
+    if find(docs, "ConfigMap", ZAAKBRUG_ROLE_MAPPING) is None:
         return
-    spec = next(
-        (_pod_spec(doc) for doc in docs if doc.get("kind") == "Deployment" and name_of(doc) == "zaakbrug"), None
-    )
+    zaakbrug = find(docs, "Deployment", "zaakbrug")
+    spec = None if zaakbrug is None else _pod_spec(zaakbrug)
     if spec is None:
         return
     volumes: list[Doc] = spec.get("volumes") or []
@@ -711,8 +717,9 @@ def _merge_env(container: Doc, items: list[Doc], key: str = "env") -> None:
 
 def _is_test_or_delete_hook(doc: Doc) -> bool:
     """Helm test and delete hooks: `kubectl apply` would run them at once (redis-ha-pre-delete deletes Redis)."""
-    hooks = str(section(section(doc, "metadata"), "annotations").get("helm.sh/hook") or "").split(",")
-    return any(hook.strip().startswith("test") or hook.strip().endswith("-delete") for hook in hooks)
+    annotations = section(section(doc, "metadata"), "annotations")
+    hooks = [hook.strip() for hook in str(annotations.get("helm.sh/hook") or "").split(",")]
+    return any(hook.startswith("test") or hook.endswith("-delete") for hook in hooks)
 
 
 def _configuration_yaml(doc: Doc, configmap: str) -> Any | None:
@@ -807,8 +814,7 @@ class Render:
 
     def named(self, kind: str, name: str) -> Doc | None:
         """The doc of kind called name, or None."""
-        of_kind = (doc for doc in self.docs if doc.get("kind") == kind)
-        return next((doc for doc in of_kind if name_of(doc) == name), None)
+        return find(self.docs, kind, name)
 
     @property
     def manifest(self) -> str:
@@ -831,7 +837,8 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     """Applies every local fixup to `helm template` output."""
     loaded = _loaded(text)
     sources = [(doc, _SOURCE.search(chunk)) for doc, chunk in loaded]
-    charts = {key_of(doc): source[2] or source[1] for doc, source in sources if doc and source}
+    matched = [(doc, source) for doc, source in sources if doc and source]
+    charts = {key_of(doc): source[2] or source[1] for doc, source in matched}
     templated_crds = [
         name_of(doc)
         for doc, chunk in loaded

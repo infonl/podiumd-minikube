@@ -74,9 +74,13 @@ def _pairs(helm_args: list[str]) -> list[tuple[str, str]]:
 
 def _split(helm_args: list[str], prefix: str) -> list[str]:
     """The --set pairs of helm_args under prefix, with the prefix removed."""
-    return [
-        arg for flag, value in _pairs(helm_args) if value.startswith(prefix) for arg in (flag, value[len(prefix) :])
-    ]
+    pairs = [(flag, value.removeprefix(prefix)) for flag, value in _prefixed(helm_args, prefix)]
+    return [arg for pair in pairs for arg in pair]
+
+
+def _prefixed(helm_args: list[str], prefix: str) -> list[tuple[str, str]]:
+    """The (flag, key=value) pairs of helm_args whose key=value starts with prefix."""
+    return [(flag, value) for flag, value in _pairs(helm_args) if value.startswith(prefix)]
 
 
 def _enabled(helm_args: list[str], key: str, *, default: bool) -> bool:
@@ -142,7 +146,8 @@ def digest(render: manifests.Render, post_render: list[str]) -> str:
     As podiumd-infra's helmSkipUnchanged, minus its inputs: the render covers them, and is deterministic with lookups.
     """
     sha = hashlib.sha256(json.dumps(post_render).encode())
-    sha.update(manifests.dump([*render.docs, *render.large_configmaps, *render.crds]).encode())
+    manifest = manifests.dump([*render.docs, *render.large_configmaps, *render.crds])
+    sha.update(manifest.encode())
     return sha.hexdigest()
 
 

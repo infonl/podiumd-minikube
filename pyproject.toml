@@ -231,7 +231,7 @@ disable = [
 select = ["WPS", "B042", "B907"]
 max-line-length = 120
 # Jones complexity of a line (default 14): only the really dense lines
-max-line-complexity = 20
+max-line-complexity = 18
 max-cognitive-average = 6
 max-name-length = 30
 max-tuple-unpack-length = 3

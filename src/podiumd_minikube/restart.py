@@ -64,7 +64,8 @@ def start() -> None:
     print("Waiting until every workload except ZAC is ready...")
 
     def others_ready() -> bool:
-        return all(deploy.rolled_out(item) for item in _workloads() if item["metadata"]["name"] != deploy.ZAC)
+        others = [item for item in _workloads() if item["metadata"]["name"] != deploy.ZAC]
+        return all(deploy.rolled_out(item) for item in others)
 
     if not polling.wait_until(others_ready, timeout=deploy.READY_TIMEOUT, interval=10):
         stuck = [item["metadata"]["name"] for item in _workloads() if not deploy.rolled_out(item)]

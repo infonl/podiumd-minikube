@@ -141,8 +141,10 @@ def with_control_plane_env(manifest: str) -> str | None:
     container = pod["spec"]["containers"][0]
     before: list[dict[str, Any]] = list(container.get("env") or [])
     kept = [item for item in before if item.get("name") not in wanted]
-    container["env"] = [*kept, *({"name": name, "value": value} for name, value in wanted.items())]
-    unchanged = {item["name"]: item.get("value") for item in before if item.get("name") in wanted} == wanted
+    added = [{"name": name, "value": value} for name, value in wanted.items()]
+    container["env"] = [*kept, *added]
+    current = {item["name"]: item.get("value") for item in before if item.get("name") in wanted}
+    unchanged = current == wanted
     return None if unchanged else yaml.safe_dump(pod, sort_keys=False)
 
 
@@ -154,7 +156,8 @@ def _tuned_and_ready(name: str) -> bool:
     env_items: list[dict[str, Any]] = pod["spec"]["containers"][0].get("env") or []
     env = {item["name"]: item.get("value") for item in env_items}
     statuses: list[dict[str, Any]] = pod["status"].get("containerStatuses") or []
-    tuned = all(env.get(name) == value for name, value in CONTROL_PLANE_ENV[name].items())
+    wanted = CONTROL_PLANE_ENV[name]
+    tuned = all(env.get(key) == value for key, value in wanted.items())
     return tuned and bool(statuses) and all(status.get("ready") for status in statuses)
 
 
@@ -344,7 +347,10 @@ def _load(directory: str, image: str) -> process.ProcessError | None:
 
 
 def _in_batches(
-    images: list[str], label: str, action: Callable[[str], process.ProcessError | None], workers: int = BATCH_SIZE
+    images: list[str],
+    label: str,
+    action: Callable[[str], process.ProcessError | None],
+    workers: int = BATCH_SIZE,
 ) -> list[str]:
     """Runs action on images; returns those it succeeded for."""
     done: list[str] = []
@@ -388,7 +394,8 @@ def stale_images(pinned: list[str]) -> list[str]:
     if not pinned:
         return []
     listed = json.loads(process.output(["docker", "exec", PROFILE, "crictl", "images", "--digests", "-o", "json"]))
-    node = _digests_by_tag([(image["repoTags"], image.get("repoDigests") or []) for image in listed["images"]])
+    names: list[ImageNames] = [(image["repoTags"], image.get("repoDigests") or []) for image in listed["images"]]
+    node = _digests_by_tag(names)
     host_lines = process.output(
         ["docker", "images", "--digests", "--format", "{{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}}"]
     )

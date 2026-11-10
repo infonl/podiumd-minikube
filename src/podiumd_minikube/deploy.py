@@ -178,7 +178,10 @@ def installed_podiumd(found: list[releases.Release]) -> manifests.Render:
 
 
 def _prepare(
-    names: list[str], renders: dict[str, manifests.Render], found: list[releases.Release], before: manifests.Render
+    names: list[str],
+    renders: dict[str, manifests.Render],
+    found: list[releases.Release],
+    before: manifests.Render,
 ) -> list[str]:
     """Before the upgrades of names: fsGroups, CRDs, one-shot Jobs; returns the objects moving to this chart.
 

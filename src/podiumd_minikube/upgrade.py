@@ -19,7 +19,8 @@ _OURS = "podiumd-minikube"
 
 def undeleted_fixed_jobs(docs: list[manifests.Doc]) -> list[str]:
     """The chart's non-hook Jobs with a fixed name that ExternalsPodiumD does not delete before `helm upgrade`."""
-    return sorted(manifests.name_of(doc) for doc in docs if doc.get("kind") == "Job" and _fixed_upgraded_job(doc))
+    jobs = [doc for doc in docs if doc.get("kind") == "Job"]
+    return sorted(manifests.name_of(job) for job in jobs if _fixed_upgraded_job(job))
 
 
 def _fixed_upgraded_job(job: manifests.Doc) -> bool:

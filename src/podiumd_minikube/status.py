@@ -100,7 +100,8 @@ def node_usage() -> Usage:
 def reclaimable_kernel_mib() -> int:
     """MiB of the node's kernel caches the kernel frees under memory pressure (counted in node_usage)."""
     stat = kube.node("cat /sys/fs/cgroup/memory.stat")
-    found = next((line.split()[1] for line in stat.splitlines() if line.startswith("slab_reclaimable ")), "0")
+    lines = [line for line in stat.splitlines() if line.startswith("slab_reclaimable ")]
+    found = lines[0].split()[1] if lines else "0"
     return round(int(found) / MIB)
 
 
@@ -110,7 +111,9 @@ def workloads(items: list[dict[str, Any]]) -> dict[str, str]:
     for pod in items:
         meta = pod["metadata"]
         owner = next(iter(meta.get("ownerReferences", [])), {"kind": "", "name": meta["name"]})
-        name = owner["name"].rsplit("-", 1)[0] if owner["kind"] == "ReplicaSet" else owner["name"]
+        name = str(owner["name"])
+        if owner["kind"] == "ReplicaSet":
+            name = name.rsplit("-", 1)[0]
         names[f"{meta['namespace']}/{meta['name']}"] = name
     return names
 
@@ -183,7 +186,10 @@ def _recently_restarted(container: dict[str, Any], now: datetime) -> bool:
     return (now - datetime.fromisoformat(finished)).total_seconds() < RECENT_RESTART_SECONDS
 
 
-def problems(items: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> list[str]:
+def problems(
+    items: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+) -> list[str]:
     """Pods not Ready or restarted in the last hour (not by a node stop), and failed Jobs, one line each."""
     found: list[str] = []
     now = datetime.now(UTC)
@@ -196,10 +202,10 @@ def problems(items: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> list[st
         recent = [container["name"] for container in containers if _recently_restarted(container, now)]
         if status.get("phase") != "Running" or ready < len(containers) or recent:
             restarted = f" restarted: {', '.join(recent)}" if recent else ""
-            found.append(
-                f"{meta['namespace']}/{meta['name']} {status.get('phase')} {ready}/{len(containers)}{restarted}"
-            )
-    found.extend(f"job {job['metadata']['name']} Failed" for job in jobs if "Failed" in kube.true_conditions(job))
+            counts = f"{ready}/{len(containers)}{restarted}"
+            found.append(f"{meta['namespace']}/{meta['name']} {status.get('phase')} {counts}")
+    failed = [job for job in jobs if "Failed" in kube.true_conditions(job)]
+    found.extend(f"job {job['metadata']['name']} Failed" for job in failed)
     return found
 
 

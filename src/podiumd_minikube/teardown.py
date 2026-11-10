@@ -44,7 +44,8 @@ def bound_volumes(volumes: list[Any], namespace: str = NAMESPACE) -> list[str]:
     Covers storage-hooks.yaml's Retain PVs and dynamic Delete PVs that
     minikube's provisioner left Released after the namespace was deleted.
     """
-    return [name_of(pv) for pv in volumes if section(section(pv, "spec"), "claimRef").get("namespace") == namespace]
+    claims = [(pv, section(section(pv, "spec"), "claimRef")) for pv in volumes]
+    return [name_of(pv) for pv, claim in claims if claim.get("namespace") == namespace]
 
 
 # The kubectl-apply deploys' namespace goes too, so a deploy can start clean after the Helm switch.

@@ -35,7 +35,8 @@ _CONFIG = "/tmp/kcadm-podiumd-minikube.cfg"  # nosec B108  # noqa: S108 - inside
 def kcadm(*commands: list[str]) -> str:
     """Output of kcadm.sh commands in the Keycloak pod, logged in as the chart's bootstrap admin (read from stdin)."""
     secret = kube.get_json("secret", ADMIN_SECRET, "-n", NAMESPACE)["data"]
-    credentials = "".join(f"{base64.b64decode(secret[key]).decode()}\n" for key in ("username", "password"))
+    decoded = [base64.b64decode(secret[key]).decode() for key in ("username", "password")]
+    credentials = "".join(f"{value}\n" for value in decoded)
     kc = "/opt/keycloak/bin/kcadm.sh"
     login = f"{kc} config credentials --config {_CONFIG} --server http://localhost:8080 --realm master"
     script = "\n".join([
@@ -62,7 +63,8 @@ def missing_default_scopes(clients: list[Representation], defaults: list[Represe
 
 def _import_done(render: manifests.Render) -> bool:
     imports = [name for name in render.jobs if name.startswith(IMPORT_JOB_PREFIX)]
-    return all(kube.get_json("job", name, "-n", NAMESPACE).get("status", {}).get("succeeded") for name in imports)
+    jobs = [kube.get_json("job", name, "-n", NAMESPACE) for name in imports]
+    return all(job.get("status", {}).get("succeeded") for job in jobs)
 
 
 def repair_default_client_scopes(render: manifests.Render) -> None:

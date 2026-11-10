@@ -160,9 +160,8 @@ def _service_port(docs: list[manifests.Doc], service: str, port: Any) -> int:
     """The number of a backend port, which may be a Service port name."""
     if isinstance(port, int):
         return port
-    services = [doc for doc in docs if doc.get("kind") == "Service" and manifests.name_of(doc) == service]
-    port_lists: list[list[manifests.Doc]] = [manifests.section(doc, "spec").get("ports") or [] for doc in services]
-    entries = [entry for ports in port_lists for entry in ports]
+    found = manifests.find(docs, "Service", service)
+    entries: list[manifests.Doc] = manifests.section(found, "spec").get("ports") or [] if found else []
     named = next((entry for entry in entries if entry.get("name") == port), None)
     if named is not None:
         return int(named["port"])
@@ -287,7 +286,8 @@ def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
         *route_manifests(docs),
     ]
     # NGF keeps an ExternalName Service's old target when it changes in place: such a Service is recreated.
-    _delete_stale({(doc["kind"], manifests.name_of(doc)): manifests.section(doc, "spec") for doc in objects})
+    wanted = {(doc["kind"], manifests.name_of(doc)): manifests.section(doc, "spec") for doc in objects}
+    _delete_stale(wanted)
     kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
     if not polling.wait_until(lambda: kube.exists(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3):
         msg = f"NGF created no Service {EDGE_NAMESPACE}/{EDGE_SERVICE} for Gateway {GATEWAY} within 120s"

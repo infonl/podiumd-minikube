@@ -38,7 +38,8 @@ def route_args(action: str, node_ip: str) -> list[str]:
 def sudoers_rule() -> str:
     """A sudoers.d rule that lets this user add and remove the tunnel's route without a password."""
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
-    commands = ", ".join(" ".join(route_args(action, node_ip)[1:]) for action in ("replace", "del"))
+    routes = [route_args(action, node_ip)[1:] for action in ("replace", "del")]
+    commands = ", ".join(" ".join(route) for route in routes)
     return f"# podiumd-minikube setup-tunnel: its route only.\n{getpass.getuser()} ALL=(root) NOPASSWD: {commands}\n"
 
 

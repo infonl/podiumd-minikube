@@ -104,8 +104,8 @@ def set_chart_dependency(text: str, name: str, repository: str, version: str) ->
     start = next((index for index, line in enumerate(lines) if header.search(line)), None)
     if start is None:
         return text
-    following = (index for index in range(start + 1, len(lines)) if lines[index].startswith("  - name: "))
-    end = next(following, len(lines))
+    headers = [index for index, line in enumerate(lines) if index > start and line.startswith("  - name: ")]
+    end = headers[0] if headers else len(lines)
     for index in range(start + 1, end):
         if "repository:" in lines[index]:
             lines[index] = re.sub(r'repository: "[^"]*"', f"repository: {json.dumps(repository)}", lines[index])
@@ -124,7 +124,8 @@ def _chart_reference(selected: Selection) -> tuple[str, str]:
 def _subcharts_fetched(chart: str) -> bool:
     """Whether `helm dependency list` reports every subchart of the checkout at chart as ok."""
     listed = process.output(["helm", "dependency", "list", chart]).splitlines()[1:]
-    return all(line.split("\t")[-1].strip() == "ok" for line in listed if line.strip())
+    states = [line.split("\t")[-1].strip() for line in listed if line.strip()]
+    return all(state == "ok" for state in states)
 
 
 def _build_subcharts(chart: str) -> None:

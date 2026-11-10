@@ -111,7 +111,8 @@ def major_of(image: str) -> int:
 
 def restore_errors(stderr: str) -> list[str]:
     """Distinct psql ERROR lines, without those for objects the init SQL already created."""
-    errors = {line.split("ERROR:", 1)[1].strip() for line in stderr.splitlines() if "ERROR:" in line}
+    error_lines = [line for line in stderr.splitlines() if "ERROR:" in line]
+    errors = {line.split("ERROR:", 1)[1].strip() for line in error_lines}
     return sorted(
         error for error in errors if not error.endswith("already exists") and "transaction_timeout" not in error
     )
@@ -270,7 +271,12 @@ def rename_rows() -> None:
                 _rename_values(psql, (table, column), renames, database)
 
 
-def _rename_values(psql: list[str], target: tuple[str, str], renames: dict[str, str], database: str) -> None:
+def _rename_values(
+    psql: list[str],
+    target: tuple[str, str],
+    renames: dict[str, str],
+    database: str,
+) -> None:
     """Applies renames to target's (table, column) values through psql; an old value whose new one exists stays."""
     table, column = target
     names = ["-v", f"table={table}", "-v", f"column={column}"]

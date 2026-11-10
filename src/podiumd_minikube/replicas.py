@@ -58,7 +58,8 @@ def changes(
     before = {_key(doc): doc for doc in source}
     after = {_key(doc): doc for doc in target}
     created = [doc for key, doc in after.items() if key not in before]
-    changed = {key: doc for key, doc in after.items() if key in before and before[key] != doc}
+    kept = {key: doc for key, doc in after.items() if key in before}
+    changed = {key: doc for key, doc in kept.items() if before[key] != doc}
     patches = {key: merge_patch(before[key], doc) for key, doc in changed.items()}
     deleted = [key for key in before if key not in after]
     return created, patches, deleted
@@ -80,7 +81,8 @@ def _apply_changes(source: list[manifests.Doc], target: list[manifests.Doc]) -> 
     if created:
         kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(created))
     for key, patch in patches.items():
-        kube.kubectl_shown("patch", kube.reference(*key), "-n", NAMESPACE, "--type", "merge", "-p", json.dumps(patch))
+        reference = kube.reference(*key)
+        kube.kubectl_shown("patch", reference, "-n", NAMESPACE, "--type", "merge", "-p", json.dumps(patch))
     for key in deleted:
         kube.kubectl_shown("delete", kube.reference(*key), "-n", NAMESPACE, "--ignore-not-found")
 

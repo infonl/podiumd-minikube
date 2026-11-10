@@ -22,7 +22,8 @@ def corefile_with_hosts(corefile: str, ip: str, hosts: list[str]) -> str:
     """corefile with this project's server block (replacing an earlier one) answering hosts with ip."""
     lines = corefile.rstrip("\n").splitlines()
     if BEGIN in lines:
-        lines = lines[: lines.index(BEGIN)] + lines[lines.index(END) + 1 :]
+        begin, end = lines.index(BEGIN), lines.index(END)
+        lines = [*lines[:begin], *lines[end + 1 :]]
     zones = [f"{host}:53" for host in hosts]
     block = [
         " ".join([*zones, "{"]),
