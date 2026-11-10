@@ -293,7 +293,8 @@ def old_tags(images: list[str], local: list[str]) -> list[str]:
 def remove_old_tags(images: list[str]) -> None:
     """Removes the host's older tags of images' repositories; an image a container uses stays (docker rmi refuses)."""
     local = process.output(["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"]).split()
-    if old := old_tags(images, local):
+    old = old_tags(images, local)
+    if old:
         print(f"Removing {len(old)} older image tag(s) of this chart's repositories from the host: {' '.join(old)}")
         process.run(["docker", "rmi", *old], check=False)
 
@@ -428,7 +429,8 @@ def load_images(images: list[str]) -> None:
     print(f"{len(to_fetch)} image(s) need pulling + loading: {' '.join(to_fetch)}")
     for start in range(0, len(to_fetch), BATCH_SIZE):
         batch = to_fetch[start : start + BATCH_SIZE]
-        if to_pull := [image for image in batch if not cached(image)]:
+        to_pull = [image for image in batch if not cached(image)]
+        if to_pull:
             # A docker pull of a cached image still asks the registry: 212 s for 60 images.
             print(f"Pulling batch: {' '.join(to_pull)}")
             _in_batches(to_pull, "pulling", _pull)

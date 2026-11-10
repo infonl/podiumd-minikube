@@ -31,7 +31,8 @@ def select(
     Without monitoring_logging: a podiumd checkout's sibling monitoring-logging/, else the recorded selection.
     """
     chosen = {"podiumd": _selection(podiumd)}
-    if monitoring := _monitoring_logging(chosen["podiumd"], monitoring_logging, versions_file):
+    monitoring = _monitoring_logging(chosen["podiumd"], monitoring_logging, versions_file)
+    if monitoring:
         chosen["monitoringLogging"] = monitoring
     for key, selected in chosen.items():
         _drop_packaged_checkout(key, selected, versions_file, charts_dir)

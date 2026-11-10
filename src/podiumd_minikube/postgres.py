@@ -158,7 +158,8 @@ def restore(dump: Path, major: int, render: manifests.Render) -> None:
         ["kubectl", "exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-q", "-f", "-"],
         stdin=dump.read_text(encoding="utf-8"),
     )
-    if errors := restore_errors(result.stderr):
+    errors = restore_errors(result.stderr)
+    if errors:
         shown = "; ".join(errors[:10])
         msg = f"restore into Postgres {major} had errors (dump kept in {dump}): {shown}"
         raise process.UserError(msg)
@@ -223,7 +224,8 @@ def align_with_azure() -> None:
     kube.kubectl(
         "exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-q", "-f", "-", stdin="\n".join(script)
     )
-    if moved := sorted(database for database, owner in owners.items() if owner != "postgres"):
+    moved = sorted(database for database, owner in owners.items() if owner != "postgres")
+    if moved:
         print(f"Databases given to postgres, with grants to their app role: {', '.join(moved)}")
 
 

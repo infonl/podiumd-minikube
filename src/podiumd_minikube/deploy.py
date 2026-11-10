@@ -257,7 +257,8 @@ def _upgrade(
     changed = _changed(found, digests, every=every)
     names = [release.name for release in changed]
     moved = _prepare(names, renders, found, before)
-    if own_release := next((release for release in changed if release.name == RELEASE_NAME), None):
+    own_release = next((release for release in changed if release.name == RELEASE_NAME), None)
+    if own_release:
         releases.upgrade(own_release, post[RELEASE_NAME])
         if STORAGE_PERMISSIONS_JOB in renders[RELEASE_NAME].jobs:
             # Open Formulieren (UID 1000) writes to its volume at its first start.
@@ -274,7 +275,8 @@ def _upgrade(
             upgrades = [pool.submit(releases.upgrade, release, post[release.name]) for release in others]
             for done in upgrades:
                 done.result()
-    if releases.PODIUMD in names and (undeleted := upgrade.undeleted_fixed_jobs(renders[releases.PODIUMD].docs)):
+    undeleted = upgrade.undeleted_fixed_jobs(renders[releases.PODIUMD].docs) if releases.PODIUMD in names else []
+    if undeleted:
         print(
             f"\nWARNING: fixed-name Jobs ExternalsPodiumD does not delete before helm upgrade: {', '.join(undeleted)}"
         )

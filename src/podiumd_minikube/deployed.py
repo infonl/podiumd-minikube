@@ -84,7 +84,8 @@ def running_containers(items: list[dict[str, Any]], charts: dict[str, str]) -> C
     owners = _Owners(charts)
     counts: Counter[str] = Counter()
     for pod in items:
-        if pod["metadata"]["namespace"] in NAMESPACES and (running := _running(pod)):
+        running = _running(pod)
+        if pod["metadata"]["namespace"] in NAMESPACES and running:
             counts[owners.chart_of(pod["metadata"])] += running
     return counts
 
@@ -106,9 +107,10 @@ class _Owners:
 
     def chart_of(self, metadata: dict[str, Any] | None) -> str:
         """The chart of metadata's nearest rendered owner, else OTHER."""
-        while metadata and (references := metadata.get("ownerReferences")):
-            reference = references[0]
-            if chart := self.charts.get(f"{reference['kind']}/{reference['name']}"):
+        while metadata and metadata.get("ownerReferences"):
+            reference = metadata["ownerReferences"][0]
+            chart = self.charts.get(f"{reference['kind']}/{reference['name']}")
+            if chart:
                 return chart
             metadata = self.owner(reference)
         return OTHER

@@ -253,7 +253,6 @@ ignore = [
     "WPS204",  # overused expression: flags raise X(msg), the pattern ruff EM asks for
     "WPS226",  # string constant overuse: YAML and JSON keys are data
     "WPS237",  # complex f-string: a subscript or call in an f-string reads fine
-    "WPS332",  # walrus outside a comprehension: used on purpose (if match := RE.match(...))
     "WPS407",  # mutable module constant: freezing nested dicts breaks json and yaml dumps
     "WPS430",  # nested function: closures on purpose (callbacks, fakes)
     "WPS529",  # implicit .get(): flags a dispatch on which keys a dict has; SIM401 catches the if/else default case

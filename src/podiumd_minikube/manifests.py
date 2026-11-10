@@ -216,7 +216,8 @@ def disable_service_links(docs: list[Doc]) -> None:
     immutable, so a change would make apply fail on existing Jobs.
     """
     for doc in docs:
-        if doc.get("kind") in _POD_SPEC_PATHS and (spec := _pod_spec(doc)) is not None:
+        spec = _pod_spec(doc)
+        if doc.get("kind") in _POD_SPEC_PATHS and spec is not None:
             spec["enableServiceLinks"] = False
 
 
@@ -333,7 +334,8 @@ def allow_rolling_updates(docs: list[Doc]) -> None:
     (Loki's gateway). StatefulSets replace their pod in place and keep it.
     """
     for doc in docs:
-        if doc.get("kind") == "Deployment" and (spec := _pod_spec(doc)) is not None:
+        spec = _pod_spec(doc)
+        if doc.get("kind") == "Deployment" and spec is not None:
             section(section(spec, "affinity"), "podAntiAffinity").pop(
                 "requiredDuringSchedulingIgnoredDuringExecution", None
             )

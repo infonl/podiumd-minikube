@@ -150,7 +150,8 @@ def _clear_host_paths() -> None:
 
 def _delete_cluster_leftovers() -> None:
     print("Deleting the releases' cluster-scoped RBAC, webhook and CRD objects (if any)...")
-    if leftovers := cluster_leftovers(kube.get_json(CLUSTER_KINDS)["items"]):
+    leftovers = cluster_leftovers(kube.get_json(CLUSTER_KINDS)["items"])
+    if leftovers:
         kube.kubectl_shown("delete", *leftovers, "--ignore-not-found")
     else:
         print("  (none found)")

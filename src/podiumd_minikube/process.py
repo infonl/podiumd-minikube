@@ -93,7 +93,8 @@ def fetch(args: Sequence[str], *, stdin: str | None = None, shown: bool = False)
             print(result.stderr, end="", file=sys.stderr)
         return (result.stdout,)
 
-    if result := polling.wait_until(attempt, timeout=FETCH_TIMEOUT, interval=5):
+    result = polling.wait_until(attempt, timeout=FETCH_TIMEOUT, interval=5)
+    if result:
         return result[0]
     raise errors[-1]
 

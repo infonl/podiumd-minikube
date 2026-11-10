@@ -94,7 +94,8 @@ def setup_tunnel(*, ask: bool = True) -> bool:
     """
     kube.require_minikube_context()
     pid = process.running(TUNNEL_PATTERN)
-    if pid and (ip := kube.edge_ip()):
+    ip = kube.edge_ip() if pid else ""
+    if ip:
         print(f"'minikube tunnel' runs (PID {pid}) and the edge has external IP {ip} - already up.")
         _print_access(ip)
         return True

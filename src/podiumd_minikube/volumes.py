@@ -73,12 +73,15 @@ def script(found: dict[str, int]) -> str:
 
 def apply_fs_groups(docs: list[manifests.Doc], namespace: str) -> None:
     """Gives the existing hostPath volumes of docs' pod templates in namespace their fsGroup."""
-    if not (groups := wanted(docs)):
+    groups = wanted(docs)
+    if not groups:
         return
     claims = kube.get_json("pvc", "-n", namespace)["items"]
-    if not (found := changes(groups, claims, kube.get_json("pv")["items"])):
+    found = changes(groups, claims, kube.get_json("pv")["items"])
+    if not found:
         return
-    if changed := kube.node(script(found)).split():
+    changed = kube.node(script(found)).split()
+    if changed:
         print(
             f"Gave {len(changed)} volume(s) their pod's fsGroup (minikube's hostPath ignores it): {' '.join(changed)}"
         )
