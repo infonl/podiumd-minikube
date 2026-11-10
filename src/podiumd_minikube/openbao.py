@@ -119,7 +119,7 @@ def _root_token() -> str:
     )
     encoded = json.loads(update.stdout)["data"]["encoded_token"]
     raw = base64.b64decode(encoded + "=" * (-len(encoded) % 4))
-    return bytes(a ^ b for a, b in zip(raw, otp.encode(), strict=False)).decode()
+    return bytes(left ^ right for left, right in zip(raw, otp.encode(), strict=False)).decode()
 
 
 def _write_outway_keys() -> None:
@@ -143,7 +143,7 @@ def _write_outway_keys() -> None:
 def activate(render: manifests.Render) -> None:
     """Runs podiumd's openbao-activate.sh against the keyvault stand-in, then stores the outway's API keys."""
     # The render, not the cluster: a pruned StatefulSet still exists while it terminates.
-    if not any(doc.get("kind") == "Job" and manifests.name_of(doc) == CONFIG_JOB for doc in render.docs):
+    if CONFIG_JOB not in render.jobs:
         return
     print(f"Activating OpenBao (podiumd's {SCRIPT}, Key Vault item {KEY_ITEM} in {keyvault.KEYVAULT_DIR})...")
     if polling.wait_until(_status, timeout=STARTUP_TIMEOUT, interval=5) is None:

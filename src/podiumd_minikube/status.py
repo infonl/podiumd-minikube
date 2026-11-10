@@ -73,7 +73,7 @@ class Usage:
 def enabled_profiles(pod_names: list[str]) -> dict[str, bool]:
     """Which optional profiles run, from the names of the running pods."""
     return {
-        profile: any(name == prefix or name.startswith(prefix + "-") for name in pod_names)
+        profile: any(name == prefix or name.startswith(f"{prefix}-") for name in pod_names)
         for profile, prefix in PROFILE_PODS.items()
     }
 
@@ -93,7 +93,8 @@ def node_usage() -> Usage:
     """The minikube container's memory (inactive page cache excluded) and CPU, as docker stats reports them."""
     line = process.output(["docker", "stats", PROFILE, "--no-stream", "--format", "{{.MemUsage}}|{{.CPUPerc}}"])
     used, cpu = line.strip().split("|")
-    return Usage(mib=_mib(used.split(" / ")[0]), cpu=float(cpu.rstrip("%")) / 100)
+    cores = float(cpu.rstrip("%")) / 100
+    return Usage(mib=_mib(used.split(" / ")[0]), cpu=cores)
 
 
 def reclaimable_kernel_mib() -> int:
@@ -133,27 +134,28 @@ def sampled_cores(first: dict[str, Any], later: dict[str, Any] | None) -> float:
     """Cores a container used between two crictl stats CPU_SAMPLE_SECONDS apart; 0 without both counters."""
     start, end = _cpu_nanoseconds(first), _cpu_nanoseconds(later)
     if start is None or end is None:
-        return 0.0
+        return 0
     return (end - start) / 1e9 / CPU_SAMPLE_SECONDS
 
 
 def container_usage(items: list[dict[str, Any]], *, cpu: bool = True) -> dict[str, Usage]:
     """Usage per running container, keyed 'namespace/workload/container'; replicas add up."""
-    labels = {c["id"]: c["labels"] for c in _crictl("ps")["containers"]}
+    labels = {container["id"]: container["labels"] for container in _crictl("ps")["containers"]}
     names = workloads(items)
     first = _crictl("stats")["stats"]
     if cpu:
         time.sleep(CPU_SAMPLE_SECONDS)  # a measuring interval, not a wait for a condition
-    second = {s["attributes"]["id"]: s for s in _crictl("stats")["stats"]} if cpu else {}
+    second = {stat["attributes"]["id"]: stat for stat in _crictl("stats")["stats"]} if cpu else {}
     usage: dict[str, Usage] = {}
     for stat in first:
         label = labels.get(stat["attributes"]["id"])
         if label is None:
             continue
         key = _key(label, names)
-        before = usage.get(key, Usage(0, 0.0))
+        before = usage.get(key, Usage(0, 0))
         mib = round(int(stat["memory"]["workingSetBytes"]["value"]) / MIB)
-        usage[key] = Usage(before.mib + mib, before.cpu + sampled_cores(stat, second.get(stat["attributes"]["id"])))
+        cores = sampled_cores(stat, second.get(stat["attributes"]["id"]))
+        usage[key] = Usage(before.mib + mib, before.cpu + cores)
     return dict(sorted(usage.items()))
 
 
@@ -190,17 +192,14 @@ def problems(items: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> list[st
         if any(ref.get("kind") == "Job" for ref in meta.get("ownerReferences", [])):
             continue
         containers: list[dict[str, Any]] = status.get("containerStatuses", [])
-        ready = sum(1 for c in containers if c.get("ready"))
-        recent = [c["name"] for c in containers if _recently_restarted(c, now)]
+        ready = sum(1 for container in containers if container.get("ready"))
+        recent = [container["name"] for container in containers if _recently_restarted(container, now)]
         if status.get("phase") != "Running" or ready < len(containers) or recent:
             restarted = f" restarted: {', '.join(recent)}" if recent else ""
             found.append(
                 f"{meta['namespace']}/{meta['name']} {status.get('phase')} {ready}/{len(containers)}{restarted}"
             )
-    for job in jobs:
-        conditions: list[dict[str, Any]] = job.get("status", {}).get("conditions") or []
-        if any(c.get("type") == "Failed" and c.get("status") == "True" for c in conditions):
-            found.append(f"job {job['metadata']['name']} Failed")
+    found.extend(f"job {job['metadata']['name']} Failed" for job in jobs if "Failed" in kube.true_conditions(job))
     return found
 
 
@@ -222,6 +221,7 @@ def _gib(mib: float) -> str:
 
 def _node_lines(profiles: dict[str, bool], node: Usage, usage: dict[str, Usage]) -> list[str]:
     cap = memory.node_mb()
+    containers = sum(container.mib for container in usage.values())
     nano_cpus = process.output(["docker", "inspect", PROFILE, "--format", "{{.HostConfig.NanoCpus}}"]).strip()
     cores = f"{int(nano_cpus) / 1e9:g}" if nano_cpus not in {"", "0"} else "all host"
     root = disk.docker_root()
@@ -229,7 +229,7 @@ def _node_lines(profiles: dict[str, bool], node: Usage, usage: dict[str, Usage])
     return [
         (
             f"Node        memory {_gib(node.mib)} / {_gib(cap) if cap else '?'} GiB cap, "
-            f"budget {_gib(budget_mib(profiles))} GiB, containers {_gib(sum(u.mib for u in usage.values()))} GiB"
+            f"budget {_gib(budget_mib(profiles))} GiB, containers {_gib(containers)} GiB"
         ),
         f"            of which {_gib(reclaimable_kernel_mib())} GiB kernel caches, freed under memory pressure",
         f"            CPU {node.cpu:.1f} / {cores} cores",
@@ -241,7 +241,8 @@ def _access_line() -> str:
     edge = kube.edge_ip()
     running = process.running(tunnel.TUNNEL_PATTERN)
     access = f"tunnel PID {running}, edge {edge or 'no IP'}" if running else "tunnel not running"
-    return f"Access      {access}" + (f"; {tunnel.hosts_hint(edge)}" if edge else "")
+    hint = f"; {tunnel.hosts_hint(edge)}" if edge else ""
+    return f"Access      {access}{hint}"
 
 
 def _container_lines(usage: dict[str, Usage], top: int) -> list[str]:
@@ -257,26 +258,30 @@ def _container_lines(usage: dict[str, Usage], top: int) -> list[str]:
     return lines
 
 
+# A problem per line, aligned under the first.
+PROBLEM_SEPARATOR = "\n            "
+
+
 def report(top: int) -> None:
     """Prints the status; top limits the container list (0: all)."""
     items = pods()
-    profiles = enabled_profiles(
-        [p["metadata"]["name"] for p in items if p["metadata"]["namespace"] in (NAMESPACE, MONITORING_NAMESPACE)]
-    )
+    ours = [pod["metadata"] for pod in items if pod["metadata"]["namespace"] in {NAMESPACE, MONITORING_NAMESPACE}]
+    profiles = enabled_profiles([meta["name"] for meta in ours])
     usage = container_usage(items)
     age = youngest_container_seconds(items)
     settled = "settled" if age >= SETTLE_SECONDS else "not settled yet: memory is still growing"
     hold = lock.current()
     found = problems(items, kube.get_json("jobs", "-A")["items"])
+    running = " ".join(profile for profile, on in profiles.items() if on)
     lines = [
         f"podiumd-minikube cluster status {datetime.now(UTC):%Y-%m-%d %H:%M} UTC",
         *_node_lines(profiles, node_usage(), usage),
         *deployed.lines(items),
-        f"Profiles    {' '.join(p for p, on in profiles.items() if on) or 'none (default)'}",
+        f"Profiles    {running or 'none (default)'}",
         f"Started     youngest container {age / 60:.0f} min ago ({settled})",
         _access_line(),
         f"Lock        {lock.describe(hold) if hold else 'free'}",
-        "Problems    " + ("\n            ".join(found) if found else "none"),
+        f"Problems    {PROBLEM_SEPARATOR.join(found) or 'none'}",
         *_container_lines(usage, top),
     ]
     print("\n".join(lines))

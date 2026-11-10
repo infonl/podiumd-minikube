@@ -39,7 +39,9 @@ def stale_pods(pods: list[dict[str, Any]], boot: datetime) -> list[str]:
         if any(ref.get("kind") == "Job" for ref in meta.get("ownerReferences", [])):
             continue
         conditions: list[dict[str, Any]] = pod["status"].get("conditions") or []
-        changed = next((str(c.get("lastTransitionTime") or "") for c in conditions if c["type"] == "Ready"), "")
+        none: dict[str, Any] = {}
+        ready = next((condition for condition in conditions if condition["type"] == "Ready"), none)
+        changed = str(ready.get("lastTransitionTime") or "")
         if not changed or datetime.fromisoformat(changed) < boot:
             stale.append(meta["name"])
     return stale

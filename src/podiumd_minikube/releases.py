@@ -65,7 +65,8 @@ _PODIUMD_ONLY = "podiumd.openbao.seal."
 def _pairs(helm_args: list[str]) -> list[tuple[str, str]]:
     """helm_args as (flag, key=value) pairs; UserError on anything else, which cannot be routed to a release."""
     pairs = list(zip(helm_args[::2], helm_args[1::2], strict=False))
-    if len(helm_args) % 2 or any(flag not in SET_FLAGS or "=" not in value for flag, value in pairs):
+    routable = all(flag in SET_FLAGS and "=" in value for flag, value in pairs)
+    if len(helm_args) % 2 or not routable:
         msg = f"deploy passes only {'/'.join(SET_FLAGS)} <key>=<value> pairs to helm, got: {' '.join(helm_args)}"
         raise process.UserError(msg)
     return pairs
@@ -80,7 +81,8 @@ def _split(helm_args: list[str], prefix: str) -> list[str]:
 
 def _enabled(helm_args: list[str], key: str, *, default: bool) -> bool:
     """The last `--set key=true|false` in helm_args, else default."""
-    found = [value.split("=", 1)[1] == "true" for _, value in _pairs(helm_args) if value.startswith(f"{key}=")]
+    values = [value for _, value in _pairs(helm_args) if value.startswith(f"{key}=")]
+    found = [value.split("=", 1)[1] == "true" for value in values]
     return found[-1] if found else default
 
 

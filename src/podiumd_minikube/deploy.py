@@ -66,7 +66,7 @@ class Options:
     def render_release(self, release: releases.Release, *, lookup: bool = True) -> manifests.Render:
         """release as its `helm upgrade` installs it; each object carries the release's namespace."""
         render = self._fixed_up(lambda *extra: releases.template(release, *extra), lookup=lookup)
-        for doc in [*render.docs, *render.large_configmaps]:
+        for doc in (*render.docs, *render.large_configmaps):
             manifests.section(doc, "metadata").setdefault("namespace", release.namespace)
         return render
 
@@ -153,7 +153,7 @@ def _ensure_namespace(namespace: str) -> None:
 def combined(renders: list[manifests.Render]) -> manifests.Render:
     """One Render of several releases' renders."""
     return manifests.Render(
-        docs=[doc for render in renders for doc in [*render.docs, *render.large_configmaps]],
+        docs=[doc for render in renders for doc in (*render.docs, *render.large_configmaps)],
         large_configmaps=[],
         crds=[doc for render in renders for doc in render.crds],
         templated_crds=[name for render in renders for name in render.templated_crds],
@@ -266,7 +266,9 @@ def _upgrade(
             )
     try:
         with ThreadPoolExecutor(max_workers=len(found)) as pool:
-            for done in [pool.submit(releases.upgrade, r, post[r.name]) for r in changed if r.name != RELEASE_NAME]:
+            others = [release for release in changed if release.name != RELEASE_NAME]
+            upgrades = [pool.submit(releases.upgrade, release, post[release.name]) for release in others]
+            for done in upgrades:
                 done.result()
     finally:
         if own_release and moved:
@@ -326,7 +328,7 @@ def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool
     dns.apply_hosts(chart_hosts)
     # Before the upgrades: IfNotPresent pods start from the node's image under their tag.
     provision.refresh_images(
-        provision.stale_images(sorted({i for done in renders.values() for i in done.pinned_images}))
+        provision.stale_images(sorted({image for done in renders.values() for image in done.pinned_images}))
     )
     upgraded = _upgrade(selected, found, renders, before, every=every)
     # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
@@ -361,7 +363,7 @@ def rolled_out(workload: dict[str, Any]) -> bool:
     status = workload.get("status", {})
     current = status.get("observedGeneration", 0) >= workload["metadata"].get("generation", 0)
     if workload.get("kind") in manifests.ECK_KINDS:
-        return current and status.get("health") in ("green", "yellow") and status.get("phase", "Ready") == "Ready"
+        return current and status.get("health") in {"green", "yellow"} and status.get("phase", "Ready") == "Ready"
     wanted = workload.get("spec", {}).get("replicas", 1)
     updated = status.get("updatedReplicas", 0)
     # readyReplicas also counts old pods while a rollout replaces them.
@@ -369,7 +371,7 @@ def rolled_out(workload: dict[str, Any]) -> bool:
     return current and updated >= wanted and old_gone and status.get("readyReplicas", 0) >= wanted
 
 
-def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[str], list[str]]:
+def unfinished_jobs(live: list[manifests.Doc], names: list[str]) -> tuple[list[str], list[str]]:
     """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live.
 
     A missing Job counts as finished: helm upgrade creates every rendered Job, and the chart's
@@ -378,8 +380,7 @@ def unfinished_jobs(live: list[dict[str, Any]], names: list[str]) -> tuple[list[
     outcomes: dict[str, str] = {}
     present = {job["metadata"]["name"] for job in live}
     for job in live:
-        conditions: list[dict[str, Any]] = job.get("status", {}).get("conditions") or []
-        done = {c["type"] for c in conditions if c.get("status") == "True"} & {"Complete", "Failed"}
+        done = kube.true_conditions(job) & {"Complete", "Failed"}
         if done:
             outcomes[job["metadata"]["name"]] = "Failed" if "Failed" in done else "Complete"
     running = [name for name in names if name in present and name not in outcomes]
@@ -418,7 +419,7 @@ def hold_zac(render: manifests.Render) -> list[int]:
     """
     if not set(ZAC_JOBS) & set(render.jobs) or kube.exists(f"deployment/{ZAC}"):
         return []
-    zac = next((d for d in render.docs if d.get("kind") == "Deployment" and manifests.name_of(d) == ZAC), None)
+    zac = render.named("Deployment", ZAC)
     return [] if zac is None else [zac["spec"].get("replicas", 1)]
 
 
@@ -437,7 +438,7 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
     workloads = [
         f"{doc['kind'].lower()}/{manifests.name_of(doc)}"
         for doc in render.docs
-        if doc.get("kind") in ("Deployment", "StatefulSet", *manifests.ECK_KINDS)
+        if doc.get("kind") in {"Deployment", "StatefulSet", *manifests.ECK_KINDS}
     ]
     kinds = ",".join(sorted({workload.split("/")[0] for workload in workloads}))
     names = render.jobs
@@ -449,7 +450,7 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
         # One kubectl call per poll: one per workload took 2.4 s with --full.
         found: list[dict[str, Any]] = kube.get_json(kinds, "-n", NAMESPACE)["items"] if kinds else []
         live = {f"{item['kind'].lower()}/{manifests.name_of(item)}": item for item in found}
-        return [w for w in workloads if w not in live or not rolled_out(live[w])]
+        return [workload for workload in workloads if workload not in live or not rolled_out(live[workload])]
 
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
@@ -470,11 +471,11 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
     result = polling.wait_until(settled, timeout=READY_TIMEOUT, interval=10)
     if result is None:
         running, _ = job_state()
+        zac_hint = f"; deployment/{ZAC} still at 0 replicas: the next deploy starts it" if held else ""
         msg = (
-            f"after {READY_TIMEOUT}s: not rolled out: {', '.join(stuck()) or '-'}; running: {', '.join(running) or '-'}"
+            f"after {READY_TIMEOUT}s: not rolled out: {', '.join(stuck()) or '-'}; "
+            f"running: {', '.join(running) or '-'}{zac_hint}"
         )
-        if held:
-            msg += f"; deployment/{ZAC} still at 0 replicas: the next deploy starts it"
         raise process.UserError(msg)
     if result[0]:
         msg = f"Job(s) failed: {', '.join(result[0])}: check `kubectl logs job/<name> -n {NAMESPACE}`"

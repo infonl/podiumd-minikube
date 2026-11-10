@@ -43,7 +43,8 @@ def routes(ingresses: list[Any]) -> list[Route]:
             for path in rule.get("http", {}).get("paths", []):
                 backend = path["backend"]["service"]
                 port = backend["port"]
-                found.add(Route(rule.get("host", ""), backend["name"], str(port.get("number") or port.get("name"))))
+                number = str(port.get("number") or port.get("name"))
+                found.add(Route(rule.get("host", ""), backend["name"], number))
     return sorted(found, key=lambda route: (route.host, route.service, route.port))
 
 
@@ -78,7 +79,8 @@ def show_port_mappings() -> None:
         backend = f"{route.service}:{route.port} -> {port_number(route, services)}"
         print(f"{route.host:<30} {backend:<32} {TRAFFIC_TYPE.get(route.host, '(no description on file)')}")
     # Two Ingresses for one host (a leftover of an earlier render): two routes claim it.
-    duplicates = sorted(host for host, count in Counter(route.host for route in found).items() if count > 1)
+    counts = Counter(route.host for route in found)
+    duplicates = sorted(host for host, count in counts.items() if count > 1)
     if duplicates:
         print(
             "\nWARNING: hostname(s) claimed by more than one Ingress (the edge may route to either):", file=sys.stderr

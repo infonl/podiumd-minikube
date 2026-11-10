@@ -86,6 +86,12 @@ def edge_ip() -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def true_conditions(resource: dict[str, Any]) -> set[str]:
+    """The types of resource's status conditions that are True."""
+    conditions: list[dict[str, Any]] = resource.get("status", {}).get("conditions") or []
+    return {str(condition["type"]) for condition in conditions if condition.get("status") == "True"}
+
+
 def serving_pod(pods: list[dict[str, Any]]) -> str:
     """Name of the first pod that is Ready and not terminating; "" when none is.
 
@@ -94,9 +100,7 @@ def serving_pod(pods: list[dict[str, Any]]) -> str:
     on it).
     """
     for pod in pods:
-        conditions: list[dict[str, Any]] = pod.get("status", {}).get("conditions") or []
-        ready = any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions)
-        if ready and not pod["metadata"].get("deletionTimestamp"):
+        if "Ready" in true_conditions(pod) and not pod["metadata"].get("deletionTimestamp"):
             return str(pod["metadata"]["name"])
     return ""
 

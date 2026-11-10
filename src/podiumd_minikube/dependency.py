@@ -23,7 +23,6 @@ from podiumd_minikube.paths import CHART_LOCK
 from podiumd_minikube.paths import CHART_YAML
 from podiumd_minikube.paths import CHARTS_DIR
 from podiumd_minikube.paths import VERSIONS_FILE
-from podiumd_minikube.process import UserError
 
 Mode = Literal["version", "path"]
 
@@ -87,9 +86,9 @@ def podiumd_script(name: str, work: Path) -> Path:
     return work / "charts" / "podiumd" / "scripts" / name
 
 
-def missing_error(names: list[str]) -> UserError:
+def missing_error(names: list[str]) -> process.UserError:
     """The error for dependencies without a selection."""
-    return UserError(f"no .podiumd-versions.yaml entry for {', '.join(names)}: {USAGE_HINT}")
+    return process.UserError(f"no .podiumd-versions.yaml entry for {', '.join(names)}: {USAGE_HINT}")
 
 
 def set_chart_dependency(text: str, name: str, repository: str, version: str) -> str:

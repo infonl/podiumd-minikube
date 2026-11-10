@@ -221,7 +221,7 @@ def called(
     monkeypatch.setattr(crds, "keycloak_version", lambda: None)
     monkeypatch.setattr(deployed, "last_digests", dict)
     monkeypatch.setattr(releases, "is_deployed", lambda _release: True)
-    monkeypatch.setattr(openbao, "unsealed", lambda: False)
+    monkeypatch.setattr(openbao, "unsealed", bool)
     pki.CA_CERT.write_text("")
     fake_run.on("kubectl", "get", f"namespace/{OLD_NAMESPACE}", returncode=1)
     fake_run.on("kubectl", "create", "namespace", stdout="kind: Namespace\n")
@@ -281,7 +281,7 @@ def test_deploy_installs_without_kiss_website_first_while_its_hook_is_blocked(
 def test_deploy_refreshes_images_with_a_changed_digest_before_the_upgrades(
     called: list[str], monkeypatch: pytest.MonkeyPatch, renders: dict[str, manifests.Render]
 ):
-    pinned = "a/app:1@sha256:" + "b" * 64
+    pinned = f"a/app:1@sha256:{'b' * 64}"
     renders[releases.PODIUMD] = replace(RENDER, pinned_images=[pinned])
     monkeypatch.setattr(provision, "stale_images", lambda images: images)
     monkeypatch.setattr(provision, "refresh_images", lambda images: called.append(f"refresh {' '.join(images)}"))
@@ -410,7 +410,8 @@ def test_deploy_restarts_zac_only_after_its_jobs_completed(
         live["job"]["items"].append(jobs[name])
         renders[releases.PODIUMD] = manifests.Render(docs=[*RENDER.docs, _doc("Job", name)], large_configmaps=[])
     job = jobs[name]
-    complete, job["status"] = job["status"], {}
+    complete = job["status"]
+    job["status"] = {}
     events: list[str] = []
     answer = kube.get_json
 
@@ -444,7 +445,8 @@ def test_deploy_starts_zac_on_a_fresh_install_only_after_its_jobs_finished(
     renders[releases.PODIUMD] = manifests.Render(docs=[zac, _doc("Job", "openzaak-config")], large_configmaps=[])
     fake_run.on("kubectl", "get", "deployment/zac", returncode=1)
     job = live["job"]["items"][0]
-    complete, job["status"] = job["status"], {}
+    complete = job["status"]
+    job["status"] = {}
     answer = kube.get_json
 
     def get_json(resource: str, *args: str) -> Any:
@@ -459,7 +461,8 @@ def test_deploy_starts_zac_on_a_fresh_install_only_after_its_jobs_finished(
     _deploy()
     assert f"upgrade {releases.PODIUMD} --hold-zac" in called
     scale = f"scale deployment/zac --replicas=1 -n {NAMESPACE}"
-    assert called[called.index("activate") + 1 :][:3] == ["poll", "poll", scale]
+    after = called[called.index("activate") + 1 :]
+    assert after[:3] == ["poll", "poll", scale]
 
 
 def test_deploy_upgrades_only_releases_whose_render_changed(called: list[str], monkeypatch: pytest.MonkeyPatch):

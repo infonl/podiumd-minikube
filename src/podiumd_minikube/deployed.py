@@ -15,7 +15,6 @@ from podiumd_minikube import dependency
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
-from podiumd_minikube.dependency import DEPENDENCIES
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -53,7 +52,7 @@ def record(command: str, render: manifests.Render, digests: dict[str, str]) -> N
     data = {
         "time": datetime.now(UTC).isoformat(timespec="seconds"),
         "command": command,
-        **{chart: selected(key) for key, chart in DEPENDENCIES.items()},
+        **{chart: selected(key) for key, chart in dependency.DEPENDENCIES.items()},
         "charts": json.dumps(render.charts, sort_keys=True),
         "digests": json.dumps(digests, sort_keys=True),
     }
@@ -115,11 +114,15 @@ def lines(items: list[dict[str, Any]]) -> list[str]:
         ]
     when = datetime.fromisoformat(deployed["time"]).astimezone()
     result = [f"Deployed    {when:%Y-%m-%d %H:%M %Z}: {deployed['command']}"]
-    for key, chart in DEPENDENCIES.items():
+    for key, chart in dependency.DEPENDENCIES.items():
         now = selected(key)
         differs = f"; selected now: {now}" if now != deployed.get(chart) else ""
         result.append(f"            {chart} {deployed.get(chart, '?')}{differs}")
     counts = running_containers(items, json.loads(deployed["charts"]))
-    shown = [*DEPENDENCIES.values(), RELEASE_NAME, *sorted(set(counts) - {*DEPENDENCIES.values(), RELEASE_NAME})]
+    shown = [
+        *dependency.DEPENDENCIES.values(),
+        RELEASE_NAME,
+        *sorted(set(counts) - {*dependency.DEPENDENCIES.values(), RELEASE_NAME}),
+    ]
     result.append(f"Running     containers: {', '.join(f'{chart} {counts[chart]}' for chart in shown)}")
     return result

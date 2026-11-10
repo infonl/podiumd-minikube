@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from podiumd_minikube import dependency
-from podiumd_minikube.dependency import DEPENDENCIES
 from podiumd_minikube.paths import CHARTS_DIR
 from podiumd_minikube.paths import VERSIONS_FILE
 from podiumd_minikube.process import UserError
@@ -32,32 +31,49 @@ def select(
     Without monitoring_logging: a podiumd checkout's sibling monitoring-logging/, else the recorded selection.
     """
     chosen = {"podiumd": _selection(podiumd)}
-    sibling = Path(chosen["podiumd"].value).parent / "monitoring-logging"
-    if monitoring_logging:
-        chosen["monitoringLogging"] = _selection(monitoring_logging)
-    elif chosen["podiumd"].mode == "path" and (sibling / "Chart.yaml").is_file():
-        chosen["monitoringLogging"] = dependency.Selection("path", str(sibling))
-    elif dependency.selection("monitoringLogging", versions_file) is None:
-        msg = f"no monitoring-logging selection recorded: {dependency.USAGE_HINT}"
-        raise UserError(msg)
+    if monitoring := _monitoring_logging(chosen["podiumd"], monitoring_logging, versions_file):
+        chosen["monitoringLogging"] = monitoring
     for key, selected in chosen.items():
-        recorded = dependency.selection(key, versions_file)
-        if selected.mode == "version" and recorded and recorded.mode == "path":
-            # The checkout's package has the published tarball's name, so sync would take it as fetched.
-            for tgz in charts_dir.glob(f"{DEPENDENCIES[key]}-*.tgz"):
-                tgz.unlink()
+        _drop_packaged_checkout(key, selected, versions_file, charts_dir)
         dependency.write(key, selected.mode, selected.value, versions_file)
     dependency.sync(versions_file)
     for key, selected in chosen.items():
-        print(f"{DEPENDENCIES[key]}: {'local checkout ' if selected.mode == 'path' else ''}{selected.value}")
+        origin = "local checkout " if selected.mode == "path" else ""
+        print(f"{dependency.DEPENDENCIES[key]}: {origin}{selected.value}")
     if "monitoringLogging" not in chosen:
         print("monitoring-logging: recorded selection kept")
     print("charts/*.tgz synced.")
 
 
+def _monitoring_logging(
+    podiumd: dependency.Selection, argument: str | None, versions_file: Path
+) -> dependency.Selection | None:
+    """argument's selection, else podiumd's sibling checkout; None to keep the recorded one."""
+    sibling = Path(podiumd.value).parent / "monitoring-logging"
+    if argument:
+        return _selection(argument)
+    if podiumd.mode == "path" and (sibling / "Chart.yaml").is_file():
+        return dependency.Selection("path", str(sibling))
+    if dependency.selection("monitoringLogging", versions_file) is None:
+        msg = f"no monitoring-logging selection recorded: {dependency.USAGE_HINT}"
+        raise UserError(msg)
+    return None
+
+
+def _drop_packaged_checkout(key: str, selected: dependency.Selection, versions_file: Path, charts_dir: Path) -> None:
+    """Removes key's tarballs when selected changes it from a checkout to a published version.
+
+    The checkout's package has the published tarball's name, so sync would take it as fetched.
+    """
+    recorded = dependency.selection(key, versions_file)
+    if selected.mode == "version" and recorded and recorded.mode == "path":
+        for tgz in charts_dir.glob(f"{dependency.DEPENDENCIES[key]}-*.tgz"):
+            tgz.unlink()
+
+
 def describe(key: str, charts_dir: Path = CHARTS_DIR, versions_file: Path = VERSIONS_FILE) -> list[str]:
     """Lines describing key's selection and whether its tarball is fetched; [] when not set."""
-    chart = DEPENDENCIES[key]
+    chart = dependency.DEPENDENCIES[key]
     selected = dependency.selection(key, versions_file)
     if selected is None:
         return []
@@ -90,7 +106,7 @@ def describe(key: str, charts_dir: Path = CHARTS_DIR, versions_file: Path = VERS
 def show(charts_dir: Path = CHARTS_DIR, versions_file: Path = VERSIONS_FILE) -> None:
     """Prints each dependency's selection; raises for missing selections."""
     missing: list[str] = []
-    for key, chart in DEPENDENCIES.items():
+    for key, chart in dependency.DEPENDENCIES.items():
         print(f"{chart}:")
         lines = describe(key, charts_dir, versions_file)
         if not lines:

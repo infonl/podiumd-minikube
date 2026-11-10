@@ -24,10 +24,6 @@ class FakeRun:
     calls: list[list[str]] = field(default_factory=list)
     stdins: list[str | None] = field(default_factory=list)
 
-    def on(self, *prefix: str, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
-        """Answers commands starting with prefix (latest registration wins)."""
-        self.answers.insert(0, (prefix, returncode, stdout, stderr))
-
     def __call__(
         self,
         args: Sequence[str],
@@ -47,6 +43,10 @@ class FakeRun:
         if check and returncode != 0:
             raise process.ProcessError(argv, returncode, stderr)
         return subprocess.CompletedProcess(argv, returncode, stdout, stderr)
+
+    def on(self, *prefix: str, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
+        """Answers commands starting with prefix (latest registration wins)."""
+        self.answers.insert(0, (prefix, returncode, stdout, stderr))
 
     def ran(self, *prefix: str) -> list[list[str]]:
         """Recorded calls starting with prefix."""

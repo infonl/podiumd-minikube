@@ -7,7 +7,6 @@ from podiumd_minikube import lock
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube.paths import NAMESPACE
-from podiumd_minikube.process import UserError
 
 POSTGRES_PORT = 5432
 FORWARD_LOG = Path("/tmp/podiumd-minikube-postgres-port-forward.log")  # noqa: S108 - user-visible log
@@ -35,7 +34,7 @@ def expose_postgres(local_port: int) -> None:
 
         if not polling.wait_until(forwarding, timeout=10, interval=1):
             msg = f"port-forward did not come up within 10s; log: {FORWARD_LOG}"
-            raise UserError(msg)
+            raise process.UserError(msg)
     databases = kube.kubectl(
         "exec", "-n", NAMESPACE, kube.first_pod("app=postgres"), "--", "psql", "-U", "postgres", "-tA", "-c",
         "select datname from pg_database where not datistemplate order by datname;",

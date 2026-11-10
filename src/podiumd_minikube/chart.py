@@ -1,5 +1,6 @@
 """Facts read from the vendored dependency tarballs in charts/."""
 
+import itertools
 import tarfile
 
 from dataclasses import dataclass
@@ -56,20 +57,18 @@ SKIP_ROLES_SETS = [
 # Deployment dropped by manifests.is_unused_zac_collector.
 OTEL_COLLECTOR = "http://monitoring-logging-opentelemetry-collector.monitoring:4317"
 OTEL_APPS = ("openzaak", "opennotificaties", "objecten", "openklant", "openformulieren", "openinwoner")
+OTEL_SETTINGS = (
+    ("disabled", "false"),
+    ("exporterOtlpEndpoint", OTEL_COLLECTOR),
+    ("exporterOtlpProtocol", "grpc"),
+    ("exporterOtlpMetricsInsecure", "true"),
+    ("metricExportInterval", "60000"),
+    ("metricExportTimeout", "10000"),
+)
 OTEL_SETS = [
     *METRICS_SETS,
-    *(
-        arg
-        for app in OTEL_APPS
-        for key, value in (
-            ("disabled", "false"),
-            ("exporterOtlpEndpoint", OTEL_COLLECTOR),
-            ("exporterOtlpProtocol", "grpc"),
-            ("exporterOtlpMetricsInsecure", "true"),
-            ("metricExportInterval", "60000"),
-            ("metricExportTimeout", "10000"),
-        )
-        for arg in ("--set", f"podiumd.{app}.settings.otel.{key}={value}")
+    *itertools.chain.from_iterable(
+        ("--set", f"podiumd.{app}.settings.otel.{key}={value}") for app in OTEL_APPS for key, value in OTEL_SETTINGS
     ),
     "--set", "podiumd.zac.opentelemetry-collector.enabled=true",
     "--set", "podiumd.zac.opentelemetry-collector.fullnameOverride=zac-opentelemetry-collector",
@@ -154,7 +153,10 @@ def merged(base: Any, override: Any) -> Any:
     if isinstance(base, dict) and isinstance(override, dict):
         old = cast("dict[str, Any]", base)
         new = cast("dict[str, Any]", override)
-        return {key: merged(old.get(key), new[key]) if key in new else old[key] for key in {**old, **new}}
+        result = dict(old)
+        for key, value in new.items():
+            result[key] = merged(old.get(key), value)
+        return result
     return cast("Any", base if override is None else override)
 
 

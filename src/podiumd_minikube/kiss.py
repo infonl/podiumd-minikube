@@ -21,25 +21,27 @@ def _admits(policy: manifests.Doc, peer: manifests.Doc) -> bool:
 
 def website_hook_blocked(podiumd: manifests.Render) -> str:
     """Why the crawler index-template hook in podiumd's render cannot reach Elasticsearch now; "" when it can."""
-    hook = next(
-        (doc for doc in podiumd.docs if doc.get("kind") == "Job" and manifests.name_of(doc).endswith(_HOOK_SUFFIX)),
-        None,
-    )
+    hook = next((name for name in podiumd.jobs if name.endswith(_HOOK_SUFFIX)), None)
     if hook is None:
         return ""
-    container: manifests.Doc = hook["spec"]["template"]["spec"]["containers"][0]
-    env: list[manifests.Doc] = container.get("env", [])
+    template = (podiumd.named("Job", hook) or {})["spec"]["template"]
+    env: list[manifests.Doc] = template["spec"]["containers"][0].get("env", [])
     url: str = next(item["value"] for item in env if item["name"] == "ELASTIC_BASE_URL")
     service = (urlparse(url).hostname or "").split(".")[0]
     if not kube.exists(f"service/{service}"):
         return f"Service {service} does not exist yet"
-    peer = {"podSelector": {"matchLabels": {"batch.kubernetes.io/job-name": manifests.name_of(hook)}}}
-    for policy in podiumd.docs:
-        if policy.get("kind") != "NetworkPolicy" or not _admits(policy, peer):
-            continue
-        name = manifests.name_of(policy)
-        if not kube.exists(f"networkpolicy/{name}") or not _admits(
-            kube.get_json("networkpolicy", name, "-n", NAMESPACE), peer
-        ):
-            return f"NetworkPolicy {name} does not admit it yet"
-    return ""
+    peer = {"podSelector": {"matchLabels": {"batch.kubernetes.io/job-name": hook}}}
+    policies = [doc for doc in podiumd.docs if doc.get("kind") == "NetworkPolicy" and _admits(doc, peer)]
+    return next(
+        (
+            f"NetworkPolicy {name} does not admit it yet"
+            for name in map(manifests.name_of, policies)
+            if not _live_admits(name, peer)
+        ),
+        "",
+    )
+
+
+def _live_admits(name: str, peer: manifests.Doc) -> bool:
+    """Whether the NetworkPolicy called name exists in the cluster and admits peer."""
+    return kube.exists(f"networkpolicy/{name}") and _admits(kube.get_json("networkpolicy", name, "-n", NAMESPACE), peer)

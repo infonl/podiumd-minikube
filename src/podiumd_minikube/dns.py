@@ -23,15 +23,16 @@ def corefile_with_hosts(corefile: str, ip: str, hosts: list[str]) -> str:
     lines = corefile.rstrip("\n").splitlines()
     if BEGIN in lines:
         lines = lines[: lines.index(BEGIN)] + lines[lines.index(END) + 1 :]
+    zones = [f"{host}:53" for host in hosts]
     block = [
-        f"{' '.join(f'{host}:53' for host in hosts)} {{",
+        " ".join([*zones, "{"]),
         "    errors",
         "    hosts {",
         f"        {ip} {' '.join(hosts)}",
         "    }",
         "}",
     ]
-    return "\n".join([*lines, BEGIN, *block, END]) + "\n"
+    return "".join(f"{line}\n" for line in (*lines, BEGIN, *block, END))
 
 
 def apply_hosts(hosts: list[str]) -> None:

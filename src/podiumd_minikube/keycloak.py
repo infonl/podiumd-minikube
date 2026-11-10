@@ -26,6 +26,8 @@ IMPORT_JOB_PREFIX = "import-podiumd-realm-job"
 CHART_REPAIR_JOB_PREFIX = "keycloak-repair-client-scopes"
 IMPORT_TIMEOUT = 900
 # Keycloak's own clients keep their scopes.
+# A client or client scope from the admin API.
+Representation = dict[str, Any]
 BUILTIN_CLIENTS = {"account", "account-console", "admin-cli", "broker", "realm-management", "security-admin-console"}
 _CONFIG = "/tmp/kcadm-podiumd-minikube.cfg"  # nosec B108  # noqa: S108 - inside the Keycloak container
 
@@ -46,10 +48,13 @@ def kcadm(*commands: list[str]) -> str:
     )
 
 
-def missing_default_scopes(clients: list[dict[str, Any]], defaults: list[dict[str, Any]]) -> dict[str, list[str]]:
+def missing_default_scopes(clients: list[Representation], defaults: list[Representation]) -> dict[str, list[str]]:
     """Client id -> ids of the realm default scopes of its protocol, for each non-builtin client without any."""
+    by_protocol: dict[str, list[str]] = {}
+    for scope in defaults:
+        by_protocol.setdefault(scope.get("protocol", ""), []).append(scope["id"])
     return {
-        client["id"]: [s["id"] for s in defaults if s.get("protocol") == client.get("protocol", "openid-connect")]
+        client["id"]: by_protocol.get(client.get("protocol", "openid-connect"), [])
         for client in clients
         if client["clientId"] not in BUILTIN_CLIENTS and not client.get("defaultClientScopes")
     }

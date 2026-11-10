@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 
 
-def wait_until[T](probe: Callable[[], T | None], *, timeout: float, interval: float) -> T | None:
+def wait_until[T](probe: Callable[[], T | None], *, timeout: float, interval: float) -> T | None:  # noqa: WPS111 - type parameter
     """First truthy probe() result within timeout seconds, or None."""
     deadline = time.monotonic() + timeout
     while True:

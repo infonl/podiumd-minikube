@@ -30,7 +30,7 @@ def measured(edge_ip, request):
         if age < status.SETTLE_SECONDS:
             pytest.fail(f"a container started {age:.0f}s ago; refresh the baseline after {status.SETTLE_SECONDS}s")
         dated = {"measured": datetime.now(UTC).isoformat(timespec="seconds"), **snapshot}
-        status.BASELINE.write_text(json.dumps(dated, indent=2) + "\n", encoding="utf-8")
+        status.BASELINE.write_text(f"{json.dumps(dated, indent=2)}\n", encoding="utf-8")
     return snapshot
 
 

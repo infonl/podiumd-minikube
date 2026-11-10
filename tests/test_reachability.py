@@ -13,12 +13,8 @@ def _items(*args):
 
 
 def _ingress_hosts():
-    return {
-        rule["host"]
-        for ns in (NAMESPACE, MONITORING_NAMESPACE)
-        for ingress in _items("ingress", "-n", ns)
-        for rule in ingress["spec"].get("rules") or []
-    }
+    ingresses = [ingress for ns in (NAMESPACE, MONITORING_NAMESPACE) for ingress in _items("ingress", "-n", ns)]
+    return {rule["host"] for ingress in ingresses for rule in ingress["spec"].get("rules") or []}
 
 
 def _route_conditions():

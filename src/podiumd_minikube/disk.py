@@ -12,7 +12,6 @@ import sys
 from dataclasses import dataclass
 
 from podiumd_minikube import process
-from podiumd_minikube.process import UserError
 
 GIB = 1024**3
 WARN_USED_FRACTION = 0.85
@@ -53,7 +52,7 @@ def check(need: Need) -> None:
     level, message = verdict(usage.total, usage.free, need)
     if level == "fail":
         msg = f"disk {root}: {message}"
-        raise UserError(msg)
+        raise process.UserError(msg)
     if level == "warn":
         print(f"WARNING: disk {root}: {message}", file=sys.stderr)
     else:

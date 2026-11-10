@@ -44,7 +44,7 @@ def pytest_addoption(parser):
 
 def kubectl(*args):
     """Run kubectl and return stdout, raising if it fails."""
-    result = subprocess.run(["kubectl", *args], capture_output=True, text=True, timeout=30)
+    result = subprocess.run(["kubectl", *args], check=False, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
         msg = f"kubectl {' '.join(args)} failed: {result.stderr}"
         raise RuntimeError(msg)

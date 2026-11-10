@@ -128,7 +128,7 @@ spec:
 
 
 def test_disable_service_links_skips_bare_jobs():
-    docs = _docs("""
+    text = """
 kind: Deployment
 spec: {template: {spec: {containers: []}}}
 ---
@@ -137,7 +137,8 @@ spec: {jobTemplate: {spec: {template: {spec: {}}}}}
 ---
 kind: Job
 spec: {template: {spec: {}}}
-""")
+"""
+    docs = _docs(text)
     manifests.disable_service_links(docs)
     assert docs[0]["spec"]["template"]["spec"]["enableServiceLinks"] is False
     assert docs[1]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["enableServiceLinks"] is False

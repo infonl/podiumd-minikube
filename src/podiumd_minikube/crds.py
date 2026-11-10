@@ -6,11 +6,12 @@ them every Prometheus/ServiceMonitor/PodMonitor in the render fails to apply.
 
 import re
 import tarfile
-import urllib.error
-import urllib.request
 
 from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
 import yaml
 
@@ -36,7 +37,7 @@ _KEYCLOAK_VERSION = re.compile(r'&keycloakImageVersion "?([0-9][0-9.]*)"?')
 # operator runs). The Prometheus operator skips their controllers when absent; each CRD costs the
 # kube-apiserver memory (these five monitoring ones: about 45 MiB of live heap).
 UNUSED_MONITORING_LOGGING_CRDS = frozenset(
-    {
+    (
         "alertmanagerconfigs.monitoring.coreos.com",
         "alertmanagers.monitoring.coreos.com",
         "prometheusagents.monitoring.coreos.com",
@@ -49,7 +50,7 @@ UNUSED_MONITORING_LOGGING_CRDS = frozenset(
         "podlogs.monitoring.grafana.com",
         "replicatemplates.rollout-operator.grafana.com",
         "zoneawarepoddisruptionbudgets.rollout-operator.grafana.com",
-    }
+    )
 )
 
 
@@ -77,7 +78,7 @@ def crd_documents(tgz_path: str) -> list[Doc]:
     """
     newest: dict[str, Doc] = {}
     with tarfile.open(tgz_path) as archive:
-        for member in sorted(archive.getmembers(), key=lambda m: m.name):
+        for member in sorted(archive.getmembers(), key=lambda member: member.name):
             if not member.name.endswith(".yaml"):
                 continue
             stream = archive.extractfile(member)
@@ -123,10 +124,10 @@ def keycloak_version(charts_dir: Path = CHARTS_DIR) -> str | None:
 
 def _fetch(url: str) -> str | None:
     try:
-        with urllib.request.urlopen(url, timeout=30) as response:  # nosec B310  # noqa: S310 - KEYCLOAK_CRD_URL, https
+        with urlopen(url, timeout=30) as response:  # nosec B310  # noqa: S310 - KEYCLOAK_CRD_URL, https
             return str(response.read().decode())
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
+    except HTTPError as error:
+        if error.code == HTTPStatus.NOT_FOUND:
             return None
         raise
 

@@ -74,7 +74,7 @@ def test_off_fails_while_a_statefulset_keeps_its_pods(switched: list[str]):
 
 
 def test_off_promotes_the_remaining_redis_pod(switched: list[str], monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(replicas, "_counted", lambda counts: list(counts))
+    monkeypatch.setattr(replicas, "_counted", list)
     replicas.switch(on=False)
     assert switched[-2:] == [
         "exec -n podiumd redis-ha-0 -c redis-ha -- redis-cli REPLICAOF NO ONE",

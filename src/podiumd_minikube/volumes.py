@@ -5,8 +5,6 @@ The kubelet gives a volume the pod's fsGroup (group, g+rwX, setgid directories) 
 data written under another user needs it: podiumd 4.10 runs frankgateway's etcd as uid 1001, 4.9 as root.
 """
 
-from typing import Any
-
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 
@@ -37,16 +35,22 @@ def wanted(docs: list[manifests.Doc]) -> dict[str, int]:
 def _group_of(claim: str, groups: dict[str, int]) -> int | None:
     if claim in groups:
         return groups[claim]
-    return next((group for prefix, group in groups.items() if prefix.endswith("-") and claim.startswith(prefix)), None)
+    prefixes = {prefix: group for prefix, group in groups.items() if prefix.endswith("-")}
+    return next((group for prefix, group in prefixes.items() if claim.startswith(prefix)), None)
 
 
-def changes(groups: dict[str, int], claims: list[dict[str, Any]], volumes: list[dict[str, Any]]) -> dict[str, int]:
+def _host_path(volume: manifests.Doc) -> str:
+    """volume's spec.hostPath.path; "" for other volumes."""
+    return str(manifests.section(manifests.section(volume, "spec"), "hostPath").get("path") or "")
+
+
+def changes(
+    groups: dict[str, int],
+    claims: list[manifests.Doc],
+    volumes: list[manifests.Doc],
+) -> dict[str, int]:
     """Host path -> fsGroup for each bound claim of groups on a hostPath volume."""
-    paths = {
-        manifests.name_of(volume): path
-        for volume in volumes
-        if (path := str(manifests.section(manifests.section(volume, "spec"), "hostPath").get("path") or ""))
-    }
+    paths = {manifests.name_of(volume): _host_path(volume) for volume in volumes}
     found: dict[str, int] = {}
     for claim in claims:
         group = _group_of(manifests.name_of(claim), groups)

@@ -17,16 +17,16 @@ from podiumd_minikube import process
 from podiumd_minikube import provision
 from podiumd_minikube.paths import NAMESPACE
 
-INIT_SQL = """-- comment
+INIT_SQL = r"""-- comment
 CREATE ROLE a WITH LOGIN PASSWORD 'a';
 CREATE DATABASE a;
 CREATE ROLE b WITH LOGIN PASSWORD 'b';
 CREATE DATABASE b;
-\\c a
+\c a
 CREATE EXTENSION IF NOT EXISTS postgis;
-\\c b
+\c b
 CREATE EXTENSION IF NOT EXISTS postgis;
-\\c b
+\c b
 GRANT ALL ON DATABASE b TO b;
 """
 
@@ -34,10 +34,14 @@ GRANT ALL ON DATABASE b TO b;
 def test_missing_sql_only_covers_missing_databases():
     missing, script = postgres.missing_sql(INIT_SQL, {"a"}, {"a"})
     assert missing == ["b"]
-    assert script == (
-        "CREATE ROLE b WITH LOGIN PASSWORD 'b';\nCREATE DATABASE b;\n"
-        "\\c b\nCREATE EXTENSION IF NOT EXISTS postgis;\n\\c b\nGRANT ALL ON DATABASE b TO b;\n"
-    )
+    expected = r"""CREATE ROLE b WITH LOGIN PASSWORD 'b';
+CREATE DATABASE b;
+\c b
+CREATE EXTENSION IF NOT EXISTS postgis;
+\c b
+GRANT ALL ON DATABASE b TO b;
+"""
+    assert script == expected
 
 
 def test_missing_sql_keeps_an_existing_role():
@@ -197,4 +201,6 @@ def test_align_with_azure_moves_app_databases_and_installs_the_allow_list_everyw
     assert "ALTER DATABASE openzaak OWNER TO postgres;" in script
     assert "GRANT ALL ON SCHEMA public TO openzaak;" in script
     assert "ALTER DATABASE template1" not in script
-    assert script.endswith('\\c openzaak\nDROP EXTENSION IF EXISTS "uuid-ossp";')
+    tail = r"""\c openzaak
+DROP EXTENSION IF EXISTS "uuid-ossp";"""
+    assert script.endswith(tail)

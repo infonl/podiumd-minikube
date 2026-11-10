@@ -95,13 +95,11 @@ ZOOKEEPER_ENV = {
 LARGE_CONFIGMAP_BYTES = 200_000
 
 # A tag in the reference, or an operator resource's separate `tag:` field.
-_DIGEST_SUFFIX = re.compile(r"""((?::|\btag:[ \t]*"?)[^\s@"]+)@sha256:[0-9a-f]{64}\b""")
+_DIGEST_SUFFIX = re.compile(r'((?::|\btag:[ \t]*"?)[^\s@"]+)@sha256:[0-9a-f]{64}\b')
 # [ \t], not \s: an `image:` key without a value must not take the next line.
-_IMAGE_LINE = re.compile(r"""^[ \t]*(?:-[ \t]+)?image:[ \t]*"?([^"\s]+)""", re.MULTILINE)
+_IMAGE_LINE = re.compile(r'^[ \t]*(?:-[ \t]+)?image:[ \t]*"?([^"\s]+)', re.MULTILINE)
 # Operator resources (SolrCloud, its ZooKeeper) name an image as repository and tag.
-_REPOSITORY_TAG = re.compile(
-    r"""^([ \t]*)repository:[ \t]*"?([^"\s]+)"?[ \t]*\n\1tag:[ \t]*"?([^"\s]+)""", re.MULTILINE
-)
+_REPOSITORY_TAG = re.compile(r'^([ \t]*)repository:[ \t]*"?([^"\s]+)"?[ \t]*\n\1tag:[ \t]*"?([^"\s]+)', re.MULTILINE)
 # The Prometheus operator starts each Prometheus with this sidecar image.
 _RELOADER_ARG = re.compile(r"--prometheus-config-reloader=(\S+)")
 # ECK's image for an Elasticsearch resource without `image`.
@@ -112,6 +110,7 @@ _POD_SPEC_PATHS = {
     "DaemonSet": ("spec", "template", "spec"),
     "CronJob": ("spec", "jobTemplate", "spec", "template", "spec"),
 }
+_JOB_POD_SPEC_PATHS = {**_POD_SPEC_PATHS, "Job": ("spec", "template", "spec")}
 
 
 def strip_image_digests(text: str) -> str:
@@ -139,7 +138,7 @@ def _record_digests(doc: Doc, chunk: str) -> None:
     """
     digests = sorted({match[0].rpartition("@")[2] for match in _DIGEST_SUFFIX.finditer(chunk)})
     kind, body = doc.get("kind", ""), section(doc, "spec")
-    if not digests or kind in ("Job", "Pod"):
+    if not digests or kind in {"Job", "Pod"}:
         return
     if kind in _POD_SPEC_PATHS:
         templates = [_mapping(doc, *_POD_SPEC_PATHS[kind][:-1])]
@@ -345,9 +344,7 @@ def allow_rolling_updates(docs: list[Doc]) -> None:
 
 def _pod_spec(doc: Doc) -> Doc | None:
     """doc's pod spec for workloads (and Jobs), or None."""
-    path = _POD_SPEC_PATHS.get(doc.get("kind", "")) or (
-        ("spec", "template", "spec") if doc.get("kind") == "Job" else None
-    )
+    path = _JOB_POD_SPEC_PATHS.get(doc.get("kind", ""))
     node: Doc | None = doc
     for key in path or ():
         value = node.get(key) if node is not None else None
@@ -369,7 +366,7 @@ def _runtime_pod_specs(doc: Doc) -> list[Doc]:
         return [section(section(section(body, "unsupported"), "podTemplate"), "spec")]
     if kind == "Prometheus":
         containers: list[Doc] = body.setdefault("containers", [])
-        if not any(c.get("name") == "prometheus" for c in containers):
+        if "prometheus" not in {container.get("name") for container in containers}:
             containers.append({"name": "prometheus", "resources": body.get("resources") or {}})
         return [{"containers": containers}]
     node_sets: list[Doc] = (body.get("nodeSets") or []) if kind == "Elasticsearch" else []
@@ -464,12 +461,11 @@ def tune_keycloak(docs: list[Doc]) -> None:
     """
     for doc in docs:
         if doc.get("kind") == "Keycloak":
-            body = section(doc, "spec")
-            for spec in _runtime_pod_specs(doc):
-                for container in _containers(spec):
-                    add_env(container, {"JAVA_OPTS_APPEND": KEYCLOAK_JAVA_OPTS})
-                    if container.get("name") == "keycloak" and body.get("resources"):
-                        container["resources"] = body["resources"]
+            resources = section(doc, "spec").get("resources")
+            for container in _runtime_containers(doc):
+                add_env(container, {"JAVA_OPTS_APPEND": KEYCLOAK_JAVA_OPTS})
+                if container.get("name") == "keycloak" and resources:
+                    container["resources"] = resources
         elif doc.get("kind") == "Deployment" and name_of(doc) == KEYCLOAK_OPERATOR:
             for container in _containers(_pod_spec(doc) or {}):
                 add_env(container, KEYCLOAK_OPERATOR_ENV)
@@ -501,13 +497,12 @@ def speed_up_keycloak_start(docs: list[Doc]) -> None:
     for doc in docs:
         if doc.get("kind") != "Keycloak":
             continue
-        for spec in _runtime_pod_specs(doc):
-            for container in _containers(spec):
-                for probe, settings in KEYCLOAK_PROBES.items():
-                    if isinstance(container.get(probe), dict):
-                        container[probe].update(settings)
-                if container.get("name") == "keycloak-builder":
-                    _mapping(container, "resources", "limits")["cpu"] = KEYCLOAK_BUILDER_CPU
+        for container in _runtime_containers(doc):
+            for probe, settings in KEYCLOAK_PROBES.items():
+                if isinstance(container.get(probe), dict):
+                    container[probe].update(settings)
+            if container.get("name") == "keycloak-builder":
+                _mapping(container, "resources", "limits")["cpu"] = KEYCLOAK_BUILDER_CPU
 
 
 ZAC_SOLR_INIT = "init-solr-zac-core"
@@ -542,6 +537,8 @@ RETRIED_CONTAINERS = {
     ("Job", "create-required-objecttypen-job", "create-required-objecttypen"),  # podiumd<4.10.1
 }
 RETRY_ATTEMPTS = 150
+# The script of `sh -c SCRIPT`.
+SCRIPT_ARG = 2
 
 
 def _retried(kind: str, name: str, container: str) -> bool:
@@ -561,7 +558,7 @@ def retry_in_container(docs: list[Doc]) -> None:
                 continue
             command = container.get("command") or IMAGE_ENTRYPOINTS[str(container["name"])]
             # podiumd<4.10.1: podiumd's own retry (podiumd.retryCommand) wraps the same way.
-            if len(command) > 2 and 'until "$@"' in str(command[2]):
+            if len(command) > SCRIPT_ARG and 'until "$@"' in str(command[SCRIPT_ARG]):
                 continue
             # A process of its own: an until condition would turn off a script's `set -e`.
             argv: list[str] = [*command, *(container.pop("args", None) or [])]
@@ -591,12 +588,11 @@ SOLR_STARTUP_PROBE = {"timeoutSeconds": 15, "failureThreshold": 60}
 # Solr fails to start ("NodeExistsException", CoreContainer shut down; its liveness probe restarts it
 # 3 minutes later) while its live_nodes entry from before a node stop still exists: ZooKeeper expires
 # that session about 30 s after it is up. This init container waits up to 90 s for the entry to go.
-SOLR_LIVE_NODE_WAIT = """\
-node="$POD_NAME.{headless}:8983_solr"
+SOLR_LIVE_NODE_WAIT = r"""node="$POD_NAME.{headless}:8983_solr"
 i=0
 while [ "$i" -lt 45 ]; do
-  nodes=$(solr zk ls /live_nodes -z "$ZK_HOST" 2>&1) && ! printf '%s\\n' "$nodes" | grep -qx "$node" && exit 0
-  printf '%s\\n' "$nodes" | grep -q NoNode && exit 0
+  nodes=$(solr zk ls /live_nodes -z "$ZK_HOST" 2>&1) && ! printf '%s\n' "$nodes" | grep -qx "$node" && exit 0
+  printf '%s\n' "$nodes" | grep -q NoNode && exit 0
   i=$((i + 1)); sleep 2
 done
 echo "$node is still in live_nodes; starting Solr anyway"
@@ -668,7 +664,7 @@ def limit_runtimes(docs: list[Doc]) -> None:
     containers, which have other names.
     """
     for doc in docs:
-        for container in [c for spec in _runtime_pod_specs(doc) for c in _containers(spec)]:
+        for container in _runtime_containers(doc):
             add_env(container, CAPACITY_ENV)
             if section(section(container, "resources"), "limits").get("memory"):
                 limit = {"resourceFieldRef": {"resource": "limits.memory"}}
@@ -677,6 +673,11 @@ def limit_runtimes(docs: list[Doc]) -> None:
 
 def _containers(spec: Doc) -> list[Doc]:
     return [*(spec.get("initContainers") or []), *(spec.get("containers") or [])]
+
+
+def _runtime_containers(doc: Doc) -> list[Doc]:
+    """The containers of doc's pod specs (_runtime_pod_specs)."""
+    return [container for spec in _runtime_pod_specs(doc) for container in _containers(spec)]
 
 
 def add_env(container: Doc, values: dict[str, str], key: str = "env") -> None:
@@ -783,6 +784,11 @@ class Render:
     def jobs(self) -> list[str]:
         """Names of the Jobs in docs (all idempotent)."""
         return [name_of(doc) for doc in self.docs if doc.get("kind") == "Job"]
+
+    def named(self, kind: str, name: str) -> Doc | None:
+        """The doc of kind called name, or None."""
+        of_kind = (doc for doc in self.docs if doc.get("kind") == kind)
+        return next((doc for doc in of_kind if name_of(doc) == name), None)
 
     @property
     def manifest(self) -> str:

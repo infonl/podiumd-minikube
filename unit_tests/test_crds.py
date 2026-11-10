@@ -20,7 +20,7 @@ def _crd(name: str, version: str | None) -> str:
 
 
 def test_crd_documents_reads_a_bare_equals_sign_as_a_string(tmp_path: Path):
-    text = _crd("probes.x", None) + "spec:\n  enum:\n  - =\n"
+    text = f"{_crd('probes.x', None)}spec:\n  enum:\n  - =\n"
     tgz = make_tgz(tmp_path / "monitoring-logging-1.0.0.tgz", {"m/crds/probes.yaml": text})
     assert crds.crd_documents(str(tgz))[0]["spec"]["enum"] == ["="]
 
@@ -48,7 +48,7 @@ def test_crd_documents_skips_non_yaml_members_and_other_kinds(tmp_path: Path):
         tmp_path / "monitoring-logging-1.0.0.tgz",
         {
             "m/README.md": _crd("readme.x", None),
-            "m/crds/mixed.yaml": "---\n" + _crd("probes.x", None) + "---\nkind: Service\nmetadata:\n  name: s\n",
+            "m/crds/mixed.yaml": f"---\n{_crd('probes.x', None)}---\nkind: Service\nmetadata:\n  name: s\n",
         },
     )
     assert [doc["metadata"]["name"] for doc in crds.crd_documents(str(tgz))] == ["probes.x"]

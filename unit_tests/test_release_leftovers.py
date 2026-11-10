@@ -19,11 +19,10 @@ def _version(text: str) -> tuple[int, ...]:
 
 
 def test_no_code_is_marked_for_releases_older_than_the_oldest_deployed():
+    files = [path for pattern in SOURCES for path in sorted(CHART_DIR.glob(pattern)) if path.is_file()]
     dead = [
         f"{path.relative_to(CHART_DIR)}:{number}: {line.strip()}"
-        for pattern in SOURCES
-        for path in sorted(CHART_DIR.glob(pattern))
-        if path.is_file()
+        for path in files
         for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1)
         if (match := MARKER.search(line)) and _version(match.group(1)) <= _version(OLDEST_PODIUMD)
     ]

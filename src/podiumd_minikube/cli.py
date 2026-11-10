@@ -72,31 +72,49 @@ def cluster_lock(argv: list[str]) -> int:
     breaking = actions.add_parser("break", help="remove a stale lock")
     breaking.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
     args = parser.parse_args(argv)
-
-    hold = lock.current()
-    if args.action == "status":
-        print(f"held by {lock.describe(hold)}" if hold else f"free ({lock.LOCK_FILE})")
-    elif args.action == "take":
-        lock.take(args.what, who=args.who)
-        who = "" if args.who == lock.person() else f" --who {args.who}"
-        print(f"taken; release with: {PROG} cluster-lock{who} release")
-    elif args.action == "release":
-        found = lock.release_held_by(args.who)
-        if found is not None and found.who == args.who:
-            print("released")
-        else:
-            print(f"not held by {args.who}: {lock.describe(found) if found else 'free'}")
-    elif args.action == "run":
+    if args.action == "run":
         command = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
         if not command:
             parser.error("run needs a command after --")
         return lock.run(args.what, command, who=args.who)
-    elif hold is None:
+    LOCK_ACTIONS[args.action](args)
+    return 0
+
+
+def _lock_status(_args: argparse.Namespace) -> None:
+    hold = lock.current()
+    print(f"held by {lock.describe(hold)}" if hold else f"free ({lock.LOCK_FILE})")
+
+
+def _lock_take(args: argparse.Namespace) -> None:
+    lock.take(args.what, who=args.who)
+    who = "" if args.who == lock.person() else f" --who {args.who}"
+    print(f"taken; release with: {PROG} cluster-lock{who} release")
+
+
+def _lock_release(args: argparse.Namespace) -> None:
+    found = lock.release_held_by(args.who)
+    if found is not None and found.who == args.who:
+        print("released")
+    else:
+        print(f"not held by {args.who}: {lock.describe(found) if found else 'free'}")
+
+
+def _lock_break(args: argparse.Namespace) -> None:
+    hold = lock.current()
+    if hold is None:
         print("free")
     elif teardown.confirmed(f"Remove the lock held by {lock.describe(hold)}?", yes=args.yes):
         lock.break_lock()
         print("removed")
-    return 0
+
+
+LOCK_ACTIONS: dict[str, Callable[[argparse.Namespace], None]] = {
+    "status": _lock_status,
+    "take": _lock_take,
+    "release": _lock_release,
+    "break": _lock_break,
+}
 
 
 def deploy(argv: list[str]) -> None:
@@ -279,7 +297,8 @@ COMMANDS: dict[str, Command] = {
 
 def run(argv: list[str]) -> int | None:
     """Runs the command argv names."""
-    listing = "\n".join(f"  {name:22} {(command.__doc__ or '').splitlines()[0]}" for name, command in COMMANDS.items())
+    summaries = {name: (command.__doc__ or "").splitlines()[0] for name, command in COMMANDS.items()}
+    listing = "\n".join(f"  {name:22} {summary}" for name, summary in summaries.items())
     parser = argparse.ArgumentParser(
         prog=PROG,
         description=__doc__,

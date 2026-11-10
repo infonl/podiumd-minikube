@@ -122,5 +122,5 @@ def test_apply_trust_applies_the_ca_bundle_and_truststore(pki_dir: Path, openssl
     configmap = yaml.safe_load(openssl.stdins[-1] or "")
     assert configmap["metadata"]["namespace"] == "ns"
     assert configmap["data"]["ca.crt"] == "CERT"
-    assert configmap["data"]["ca-bundle.pem"] == Path(certifi.where()).read_text(encoding="utf-8") + "CERT"
+    assert configmap["data"]["ca-bundle.pem"] == f"{Path(certifi.where()).read_text(encoding='utf-8')}CERT"
     assert base64.b64decode(configmap["binaryData"]["truststore.p12"]) == b"-out"

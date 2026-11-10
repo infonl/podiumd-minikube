@@ -31,7 +31,7 @@ except Exception as e:
 def _wired_here(api_root):
     """In-cluster names and *.local hosts; public APIs (selectielijst.openzaak.nl) are out of reach offline."""
     labels = (urlparse(api_root).hostname or "").split(".")
-    return len(labels) == 1 or (len(labels) == 2 and labels[1] in (NAMESPACE, "local"))
+    return len(labels) == 1 or (len(labels) == 2 and labels[1] in {NAMESPACE, "local"})
 
 
 def _last_line(*args):
@@ -58,4 +58,4 @@ def test_zgw_service_api_roots_reachable(app, enabled_profiles):
             outcome := _last_line("exec", "-n", NAMESPACE, pod, "--", "python", "-c", PROBE.format(url=s["api_root"]))
         ).startswith("OK")
     ]
-    assert not failures, f"unreachable api_roots in '{app}': " + "; ".join(failures)
+    assert not failures, f"unreachable api_roots in '{app}': {'; '.join(failures)}"

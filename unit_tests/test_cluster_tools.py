@@ -120,7 +120,7 @@ def test_install_sudoers_checks_installs_and_verifies(
     if verified:
         tunnel.install_sudoers()
     else:
-        with pytest.raises(tunnel.UserError, match="sudo still asks"):
+        with pytest.raises(UserError, match="sudo still asks"):
             tunnel.install_sudoers()
     (check,) = [call for call in fake_run.calls if call[-2] == "-cf"]
     (install,) = fake_run.ran("sudo", "install")
@@ -136,7 +136,7 @@ def test_require_sudo_refuses_only_without_a_terminal_or_a_rule(
     monkeypatch.setattr("sys.stdin.isatty", lambda: tty)
     fake_run.on("sudo", "-n", "-l", "/usr/bin/ip", returncode=0 if allowed else 1)
     if refused:
-        with pytest.raises(tunnel.UserError, match="setup-tunnel sudoers"):
+        with pytest.raises(UserError, match="setup-tunnel sudoers"):
             tunnel.require_sudo("setup-tunnel", ["/usr/bin/ip", "route"])
     else:
         tunnel.require_sudo("setup-tunnel", ["/usr/bin/ip", "route"])

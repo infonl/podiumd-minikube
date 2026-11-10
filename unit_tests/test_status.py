@@ -74,8 +74,8 @@ def test_grown_allows_twenty_percent_plus_slack():
 
 def test_cores_is_zero_for_a_container_without_a_cpu_counter():
     first = {"cpu": {"usageCoreNanoSeconds": {"value": "1000000000"}}}
-    assert status.sampled_cores(first, {"attributes": {"id": "x"}}) == 0.0
-    assert status.sampled_cores(first, None) == 0.0
+    assert status.sampled_cores(first, {"attributes": {"id": "x"}}) == 0
+    assert status.sampled_cores(first, None) == 0
 
 
 @pytest.mark.parametrize(

@@ -80,10 +80,10 @@ def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
     monkeypatch.setattr(memory, "host_cpus", lambda: 16)
     monkeypatch.setattr(memory, "wanted", lambda: 8192)
     monkeypatch.setattr(provision, "start_minikube", lambda cpus, mb: calls.append(f"start {cpus} {mb}"))
-    for module, name in [(kube, "require_minikube_context"), (cni, "apply")]:
+    for module, name in ((kube, "require_minikube_context"), (cni, "apply")):
         monkeypatch.setattr(module, name, _record(calls, name))
-    monkeypatch.setattr(provision, "tune_control_plane", lambda: [*control_plane])
-    monkeypatch.setattr(provision, "tune_node_services", lambda: [*services])
+    monkeypatch.setattr(provision, "tune_control_plane", lambda: list(control_plane))
+    monkeypatch.setattr(provision, "tune_node_services", lambda: list(services))
     monkeypatch.setattr(provision, "isolate_pod_dns", lambda: kubelet_config)
     monkeypatch.setattr(provision, "restart_node_services", lambda names: calls.append(f"restart {names}"))
     monkeypatch.setattr(provision, "wait_for_control_plane", lambda names: calls.append(f"wait {names}"))
@@ -180,7 +180,7 @@ def test_isolate_pod_dns_writes_only_what_differs(fake_run: FakeRun, pod_resolv:
 
 
 def test_chart_images_render_everything_without_digests(monkeypatch: pytest.MonkeyPatch):
-    rendered = "image: a/app:1.0@sha256:" + "0" * 64 + "\nimage: b/db:2\n"
+    rendered = f"image: a/app:1.0@sha256:{'0' * 64}\nimage: b/db:2\n"
     monkeypatch.setattr(chart, "everything_args", lambda: ["--set", "x=1"])
     monkeypatch.setattr(manifests, "helm_template", lambda *args: rendered if args == ("--set", "x=1") else "")
     assert provision.chart_images() == ["a/app:1.0", "b/db:2"]
@@ -217,8 +217,8 @@ def test_load_images_pulls_only_what_the_host_lacks_for_the_platform(fake_run: F
     assert sorted(call[4] for call in fake_run.ran("docker", "save")) == ["a/app:1.0", "b/db:2", "c/new:3"]
 
 
-A_DIGEST = "sha256:" + "a" * 64
-B_DIGEST = "sha256:" + "b" * 64
+A_DIGEST = f"sha256:{'a' * 64}"
+B_DIGEST = f"sha256:{'b' * 64}"
 
 
 def _node_and_host(fake_run: FakeRun, node: list[dict[str, list[str]]], host: str) -> None:
@@ -263,13 +263,13 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
         while_starting()
 
     monkeypatch.setattr(provision, "start_node", start_node)
-    for module, name in [
+    for module, name in (
         (gateway, "install_crds"),
         (gateway, "install"),
         (pki, "install_cert_manager"),
         (pki, "install_issuer"),
         (dependency, "sync"),
-    ]:
+    ):
         monkeypatch.setattr(module, name, _record(calls, name))
     provision.provision()
     # NGF and cert-manager install in parallel, in either order.

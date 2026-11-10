@@ -103,7 +103,11 @@ def default_cpus(host_cpus: int) -> int:
     return max(2, min(8, host_cpus - max(2, host_cpus // 4)))
 
 
-def start_node(while_starting: Callable[[], None] = lambda: None) -> None:
+def _nothing() -> None:
+    """Does nothing: start_node's default while_starting."""
+
+
+def start_node(while_starting: Callable[[], None] = _nothing) -> None:
     """start_minikube sized from MINIKUBE_CPUS (default: default_cpus) and memory.py, then requires its kubectl context.
 
     while_starting runs once containerd has its tuning, beside the waits for Cilium and the control plane.
@@ -151,7 +155,7 @@ def _tuned_and_ready(name: str) -> bool:
     env = {item["name"]: item.get("value") for item in env_items}
     statuses: list[dict[str, Any]] = pod["status"].get("containerStatuses") or []
     tuned = all(env.get(name) == value for name, value in CONTROL_PLANE_ENV[name].items())
-    return tuned and bool(statuses) and all(c.get("ready") for c in statuses)
+    return tuned and bool(statuses) and all(status.get("ready") for status in statuses)
 
 
 def _write_node_file(path: str, content: str, mode: str) -> None:
@@ -202,7 +206,8 @@ def isolate_pod_dns() -> bool:
 
 def service_drop_in(env: dict[str, str]) -> str:
     """A systemd drop-in that adds env to its service."""
-    return "[Service]\n" + "".join(f"Environment={name}={value}\n" for name, value in env.items())
+    lines = ["[Service]", *(f"Environment={name}={value}" for name, value in env.items())]
+    return "".join(f"{line}\n" for line in lines)
 
 
 def node_drop_ins() -> dict[str, tuple[str, str]]:
@@ -316,7 +321,8 @@ def _pull(image: str) -> process.ProcessError | None:
 
 
 def _tarball(directory: str, image: str) -> str:
-    return str(Path(directory) / (image.replace("/", "_").replace(":", "_") + ".tar"))
+    name = image.replace("/", "_").replace(":", "_")
+    return str(Path(directory) / f"{name}.tar")
 
 
 def _save(directory: str, image: str) -> process.ProcessError | None:
@@ -359,7 +365,11 @@ def _import(images: list[str]) -> None:
         _in_batches(saved, "loading", functools.partial(_load, directory), workers=IMPORT_WORKERS)
 
 
-def _digests_by_tag(lines: list[tuple[list[str], list[str]]]) -> dict[str, set[str]]:
+# (tags, repository@digest references) of one image
+ImageNames = tuple[list[str], list[str]]
+
+
+def _digests_by_tag(lines: list[ImageNames]) -> dict[str, set[str]]:
     """repository:tag (as _repository) -> its sha256 digests, from (tags, repository@digest references) pairs."""
     found: dict[str, set[str]] = {}
     for tags, references in lines:
@@ -381,9 +391,8 @@ def stale_images(pinned: list[str]) -> list[str]:
     host_lines = process.output(
         ["docker", "images", "--digests", "--format", "{{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}}"]
     )
-    host = _digests_by_tag(
-        [([tag], [reference]) for tag, reference in (line.split() for line in host_lines.splitlines())]
-    )
+    host_pairs = [line.split() for line in host_lines.splitlines()]
+    host = _digests_by_tag([([tag], [reference]) for tag, reference in host_pairs])
     stale: list[str] = []
     for image in pinned:
         tagged, _, digest = image.partition("@")
@@ -399,9 +408,8 @@ def refresh_images(stale: list[str]) -> None:
     if not stale:
         return
     print(f"{len(stale)} image(s) changed digest under the same tag: {' '.join(stale)}")
-    by_digest = {
-        f"{tagged.rpartition(':')[0]}@{digest}": tagged for tagged, _, digest in (i.partition("@") for i in stale)
-    }
+    parts = [image.partition("@") for image in stale]
+    by_digest = {f"{tagged.rpartition(':')[0]}@{digest}": tagged for tagged, _, digest in parts}
     references = list(by_digest)
     for start in range(0, len(references), BATCH_SIZE):
         pulled = _in_batches(references[start : start + BATCH_SIZE], "pulling", _pull)
@@ -438,7 +446,7 @@ def provision() -> None:
     dependency.sync()
     print("Deriving the image list from the currently-selected podiumd version...")
     # The kubelet pulls one image at a time; loaded first, the edge and cert-manager wait for none.
-    edge = gateway.ngf_template() + "\n---\n" + pki.cert_manager_template()
+    edge = f"{gateway.ngf_template()}\n---\n{pki.cert_manager_template()}"
     images = sorted({*chart_images(), *manifests.images(edge)})
     print(f"{len(images)} image(s) referenced by this chart's fully-enabled render, the edge and cert-manager.")
     start_node(functools.partial(load_images, images))
@@ -447,7 +455,8 @@ def provision() -> None:
     remove_old_tags(images)
     gateway.install_crds()
     with ThreadPoolExecutor() as pool:
-        for future in [pool.submit(gateway.install), pool.submit(pki.install_cert_manager)]:
+        installs = [pool.submit(gateway.install), pool.submit(pki.install_cert_manager)]
+        for future in installs:
             future.result()
     pki.install_issuer()
     print("\nCluster provisioned. Next steps:")

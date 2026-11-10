@@ -26,7 +26,10 @@ LOCK_FILE = Path(os.environ.get("MINIKUBE_LOCK_FILE", str(CHART_DIR.parent / ".m
 HOLD_ENV = "MINIKUBE_LOCK_HOLD"
 HOLDER = "podiumd-minikube"
 # A hold older than this is mentioned as possibly stale; a full test tier can take an hour.
-STALE_SECONDS = 2 * 3600
+HOUR = 3600
+STALE_SECONDS = 2 * HOUR
+# who, what and the ISO start time
+HOLD_FIELDS = 3
 
 
 @dataclass(frozen=True)
@@ -43,7 +46,7 @@ def parse(line: str) -> Hold:
     """A Hold from "<who> <what> <ISO start time>"; what may contain spaces."""
     parts = line.split()
     since = None
-    if len(parts) >= 3:
+    if len(parts) >= HOLD_FIELDS:
         try:
             since = datetime.fromisoformat(parts[-1])
         except ValueError:
@@ -68,10 +71,10 @@ def describe(hold: Hold, now: datetime | None = None) -> str:
     if hold.since is None:
         return text
     age = int(((now or datetime.now(UTC)) - hold.since).total_seconds())
-    text += f" for {age // 3600}h{age % 3600 // 60:02d}m" if age >= 3600 else f" for {age // 60}m"
-    if age > STALE_SECONDS:
-        text += "; if its holder is gone: podiumd-minikube cluster-lock break"
-    return text
+    hours, seconds = divmod(age, HOUR)
+    duration = f"{hours}h{seconds // 60:02d}m" if hours else f"{age // 60}m"
+    hint = "; if its holder is gone: podiumd-minikube cluster-lock break" if age > STALE_SECONDS else ""
+    return f"{text} for {duration}{hint}"
 
 
 def _ours(hold: Hold | None) -> bool:
@@ -91,7 +94,7 @@ def take(what: str, *, who: str = HOLDER, path: Path | None = None) -> bool:
         msg = f"the cluster is locked by {describe(hold) if hold else 'unknown'}: wait, or ask its holder ({path})"
         raise process.UserError(msg) from None
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        handle.write(line + "\n")
+        handle.write(f"{line}\n")
     os.environ[HOLD_ENV] = line
     return True
 
@@ -116,7 +119,7 @@ def held(what: str, *, who: str = HOLDER, path: Path | None = None) -> Generator
             release(path)
 
 
-def holding[**P, R](what: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
+def holding[**P, R](what: str) -> Callable[[Callable[P, R]], Callable[P, R]]:  # noqa: WPS111 - type parameters
     """Decorator: the function runs while holding the lock (see held)."""
 
     def wrap(function: Callable[P, R]) -> Callable[P, R]:

@@ -25,7 +25,9 @@ ALLOW_LIST_SQL = CHART_DIR / "files" / "postgres" / "00-azure-extension-allow-li
 # ExternalsPodiumD's: database -> (table, column) -> {old: new}. Without the
 # rename they add a new row beside the old one (zgw_consumers_service.api_root
 # is unique; catalogus ALG is found by its RSIN).
-RENAMES: dict[str, dict[tuple[str, str], dict[str, str]]] = {
+# (table, column) -> old value -> new value
+Renames = dict[tuple[str, str], dict[str, str]]
+RENAMES: dict[str, Renames] = {
     "openformulieren": {
         ("zgw_consumers_service", "slug"): {
             "objects-api": "objecten-api",
@@ -62,30 +64,30 @@ _DATABASE = re.compile(r"CREATE DATABASE (\w+);")
 
 
 def missing_sql(init_sql: str, databases: set[str], roles: set[str]) -> tuple[list[str], str]:
-    """(names, script): the init SQL's statements for the databases not in databases.
+    r"""(names, script): the init SQL's statements for the databases not in databases.
 
     A database's statements are its role's CREATE ROLE (same name; unless that
-    role exists), its CREATE DATABASE and the statements after its `\\c` lines.
+    role exists), its CREATE DATABASE and the statements after its `\c` lines.
     """
     statements = [line for line in init_sql.splitlines() if line.strip() and not line.startswith("--")]
-    role_lines = {m.group(1): line for line in statements if (m := _ROLE.match(line))}
+    role_lines = {match.group(1): line for line in statements if (match := _ROLE.match(line))}
     missing: list[str] = []
     script: list[str] = []
     for line in statements:
-        if (m := _DATABASE.match(line)) and m.group(1) not in databases:
-            missing.append(m.group(1))
-            if m.group(1) not in roles:
-                script.append(role_lines[m.group(1)])
+        if (match := _DATABASE.match(line)) and match.group(1) not in databases:
+            missing.append(match.group(1))
+            if match.group(1) not in roles:
+                script.append(role_lines[match.group(1)])
             script.append(line)
     connected = ""
     for line in statements:
-        if line.startswith("\\c "):
+        if line.startswith(r"\c "):
             connected = line.split()[1]
             if connected in missing:
                 script.append(line)
         elif connected in missing:
             script.append(line)
-    return missing, "\n".join(script) + "\n" if script else ""
+    return missing, "".join(f"{line}\n" for line in script)
 
 
 def _names(query: str) -> set[str]:
@@ -100,13 +102,15 @@ def _psql(query: str) -> str:
 
 def major_of(image: str) -> int:
     """The Postgres major of a postgis/postgis:<major>-<postgis> image."""
-    return int(image.rsplit(":", 1)[1].split("-")[0])
+    return int(image.rsplit(":", 1)[1].split("-", maxsplit=1)[0])
 
 
 def restore_errors(stderr: str) -> list[str]:
     """Distinct psql ERROR lines, without those for objects the init SQL already created."""
     errors = {line.split("ERROR:", 1)[1].strip() for line in stderr.splitlines() if "ERROR:" in line}
-    return sorted(e for e in errors if not e.endswith("already exists") and "transaction_timeout" not in e)
+    return sorted(
+        error for error in errors if not error.endswith("already exists") and "transaction_timeout" not in error
+    )
 
 
 def migrate_major(render: manifests.Render) -> None:
@@ -114,10 +118,11 @@ def migrate_major(render: manifests.Render) -> None:
 
     Clients are restarted afterwards; writes between the dump and the restore are lost.
     """
-    rendered = [doc for doc in render.docs if doc.get("kind") == "Deployment" and manifests.name_of(doc) == "postgres"]
-    if not rendered or not kube.exists("deployment/postgres"):
+    rendered = render.named("Deployment", "postgres")
+    if rendered is None or not kube.exists("deployment/postgres"):
         return
-    image = rendered[0]["spec"]["template"]["spec"]["containers"][0]["image"]
+    template = rendered["spec"]["template"]
+    image = template["spec"]["containers"][0]["image"]
     wanted, running = major_of(image), int(_psql("show server_version_num").strip()) // 10000
     if wanted == running:
         return
@@ -128,7 +133,7 @@ def migrate_major(render: manifests.Render) -> None:
     dump.write_text(kube.kubectl("exec", "-n", NAMESPACE, pod, "--", "pg_dumpall", "-U", "postgres"), encoding="utf-8")
     print(f"Dumped to {dump}.")
     provision.load_images([image])
-    kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(rendered))
+    kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump([rendered]))
     kube.kubectl_shown("rollout", "status", "deployment/postgres", "-n", NAMESPACE, "--timeout=600s")
     restore(dump, wanted, render)
 
@@ -141,7 +146,8 @@ def restore(dump: Path, major: int, render: manifests.Render) -> None:
         stdin=dump.read_text(encoding="utf-8"),
     )
     if errors := restore_errors(result.stderr):
-        msg = f"restore into Postgres {major} had errors (dump kept in {dump}): " + "; ".join(errors[:10])
+        shown = "; ".join(errors[:10])
+        msg = f"restore into Postgres {major} had errors (dump kept in {dump}): {shown}"
         raise process.UserError(msg)
     kube.kubectl(
         "exec", "-n", NAMESPACE, pod, "--", "find", DATA_ROOT, "-mindepth", "1", "-maxdepth", "1",
@@ -154,7 +160,7 @@ def restore(dump: Path, major: int, render: manifests.Render) -> None:
         for doc in render.docs
         if doc.get("kind") in kinds and manifests.name_of(doc) != "postgres"
     ]
-    kube.kubectl_shown("rollout", "restart", "-n", NAMESPACE, *[c for c in clients if kube.exists(c)])
+    kube.kubectl_shown("rollout", "restart", "-n", NAMESPACE, *[client for client in clients if kube.exists(client)])
     print(f"Postgres {major} restored; old data directories removed, dump kept in {dump}.")
 
 
@@ -189,7 +195,7 @@ def align_with_azure() -> None:
         .strip()
         .splitlines()
     )
-    script = ["\\set ON_ERROR_STOP on"]
+    script = [r"\set ON_ERROR_STOP on"]
     for database, owner in owners.items():
         script += [f"\\c {database}", ALLOW_LIST_SQL.read_text(encoding="utf-8")]
         if owner != "postgres":
@@ -199,7 +205,7 @@ def align_with_azure() -> None:
                 f"GRANT ALL ON SCHEMA public TO {owner};",
             ]
     if "openzaak" in owners:
-        script += ["\\c openzaak", 'DROP EXTENSION IF EXISTS "uuid-ossp";']
+        script += [r"\c openzaak", 'DROP EXTENSION IF EXISTS "uuid-ossp";']
     pod = kube.first_pod("app=postgres")
     kube.kubectl(
         "exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-q", "-f", "-", stdin="\n".join(script)

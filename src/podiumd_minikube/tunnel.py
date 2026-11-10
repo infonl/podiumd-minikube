@@ -13,7 +13,6 @@ from podiumd_minikube import lock
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube.paths import PROFILE
-from podiumd_minikube.process import UserError
 
 TUNNEL_LOG = Path("/tmp/minikube-tunnel.log")  # noqa: S108 - user-visible log, fixed name on purpose
 TUNNEL_PATTERN = "minikube tunnel"
@@ -57,7 +56,7 @@ def install_sudoers() -> None:
         )
     if not process.succeeds(["sudo", "-n", "-l", *route_args("replace", node_ip)[1:]]):
         msg = f"{SUDOERS_FILE} is installed, but sudo still asks for the route: check `sudo -l`"
-        raise UserError(msg)
+        raise process.UserError(msg)
     print("Installed: setup-tunnel, deploy and start-cluster now add the route without a password.")
 
 
@@ -79,7 +78,7 @@ def require_sudo(command: str, sudo_args: list[str]) -> None:
             f"sudo needs a terminal for its password: run `podiumd-minikube {command}` in a terminal,"
             f" or install `podiumd-minikube setup-tunnel sudoers` as {SUDOERS_FILE} (README)"
         )
-        raise UserError(msg)
+        raise process.UserError(msg)
 
 
 def setup_tunnel(*, ask: bool = True) -> bool:
@@ -121,7 +120,7 @@ def setup_tunnel(*, ask: bool = True) -> bool:
         log = TUNNEL_LOG.read_text(encoding="utf-8") if TUNNEL_LOG.is_file() else "(no log file yet)"
         print("\n".join(log.splitlines()[-20:]), file=sys.stderr)
         msg = f"no external IP for the edge after {TIMEOUT_SECONDS}s; tunnel log above ({TUNNEL_LOG})"
-        raise UserError(msg)
+        raise process.UserError(msg)
     print(f"Tunnel is up in the background. Edge external IP: {ip}")
     print(f"\n{hosts_hint(ip)}")
     print(STOP_HINT)
@@ -147,7 +146,7 @@ def stop_tunnel() -> None:
 def replace_hosts_line(text: str, line: str) -> str:
     """text without earlier lines of this project (any line naming zac.local), plus line."""
     kept = [old for old in text.splitlines() if "zac.local" not in old]
-    return "\n".join([*kept, line]) + "\n"
+    return "".join(f"{kept_line}\n" for kept_line in (*kept, line))
 
 
 def wanted_hosts_line(ip: str) -> str:
@@ -169,7 +168,7 @@ def update_hosts() -> None:
     ip = kube.edge_ip()
     if not ip:
         msg = "the edge has no external IP yet: run podiumd-minikube setup-tunnel first"
-        raise UserError(msg)
+        raise process.UserError(msg)
     current = ETC_HOSTS.read_text(encoding="utf-8")
     line = wanted_hosts_line(ip)
     if replace_hosts_line(current, line) == current:

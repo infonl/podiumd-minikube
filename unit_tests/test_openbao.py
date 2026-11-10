@@ -21,8 +21,12 @@ from podiumd_minikube.paths import NAMESPACE
 SCRIPT = 'read -r BAO_TOKEN; [ -n "$BAO_TOKEN" ] && export BAO_TOKEN; exec bao "$@"'
 
 
+EXEC = ("kubectl", "exec", "-i", "-n", NAMESPACE, openbao.POD, "--", "env")
+SHELL = ("sh", "-c", SCRIPT, "sh")
+
+
 def _bao(addr: str = openbao.ADDR) -> tuple[str, ...]:
-    return ("kubectl", "exec", "-i", "-n", NAMESPACE, openbao.POD, "--", "env", f"BAO_ADDR={addr}", "sh", "-c", SCRIPT, "sh")  # fmt: skip
+    return (*EXEC, f"BAO_ADDR={addr}", *SHELL)
 
 
 BAO, LOCAL = _bao(), _bao(openbao.LOCAL_ADDR)
