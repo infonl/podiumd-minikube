@@ -59,6 +59,18 @@ def cluster_lock(argv: list[str]) -> int:
     status: who holds it and since when. take/release: around manual changes.
     run: holds it while a command runs. break: removes a stale lock.
     """
+    parser = _lock_parser()
+    args = parser.parse_args(argv)
+    if args.action == "run":
+        command = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
+        if not command:
+            parser.error("run needs a command after --")
+        return lock.run(args.what, command, who=args.who)
+    LOCK_ACTIONS[args.action](args)
+    return 0
+
+
+def _lock_parser() -> argparse.ArgumentParser:
     parser = _parser(cluster_lock)
     parser.add_argument("--who", default=lock.person(), help="holder name for take/release/run (default: your user)")
     actions = parser.add_subparsers(dest="action", required=True)
@@ -71,14 +83,7 @@ def cluster_lock(argv: list[str]) -> int:
     running.add_argument("argv", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
     breaking = actions.add_parser("break", help="remove a stale lock")
     breaking.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
-    args = parser.parse_args(argv)
-    if args.action == "run":
-        command = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
-        if not command:
-            parser.error("run needs a command after --")
-        return lock.run(args.what, command, who=args.who)
-    LOCK_ACTIONS[args.action](args)
-    return 0
+    return parser
 
 
 def _lock_status(_args: argparse.Namespace) -> None:

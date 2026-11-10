@@ -829,6 +829,25 @@ def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Rende
     )
 
 
+# The fixups every render gets, in order; post_render adds the optional ones.
+POST_RENDER_STEPS = (
+    disable_service_links,
+    allow_rolling_updates,
+    drop_duplicate_env,
+    route_outbound,
+    limit_nginx_workers,
+    route_through_nginx,
+    tune_keycloak,
+    tune_kcadm,
+    speed_up_keycloak_start,
+    retry_in_container,
+    tune_solr,
+    ease_solr_start,
+    mount_zaakbrug_role_mapping,
+    limit_runtimes,
+)
+
+
 def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> list[Doc]:
     """The local fixups of a rendered manifest, as the Helm post-renderer plugin applies them.
 
@@ -839,20 +858,8 @@ def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool, hold_
         for doc in docs:
             if doc.get("kind") == "Deployment" and name_of(doc) == ZAC_DEPLOYMENT:
                 section(doc, "spec")["replicas"] = 0
-    disable_service_links(docs)
-    allow_rolling_updates(docs)
-    drop_duplicate_env(docs)
-    route_outbound(docs)
-    limit_nginx_workers(docs)
-    route_through_nginx(docs)
-    tune_keycloak(docs)
-    tune_kcadm(docs)
-    speed_up_keycloak_start(docs)
-    retry_in_container(docs)
-    tune_solr(docs)
-    ease_solr_start(docs)
-    mount_zaakbrug_role_mapping(docs)
-    limit_runtimes(docs)
+    for step in POST_RENDER_STEPS:
+        step(docs)
     if ca_trust:
         trust_ca(docs)
         docs = serve_postgres_tls(docs)

@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from conftest import FakeRun
+from conftest import patch_all
+from conftest import recorder
 
 from podiumd_minikube import chart
 from podiumd_minikube import cni
@@ -35,17 +37,13 @@ def _static_pod(name: str) -> str:
     return f"apiVersion: v1\nkind: Pod\nmetadata:\n  name: {name}\nspec:\n  containers:\n  - name: {name}\n"
 
 
-def _record(calls: list[str], name: str):
-    return lambda *_args, **_kwargs: calls.append(name)
-
-
 @pytest.mark.parametrize(("status", "started"), [(0, False), (1, True)])
 def test_start_minikube_starts_only_a_stopped_profile(
     fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, *, status: int, started: bool
 ):
     checked: list[str] = []
     monkeypatch.setattr(cni, "write_manifest", lambda: "/c/cilium.yaml")
-    monkeypatch.setattr(memory, "check", _record(checked, "memory"))
+    monkeypatch.setattr(memory, "check", recorder(checked, "memory"))
     fake_run.on("minikube", "status", returncode=status)
     provision.start_minikube(4, 8192)
     starts = fake_run.ran("minikube", "start")
@@ -77,17 +75,22 @@ def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
 ):
     calls: list[str] = []
     monkeypatch.setenv("MINIKUBE_CPUS", "4")
-    monkeypatch.setattr(memory, "host_cpus", lambda: 16)
-    monkeypatch.setattr(memory, "wanted", lambda: 8192)
-    monkeypatch.setattr(provision, "start_minikube", lambda cpus, mb: calls.append(f"start {cpus} {mb}"))
-    for module, name in ((kube, "require_minikube_context"), (cni, "apply")):
-        monkeypatch.setattr(module, name, _record(calls, name))
-    monkeypatch.setattr(provision, "tune_control_plane", lambda: list(control_plane))
-    monkeypatch.setattr(provision, "tune_node_services", lambda: list(services))
-    monkeypatch.setattr(provision, "isolate_pod_dns", lambda: kubelet_config)
-    monkeypatch.setattr(provision, "restart_node_services", lambda names: calls.append(f"restart {names}"))
-    monkeypatch.setattr(provision, "wait_for_control_plane", lambda names: calls.append(f"wait {names}"))
-    provision.start_node(_record(calls, "while_starting"))
+    patch_all(
+        monkeypatch,
+        {
+            (memory, "host_cpus"): lambda: 16,
+            (memory, "wanted"): lambda: 8192,
+            (provision, "start_minikube"): lambda cpus, mb: calls.append(f"start {cpus} {mb}"),
+            (kube, "require_minikube_context"): recorder(calls, "require_minikube_context"),
+            (cni, "apply"): recorder(calls, "apply"),
+            (provision, "tune_control_plane"): lambda: list(control_plane),
+            (provision, "tune_node_services"): lambda: list(services),
+            (provision, "isolate_pod_dns"): lambda: kubelet_config,
+            (provision, "restart_node_services"): lambda names: calls.append(f"restart {names}"),
+            (provision, "wait_for_control_plane"): lambda names: calls.append(f"wait {names}"),
+        },
+    )
+    provision.start_node(recorder(calls, "while_starting"))
     assert calls[:3] == ["start 4 8192", "require_minikube_context", f"restart {restarted}"]
     # while_starting runs beside the waits for the control plane and then Cilium.
     assert [call for call in calls[3:] if call != "while_starting"] == [f"wait {control_plane}", "apply"]
@@ -254,26 +257,31 @@ def test_refresh_images_pulls_by_digest_and_loads_under_the_tag(fake_run: FakeRu
 
 def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     calls: list[str] = []
-    monkeypatch.setattr(disk, "check", lambda need: calls.append(f"disk {need.fail_gib}"))
-    monkeypatch.setattr(provision, "chart_images", lambda: ["a/app:1.0"])
-    monkeypatch.setattr(gateway, "ngf_template", lambda: "image: ngf:1")
-    monkeypatch.setattr(pki, "cert_manager_template", lambda: "image: cert-manager:2")
-    monkeypatch.setattr(provision, "load_images", lambda images: calls.append(f"load {' '.join(images)}"))
-    monkeypatch.setattr(provision, "remove_old_tags", lambda images: calls.append(f"remove old {' '.join(images)}"))
+    patch_all(
+        monkeypatch,
+        {
+            (disk, "check"): lambda need: calls.append(f"disk {need.fail_gib}"),
+            (provision, "chart_images"): lambda: ["a/app:1.0"],
+            (gateway, "ngf_template"): lambda: "image: ngf:1",
+            (pki, "cert_manager_template"): lambda: "image: cert-manager:2",
+            (provision, "load_images"): lambda images: calls.append(f"load {' '.join(images)}"),
+            (provision, "remove_old_tags"): lambda images: calls.append(f"remove old {' '.join(images)}"),
+        },
+    )
 
     def start_node(while_starting: Callable[[], None]) -> None:
         calls.append("start_node")
         while_starting()
 
-    monkeypatch.setattr(provision, "start_node", start_node)
-    for module, name in (
-        (gateway, "install_crds"),
-        (gateway, "install"),
-        (pki, "install_cert_manager"),
-        (pki, "install_issuer"),
-        (dependency, "sync"),
-    ):
-        monkeypatch.setattr(module, name, _record(calls, name))
+    steps = ((gateway, "install_crds"), (gateway, "install"), (pki, "install_cert_manager"), (pki, "install_issuer"))
+    patch_all(
+        monkeypatch,
+        {
+            (provision, "start_node"): start_node,
+            (dependency, "sync"): recorder(calls, "sync"),
+            **{(module, name): recorder(calls, name) for module, name in steps},
+        },
+    )
     provision.provision()
     # NGF and cert-manager install in parallel, in either order.
     assert [*calls[:-3], *sorted(calls[-3:-1]), calls[-1]] == [

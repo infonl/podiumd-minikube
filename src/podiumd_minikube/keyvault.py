@@ -10,6 +10,7 @@ import stat
 import sys
 
 from pathlib import Path
+from typing import Any
 
 from podiumd_minikube.paths import OPENBAO_DIR
 
@@ -29,19 +30,28 @@ def write(name: str, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
 
+# The `az keyvault secret` arguments podiumd's openbao-activate.sh passes.
+# Its flags and add_argument options.
+Argument = tuple[tuple[str, ...], dict[str, Any]]
+AZ_ARGUMENTS: tuple[Argument, ...] = (
+    (("group",), {"choices": ["keyvault"]}),
+    (("kind",), {"choices": ["secret"]}),
+    (("action",), {"choices": ["show", "set", "set-attributes"]}),
+    (("--vault-name",), {"required": True}),
+    (("--name",), {"required": True}),
+    (("--subscription",), {}),
+    (("--query",), {"choices": ["value"]}),
+    (("-o", "--output"), {"choices": ["tsv", "none"]}),
+    (("--file",), {}),
+    (("--encoding",), {"choices": ["utf-8"]}),
+    (("--tags",), {"nargs": "*"}),
+)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="az", exit_on_error=False)
-    parser.add_argument("group", choices=["keyvault"])
-    parser.add_argument("kind", choices=["secret"])
-    parser.add_argument("action", choices=["show", "set", "set-attributes"])
-    parser.add_argument("--vault-name", required=True)
-    parser.add_argument("--name", required=True)
-    parser.add_argument("--subscription")
-    parser.add_argument("--query", choices=["value"])
-    parser.add_argument("-o", "--output", choices=["tsv", "none"])
-    parser.add_argument("--file")
-    parser.add_argument("--encoding", choices=["utf-8"])
-    parser.add_argument("--tags", nargs="*")
+    for flags, options in AZ_ARGUMENTS:
+        parser.add_argument(*flags, **options)
     return parser
 
 

@@ -311,26 +311,19 @@ def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool
         found, renders = _rendered(selected)
     # The podiumd namespace's objects; monitoring-logging's `helm upgrade --wait` covers its own.
     render = combined([renders[RELEASE_NAME], renders[releases.PODIUMD]])
-    postgres.migrate_major(render)
-    postgres.rename_databases()
-    postgres.create_missing_databases()
-    postgres.align_with_azure()
-    postgres.rename_rows()
+    postgres.prepare(render)
     print()
-    chart_hosts = hosts.chart_hosts()
-    # Before the upgrades: podiumd's hook Jobs reach Keycloak by its host, and Helm waits for them.
-    # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
     before = installed_podiumd(found)
-    # Before the edge: its new routes send objecttypen.local to objecten, which the import reads objecttypen through.
-    if objecten.merging(before, renders[releases.PODIUMD]):
-        objecten.import_objecttypes()
-    gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
-    dns.apply_hosts(chart_hosts)
-    # Before the upgrades: IfNotPresent pods start from the node's image under their tag.
-    provision.refresh_images(
-        provision.stale_images(sorted({image for done in renders.values() for image in done.pinned_images}))
-    )
+    _before_upgrades(renders, before)
     upgraded = _upgrade(selected, found, renders, before, every=every)
+    _after_upgrades(command, found, render, upgraded)
+    print("\nDeployed.")
+    tunnel.setup_tunnel(ask=False)
+    return bool(blocked)
+
+
+def _after_upgrades(command: str, found: list[releases.Release], render: manifests.Render, upgraded: Upgraded) -> None:
+    """Records what Helm installed, repairs Keycloak, activates OpenBao and waits until everything runs."""
     # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
     installed = {release.name: releases.installed(release) for release in found}
     live = combined([installed[RELEASE_NAME], installed[releases.PODIUMD]])
@@ -341,9 +334,21 @@ def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool
     if releases.PODIUMD in upgraded.names or not openbao.unsealed():
         openbao.activate(render)
     _wait_ready(live, upgraded.held)
-    print("\nDeployed.")
-    tunnel.setup_tunnel(ask=False)
-    return bool(blocked)
+
+
+def _before_upgrades(renders: dict[str, manifests.Render], before: manifests.Render) -> None:
+    """The edge, CoreDNS's hosts and the node's images the upgrades need; the objecttypes import when merging."""
+    chart_hosts = hosts.chart_hosts()
+    # Before the upgrades: podiumd's hook Jobs reach Keycloak by its host, and Helm waits for them.
+    # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
+    # Before the edge: its new routes send objecttypen.local to objecten, which the import reads objecttypen through.
+    if objecten.merging(before, renders[releases.PODIUMD]):
+        objecten.import_objecttypes()
+    gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
+    dns.apply_hosts(chart_hosts)
+    # Before the upgrades: IfNotPresent pods start from the node's image under their tag.
+    pinned = sorted({image for done in renders.values() for image in done.pinned_images})
+    provision.refresh_images(provision.stale_images(pinned))
 
 
 def _rendered(selected: Options) -> tuple[list[releases.Release], dict[str, manifests.Render]]:

@@ -242,7 +242,6 @@ ignore = [
     # done by ruff or pylint
     "WPS210",  # too many locals: PLR0914
     "WPS211",  # too many arguments: PLR0913, PLR0917
-    "WPS213",  # too many expressions: PLR0915
     "WPS214",  # too many methods: PLR0904
     "WPS231",  # cognitive complexity: C901, PLR0912
     "WPS421",  # print: T201, off on purpose (the commands print)

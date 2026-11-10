@@ -62,16 +62,19 @@ def show_port_mappings() -> None:
     """Prints the edge's entry point and every live Ingress host's backend (the routes follow the Ingresses)."""
     kube.require_minikube_context()
     ip = kube.edge_ip()
-    print("== Host entry point ==")
-    if ip:
-        print(
-            f"Edge (NGINX Gateway Fabric) LoadBalancer IP: {ip} "
-            "(reachable while 'minikube tunnel' runs, see podiumd-minikube setup-tunnel)"
-        )
-    else:
-        print("The edge has no external IP yet - 'minikube tunnel' isn't running (see podiumd-minikube setup-tunnel).")
-    print("  port 80  (web)        - HTTP; every hostname below is routed by Host header")
-    print("  port 443 (websecure)  - listener without TLS: no Ingress sets spec.tls\n")
+    edge = (
+        f"Edge (NGINX Gateway Fabric) LoadBalancer IP: {ip} "
+        "(reachable while 'minikube tunnel' runs, see podiumd-minikube setup-tunnel)"
+        if ip
+        else "The edge has no external IP yet - 'minikube tunnel' isn't running (see podiumd-minikube setup-tunnel)."
+    )
+    print(
+        "== Host entry point ==",
+        edge,
+        "  port 80  (web)        - HTTP; every hostname below is routed by Host header",
+        "  port 443 (websecure)  - listener without TLS: no Ingress sets spec.tls\n",
+        sep="\n",
+    )
     services = {item["metadata"]["name"]: item for item in kube.get_json("svc", "-n", NAMESPACE)["items"]}
     found = routes(kube.get_json("ingress", "-n", NAMESPACE)["items"])
     print(f"{'HOST':<30} {'BACKEND (svc:port -> real port)':<32} TRAFFIC TYPE")

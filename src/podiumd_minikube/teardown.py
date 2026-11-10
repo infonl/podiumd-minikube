@@ -139,6 +139,33 @@ def cluster_leftovers(items: list[Any]) -> list[str]:
 
 
 @lock.holding("reset-namespace")
+def _clear_host_paths() -> None:
+    print("Clearing hostPath data on the minikube node...")
+    paths = " ".join(f"/data/{ns}/* /tmp/hostpath-provisioner/{ns}" for ns in RESET_NAMESPACES)
+    try:
+        kube.node(f"sudo rm -rf {paths}")
+    except process.ProcessError:
+        print("  WARNING: could not reach the minikube node to clear hostPath data - do it by hand.", file=sys.stderr)
+
+
+def _delete_cluster_leftovers() -> None:
+    print("Deleting the releases' cluster-scoped RBAC, webhook and CRD objects (if any)...")
+    if leftovers := cluster_leftovers(kube.get_json(CLUSTER_KINDS)["items"]):
+        kube.kubectl_shown("delete", *leftovers, "--ignore-not-found")
+    else:
+        print("  (none found)")
+
+
+def _delete_bound_volumes() -> None:
+    print("Deleting PersistentVolumes still bound to them...")
+    volumes = kube.get_json("pv")["items"]
+    stale = [name for namespace in RESET_NAMESPACES for name in bound_volumes(volumes, namespace)]
+    if stale:
+        kube.kubectl_shown("delete", "pv", *stale)
+    else:
+        print("  (none found)")
+
+
 def reset_namespace(*, yes: bool) -> int:
     """Deletes the namespaces and what they leave behind cluster-wide; 1 when not confirmed."""
     kube.require_minikube_context()
@@ -148,24 +175,9 @@ def reset_namespace(*, yes: bool) -> int:
     with ThreadPoolExecutor(max_workers=len(RESET_NAMESPACES)) as pool:
         for line in pool.map(_empty, RESET_NAMESPACES):
             print(f"  {line}")
-    print("Deleting PersistentVolumes still bound to them...")
-    volumes = kube.get_json("pv")["items"]
-    stale = [name for namespace in RESET_NAMESPACES for name in bound_volumes(volumes, namespace)]
-    if stale:
-        kube.kubectl_shown("delete", "pv", *stale)
-    else:
-        print("  (none found)")
-    print("Clearing hostPath data on the minikube node...")
-    paths = " ".join(f"/data/{ns}/* /tmp/hostpath-provisioner/{ns}" for ns in RESET_NAMESPACES)
-    try:
-        kube.node(f"sudo rm -rf {paths}")
-    except process.ProcessError:
-        print("  WARNING: could not reach the minikube node to clear hostPath data - do it by hand.", file=sys.stderr)
-    print("Deleting the releases' cluster-scoped RBAC, webhook and CRD objects (if any)...")
-    if leftovers := cluster_leftovers(kube.get_json(CLUSTER_KINDS)["items"]):
-        kube.kubectl_shown("delete", *leftovers, "--ignore-not-found")
-    else:
-        print("  (none found)")
+    _delete_bound_volumes()
+    _clear_host_paths()
+    _delete_cluster_leftovers()
     openbao.forget_vault()
     print("\nDone. Run podiumd-minikube deploy to redeploy from scratch.")
     return 0

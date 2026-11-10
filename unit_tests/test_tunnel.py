@@ -9,6 +9,7 @@ from typing import override
 import pytest
 
 from conftest import FakeRun
+from conftest import patch_all
 
 from podiumd_minikube import hosts
 from podiumd_minikube import process
@@ -29,12 +30,17 @@ class Terminal(io.StringIO):
 @pytest.fixture
 def machine(fake_run: FakeRun, poll_once: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeRun:
     """minikube context, no tunnel, no route, an edge IP; /etc/hosts and the log in tmp_path."""
-    monkeypatch.setattr(tunnel, "ETC_HOSTS", tmp_path / "hosts")
-    monkeypatch.setattr(tunnel, "TUNNEL_LOG", tmp_path / "tunnel.log")
+    patch_all(
+        monkeypatch,
+        {
+            (tunnel, "ETC_HOSTS"): tmp_path / "hosts",
+            (tunnel, "TUNNEL_LOG"): tmp_path / "tunnel.log",
+            (hosts, "chart_hosts"): lambda: ["zac.local"],
+            (sys, "stdin"): io.StringIO(),
+            (tunnel, "_ip"): lambda: "ip",
+        },
+    )
     tunnel.ETC_HOSTS.write_text("127.0.0.1 localhost\n", encoding="utf-8")
-    monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
-    monkeypatch.setattr(sys, "stdin", io.StringIO())
-    monkeypatch.setattr(tunnel, "_ip", lambda: "ip")
     fake_run.on("kubectl", "config", "current-context", stdout="minikube\n")
     fake_run.on("pgrep", "-f", tunnel.TUNNEL_PATTERN, returncode=1)
     fake_run.on("minikube", "ip", stdout=f"{NODE_IP}\n")

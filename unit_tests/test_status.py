@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from conftest import FakeRun
+from conftest import patch_all
 
 from podiumd_minikube import deployed
 from podiumd_minikube import hosts
@@ -190,28 +191,35 @@ def cluster(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     }
     baseline = tmp_path / "memory-baseline.json"
     baseline.write_text(json.dumps({"containers": {"ns/big/app": 100, "ns/small/app": 20}}), encoding="utf-8")
-    monkeypatch.setattr(status, "BASELINE", baseline)
     etc_hosts = tmp_path / "hosts"
     etc_hosts.write_text("127.0.0.1 localhost\n", encoding="utf-8")
-    monkeypatch.setattr(tunnel, "ETC_HOSTS", etc_hosts)
-    monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
     usage = {
         "ns/big/app": status.Usage(300, 0.5),
         "ns/small/app": status.Usage(20, 0.0),
         "ns/fresh/app": status.Usage(10, 0.0),
     }
-    monkeypatch.setattr(status, "container_usage", lambda _items: usage)
-    monkeypatch.setattr(deployed, "lines", lambda _items: ["Deployed    by deploy --full"])
-    fake_run.on("kubectl", "get", "pods", "-A", stdout=json.dumps({"items": [pod]}))
-    fake_run.on("kubectl", "get", "jobs", "-A", stdout=json.dumps({"items": []}))
-    fake_run.on("docker", "stats", stdout="4GiB / 16GiB|150%")
+    patch_all(
+        monkeypatch,
+        {
+            (status, "BASELINE"): baseline,
+            (tunnel, "ETC_HOSTS"): etc_hosts,
+            (hosts, "chart_hosts"): lambda: ["zac.local"],
+            (status, "container_usage"): lambda _items: usage,
+            (deployed, "lines"): lambda _items: ["Deployed    by deploy --full"],
+        },
+    )
     stat = "anon 1\nslab_reclaimable 536870912\nslab 600000000\n"
-    fake_run.on("minikube", "ssh", "-p", "minikube", "--", "cat /sys/fs/cgroup/memory.stat", stdout=stat)
-    fake_run.on("docker", "inspect", "minikube", "--format", "{{.HostConfig.Memory}}", stdout=str(16 * 1024**3))
-    fake_run.on("docker", "inspect", "minikube", "--format", "{{.HostConfig.NanoCpus}}", stdout="6000000000\n")
-    fake_run.on("docker", "info", stdout=str(tmp_path))
-    fake_run.on("pgrep", "-f", tunnel.TUNNEL_PATTERN, stdout="4242\n")
-    fake_run.on("kubectl", "get", "svc", stdout="10.96.0.200")
+    fake_run.on_each({
+        ("kubectl", "get", "pods", "-A"): json.dumps({"items": [pod]}),
+        ("kubectl", "get", "jobs", "-A"): json.dumps({"items": []}),
+        ("docker", "stats"): "4GiB / 16GiB|150%",
+        ("minikube", "ssh", "-p", "minikube", "--", "cat /sys/fs/cgroup/memory.stat"): stat,
+        ("docker", "inspect", "minikube", "--format", "{{.HostConfig.Memory}}"): str(16 * 1024**3),
+        ("docker", "inspect", "minikube", "--format", "{{.HostConfig.NanoCpus}}"): "6000000000\n",
+        ("docker", "info"): str(tmp_path),
+        ("pgrep", "-f", tunnel.TUNNEL_PATTERN): "4242\n",
+        ("kubectl", "get", "svc"): "10.96.0.200",
+    })  # fmt: skip
     return fake_run
 
 

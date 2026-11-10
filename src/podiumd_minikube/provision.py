@@ -444,21 +444,35 @@ def provision() -> None:
     disk.check(disk.PROVISION)
     print("Running helm dependency update...")
     dependency.sync()
+    images = _provisioned_images()
+    start_node(functools.partial(load_images, images))
+    # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
+    kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
+    remove_old_tags(images)
+    _install_edge()
+    print(
+        "\nCluster provisioned. Next steps:",
+        "  1. podiumd-minikube deploy (or podiumd-minikube deploy --full for every optional profile).",
+        "  2. podiumd-minikube setup-tunnel for external reachability.",
+        sep="\n",
+    )
+
+
+def _provisioned_images() -> list[str]:
+    """The images of this chart's fully-enabled render, the edge and cert-manager."""
     print("Deriving the image list from the currently-selected podiumd version...")
     # The kubelet pulls one image at a time; loaded first, the edge and cert-manager wait for none.
     edge = f"{gateway.ngf_template()}\n---\n{pki.cert_manager_template()}"
     images = sorted({*chart_images(), *manifests.images(edge)})
     print(f"{len(images)} image(s) referenced by this chart's fully-enabled render, the edge and cert-manager.")
-    start_node(functools.partial(load_images, images))
-    # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
-    kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
-    remove_old_tags(images)
+    return images
+
+
+def _install_edge() -> None:
+    """The Gateway API CRDs, NGINX Gateway Fabric and cert-manager (in parallel), then the cluster issuer."""
     gateway.install_crds()
     with ThreadPoolExecutor() as pool:
         installs = [pool.submit(gateway.install), pool.submit(pki.install_cert_manager)]
         for future in installs:
             future.result()
     pki.install_issuer()
-    print("\nCluster provisioned. Next steps:")
-    print("  1. podiumd-minikube deploy (or podiumd-minikube deploy --full for every optional profile).")
-    print("  2. podiumd-minikube setup-tunnel for external reachability.")

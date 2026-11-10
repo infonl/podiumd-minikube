@@ -3,6 +3,7 @@
 import subprocess
 import tarfile
 
+from collections.abc import Callable
 from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field
@@ -48,9 +49,29 @@ class FakeRun:
         """Answers commands starting with prefix (latest registration wins)."""
         self.answers.insert(0, (prefix, returncode, stdout, stderr))
 
+    def on_each(self, stdouts: dict[tuple[str, ...], str]) -> None:
+        """Answers each command prefix with its stdout and exit code 0."""
+        for prefix, stdout in stdouts.items():
+            self.on(*prefix, stdout=stdout)
+
     def ran(self, *prefix: str) -> list[list[str]]:
         """Recorded calls starting with prefix."""
         return [call for call in self.calls if tuple(call[: len(prefix)]) == prefix]
+
+
+def recorder(calls: list[str], name: str) -> Callable[..., None]:
+    """A stand-in that appends name to calls, whatever its arguments."""
+
+    def record(*_args: object, **_kwargs: object) -> None:
+        calls.append(name)
+
+    return record
+
+
+def patch_all(monkeypatch: pytest.MonkeyPatch, replacements: dict[tuple[object, str], object]) -> None:
+    """monkeypatch.setattr(target, name, value) for each (target, name): value."""
+    for (target, name), value in replacements.items():
+        monkeypatch.setattr(target, name, value)
 
 
 @pytest.fixture

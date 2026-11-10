@@ -74,19 +74,24 @@ def _counted(counts: dict[str, int]) -> list[str] | None:
 
 
 @lock.holding("replicas")
-def switch(*, on: bool) -> None:
-    """Applies the chart's pod counts (on) or values.yaml's one pod (off), then waits for the pods."""
-    kube.require_minikube_context()
-    selected = deploy.options(full=False, extra=[])
-    print("Rendering with one pod and with the chart's pod counts...")
-    one, several = selected.render().docs, selected.render(*SETS).docs
-    created, patches, deleted = changes(*((one, several) if on else (several, one)))
+def _apply_changes(source: list[manifests.Doc], target: list[manifests.Doc]) -> None:
+    """Creates, patches and deletes the live objects so that source becomes target."""
+    created, patches, deleted = changes(source, target)
     if created:
         kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(created))
     for key, patch in patches.items():
         kube.kubectl_shown("patch", kube.reference(*key), "-n", NAMESPACE, "--type", "merge", "-p", json.dumps(patch))
     for key in deleted:
         kube.kubectl_shown("delete", kube.reference(*key), "-n", NAMESPACE, "--ignore-not-found")
+
+
+def switch(*, on: bool) -> None:
+    """Applies the chart's pod counts (on) or values.yaml's one pod (off), then waits for the pods."""
+    kube.require_minikube_context()
+    selected = deploy.options(full=False, extra=[])
+    print("Rendering with one pod and with the chart's pod counts...")
+    one, several = selected.render().docs, selected.render(*SETS).docs
+    _apply_changes(*((one, several) if on else (several, one)))
     counts = {name: count if on else 1 for name, (_, count) in MULTI_POD.items()}
     print(f"Waiting for {', '.join(f'{name} at {count}' for name, count in counts.items())}...")
     if polling.wait_until(lambda: _counted(counts), timeout=READY_TIMEOUT, interval=5) is None:

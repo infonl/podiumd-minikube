@@ -113,6 +113,15 @@ def restore_errors(stderr: str) -> list[str]:
     )
 
 
+def prepare(render: manifests.Render) -> None:
+    """The database steps before an upgrade: major version, renames, missing databases, Azure's settings."""
+    migrate_major(render)
+    rename_databases()
+    create_missing_databases()
+    align_with_azure()
+    rename_rows()
+
+
 def migrate_major(render: manifests.Render) -> None:
     """Dumps every database and restores it into a fresh data directory when the rendered major differs.
 

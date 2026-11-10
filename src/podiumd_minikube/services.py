@@ -54,14 +54,21 @@ def flush_redis(db: int | None) -> None:
     """FLUSHDB on db, or FLUSHALL when db is None (DBs mix caches and Celery queues per app)."""
     kube.require_minikube_context()
     if db is not None:
-        print(f"DB {db}: {_redis('-n', str(db), 'DBSIZE')} key(s) before flush.")
-        _redis("-n", str(db), "FLUSHDB")
-        print(f"DB {db}: {_redis('-n', str(db), 'DBSIZE')} key(s) after flush.")
+        _flush_db(db)
         return
     print("Key counts before flush:")
-    for number in REDIS_DBS:
-        print(f"  DB {number}: {_redis('-n', str(number), 'DBSIZE')} key(s)")
+    _print_key_counts()
     _redis("FLUSHALL")
     print("Flushed all DBs. Key counts after flush:")
+    _print_key_counts()
+
+
+def _flush_db(db: int) -> None:
+    print(f"DB {db}: {_redis('-n', str(db), 'DBSIZE')} key(s) before flush.")
+    _redis("-n", str(db), "FLUSHDB")
+    print(f"DB {db}: {_redis('-n', str(db), 'DBSIZE')} key(s) after flush.")
+
+
+def _print_key_counts() -> None:
     for number in REDIS_DBS:
         print(f"  DB {number}: {_redis('-n', str(number), 'DBSIZE')} key(s)")

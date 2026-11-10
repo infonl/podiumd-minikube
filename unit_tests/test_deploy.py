@@ -3,7 +3,6 @@
 import argparse
 import json
 
-from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -11,6 +10,8 @@ from typing import Any
 import pytest
 
 from conftest import FakeRun
+from conftest import patch_all
+from conftest import recorder
 
 from podiumd_minikube import chart
 from podiumd_minikube import crds
@@ -202,15 +203,6 @@ def renders(monkeypatch: pytest.MonkeyPatch) -> dict[str, manifests.Render]:
     return found
 
 
-def _recorder(steps: list[str], name: str) -> Callable[..., None]:
-    """A stand-in that appends name to steps."""
-
-    def record(*_args: object, **_kwargs: object) -> None:
-        steps.append(name)
-
-    return record
-
-
 @pytest.fixture
 def called(
     fake_run: FakeRun,
@@ -222,16 +214,20 @@ def called(
 ) -> list[str]:
     """deploy()'s steps outside this module, its shown kubectl commands and its upgrades, in order; the CA exists."""
     steps: list[str] = []
-    for module, name in STEPS:
-        monkeypatch.setattr(module, name, _recorder(steps, name))
-    monkeypatch.setattr(kube, "kubectl_shown", lambda *args, stdin=None: steps.append(" ".join(args)))
-    monkeypatch.setattr(releases, "upgrade", lambda release, post: steps.append(f"upgrade {release.name} {post[-1]}"))
-    monkeypatch.setattr(hosts, "chart_hosts", lambda: ["zac.local"])
-    monkeypatch.setattr(pki, "CA_CERT", tmp_path / "ca.crt")
-    monkeypatch.setattr(crds, "keycloak_version", lambda: None)
-    monkeypatch.setattr(deployed, "last_digests", dict)
-    monkeypatch.setattr(releases, "is_deployed", lambda _release: True)
-    monkeypatch.setattr(openbao, "unsealed", bool)
+    patch_all(monkeypatch, {(module, name): recorder(steps, name) for module, name in STEPS})
+    patch_all(
+        monkeypatch,
+        {
+            (kube, "kubectl_shown"): lambda *args, stdin=None: steps.append(" ".join(args)),
+            (releases, "upgrade"): lambda release, post: steps.append(f"upgrade {release.name} {post[-1]}"),
+            (hosts, "chart_hosts"): lambda: ["zac.local"],
+            (pki, "CA_CERT"): tmp_path / "ca.crt",
+            (crds, "keycloak_version"): lambda: None,
+            (deployed, "last_digests"): dict,
+            (releases, "is_deployed"): lambda _release: True,
+            (openbao, "unsealed"): bool,
+        },
+    )
     pki.CA_CERT.write_text("")
     fake_run.on("kubectl", "get", f"namespace/{OLD_NAMESPACE}", returncode=1)
     fake_run.on("kubectl", "create", "namespace", stdout="kind: Namespace\n")

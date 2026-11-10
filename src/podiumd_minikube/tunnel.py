@@ -94,26 +94,23 @@ def setup_tunnel(*, ask: bool = True) -> bool:
     """
     kube.require_minikube_context()
     pid = process.running(TUNNEL_PATTERN)
-    if pid and kube.edge_ip():
-        ip = kube.edge_ip()
+    if pid and (ip := kube.edge_ip()):
         print(f"'minikube tunnel' runs (PID {pid}) and the edge has external IP {ip} - already up.")
-        print(f"\n{hosts_hint(ip)}")
-        print(STOP_HINT)
+        _print_access(ip)
         return True
-    node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
-    if routed_via() == node_ip:
-        print(f"{SERVICE_CIDR} is already routed via the minikube node {node_ip}.")
-    else:
-        route = route_args("replace", node_ip)
-        if not ask and not process.succeeds(["sudo", "-n", "-l", *route[1:]]):
-            print(f"\nNext: podiumd-minikube setup-tunnel (sudo asks for the route; README: {SUDOERS_FILE}).")
-            return False
-        require_sudo("setup-tunnel", route[1:])
-        print(f"Routing {SERVICE_CIDR} via the minikube node {node_ip} (sudo may ask for your password)...")
-        process.run(route, capture=False)
+    if not _route(ask=ask):
+        return False
     if not pid:
         print(f"Starting 'minikube tunnel' in the background (log: {TUNNEL_LOG})...")
         process.spawn(["minikube", "tunnel", "-p", PROFILE], TUNNEL_LOG)
+    ip = _wait_for_edge_ip()
+    print(f"Tunnel is up in the background. Edge external IP: {ip}")
+    _print_access(ip)
+    return True
+
+
+def _wait_for_edge_ip() -> str:
+    """The edge's external IP once the tunnel gives it one; UserError with the tunnel log's tail after the timeout."""
     print("Waiting for the edge's external IP...")
     ip = polling.wait_until(kube.edge_ip, timeout=TIMEOUT_SECONDS, interval=2)
     if not ip:
@@ -121,9 +118,26 @@ def setup_tunnel(*, ask: bool = True) -> bool:
         print("\n".join(log.splitlines()[-20:]), file=sys.stderr)
         msg = f"no external IP for the edge after {TIMEOUT_SECONDS}s; tunnel log above ({TUNNEL_LOG})"
         raise process.UserError(msg)
-    print(f"Tunnel is up in the background. Edge external IP: {ip}")
-    print(f"\n{hosts_hint(ip)}")
-    print(STOP_HINT)
+    return ip
+
+
+def _print_access(ip: str) -> None:
+    print(f"\n{hosts_hint(ip)}\n{STOP_HINT}")
+
+
+def _route(*, ask: bool) -> bool:
+    """Routes SERVICE_CIDR via the minikube node; False when ask is off and sudo would ask for a password."""
+    node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
+    if routed_via() == node_ip:
+        print(f"{SERVICE_CIDR} is already routed via the minikube node {node_ip}.")
+        return True
+    route = route_args("replace", node_ip)
+    if not ask and not process.succeeds(["sudo", "-n", "-l", *route[1:]]):
+        print(f"\nNext: podiumd-minikube setup-tunnel (sudo asks for the route; README: {SUDOERS_FILE}).")
+        return False
+    require_sudo("setup-tunnel", route[1:])
+    print(f"Routing {SERVICE_CIDR} via the minikube node {node_ip} (sudo may ask for your password)...")
+    process.run(route, capture=False)
     return True
 
 
