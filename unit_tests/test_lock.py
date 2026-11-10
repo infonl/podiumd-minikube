@@ -16,7 +16,8 @@ from podiumd_minikube.process import UserError
 def test_take_writes_who_what_and_time_and_release_removes_it(private_lock: Path):
     assert lock.take("deploy --full")
     hold = lock.current()
-    assert hold is not None and (hold.who, hold.what) == ("podiumd-minikube", "deploy --full")
+    assert hold is not None
+    assert (hold.who, hold.what) == ("podiumd-minikube", "deploy --full")
     lock.release()
     assert lock.current() is None
 

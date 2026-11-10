@@ -2,10 +2,10 @@
 
 import json
 
-from conftest import NAMESPACE
 from conftest import kubectl
 
 from podiumd_minikube import services
+from podiumd_minikube.paths import NAMESPACE
 
 
 def test_master_service_and_flush_redis_find_the_master_pod():

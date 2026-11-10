@@ -29,6 +29,7 @@ dev = [
     "types-requests",
     "flake8-pyproject",  # flake8 reads [tool.flake8] in pyproject.toml
     "wemake-python-styleguide",  # flake8 plugin, brings its own pinned flake8
+    "flake8-bugbear",  # B907 and B042 only ([tool.flake8] select)
     "pip-audit",
 ]
 
@@ -110,12 +111,18 @@ select = [
     "UP",   # pyupgrade
     "W",    # pycodestyle
     "YTT",  # flake8-2020
+    "ANN201",  # public function without a return annotation (production code; tests ignore it)
+    "ANN202",  # private function without a return annotation (production code; tests ignore it)
     # Preview rules, each selected by its code (explicit-preview-rules):
     "PLR0904",  # too many public methods
     "PLR0914",  # too many locals
     "PLR6201",  # membership test on a list or tuple literal, a set is meant
     "PLW0717",  # too many statements in a try body: the except catches only what it is meant for
     "PLW1514",  # text mode open without an explicit encoding
+    "PLR6301",  # method that does not use self: a module-level function (WPS602 forbids staticmethod)
+    "RUF039",   # regex pattern not a raw string
+    "FURB113",  # repeated append instead of extend
+    "FURB140",  # starmap instead of a comprehension that unpacks
 ]
 # Only the preview rules selected by code above, not every preview rule of a selected group.
 preview = true
@@ -148,16 +155,16 @@ known-first-party = ["podiumd_minikube"]
 check-typed-exception = true  # Enable additional checks for try-except-pass
 
 [tool.ruff.lint.per-file-ignores]
-# tests/ and unit_tests/: pytest asserts, fixture/mock params (ARG),
-# private-helper access (SLF001), no __init__.py (INP001), composite asserts
-# (PT018), unused unpacked vars (RUF059), fixed-argv kubectl/helm calls
-# (S603/S607), fake tokens and dev passwords (S105/S106). bandit does not
+# tests/ and unit_tests/: pytest asserts, fixture/mock params (ARG), no
+# __init__.py (INP001), unused unpacked vars (RUF059), fixed-argv
+# kubectl/helm calls (S603/S607), dev passwords (S105), unannotated returns
+# (ANN201/ANN202). bandit does not
 # scan them either. Test values in asserts (PLR2004), fixtures and fakes
 # with many parameters (PLR0913, PLR0917), imports inside a test (PLC0415),
 # setup and assert together in a try (PLW0717), many tests (PLR0904) and
 # locals (PLR0914).
 "{tests,unit_tests}/**" = [
-    "S101", "ARG001", "ARG005", "SLF001", "INP001", "PT018", "RUF059", "S603", "S607", "S105", "S106",
+    "S101", "ARG001", "ARG005", "INP001", "RUF059", "S603", "S607", "S105", "ANN201", "ANN202",
     "PLR2004", "PLR0913", "PLR0917", "PLC0415", "PLW0717", "PLR0904", "PLR0914",
 ]
 # files/: scripts an app's `manage.py shell` runs, not a package.
@@ -220,21 +227,25 @@ disable = [
 
 [tool.flake8]
 # Only the WPS rules (wemake-python-styleguide) that ruff and pylint lack.
-select = ["WPS"]
+# B042 (flake8-bugbear): a bugbear rule ruff lacks.
+select = ["WPS", "B042"]
 max-line-length = 120
 # Jones complexity of a line (default 14): only the really dense lines
 max-line-complexity = 20
+max-cognitive-average = 6
+max-name-length = 30
+max-tuple-unpack-length = 3
+max-except-exceptions = 2
+max-lines-in-finally = 1
+max-noqa-comments = 5
 ignore = [
     # done by ruff or pylint
     "WPS210",  # too many locals: PLR0914
     "WPS211",  # too many arguments: PLR0913, PLR0917
-    "WPS212",  # too many returns: PLR0911
     "WPS213",  # too many expressions: PLR0915
     "WPS214",  # too many methods: PLR0904
-    "WPS229",  # too long try body: PLW0717
     "WPS231",  # cognitive complexity: C901, PLR0912
     "WPS421",  # print: T201, off on purpose (the commands print)
-    "WPS426",  # lambda in a loop: B023 checks the actual late binding
     "WPS432",  # magic number: PLR2004 (comparisons), elsewhere a named constant is not clearer
     "WPS441",  # control variable used after its loop: B020, PLW2901 (a comprehension reusing names is no bug)
     # opinion, or in conflict with this code base
@@ -244,16 +255,10 @@ ignore = [
     "WPS204",  # overused expression: flags raise X(msg), the pattern ruff EM asks for
     "WPS226",  # string constant overuse: YAML and JSON keys are data
     "WPS237",  # complex f-string: a subscript or call in an f-string reads fine
-    "WPS238",  # too many raises: a validating function raises per check
     "WPS332",  # walrus outside a comprehension: used on purpose (if match := RE.match(...))
     "WPS407",  # mutable module constant: freezing nested dicts breaks json and yaml dumps
-    "WPS420",  # del, pass, global: normal python
     "WPS430",  # nested function: closures on purpose (callbacks, fakes)
-    "WPS501",  # finally without except: a try/finally cleanup is normal python
-    "WPS504",  # negated condition: flags x if y is not None else None, the natural order
     "WPS529",  # implicit .get(): flags a dispatch on which keys a dict has; SIM401 catches the if/else default case
-    "WPS602",  # staticmethod: a method that needs no instance
-    "WPS615",  # get_x/set_x: names of the data they read and write
 ]
 # flake8 applies only the longest pattern that matches a file (* matches / too).
 per-file-ignores = [
@@ -304,6 +309,12 @@ pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportUnusedImport = false  # done by ruff F401
 reportUntypedBaseClass = false # done by ruff N801
+reportUnnecessaryTypeIgnoreComment = "error"
+reportImplicitOverride = "error"
+reportCallInDefaultInitializer = "error"
+reportInvalidCast = "error"
+reportPrivateLocalImportUsage = "error"
+reportUnannotatedClassAttribute = "error"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "unit_tests"
@@ -343,6 +354,7 @@ pythonpath = ["unit_tests"]
 addopts = "-ra --tb=short"
 
 [tool.coverage.run]
+branch = true
 source = ["src/podiumd_minikube"]
 
 [tool.coverage.report]

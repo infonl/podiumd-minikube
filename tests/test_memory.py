@@ -15,13 +15,18 @@ from podiumd_minikube import process
 from podiumd_minikube import status
 
 
+def _measure():
+    """(pods, node MiB, MiB per container) of the minikube node now."""
+    items = status.pods()
+    usage = status.container_usage(items, cpu=False)
+    return items, status.node_usage().mib, {key: used.mib for key, used in usage.items()}
+
+
 @pytest.fixture(scope="module")
 def measured(edge_ip, request):
     """Node and per-container memory now; written to the baseline with --update-memory-baseline."""
     try:
-        items = status.pods()
-        node = status.node_usage().mib
-        containers = {key: used.mib for key, used in status.container_usage(items, cpu=False).items()}
+        items, node, containers = _measure()
     except (process.ProcessError, FileNotFoundError) as exc:
         pytest.skip(f"could not measure the minikube node: {exc}")
     snapshot = {"node_mib": node, "containers_mib": sum(containers.values()), "containers": containers}

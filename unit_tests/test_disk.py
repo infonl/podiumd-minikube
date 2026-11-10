@@ -39,7 +39,8 @@ def test_check_reports_on_dockers_data_directory(
     monkeypatch.setattr("shutil.disk_usage", lambda path: Usage(100 * GIB, 0, free_gib * GIB) if path == "/d" else None)
     disk.check(disk.PROVISION)
     captured = capsys.readouterr()
-    assert out in captured.out and err in captured.err
+    assert out in captured.out
+    assert err in captured.err
     assert fake_run.calls == [["docker", "info", "--format", "{{.DockerRootDir}}"]]
 
 

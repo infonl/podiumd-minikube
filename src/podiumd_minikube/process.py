@@ -7,6 +7,7 @@ import sys
 from collections.abc import Callable
 from collections.abc import Sequence
 from pathlib import Path
+from typing import override
 
 from podiumd_minikube import polling
 
@@ -18,10 +19,20 @@ class UserError(Exception):
 class ProcessError(UserError):
     """A command exited non-zero."""
 
+    argv: list[str]
+    returncode: int
+    stderr: str
+
     def __init__(self, args: Sequence[str], returncode: int, stderr: str) -> None:
+        # All arguments to the base class, so pickle and copy rebuild the error.
+        super().__init__(args, returncode, stderr)
+        self.argv = list(args)
         self.returncode = returncode
         self.stderr = stderr
-        super().__init__(f"{' '.join(args)} failed ({returncode}): {stderr.strip()}")
+
+    @override
+    def __str__(self) -> str:
+        return f"{' '.join(self.argv)} failed ({self.returncode}): {self.stderr.strip()}"
 
 
 def run(

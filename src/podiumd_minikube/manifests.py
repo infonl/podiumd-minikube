@@ -215,7 +215,7 @@ def disable_service_links(docs: list[Doc]) -> None:
             continue
         node: Doc | None = doc
         for key in path:
-            value = node.get(key) if node is not None else None
+            value = None if node is None else node.get(key)
             node = cast("Doc", value) if isinstance(value, dict) else None
         if node is not None:
             node["enableServiceLinks"] = False
@@ -347,7 +347,7 @@ def _pod_spec(doc: Doc) -> Doc | None:
     path = _JOB_POD_SPEC_PATHS.get(doc.get("kind", ""))
     node: Doc | None = doc
     for key in path or ():
-        value = node.get(key) if node is not None else None
+        value = None if node is None else node.get(key)
         node = cast("Doc", value) if isinstance(value, dict) else None
     return node if path else None
 

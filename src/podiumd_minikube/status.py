@@ -127,7 +127,7 @@ def _key(label: dict[str, str], names: dict[str, str]) -> str:
 def _cpu_nanoseconds(stat: dict[str, Any] | None) -> int | None:
     """A crictl stat's CPU counter; None for a container without one yet (starting or stopping)."""
     value = section(section(stat or {}, "cpu"), "usageCoreNanoSeconds").get("value")
-    return int(value) if value is not None else None
+    return None if value is None else int(value)
 
 
 def sampled_cores(first: dict[str, Any], later: dict[str, Any] | None) -> float:
@@ -223,7 +223,7 @@ def _node_lines(profiles: dict[str, bool], node: Usage, usage: dict[str, Usage])
     cap = memory.node_mb()
     containers = sum(container.mib for container in usage.values())
     nano_cpus = process.output(["docker", "inspect", PROFILE, "--format", "{{.HostConfig.NanoCpus}}"]).strip()
-    cores = f"{int(nano_cpus) / 1e9:g}" if nano_cpus not in {"", "0"} else "all host"
+    cores = "all host" if nano_cpus in {"", "0"} else f"{int(nano_cpus) / 1e9:g}"
     root = disk.docker_root()
     space = shutil.disk_usage(root)
     return [

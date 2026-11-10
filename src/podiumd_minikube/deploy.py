@@ -1,6 +1,7 @@
 """Installs this chart, podiumd and monitoring-logging as Helm releases on the minikube cluster."""
 
 import argparse
+import contextlib
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -264,16 +265,15 @@ def _upgrade(
             kube.kubectl_shown(
                 "wait", "--for=condition=complete", f"job/{STORAGE_PERMISSIONS_JOB}", "-n", NAMESPACE, "--timeout=60s"
             )
-    try:
+    with contextlib.ExitStack() as after:
+        if own_release and moved:
+            # Also after a failed podiumd upgrade: the next deploy no longer sees them as moved.
+            after.callback(releases.upgrade, own_release, post[RELEASE_NAME])
         with ThreadPoolExecutor(max_workers=len(found)) as pool:
             others = [release for release in changed if release.name != RELEASE_NAME]
             upgrades = [pool.submit(releases.upgrade, release, post[release.name]) for release in others]
             for done in upgrades:
                 done.result()
-    finally:
-        if own_release and moved:
-            # Also after a failed podiumd upgrade: the next deploy no longer sees them as moved.
-            releases.upgrade(own_release, post[RELEASE_NAME])
     if releases.PODIUMD in names and (undeleted := upgrade.undeleted_fixed_jobs(renders[releases.PODIUMD].docs)):
         print(
             f"\nWARNING: fixed-name Jobs ExternalsPodiumD does not delete before helm upgrade: {', '.join(undeleted)}"

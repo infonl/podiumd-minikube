@@ -82,18 +82,20 @@ def crd_documents(tgz_path: str) -> list[Doc]:
             if not member.name.endswith(".yaml"):
                 continue
             stream = archive.extractfile(member)
-            text = stream.read().decode() if stream else ""
-            # Templates are not YAML yet; only CRD files are parsed.
-            if "kind: CustomResourceDefinition" not in text.splitlines():
-                continue
-            loaded: list[Doc | None] = list(yaml.load_all(text, Loader=_CrdLoader))
-            for doc in loaded:
-                if not doc or doc.get("kind") != "CustomResourceDefinition":
-                    continue
+            for doc in _crds_in(stream.read().decode() if stream else ""):
                 name = name_of(doc)
                 if name not in newest or _version(doc) > _version(newest[name]):
                     newest[name] = doc
     return [newest[name] for name in sorted(newest)]
+
+
+def _crds_in(text: str) -> list[Doc]:
+    """The CustomResourceDefinitions in a YAML file's text."""
+    # Templates are not YAML yet; only CRD files are parsed.
+    if "kind: CustomResourceDefinition" not in text.splitlines():
+        return []
+    loaded: list[Doc | None] = list(yaml.load_all(text, Loader=_CrdLoader))
+    return [doc for doc in loaded if doc and doc.get("kind") == "CustomResourceDefinition"]
 
 
 def needed(docs: list[dict[str, object]]) -> bool:

@@ -23,7 +23,9 @@ from podiumd_minikube.paths import NAMESPACE
 def test_enabled_profiles_match_pod_name_prefixes():
     pods = ["contact-web-6f6d-r2q96", "clamav-0", "monitoring-logging-grafana-68fb-m7sm2", "zac-cc96-m52qj"]
     profiles = status.enabled_profiles(pods)
-    assert profiles["kiss"] and profiles["clamav"] and profiles["metrics"]
+    assert profiles["kiss"]
+    assert profiles["clamav"]
+    assert profiles["metrics"]
     assert not profiles["openinwoner"]
 
 
@@ -102,7 +104,7 @@ def _container(cid: str, pod: str, name: str = "app") -> dict[str, object]:
 
 
 def _stat(cid: str, mib: int, cpu_ns: int | None) -> dict[str, object]:
-    cpu = {"usageCoreNanoSeconds": {"value": str(cpu_ns)}} if cpu_ns is not None else {}
+    cpu = {} if cpu_ns is None else {"usageCoreNanoSeconds": {"value": str(cpu_ns)}}
     return {"attributes": {"id": cid}, "memory": {"workingSetBytes": {"value": str(mib * status.MIB)}}, "cpu": cpu}
 
 

@@ -11,8 +11,9 @@ from urllib.parse import urlparse
 
 import pytest
 
-from conftest import NAMESPACE
 from conftest import kubectl
+
+from podiumd_minikube.paths import NAMESPACE
 
 # Apps whose configuration.data in values.yaml registers zgw_consumers services.
 APPS = ["objecten", "opennotificaties", "openarchiefbeheer", "openformulieren"]

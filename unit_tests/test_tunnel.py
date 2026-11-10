@@ -4,6 +4,7 @@ import io
 import sys
 
 from pathlib import Path
+from typing import override
 
 import pytest
 
@@ -20,6 +21,7 @@ LINE = f"{EDGE_IP} zac.local  {hosts.MARKER}"
 
 
 class Terminal(io.StringIO):
+    @override
     def isatty(self) -> bool:
         return True
 

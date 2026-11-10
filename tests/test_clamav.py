@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from conftest import NAMESPACE
+from podiumd_minikube.paths import NAMESPACE
 
 # The standard EICAR test file; $ is literal here.
 EICAR = r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"

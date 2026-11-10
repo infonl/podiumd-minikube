@@ -137,7 +137,8 @@ def test_tune_control_plane_writes_untuned_pods_and_waits_until_tuned_and_ready(
             provision.wait_for_control_plane(changed)
     assert [call[-1] for call in fake_run.ran("minikube", "cp")] == ["/etc/kubernetes/.kube-apiserver.yaml"]
     moved = [call[-1] for call in fake_run.ran(*SSH) if "sudo mv" in call[-1]]
-    assert len(moved) == 1 and "sudo chmod 600 /etc/kubernetes/.kube-apiserver.yaml" in moved[0]
+    assert len(moved) == 1
+    assert "sudo chmod 600 /etc/kubernetes/.kube-apiserver.yaml" in moved[0]
     assert moved[0].endswith(
         "sudo mv /etc/kubernetes/.kube-apiserver.yaml /etc/kubernetes/manifests/kube-apiserver.yaml"
     )
@@ -201,10 +202,12 @@ def test_load_images_pulls_saves_and_loads_and_warns_on_failures(fake_run: FakeR
     assert [call[-1] for call in fake_run.ran("docker", "pull")] == ["b/db:2", "c/bad:3"]
     assert sorted(call[4] for call in fake_run.ran("docker", "save")) == ["b/db:2", "c/bad:3"]
     (load,) = fake_run.ran("sh", "-c")
-    assert load[3].endswith("/b_db_2.tar") and load[4:] == provision.NODE_IMPORT
+    assert load[3].endswith("/b_db_2.tar")
+    assert load[4:] == provision.NODE_IMPORT
     err = capsys.readouterr().err
     assert "pulling c/bad:3 failed" in err
-    assert "saving c/bad:3 failed" in err and "no such image" in err
+    assert "saving c/bad:3 failed" in err
+    assert "no such image" in err
     assert "not in minikube after loading: b/db:2 c/bad:3" in err
 
 

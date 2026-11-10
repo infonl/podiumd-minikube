@@ -7,6 +7,7 @@ write_outway_keys. The seal key stays in .openbao/ (gitignored), like .pki/.
 """
 
 import base64
+import contextlib
 import json
 import os
 import secrets
@@ -125,7 +126,8 @@ def _root_token() -> str:
 def _write_outway_keys() -> None:
     """Stores the outway's API keys in OpenBao with a temporary root token, revoked afterwards."""
     root = _root_token()
-    try:
+    with contextlib.ExitStack() as revoke:
+        revoke.callback(_bao, "token", "revoke", "-self", token=root)
         _bao(
             "kv",
             "put",
@@ -135,8 +137,6 @@ def _write_outway_keys() -> None:
             token=root,
             stdin=values.kvk_test_api_key(),
         )
-    finally:
-        _bao("token", "revoke", "-self", token=root)
     print(f"  stored the outway's API keys in {KV_MOUNT}/{OUTWAY_KV_PATH}")
 
 

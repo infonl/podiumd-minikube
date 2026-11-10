@@ -2,10 +2,10 @@
 
 import json
 
-from conftest import NAMESPACE
 from conftest import kubectl
 
 from podiumd_minikube import manifests
+from podiumd_minikube.paths import NAMESPACE
 
 
 def _env(statefulset):

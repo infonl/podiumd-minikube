@@ -7,6 +7,7 @@ restores Chart.yaml and Chart.lock afterwards: `helm template` does not check
 a fetched subchart against Chart.yaml's version constraint.
 """
 
+import contextlib
 import re
 import shutil
 import tempfile
@@ -186,13 +187,12 @@ def _update(resolved: dict[str, Selection], chart_dir: Path) -> None:
         for original, backup in backups:
             if original.is_file():
                 shutil.copy2(original, backup)
-        try:
+        with contextlib.ExitStack() as restore:
+            for original, backup in backups:
+                if backup.is_file():
+                    restore.callback(shutil.copy2, backup, original)
             text = chart_yaml.read_text(encoding="utf-8")
             for chart, selected in resolved.items():
                 text = set_chart_dependency(text, chart, *_chart_reference(selected))
             chart_yaml.write_text(text, encoding="utf-8")
             process.run(["helm", "dependency", "update", str(chart_dir)], capture=False)
-        finally:
-            for original, backup in backups:
-                if backup.is_file():
-                    shutil.copy2(backup, original)

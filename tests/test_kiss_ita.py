@@ -5,9 +5,10 @@ import json
 import pytest
 import requests
 
-from conftest import NAMESPACE
 from conftest import host_url
 from conftest import kubectl
+
+from podiumd_minikube.paths import NAMESPACE
 
 # podiumd's create-required-objecttypen Job creates it with this fixed UUID.
 ACTIVITEITENLOG = "2eb81bd1-0d2b-4123-84ab-d55b99b9e75a"

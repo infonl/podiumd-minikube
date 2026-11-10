@@ -116,7 +116,7 @@ def lines(items: list[dict[str, Any]]) -> list[str]:
     result = [f"Deployed    {when:%Y-%m-%d %H:%M %Z}: {deployed['command']}"]
     for key, chart in dependency.DEPENDENCIES.items():
         now = selected(key)
-        differs = f"; selected now: {now}" if now != deployed.get(chart) else ""
+        differs = "" if now == deployed.get(chart) else f"; selected now: {now}"
         result.append(f"            {chart} {deployed.get(chart, '?')}{differs}")
     counts = running_containers(items, json.loads(deployed["charts"]))
     shown = [

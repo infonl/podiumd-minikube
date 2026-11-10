@@ -3,9 +3,9 @@
 import pytest
 import yaml
 
-from conftest import NAMESPACE
 from conftest import kubectl
 
+from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import VALUES_YAML
 
 EXPECTED_DATABASES = {

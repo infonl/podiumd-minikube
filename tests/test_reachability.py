@@ -3,9 +3,10 @@
 import json
 
 from conftest import EDGE_NAMESPACE
-from conftest import MONITORING_NAMESPACE
-from conftest import NAMESPACE
 from conftest import kubectl
+
+from podiumd_minikube.paths import MONITORING_NAMESPACE
+from podiumd_minikube.paths import NAMESPACE
 
 
 def _items(*args):

@@ -214,7 +214,7 @@ def full_profile_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
     # podiumd<4.10: no openvtb subchart.
     if tgz and not any(name.startswith("podiumd/charts/openvtb/") for name in names):
         index = sets.index("podiumd.openvtb.enabled=true")
-        del sets[index - 1 : index + 1]
+        sets = [*sets[: index - 1], *sets[index + 1 :]]
     return sets
 
 
