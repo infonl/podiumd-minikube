@@ -20,7 +20,13 @@ def _selection(argument: str) -> dependency.Selection:
     return dependency.Selection("path", str(checkout.resolve()))
 
 
-def select(podiumd: str, monitoring_logging: str | None = None, *, versions_file: Path = VERSIONS_FILE) -> None:
+def select(
+    podiumd: str,
+    monitoring_logging: str | None = None,
+    *,
+    versions_file: Path = VERSIONS_FILE,
+    charts_dir: Path = CHARTS_DIR,
+) -> None:
     """Selects each dependency as a published version or a local chart checkout and fetches them.
 
     Without monitoring_logging: a podiumd checkout's sibling monitoring-logging/, else the recorded selection.
@@ -35,6 +41,11 @@ def select(podiumd: str, monitoring_logging: str | None = None, *, versions_file
         msg = f"no monitoring-logging selection recorded: {dependency.USAGE_HINT}"
         raise UserError(msg)
     for key, selected in chosen.items():
+        recorded = dependency.selection(key, versions_file)
+        if selected.mode == "version" and recorded and recorded.mode == "path":
+            # The checkout's package has the published tarball's name, so sync would take it as fetched.
+            for tgz in charts_dir.glob(f"{DEPENDENCIES[key]}-*.tgz"):
+                tgz.unlink()
         dependency.write(key, selected.mode, selected.value, versions_file)
     dependency.sync(versions_file)
     for key, selected in chosen.items():

@@ -28,6 +28,18 @@ def _chart(directory: Path) -> Path:
     return directory
 
 
+def test_select_drops_a_packaged_checkout_when_switching_to_the_published_version(versions_file: Path, tmp_path: Path):
+    checkout = _chart(tmp_path / "podiumd")
+    versions.select(str(checkout), "1.0.15", versions_file=versions_file, charts_dir=tmp_path)
+    packaged = tmp_path / "podiumd-4.10.1.tgz"
+    packaged.touch()
+    kept = tmp_path / "monitoring-logging-1.0.15.tgz"
+    kept.touch()
+    versions.select("4.10.1", "1.0.15", versions_file=versions_file, charts_dir=tmp_path)
+    assert not packaged.exists()
+    assert kept.exists()
+
+
 def test_select_mixes_a_published_version_and_a_checkout(versions_file: Path, tmp_path: Path):
     checkout = _chart(tmp_path / "monitoring-logging")
     versions.select("4.10.0", str(checkout), versions_file=versions_file)
