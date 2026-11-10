@@ -101,7 +101,7 @@ def _crds_in(text: str) -> list[Doc]:
     return [doc for doc in loaded if doc and doc.get("kind") == "CustomResourceDefinition"]
 
 
-def needed(docs: list[dict[str, object]]) -> bool:
+def is_needed(docs: list[dict[str, object]]) -> bool:
     """Whether docs hold objects of the Prometheus operator's kinds (the metrics profile)."""
     return any(str(doc.get("apiVersion", "")).startswith("monitoring.coreos.com/") for doc in docs)
 

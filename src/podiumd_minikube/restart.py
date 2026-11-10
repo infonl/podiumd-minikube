@@ -27,14 +27,14 @@ def node_started() -> datetime:
     )
 
 
-def stale_pods(pods: list[Doc], boot: datetime) -> list[str]:
-    """Pods (not Jobs') whose Ready condition dates from before boot: their status, and their workload's, is stale.
+def stale_pods(items: list[Doc], boot: datetime) -> list[str]:
+    """Return the pods of items (not Jobs') whose Ready condition dates from before boot: their status is stale.
 
     Right after `minikube start` they still report Ready from before the stop,
     so a workload looks rolled out before the kubelet has restarted it.
     """
     stale: list[str] = []
-    for pod in pods:
+    for pod in items:
         meta = pod["metadata"]
         if any(ref.get("kind") == "Job" for ref in meta.get("ownerReferences", [])):
             continue
@@ -54,21 +54,21 @@ def start() -> None:
     boot = node_started()
     print("\nWaiting until every pod reports its state since the node started...")
 
-    def fresh() -> bool:
+    def are_fresh() -> bool:
         return not stale_pods(kube.get_json("pods", "-n", NAMESPACE)["items"], boot)
 
-    if not polling.wait_until(fresh, timeout=deploy.READY_TIMEOUT, interval=5):
+    if not polling.wait_until(are_fresh, timeout=deploy.READY_TIMEOUT, interval=5):
         stale = stale_pods(kube.get_json("pods", "-n", NAMESPACE)["items"], boot)
         msg = f"pods still report their state from before the start after {deploy.READY_TIMEOUT}s: {', '.join(stale)}"
         raise process.UserError(msg)
     print("Waiting until every workload except ZAC is ready...")
 
-    def others_ready() -> bool:
+    def are_others_ready() -> bool:
         others = [item for item in _workloads() if item["metadata"]["name"] != deploy.ZAC]
-        return all(deploy.rolled_out(item) for item in others)
+        return all(deploy.is_rolled_out(item) for item in others)
 
-    if not polling.wait_until(others_ready, timeout=deploy.READY_TIMEOUT, interval=10):
-        stuck = [item["metadata"]["name"] for item in _workloads() if not deploy.rolled_out(item)]
+    if not polling.wait_until(are_others_ready, timeout=deploy.READY_TIMEOUT, interval=10):
+        stuck = [item["metadata"]["name"] for item in _workloads() if not deploy.is_rolled_out(item)]
         msg = f"not ready after {deploy.READY_TIMEOUT}s: {', '.join(stuck)}: check `kubectl get pods -n {NAMESPACE}`"
         raise process.UserError(msg)
     if polling.wait_until(deploy.zac_state, timeout=deploy.READY_TIMEOUT, interval=10) == "failed":

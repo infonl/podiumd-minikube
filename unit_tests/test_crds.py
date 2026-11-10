@@ -58,7 +58,7 @@ def test_crd_documents_skips_non_yaml_members_and_other_kinds(tmp_path: Path):
     ("api_version", "expected"), [("monitoring.coreos.com/v1", True), ("monitoring.example.com/v1", False)]
 )
 def test_needed_only_for_prometheus_operator_kinds(api_version: str, *, expected: bool):
-    assert crds.needed([{"apiVersion": "v1"}, {"apiVersion": api_version}]) is expected
+    assert crds.is_needed([{"apiVersion": "v1"}, {"apiVersion": api_version}]) is expected
 
 
 @pytest.mark.parametrize(

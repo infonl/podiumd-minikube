@@ -47,7 +47,7 @@ def test_reset_namespace_deletes_the_namespace_its_volumes_and_its_cluster_objec
 ):
     # Each namespace exists until its delete: the first check finds it, the next poll does not.
     seen: set[str] = set()
-    monkeypatch.setattr(kube, "exists", lambda ref, *_args: ref not in seen and not seen.add(ref))
+    monkeypatch.setattr(kube, "is_present", lambda ref, *_args: ref not in seen and not seen.add(ref))
     fake_run.on("kubectl", "config", "current-context", stdout=f"{PROFILE}\n")
     fake_run.on("kubectl", "get", "pv", stdout=json.dumps(volumes))
     fake_run.on("kubectl", "get", teardown.CLUSTER_KINDS, stdout=json.dumps({"items": []}))
@@ -118,7 +118,7 @@ def test_cluster_leftovers_match_the_instance_label_or_the_release_annotation():
 
 @pytest.mark.usefixtures("poll_once")
 def test_empty_names_a_namespace_that_stays_terminating(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(kube, "exists", lambda *_args: True)
+    monkeypatch.setattr(kube, "is_present", lambda *_args: True)
     fake_run.on("kubectl", "config", "current-context", stdout=f"{PROFILE}\n")
     with pytest.raises(UserError, match=f"still Terminating after {teardown.NAMESPACE_TIMEOUT}s"):
         teardown.reset_namespace(yes=True)

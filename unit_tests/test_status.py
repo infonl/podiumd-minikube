@@ -71,8 +71,8 @@ def test_problems_list_unready_pods_recent_restarts_and_failed_jobs():
 
 
 def test_grown_allows_twenty_percent_plus_slack():
-    assert not status.grown(1200 + 64, 1000)
-    assert status.grown(1200 + 65, 1000)
+    assert not status.has_grown(1200 + 64, 1000)
+    assert status.has_grown(1200 + 65, 1000)
 
 
 def test_cores_is_zero_for_a_container_without_a_cpu_counter():

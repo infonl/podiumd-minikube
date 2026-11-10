@@ -89,7 +89,7 @@ def _status() -> Doc | None:
         return None
 
 
-def unsealed() -> bool:
+def is_unsealed() -> bool:
     """Whether pod 0 answers initialised and unsealed."""
     status = _status()
     return bool(status) and status.get("initialized") is True and status.get("sealed") is False
@@ -158,5 +158,5 @@ def activate(render: manifests.Render) -> None:
         path = f"{keyvault.shim_dir(Path(work))}{os.pathsep}{os.environ['PATH']}"
         assignments = [f"{key}={value}" for key, value in {**settings, "PATH": path}.items()]
         process.run(["env", *assignments, "bash", str(found)], capture=False)
-    if kube.exists(f"deployment/{OUTWAY}"):
+    if kube.is_present(f"deployment/{OUTWAY}"):
         _write_outway_keys()

@@ -55,6 +55,6 @@ def test_no_container_grew_beyond_the_baseline(measured):
     grown = {
         key: f"{baseline[key]} -> {used} MiB"
         for key, used in measured["containers"].items()
-        if key in baseline and status.grown(used, baseline[key])
+        if key in baseline and status.has_grown(used, baseline[key])
     }
     assert not grown, f"above {status.BASELINE.name}; refresh it with --update-memory-baseline if intended: {grown}"

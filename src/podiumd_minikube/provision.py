@@ -151,7 +151,7 @@ def with_control_plane_env(manifest: str) -> str | None:
     return None if unchanged else yaml.safe_dump(pod, sort_keys=False)
 
 
-def _tuned_and_ready(name: str) -> bool:
+def _is_tuned_and_ready(name: str) -> bool:
     try:
         pod = kube.get_json("pod", "-n", "kube-system", f"{name}-{PROFILE}")
     except process.ProcessError:
@@ -194,8 +194,8 @@ def with_pod_resolv_conf(config: str) -> str | None:
     return yaml.safe_dump(parsed, sort_keys=False)
 
 
-def isolate_pod_dns() -> bool:
-    """Points the kubelet at POD_RESOLV_CONF; whether its configuration changed (minikube start rewrites it).
+def isolate_pod_dns() -> bool:  # noqa: FNE005 - changes the kubelet configuration
+    """Point the kubelet at POD_RESOLV_CONF; whether its configuration changed (minikube start rewrites it).
 
     Pods started before keep their search domains until they restart.
     """
@@ -236,12 +236,12 @@ def tune_node_services() -> list[str]:
     return changed
 
 
-def restart_node_services(services: list[str]) -> None:
-    """Restarts services on the node (containers outlive containerd)."""
-    if not services:
+def restart_node_services(names: list[str]) -> None:
+    """Restart the node services names (containers outlive containerd)."""
+    if not names:
         return
-    print(f"Restarting {', '.join(services)}...")
-    kube.node(f"sudo systemctl daemon-reload && sudo systemctl restart {' '.join(services)}")
+    print(f"Restarting {', '.join(names)}...")
+    kube.node(f"sudo systemctl daemon-reload && sudo systemctl restart {' '.join(names)}")
 
 
 def tune_control_plane() -> list[str]:
@@ -262,7 +262,9 @@ def tune_control_plane() -> list[str]:
 def wait_for_control_plane(changed: list[str]) -> None:
     """Wait until the static pods changed run with CONTROL_PLANE_ENV and are ready."""
     for name in changed:
-        if not polling.wait_until(functools.partial(_tuned_and_ready, name), timeout=CONTROL_PLANE_TIMEOUT, interval=5):
+        if not polling.wait_until(
+            functools.partial(_is_tuned_and_ready, name), timeout=CONTROL_PLANE_TIMEOUT, interval=5
+        ):
             msg = f"{name} not ready {CONTROL_PLANE_TIMEOUT}s after its env change: see `minikube logs -p {PROFILE}`"
             raise process.UserError(msg)
 
@@ -311,12 +313,12 @@ def chart_images() -> list[str]:
     return manifests.images(manifests.strip_image_digests(text))
 
 
-def missing_images(images: list[str], loaded: list[str]) -> list[str]:
-    """images that no `minikube image ls` line ends with."""
-    return [image for image in images if not any(line.endswith(image) for line in loaded)]
+def missing_images(wanted: list[str], loaded: list[str]) -> list[str]:
+    """Return the wanted images that no line of loaded (`minikube image ls`) ends with."""
+    return [image for image in wanted if not any(line.endswith(image) for line in loaded)]
 
 
-def cached(image: str) -> bool:
+def is_cached(image: str) -> bool:
     """Whether the host's Docker has image for PLATFORM: its tags are pinned, so no pull is needed."""
     result = process.run(["docker", "image", "inspect", image, "--format", "{{.Os}}/{{.Architecture}}"], check=False)
     return result.returncode == 0 and result.stdout.strip() == PLATFORM
@@ -429,23 +431,23 @@ def refresh_images(stale: list[str]) -> None:
         _import([by_digest[reference] for reference in pulled])
 
 
-def load_images(images: list[str]) -> None:
-    """Pull images on the host and load them into minikube, BATCH_SIZE at a time."""
+def load_images(references: list[str]) -> None:
+    """Pull references on the host and load them into minikube, BATCH_SIZE at a time."""
     loaded = process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines()
-    to_fetch = missing_images(images, loaded)
+    to_fetch = missing_images(references, loaded)
     if not to_fetch:
         print("All images already loaded - nothing to pull.")
         return
     print(f"{len(to_fetch)} image(s) need pulling + loading: {' '.join(to_fetch)}")
     for start in range(0, len(to_fetch), BATCH_SIZE):
         batch = to_fetch[start : start + BATCH_SIZE]
-        to_pull = [image for image in batch if not cached(image)]
+        to_pull = [image for image in batch if not is_cached(image)]
         if to_pull:
             # A docker pull of a cached image still asks the registry: 212 s for 60 images.
             print(f"Pulling batch: {' '.join(to_pull)}")
             _in_batches(to_pull, "pulling", _pull)
         _import(batch)
-    still_missing = missing_images(images, process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines())
+    still_missing = missing_images(references, process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines())
     if still_missing:
         print(f"WARNING: not in minikube after loading: {' '.join(still_missing)}", file=sys.stderr)
 

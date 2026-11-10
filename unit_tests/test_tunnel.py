@@ -23,7 +23,7 @@ LINE = f"{EDGE_IP} zac.local  {hosts.MARKER}"
 
 class Terminal(io.StringIO):
     @override
-    def isatty(self) -> bool:
+    def isatty(self) -> bool:  # noqa: FNE005 - io.IOBase API
         return True
 
 

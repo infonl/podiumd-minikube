@@ -29,10 +29,10 @@ def expose_postgres(local_port: int) -> None:
             ["kubectl", "port-forward", "svc/postgres", f"{local_port}:{POSTGRES_PORT}", "-n", NAMESPACE], FORWARD_LOG
         )
 
-        def forwarding() -> bool:
+        def is_forwarding() -> bool:
             return FORWARD_LOG.is_file() and "Forwarding from" in FORWARD_LOG.read_text(encoding="utf-8")
 
-        if not polling.wait_until(forwarding, timeout=10, interval=1):
+        if not polling.wait_until(is_forwarding, timeout=10, interval=1):
             msg = f"port-forward did not come up within 10s; log: {FORWARD_LOG}"
             raise process.UserError(msg)
     databases = kube.kubectl(
@@ -63,10 +63,10 @@ def flush_redis(db: int | None) -> None:
     _print_key_counts()
 
 
-def _flush_db(db: int) -> None:
-    print(f"DB {db}: {_redis('-n', str(db), 'DBSIZE')} key(s) before flush.")
-    _redis("-n", str(db), "FLUSHDB")
-    print(f"DB {db}: {_redis('-n', str(db), 'DBSIZE')} key(s) after flush.")
+def _flush_db(number: int) -> None:
+    print(f"DB {number}: {_redis('-n', str(number), 'DBSIZE')} key(s) before flush.")
+    _redis("-n", str(number), "FLUSHDB")
+    print(f"DB {number}: {_redis('-n', str(number), 'DBSIZE')} key(s) after flush.")
 
 
 def _print_key_counts() -> None:

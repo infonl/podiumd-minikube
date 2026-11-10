@@ -99,7 +99,7 @@ def fetch(args: Sequence[str], *, stdin: str | None = None, shown: bool = False)
     raise errors[-1]
 
 
-def succeeds(args: Sequence[str]) -> bool:
+def succeeds(args: Sequence[str]) -> bool:  # noqa: FNE005 - runs args
     """Whether args exits 0; output is discarded."""
     return run(args, check=False).returncode == 0
 

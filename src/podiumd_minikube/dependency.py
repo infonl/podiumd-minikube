@@ -121,7 +121,7 @@ def _chart_reference(selected: Selection) -> tuple[str, str]:
     return "@dimpact", selected.value
 
 
-def _subcharts_fetched(chart: str) -> bool:
+def _are_subcharts_fetched(chart: str) -> bool:
     """Whether `helm dependency list` reports every subchart of the checkout at chart as ok."""
     listed = process.output(["helm", "dependency", "list", chart]).splitlines()[1:]
     states = [line.split("\t")[-1].strip() for line in listed if line.strip()]
@@ -133,7 +133,7 @@ def _build_subcharts(chart: str) -> None:
 
     The checkout's Chart.lock is gitignored, so a checkout of a commit that changes a dependency keeps the old one.
     """
-    if _subcharts_fetched(chart):
+    if _are_subcharts_fetched(chart):
         return
     try:
         process.run(["helm", "dependency", "build", chart])

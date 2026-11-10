@@ -134,7 +134,7 @@ def apply_crds(render: manifests.Render, release: str) -> None:
 
 def _refuse_old_namespace() -> None:
     """UserError while the namespace of the kubectl-apply deploys still exists."""
-    if kube.exists(f"namespace/{OLD_NAMESPACE}"):
+    if kube.is_present(f"namespace/{OLD_NAMESPACE}"):
         msg = (
             f"namespace {OLD_NAMESPACE} is from before the Helm releases (now namespace {NAMESPACE}): "
             "run podiumd-minikube reset-namespace, then deploy"
@@ -142,13 +142,11 @@ def _refuse_old_namespace() -> None:
         raise process.UserError(msg)
 
 
-def _ensure_namespace(namespace: str) -> None:
+def _ensure_namespace(name: str) -> None:
     """Create namespace with the local CA's ConfigMap, which every pod mounts."""
-    print(f"Ensuring namespace {namespace!r} exists...")
-    kube.kubectl(
-        "apply", "-f", "-", stdin=kube.kubectl("create", "namespace", namespace, "--dry-run=client", "-o", "yaml")
-    )
-    pki.apply_trust(namespace)
+    print(f"Ensuring namespace {name!r} exists...")
+    kube.kubectl("apply", "-f", "-", stdin=kube.kubectl("create", "namespace", name, "--dry-run=client", "-o", "yaml"))
+    pki.apply_trust(name)
 
 
 def combined(renders: list[manifests.Render]) -> manifests.Render:
@@ -197,7 +195,7 @@ def _prepare(
         if release.name in names and release.name != RELEASE_NAME:
             volumes.apply_fs_groups(renders[release.name].docs, release.namespace)
     monitoring = renders.get(releases.MONITORING)
-    if monitoring and releases.MONITORING in names and crds.needed(monitoring.docs):
+    if monitoring and releases.MONITORING in names and crds.is_needed(monitoring.docs):
         print("\nApplying monitoring-logging's own CRDs first...")
         crds.apply_monitoring_logging_crds()
     if releases.PODIUMD in names:
@@ -306,7 +304,7 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool
         _deploy(selected, command, every=every, defer_website=False)
 
 
-def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool) -> bool:
+def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool) -> bool:  # noqa: FNE005 - deploys
     """One deploy of the releases; defer_website: without KISS's website while its hook is blocked (then True)."""
     found, renders = _rendered(selected)
     blocked = kiss.website_hook_blocked(renders[releases.PODIUMD]) if defer_website else ""
@@ -336,7 +334,7 @@ def _after_upgrades(command: str, found: list[releases.Release], render: manifes
     print()
     keycloak.repair_default_client_scopes(render)
     # As podiumd-infra: an unchanged podiumd release on an unsealed vault needs no activation.
-    if releases.PODIUMD in upgraded.names or not openbao.unsealed():
+    if releases.PODIUMD in upgraded.names or not openbao.is_unsealed():
         openbao.activate(render)
     _wait_ready(live, upgraded.held)
 
@@ -347,7 +345,7 @@ def _before_upgrades(renders: dict[str, manifests.Render], before: manifests.Ren
     # Before the upgrades: podiumd's hook Jobs reach Keycloak by its host, and Helm waits for them.
     # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
     # Before the edge: its new routes send objecttypen.local to objecten, which the import reads objecttypen through.
-    if objecten.merging(before, renders[releases.PODIUMD]):
+    if objecten.is_merging(before, renders[releases.PODIUMD]):
         objecten.import_objecttypes()
     gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
     dns.apply_hosts(chart_hosts)
@@ -364,7 +362,7 @@ def _rendered(selected: Options) -> tuple[list[releases.Release], dict[str, mani
     return found, {release.name: selected.render_release(release) for release in found}
 
 
-def rolled_out(workload: Doc) -> bool:
+def is_rolled_out(workload: Doc) -> bool:
     """Whether a workload runs its current spec and is ready.
 
     Elasticsearch and Kibana: ECK's own status (its StatefulSets are not rendered); a
@@ -408,7 +406,7 @@ BOOT_FAILED = "WFLYCTL0080"
 ZAC_JOBS = ("openzaak-config", "create-required-catalogi-job")
 
 
-def zac_boot_failed() -> bool:
+def has_zac_boot_failed() -> bool:
     """Whether ZAC's log shows WildFly gave up on its deployment."""
     result = process.run(["kubectl", "logs", "-n", NAMESPACE, f"deployment/{ZAC}", "-c", ZAC], check=False)
     return BOOT_FAILED in result.stdout
@@ -416,9 +414,9 @@ def zac_boot_failed() -> bool:
 
 def zac_state() -> str | None:
     """ "ready", "failed" (its last boot failed) or None while it boots."""
-    if rolled_out(kube.get_json(f"deployment/{ZAC}", "-n", NAMESPACE)):
+    if is_rolled_out(kube.get_json(f"deployment/{ZAC}", "-n", NAMESPACE)):
         return "ready"
-    return "failed" if zac_boot_failed() else None
+    return "failed" if has_zac_boot_failed() else None
 
 
 def hold_zac(render: manifests.Render) -> list[int]:
@@ -427,7 +425,7 @@ def hold_zac(render: manifests.Render) -> list[int]:
     Its first boot would fail before ZAC_JOBS completed; the post-renderer's --hold-zac installs it
     at 0 and _wait_ready scales it up after them.
     """
-    if not set(ZAC_JOBS) & set(render.jobs) or kube.exists(f"deployment/{ZAC}"):
+    if not set(ZAC_JOBS) & set(render.jobs) or kube.is_present(f"deployment/{ZAC}"):
         return []
     zac = render.named("Deployment", ZAC)
     return [] if zac is None else [zac["spec"].get("replicas", 1)]
@@ -458,7 +456,7 @@ class _Rollout:
         # One kubectl call per poll: one per workload took 2.4 s with --full.
         found: list[Doc] = kube.get_json(kinds, "-n", NAMESPACE)["items"] if kinds else []
         live = {f"{item['kind'].lower()}/{manifests.name_of(item)}": item for item in found}
-        return [workload for workload in self.workloads if workload not in live or not rolled_out(live[workload])]
+        return [workload for workload in self.workloads if workload not in live or not is_rolled_out(live[workload])]
 
     def settled(self) -> tuple[list[str]] | None:
         """(failed Jobs,) once nothing runs or waits; starts a held ZAC and restarts a failed ZAC boot once."""
@@ -468,7 +466,7 @@ class _Rollout:
             print("ZAC's Jobs have finished; starting ZAC.")
             kube.kubectl_shown("scale", f"deployment/{ZAC}", f"--replicas={self.held.pop()}", "-n", NAMESPACE)
         waiting = self.stuck()
-        if f"deployment/{ZAC}" in waiting and prepared and not self.restarted and zac_boot_failed():
+        if f"deployment/{ZAC}" in waiting and prepared and not self.restarted and has_zac_boot_failed():
             restart_zac()
             self.restarted.append(ZAC)
         return None if running or waiting else (failed,)

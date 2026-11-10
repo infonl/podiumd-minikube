@@ -20,9 +20,9 @@ def _render(*names: str) -> manifests.Render:
 
 def test_merging_is_an_upgrade_that_drops_objecttypen():
     classic = _render("objecten", "objecttypen")
-    assert objecten.merging(classic, _render("objecten"))
-    assert not objecten.merging(classic, classic)
-    assert not objecten.merging(_render("objecten"), _render("objecten"))
+    assert objecten.is_merging(classic, _render("objecten"))
+    assert not objecten.is_merging(classic, classic)
+    assert not objecten.is_merging(_render("objecten"), _render("objecten"))
 
 
 def test_import_runs_the_snippet_then_the_tokens_script(

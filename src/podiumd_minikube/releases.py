@@ -83,7 +83,7 @@ def _prefixed(helm_args: list[str], prefix: str) -> list[tuple[str, str]]:
     return [(flag, value) for flag, value in _pairs(helm_args) if value.startswith(prefix)]
 
 
-def _enabled(helm_args: list[str], key: str, *, default: bool) -> bool:
+def _is_enabled(helm_args: list[str], key: str, *, default: bool) -> bool:
     """Return the last `--set key=true|false` in helm_args, else default."""
     values = [value for _, value in _pairs(helm_args) if value.startswith(f"{key}=")]
     found = [value.split("=", 1)[1] == "true" for value in values]
@@ -110,7 +110,7 @@ def releases(helm_args: list[str]) -> list[Release]:
         [*own_sets, "--set", f"{PODIUMD}.enabled=false", "--set", "metrics.enabled=false"],
     )
     found = [own, Release(PODIUMD, NAMESPACE, podiumd_tgz, values[PODIUMD], _split(helm_args, f"{PODIUMD}."))]
-    if _enabled(helm_args, "metrics.enabled", default=values["metrics"]["enabled"]):
+    if _is_enabled(helm_args, "metrics.enabled", default=values["metrics"]["enabled"]):
         monitoring_tgz = chart.tarball(MONITORING)
         if monitoring_tgz is None:
             msg = "monitoring-logging is not fetched: run podiumd-minikube set-podiumd-version"

@@ -178,7 +178,7 @@ def budget_mib(profiles: dict[str, bool]) -> int:
     return memory.FULL_BUDGET_MB if any(profiles.values()) else memory.DEFAULT_BUDGET_MB
 
 
-def _recently_restarted(container: Doc, now: datetime) -> bool:
+def _is_recently_restarted(container: Doc, now: datetime) -> bool:
     terminated = container.get("lastState", {}).get("terminated", {})
     finished = terminated.get("finishedAt")
     if not finished or (terminated.get("reason"), terminated.get("exitCode")) == NODE_STOPPED:
@@ -199,7 +199,7 @@ def problems(
             continue
         containers: list[Doc] = status.get("containerStatuses", [])
         ready = sum(1 for container in containers if container.get("ready"))
-        recent = [container["name"] for container in containers if _recently_restarted(container, now)]
+        recent = [container["name"] for container in containers if _is_recently_restarted(container, now)]
         if status.get("phase") != "Running" or ready < len(containers) or recent:
             restarted = f" restarted: {', '.join(recent)}" if recent else ""
             counts = f"{ready}/{len(containers)}{restarted}"
@@ -209,7 +209,7 @@ def problems(
     return found
 
 
-def grown(used_mib: int, baseline_mib: int) -> bool:
+def has_grown(used_mib: int, baseline_mib: int) -> bool:
     """Whether a container uses more than the baseline allows."""
     return used_mib > baseline_mib * GROWTH_FACTOR + GROWTH_SLACK_MIB
 
@@ -257,7 +257,7 @@ def _container_lines(usage: dict[str, Usage], top: int) -> list[str]:
     ranked = sorted(usage.items(), key=lambda pair: -pair[1].mib)
     for key, used in ranked[: top or None]:
         delta = f"{used.mib - baseline[key]:+6d}" if key in baseline else "   new"
-        mark = "!" if key in baseline and grown(used.mib, baseline[key]) else " "
+        mark = "!" if key in baseline and has_grown(used.mib, baseline[key]) else " "
         lines.append(f"         {used.mib:6d}  {delta}{mark}     {used.cpu:5.2f}  {key}")
     if top and len(ranked) > top:
         lines.append(f"            ... {len(ranked) - top} more (--all)")

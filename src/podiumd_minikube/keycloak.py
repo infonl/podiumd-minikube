@@ -60,7 +60,7 @@ def missing_default_scopes(clients: list[Representation], defaults: list[Represe
     }
 
 
-def _import_done(render: manifests.Render) -> bool:
+def _is_import_done(render: manifests.Render) -> bool:
     imports = [name for name in render.jobs if name.startswith(IMPORT_JOB_PREFIX)]
     jobs = [kube.get_json("job", name, "-n", NAMESPACE) for name in imports]
     return all(job.get("status", {}).get("succeeded") for job in jobs)
@@ -71,10 +71,10 @@ def repair_default_client_scopes(render: manifests.Render) -> None:
 
     Skipped when the chart's own repair Job is rendered: an exec here failed when the deploy replaced keycloak-0.
     """
-    if any(name.startswith(CHART_REPAIR_JOB_PREFIX) for name in render.jobs) or not kube.exists(f"pod/{POD}"):
+    if any(name.startswith(CHART_REPAIR_JOB_PREFIX) for name in render.jobs) or not kube.is_present(f"pod/{POD}"):
         return
     print("Repairing the podiumd realm's client scopes (keycloak.py)...")
-    if not polling.wait_until(lambda: _import_done(render), timeout=IMPORT_TIMEOUT, interval=10):
+    if not polling.wait_until(lambda: _is_import_done(render), timeout=IMPORT_TIMEOUT, interval=10):
         msg = f"the {IMPORT_JOB_PREFIX} Job did not complete within {IMPORT_TIMEOUT}s: check its logs"
         raise process.UserError(msg)
     defaults = json.loads(kcadm(["get", f"realms/{REALM}/default-default-client-scopes", "--fields", "id,protocol"]))

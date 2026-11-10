@@ -244,7 +244,7 @@ def _replace_in_configmaps(docs: list[Doc], old: str, new: str) -> set[str]:
     return {name_of(doc) for doc in configmaps if _replace_in(doc.get("data") or {}, old, new)}
 
 
-def _replace_in(data: Doc, old: str, new: str) -> bool:
+def _replace_in(data: Doc, old: str, new: str) -> bool:  # noqa: FNE005 - changes data
     """Replace old by new in data's string values; return whether one had it."""
     keys = [key for key, value in data.items() if isinstance(value, str) and old in value]
     for key in keys:
@@ -548,7 +548,7 @@ RETRY_ATTEMPTS = 150
 SCRIPT_ARG = 2
 
 
-def _retried(kind: str, name: str, container: str) -> bool:
+def _is_retried(kind: str, name: str, container: str) -> bool:
     """Whether RETRIED_CONTAINERS has the container, its workload named name or name plus a hash suffix."""
     return any(
         (kind, container) == (retried_kind, retried_container) and (name == base or name.startswith(f"{base}-"))
@@ -560,7 +560,7 @@ def retry_in_container(docs: list[Doc]) -> None:
     """Make RETRIED_CONTAINERS rerun their command every 2 s, RETRY_ATTEMPTS times, instead of failing."""
     for doc in docs:
         for container in _containers(_pod_spec(doc) or {}):
-            if _retried(str(doc.get("kind")), name_of(doc), str(container.get("name"))):
+            if _is_retried(str(doc.get("kind")), name_of(doc), str(container.get("name"))):
                 _retry(container)
 
 
@@ -900,9 +900,9 @@ def documents(text: str) -> list[Doc]:
     return [doc for doc, _ in _loaded(text) if doc]
 
 
-def post_render_text(text: str, *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> str:
+def post_render_text(rendered: str, *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> str:
     """post_render on a rendered manifest, image digests stripped: the Helm post-renderer plugin's work."""
-    docs = documents(text)
+    docs = documents(rendered)
     return dump(post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust, hold_zac=hold_zac))
 
 

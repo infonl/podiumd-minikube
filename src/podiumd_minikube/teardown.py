@@ -24,7 +24,7 @@ from podiumd_minikube.paths import PROFILE
 from podiumd_minikube.paths import RELEASE_NAME
 
 
-def confirmed(summary: str, *, yes: bool) -> bool:
+def confirmed(summary: str, *, yes: bool) -> bool:  # noqa: FNE005 - asks the user
     """Print summary; True when yes or the user types 'yes'."""
     print(summary)
     if yes:
@@ -38,13 +38,13 @@ def confirmed(summary: str, *, yes: bool) -> bool:
     return False
 
 
-def bound_volumes(volumes: list[Doc], namespace: str = NAMESPACE) -> list[str]:
-    """Names of PersistentVolumes whose claimRef is in namespace.
+def bound_volumes(pvs: list[Doc], namespace: str = NAMESPACE) -> list[str]:
+    """Return the names of the PersistentVolumes in pvs whose claimRef is in namespace.
 
     Covers storage-hooks.yaml's Retain PVs and dynamic Delete PVs that
     minikube's provisioner left Released after the namespace was deleted.
     """
-    claims = [(pv, section(section(pv, "spec"), "claimRef")) for pv in volumes]
+    claims = [(pv, section(section(pv, "spec"), "claimRef")) for pv in pvs]
     return [name_of(pv) for pv, claim in claims if claim.get("namespace") == namespace]
 
 
@@ -93,7 +93,7 @@ def _empty(namespace: str) -> str:
     No hooks: zookeeper-operator's pre-delete hook holds an uninstall for its 120 s timeout. No grace
     period: the data goes anyway, and the namespace would wait for every pod's shutdown.
     """
-    if not kube.exists(f"namespace/{namespace}"):
+    if not kube.is_present(f"namespace/{namespace}"):
         return f"{namespace}: does not exist"
     for release in NAMESPACE_RELEASES[namespace]:
         process.run(["helm", "uninstall", release, "-n", namespace, "--no-hooks", "--timeout", "120s"], check=False)
@@ -105,11 +105,11 @@ def _empty(namespace: str) -> str:
     cleared: list[int] = []
 
     # Again on every poll: an operator still terminating puts a finalizer back after a clear.
-    def gone() -> bool:
+    def is_gone() -> bool:
         cleared.append(clear_finalizers(namespace))
-        return not kube.exists(f"namespace/{namespace}")
+        return not kube.is_present(f"namespace/{namespace}")
 
-    if not polling.wait_until(gone, timeout=NAMESPACE_TIMEOUT, interval=5):
+    if not polling.wait_until(is_gone, timeout=NAMESPACE_TIMEOUT, interval=5):
         msg = (
             f"namespace {namespace} is still Terminating after {NAMESPACE_TIMEOUT}s: `kubectl get namespace {namespace}"
             " -o yaml` names what holds it in status.conditions"

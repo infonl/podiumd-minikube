@@ -98,11 +98,11 @@ def test_rolled_out_needs_current_generation_and_ready_replicas():
         status = {"observedGeneration": observed, "replicas": pods, "updatedReplicas": updated, "readyReplicas": ready}
         return {"metadata": {"generation": generation}, "spec": {"replicas": 1}, "status": status}
 
-    assert deploy.rolled_out(workload(2, 2, 1, 1))
-    assert not deploy.rolled_out(workload(2, 1, 1, 1))
-    assert not deploy.rolled_out(workload(2, 2, 1, 0))
+    assert deploy.is_rolled_out(workload(2, 2, 1, 1))
+    assert not deploy.is_rolled_out(workload(2, 1, 1, 1))
+    assert not deploy.is_rolled_out(workload(2, 2, 1, 0))
     # The old pod is ready, the new one not yet.
-    assert not deploy.rolled_out(workload(2, 2, 1, 1, pods=2))
+    assert not deploy.is_rolled_out(workload(2, 2, 1, 1, pods=2))
 
 
 def test_rolled_out_reads_ecks_own_status_for_elasticsearch():
@@ -110,10 +110,10 @@ def test_rolled_out_reads_ecks_own_status_for_elasticsearch():
         status = {"observedGeneration": observed, "health": health, "phase": phase}
         return {"kind": "Elasticsearch", "metadata": {"generation": 2}, "status": status}
 
-    assert deploy.rolled_out(elasticsearch(2, "yellow", "Ready"))
-    assert not deploy.rolled_out(elasticsearch(2, "green", "ApplyingChanges"))
-    assert not deploy.rolled_out(elasticsearch(2, "unknown", "Ready"))
-    assert not deploy.rolled_out(elasticsearch(1, "green", "Ready"))
+    assert deploy.is_rolled_out(elasticsearch(2, "yellow", "Ready"))
+    assert not deploy.is_rolled_out(elasticsearch(2, "green", "ApplyingChanges"))
+    assert not deploy.is_rolled_out(elasticsearch(2, "unknown", "Ready"))
+    assert not deploy.is_rolled_out(elasticsearch(1, "green", "Ready"))
 
 
 def _doc(kind: str, name: str) -> Doc:
@@ -228,7 +228,7 @@ def called(
             (crds, "keycloak_version"): lambda: None,
             (deployed, "last_digests"): dict,
             (releases, "is_deployed"): lambda _release: True,
-            (openbao, "unsealed"): bool,
+            (openbao, "is_unsealed"): bool,
         },
     )
     pki.CA_CERT.write_text("")
@@ -395,7 +395,7 @@ def test_deploy_restarts_zac_once_when_its_boot_failed(live: Doc, monkeypatch: p
         restarts.append("zac")
         zac["status"]["readyReplicas"] = 1
 
-    monkeypatch.setattr(deploy, "zac_boot_failed", lambda: True)
+    monkeypatch.setattr(deploy, "has_zac_boot_failed", lambda: True)
     monkeypatch.setattr(deploy, "restart_zac", restart_zac)
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     _deploy()
@@ -435,7 +435,7 @@ def test_deploy_restarts_zac_only_after_its_jobs_completed(
         zac["status"]["readyReplicas"] = 1
 
     monkeypatch.setattr(kube, "get_json", get_json)
-    monkeypatch.setattr(deploy, "zac_boot_failed", lambda: True)
+    monkeypatch.setattr(deploy, "has_zac_boot_failed", lambda: True)
     monkeypatch.setattr(deploy, "restart_zac", restart_zac)
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     _deploy()
@@ -486,7 +486,7 @@ def test_deploy_skips_unchanged_releases_and_an_unsealed_vaults_activation(
 ):
     monkeypatch.setattr(releases, "digest", lambda _render, _post: "same")
     monkeypatch.setattr(deployed, "last_digests", lambda: {RELEASE_NAME: "same", releases.PODIUMD: "same"})
-    monkeypatch.setattr(openbao, "unsealed", lambda: True)
+    monkeypatch.setattr(openbao, "is_unsealed", lambda: True)
     _deploy()
     assert not [step for step in called if step.startswith(("upgrade", "delete", "apply --server-side"))]
     assert "activate" not in called

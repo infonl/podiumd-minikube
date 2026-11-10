@@ -30,7 +30,7 @@ _OBJECTTYPEN = "Deployment/objecttypen"
 _OBJECTEN = "Deployment/objecten"
 
 
-def merging(installed: manifests.Render, podiumd: manifests.Render) -> bool:
+def is_merging(installed: manifests.Render, podiumd: manifests.Render) -> bool:
     """Whether podiumd's upgrade drops the Deployment objecttypen installed beside objecten (podiumd<4.10 to 4.10+)."""
     before = {manifests.key_of(doc) for doc in installed.docs}
     after = {manifests.key_of(doc) for doc in podiumd.docs}

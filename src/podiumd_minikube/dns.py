@@ -36,14 +36,14 @@ def corefile_with_hosts(corefile: str, ip: str, hosts: list[str]) -> str:
     return "".join(f"{line}\n" for line in (*lines, BEGIN, *block, END))
 
 
-def apply_hosts(hosts: list[str]) -> None:
-    """Points hosts at the edge's ClusterIP inside the cluster."""
+def apply_hosts(names: list[str]) -> None:
+    """Point names at the edge's ClusterIP inside the cluster."""
     ip = kube.kubectl("get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}")
     corefile = kube.kubectl("get", "configmap", "coredns", "-n", "kube-system", "-o", "jsonpath={.data.Corefile}")
-    updated = corefile_with_hosts(corefile, ip, hosts)
+    updated = corefile_with_hosts(corefile, ip, names)
     if updated == corefile:
-        print(f"CoreDNS already resolves {len(hosts)} ingress host(s) to the edge ({ip}).")
+        print(f"CoreDNS already resolves {len(names)} ingress host(s) to the edge ({ip}).")
         return
-    print(f"Pointing {len(hosts)} ingress host(s) at the edge ({ip}) in CoreDNS...")
+    print(f"Pointing {len(names)} ingress host(s) at the edge ({ip}) in CoreDNS...")
     patch = json.dumps({"data": {"Corefile": updated}})
     kube.kubectl_shown("patch", "configmap", "coredns", "-n", "kube-system", "--type", "merge", "-p", patch)

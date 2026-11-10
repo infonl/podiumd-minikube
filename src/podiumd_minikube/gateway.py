@@ -258,21 +258,21 @@ def _pin_cluster_ip() -> None:
     print(f"  edge Service has ClusterIP {live}, not {EDGE_CLUSTER_IP}: recreating it; then run update-hosts")
     kube.kubectl("delete", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE)
 
-    def pinned() -> bool:
+    def is_pinned() -> bool:
         result = process.run(
             ["kubectl", "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}"],
             check=False,
         )
         return result.stdout.strip() == EDGE_CLUSTER_IP
 
-    if not polling.wait_until(pinned, timeout=120, interval=3):
+    if not polling.wait_until(is_pinned, timeout=120, interval=3):
         msg = f"NGF did not give {EDGE_SERVICE} ClusterIP {EDGE_CLUSTER_IP}: run `podiumd-minikube provision-cluster`"
         raise process.UserError(msg)
 
 
 def apply(docs: list[Doc], hosts: list[str]) -> None:
     """Apply the certificate, Gateway and routes; delete routes no longer rendered."""
-    if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
+    if not kube.is_present(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
         msg = f"NGINX Gateway Fabric is not in namespace {EDGE_NAMESPACE!r}: run `podiumd-minikube provision-cluster`"
         raise process.UserError(msg)
     print("\nApplying the NGINX Gateway Fabric Gateway and routes (gateway.py)...")
@@ -287,7 +287,9 @@ def apply(docs: list[Doc], hosts: list[str]) -> None:
     wanted = {(doc["kind"], manifests.name_of(doc)): manifests.section(doc, "spec") for doc in objects}
     _delete_stale(wanted)
     kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
-    if not polling.wait_until(lambda: kube.exists(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3):
+    if not polling.wait_until(
+        lambda: kube.is_present(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3
+    ):
         msg = f"NGF created no Service {EDGE_NAMESPACE}/{EDGE_SERVICE} for Gateway {GATEWAY} within 120s"
         raise process.UserError(msg)
     _pin_cluster_ip()

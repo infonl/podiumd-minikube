@@ -70,7 +70,7 @@ def _counted(counts: dict[str, int]) -> list[str] | None:
     """None while a StatefulSet in counts lacks its pod count or has not rolled out; else its names."""
     for name, count in counts.items():
         statefulset = kube.get_json(f"statefulset/{name}", "-n", NAMESPACE)
-        if statefulset["spec"].get("replicas") != count or not deploy.rolled_out(statefulset):
+        if statefulset["spec"].get("replicas") != count or not deploy.is_rolled_out(statefulset):
             return None
     return list(counts)
 

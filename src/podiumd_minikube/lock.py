@@ -77,14 +77,14 @@ def describe(hold: Hold, now: datetime | None = None) -> str:
     return f"{text} for {duration}{hint}"
 
 
-def _ours(hold: Hold | None) -> bool:
+def _is_ours(hold: Hold | None) -> bool:
     return hold is not None and os.environ.get(HOLD_ENV) == hold.line
 
 
-def take(what: str, *, who: str = HOLDER, path: Path | None = None) -> bool:
+def take(what: str, *, who: str = HOLDER, path: Path | None = None) -> bool:  # noqa: FNE005 - takes the lock
     """Take the lock; False when this process already holds it. UserError names the holder when busy."""
     path = path or LOCK_FILE
-    if _ours(current(path)):
+    if _is_ours(current(path)):
         return False
     line = f"{who} {what} {datetime.now(UTC).isoformat(timespec='seconds')}"
     try:
@@ -102,7 +102,7 @@ def take(what: str, *, who: str = HOLDER, path: Path | None = None) -> bool:
 def release(path: Path | None = None) -> None:
     """Remove the lock if this process holds it."""
     path = path or LOCK_FILE
-    if _ours(current(path)):
+    if _is_ours(current(path)):
         path.unlink(missing_ok=True)
     os.environ.pop(HOLD_ENV, None)
 

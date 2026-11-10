@@ -53,7 +53,7 @@ def switched(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) ->
         "get_json",
         lambda resource, *_: {"spec": {"replicas": counts[resource.split("/")[1]]}, "metadata": {}, "status": {}},
     )
-    monkeypatch.setattr(deploy, "rolled_out", lambda _statefulset: True)
+    monkeypatch.setattr(deploy, "is_rolled_out", lambda _statefulset: True)
     monkeypatch.setattr(kube, "first_pod", lambda selector: calls.append(f"master {selector}"))
     return calls
 

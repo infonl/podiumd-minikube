@@ -40,7 +40,7 @@ def kubectl_shown(*args: str, stdin: str | None = None) -> None:
     process.run(["kubectl", *args], stdin=stdin, capture=False)
 
 
-def kubectl_ok(*args: str) -> bool:
+def is_kubectl_ok(*args: str) -> bool:
     """Whether kubectl args succeeds; output is discarded."""
     return process.succeeds(["kubectl", *args])
 
@@ -62,9 +62,9 @@ def reference(api_version: str, kind: str, name: str = "") -> str:
     return f"{kinds}/{name}" if name else kinds
 
 
-def exists(resource: str, namespace: str = NAMESPACE) -> bool:
+def is_present(resource: str, namespace: str = NAMESPACE) -> bool:
     """Whether resource ("deployment/x", "job/y") exists in namespace."""
-    return kubectl_ok("get", resource, "-n", namespace)
+    return is_kubectl_ok("get", resource, "-n", namespace)
 
 
 def edge_ip() -> str:

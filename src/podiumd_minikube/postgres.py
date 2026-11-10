@@ -133,7 +133,7 @@ def migrate_major(render: manifests.Render) -> None:
     Clients are restarted afterwards; writes between the dump and the restore are lost.
     """
     rendered = render.named("Deployment", "postgres")
-    if rendered is None or not kube.exists("deployment/postgres"):
+    if rendered is None or not kube.is_present("deployment/postgres"):
         return
     template = rendered["spec"]["template"]
     image = template["spec"]["containers"][0]["image"]
@@ -175,13 +175,15 @@ def restore(dump: Path, major: int, render: manifests.Render) -> None:
         for doc in render.docs
         if doc.get("kind") in kinds and manifests.name_of(doc) != "postgres"
     ]
-    kube.kubectl_shown("rollout", "restart", "-n", NAMESPACE, *[client for client in clients if kube.exists(client)])
+    kube.kubectl_shown(
+        "rollout", "restart", "-n", NAMESPACE, *[client for client in clients if kube.is_present(client)]
+    )
     print(f"Postgres {major} restored; old data directories removed, dump kept in {dump}.")
 
 
 def create_missing_databases() -> None:
     """Create the init SQL's databases that the running Postgres lacks."""
-    if not kube.exists("deployment/postgres"):
+    if not kube.is_present("deployment/postgres"):
         return
     databases = _names("select datname from pg_database;")
     roles = _names("select rolname from pg_roles;")
@@ -202,7 +204,7 @@ def align_with_azure() -> None:
     As the init SQL, for clusters provisioned before it; idempotent. Also drops
     openzaak's unused "uuid-ossp", which Azure does not allow.
     """
-    if not kube.exists("deployment/postgres"):
+    if not kube.is_present("deployment/postgres"):
         return
     owners = dict(
         line.split("|")
@@ -232,7 +234,7 @@ def align_with_azure() -> None:
 
 def rename_databases() -> None:
     """Rename RENAMED_DATABASES and their roles in place; run before create_missing_databases."""
-    if not kube.exists("deployment/postgres"):
+    if not kube.is_present("deployment/postgres"):
         return
     databases = _names("select datname from pg_database;")
     pod = kube.first_pod("app=postgres")
@@ -257,7 +259,7 @@ def rename_databases() -> None:
 
 def rename_rows() -> None:
     """Apply RENAMES in the databases and tables that exist; an old value whose new one exists stays."""
-    if not kube.exists("deployment/postgres"):
+    if not kube.is_present("deployment/postgres"):
         return
     databases = _names("select datname from pg_database;")
     pod = kube.first_pod("app=postgres")

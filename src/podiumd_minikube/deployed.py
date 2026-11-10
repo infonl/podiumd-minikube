@@ -64,7 +64,7 @@ def record(command: str, render: manifests.Render, digests: dict[str, str]) -> N
 
 def read() -> dict[str, str]:
     """Return the last deploy's record; {} before a deploy wrote one."""
-    if not kube.exists(f"configmap/{CONFIGMAP}"):
+    if not kube.is_present(f"configmap/{CONFIGMAP}"):
         return {}
     return kube.get_json(f"configmap/{CONFIGMAP}", "-n", NAMESPACE).get("data") or {}
 

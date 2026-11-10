@@ -15,7 +15,7 @@ WEBSITE_OFF = ["--set", "podiumd.kiss.settings.syncJobs.website=null"]
 _HOOK_SUFFIX = "-crawler-index-template"
 
 
-def _admits(policy: Doc, peer: Doc) -> bool:
+def _is_admitting(policy: Doc, peer: Doc) -> bool:
     rules: list[Doc] = manifests.section(policy, "spec").get("ingress") or []
     return any(peer in (rule.get("from") or []) for rule in rules)
 
@@ -29,20 +29,22 @@ def website_hook_blocked(podiumd: manifests.Render) -> str:
     env: list[Doc] = template["spec"]["containers"][0].get("env", [])
     url: str = next(item["value"] for item in env if item["name"] == "ELASTIC_BASE_URL")
     service = (urlparse(url).hostname or "").split(".")[0]
-    if not kube.exists(f"service/{service}"):
+    if not kube.is_present(f"service/{service}"):
         return f"Service {service} does not exist yet"
     peer = {"podSelector": {"matchLabels": {"batch.kubernetes.io/job-name": hook}}}
-    policies = [doc for doc in podiumd.docs if doc.get("kind") == "NetworkPolicy" and _admits(doc, peer)]
+    policies = [doc for doc in podiumd.docs if doc.get("kind") == "NetworkPolicy" and _is_admitting(doc, peer)]
     return next(
         (
             f"NetworkPolicy {name} does not admit it yet"
             for name in map(manifests.name_of, policies)
-            if not _live_admits(name, peer)
+            if not _is_live_admitting(name, peer)
         ),
         "",
     )
 
 
-def _live_admits(name: str, peer: Doc) -> bool:
+def _is_live_admitting(name: str, peer: Doc) -> bool:
     """Whether the NetworkPolicy called name exists in the cluster and admits peer."""
-    return kube.exists(f"networkpolicy/{name}") and _admits(kube.get_json("networkpolicy", name, "-n", NAMESPACE), peer)
+    return kube.is_present(f"networkpolicy/{name}") and _is_admitting(
+        kube.get_json("networkpolicy", name, "-n", NAMESPACE), peer
+    )

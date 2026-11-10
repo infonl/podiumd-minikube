@@ -31,6 +31,7 @@ dev = [
     "wemake-python-styleguide",  # flake8 plugin, brings its own pinned flake8
     "flake8-bugbear",  # B907 and B042 only ([tool.flake8] select)
     "flake8-class-attributes-order",  # CCE001
+    "flake8-functions-names",  # FNE005, FNE008
     "deptry",
     "pip-audit",
 ]
@@ -230,8 +231,10 @@ disable = [
 [tool.flake8]
 # Only the WPS rules (wemake-python-styleguide) that ruff and pylint lack.
 # B042 and B907 (flake8-bugbear): the two bugbear rules ruff lacks; CCE001
-# (flake8-class-attributes-order): the order of a class's members.
-select = ["WPS", "B042", "B907", "CCE001"]
+# (flake8-class-attributes-order): the order of a class's members; FNE005 and
+# FNE008 (flake8-functions-names): a bool function asks (is_/has_/can_), a
+# function name does not repeat its first argument.
+select = ["WPS", "B042", "B907", "CCE001", "FNE005", "FNE008"]
 # Magic methods right after __init__, where WPS338 wants them (the default puts them last);
 # no Django save/delete special case.
 class-attributes-order = "docstring,pass,meta_class,nested_class,constant,field,outer_field,if,expression,__new__,__init__,__post_init__,magic_method,property_method,static_method,class_method,method,protected_property_method,protected_static_method,protected_class_method,protected_method,private_property_method,private_static_method,private_class_method,private_method"

@@ -67,14 +67,14 @@ def routed_via() -> str | None:
     return shown[2] if shown[1:2] == ["via"] else None
 
 
-def sudo_answers(sudo_args: list[str]) -> bool:
+def can_sudo_without_password(sudo_args: list[str]) -> bool:
     """Whether sudo can run sudo_args now: a terminal for the password, or a rule without one."""
     return sys.stdin.isatty() or process.succeeds(["sudo", "-n", "-l", *sudo_args])
 
 
 def require_sudo(command: str, sudo_args: list[str]) -> None:
     """Refuses when sudo would ask for a password for sudo_args and no terminal can answer it."""
-    if not sudo_answers(sudo_args):
+    if not can_sudo_without_password(sudo_args):
         msg = (
             f"sudo needs a terminal for its password: run `podiumd-minikube {command}` in a terminal,"
             f" or install `podiumd-minikube setup-tunnel sudoers` as {SUDOERS_FILE} (README)"
@@ -82,7 +82,7 @@ def require_sudo(command: str, sudo_args: list[str]) -> None:
         raise process.UserError(msg)
 
 
-def setup_tunnel(*, ask: bool = True) -> bool:
+def setup_tunnel(*, ask: bool = True) -> bool:  # noqa: FNE005 - starts the tunnel
     """Add the route in the foreground (sudo asks here), then run minikube tunnel in the background.
 
     ask=False (deploy, start-cluster): only when sudo needs no password for the route; else
@@ -127,8 +127,8 @@ def _print_access(ip: str) -> None:
     print(f"\n{hosts_hint(ip)}\n{STOP_HINT}")
 
 
-def _route(*, ask: bool) -> bool:
-    """Routes SERVICE_CIDR via the minikube node; False when ask is off and sudo would ask for a password."""
+def _route(*, ask: bool) -> bool:  # noqa: FNE005 - adds the route
+    """Route SERVICE_CIDR via the minikube node; False when ask is off and sudo would ask for a password."""
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
     if routed_via() == node_ip:
         print(f"{SERVICE_CIDR} is already routed via the minikube node {node_ip}.")

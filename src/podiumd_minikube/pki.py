@@ -38,7 +38,7 @@ CERT_MANAGER_CHART_ARGS = ["cert-manager", "jetstack/cert-manager", "--version",
 ISSUER = "podiumd-local-ca"
 
 
-def ensure_ca() -> bool:
+def ensure_ca() -> bool:  # noqa: FNE005 - creates the CA
     """Create .pki/ca.key and .pki/ca.crt unless both exist; True when created."""
     if CA_CERT.is_file() and CA_KEY.is_file():
         return False
@@ -98,7 +98,7 @@ def _move_from_old_namespace() -> None:
     kube.kubectl("delete", "namespace", OLD_CERT_MANAGER_NAMESPACE, "--wait=true")
 
 
-def _installed() -> bool:
+def _is_installed() -> bool:
     """Return True when the cert-manager release runs CERT_MANAGER_VERSION with cert_manager_values()."""
     releases = json.loads(process.output(["helm", "list", "-n", CERT_MANAGER_NAMESPACE, "-o", "json"]))
     if not any(release["chart"] == f"cert-manager-{CERT_MANAGER_VERSION}" for release in releases):
@@ -123,7 +123,7 @@ def cert_manager_template() -> str:
 def install_cert_manager() -> None:
     """Installs or upgrades cert-manager to CERT_MANAGER_VERSION and its values; skips it when both run."""
     _move_from_old_namespace()
-    if _installed():
+    if _is_installed():
         print(f"cert-manager {CERT_MANAGER_VERSION} already installed in {CERT_MANAGER_NAMESPACE!r} - skipping.")
         return
     print(f"Installing cert-manager {CERT_MANAGER_VERSION}...")
@@ -168,10 +168,10 @@ def install_issuer() -> None:
         print(f"Created the local CA in {PKI_DIR} (trust {CA_CERT} in browsers and test clients).")
     manifests = issuer_manifests()
 
-    def applied() -> bool:
+    def is_applied() -> bool:
         return process.run(["kubectl", "apply", "-f", "-"], stdin=manifests, check=False).returncode == 0
 
-    if not polling.wait_until(applied, timeout=180, interval=5):
+    if not polling.wait_until(is_applied, timeout=180, interval=5):
         kube.kubectl_shown("apply", "-f", "-", stdin=manifests)
     kube.kubectl_shown("wait", "--for=condition=Ready", f"clusterissuer/{ISSUER}", "--timeout=120s")
 

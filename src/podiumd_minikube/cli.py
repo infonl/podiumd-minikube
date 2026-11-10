@@ -46,7 +46,7 @@ def _name(command: Command) -> str:
     return command.__name__.replace("_", "-")
 
 
-def _yes(command: Command, argv: list[str]) -> bool:
+def _has_yes(command: Command, argv: list[str]) -> bool:
     """Parse a command whose only option is --yes."""
     parser = _parser(command)
     parser.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
@@ -180,7 +180,7 @@ def replicas(argv: list[str]) -> None:
 
 def reset_namespace(argv: list[str]) -> int:
     """Empty the releases' namespaces and their cluster-wide leftovers, after confirmation."""
-    return teardown.reset_namespace(yes=_yes(reset_namespace, argv))
+    return teardown.reset_namespace(yes=_has_yes(reset_namespace, argv))
 
 
 def set_podiumd_version(argv: list[str]) -> None:
@@ -254,7 +254,7 @@ def start_cluster(argv: list[str]) -> None:
 
 def teardown_cluster(argv: list[str]) -> int:
     """Delete the whole minikube cluster and stop minikube tunnel, after confirmation."""
-    return teardown.teardown_cluster(yes=_yes(teardown_cluster, argv))
+    return teardown.teardown_cluster(yes=_has_yes(teardown_cluster, argv))
 
 
 def update_hosts(argv: list[str]) -> None:

@@ -96,7 +96,7 @@ def write_manifest() -> str:
 
 def apply() -> None:
     """Apply MANIFEST, so a running node gets changed values; refuse a node that still runs kindnet."""
-    if kube.exists("daemonset/kindnet", "kube-system"):
+    if kube.is_present("daemonset/kindnet", "kube-system"):
         msg = "the cluster runs kindnet, not Cilium: run `podiumd-minikube teardown-cluster`, then `provision-cluster`"
         raise process.UserError(msg)
     kube.kubectl("apply", "-f", str(MANIFEST))

@@ -37,7 +37,7 @@ def _render(*docs: Doc) -> manifests.Render:
 def cluster(monkeypatch: pytest.MonkeyPatch) -> Doc:
     """Live objects by "kind/name"; kube.exists and kube.get_json read them."""
     live: Doc = {}
-    monkeypatch.setattr(kube, "exists", lambda resource, *_args, **_kwargs: resource in live)
+    monkeypatch.setattr(kube, "is_present", lambda resource, *_args, **_kwargs: resource in live)
     monkeypatch.setattr(kube, "get_json", lambda kind, name, *_args: live[f"{kind}/{name}"])
     return live
 
