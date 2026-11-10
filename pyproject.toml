@@ -54,6 +54,8 @@ podiumd_minikube = ["py.typed"]
 # Shared with [tool.ruff.format] and pylint max-line-length.
 line-length = 120
 indent-width = 4
+# The oldest Python this runs on, as requires-python and basedpyright's pythonVersion.
+target-version = "py312"
 force-exclude = true
 extend-exclude = ["vendor", ".claude"]
 
@@ -151,8 +153,6 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 # Mirror [tool.isort] below so ruff and isort agree on import layout.
 force-single-line = true
 lines-between-types = 1
-# No target-version is set, so ruff doesn't know tomllib (3.11+) is stdlib.
-extra-standard-library = ["tomllib"]
 known-first-party = ["podiumd_minikube"]
 
 [tool.ruff.lint.flake8-bandit]
