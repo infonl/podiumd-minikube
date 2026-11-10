@@ -9696,8 +9696,8 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   (podiumd-chart-39, before #698) had raised; the host kernel logged no
   other OOM since boot (`dmesg`, read by Kees). Docker's event log starts
   at the daemon restart. Prometheus here scrapes no container or node
-  memory, and the node's journal (tmpfs) is lost with the node. Proposed to
-  composers-ansible (manages chopin's daemon.json): `"live-restore": true`.
+  memory, and the node's journal (tmpfs) is lost with the node. Fix on the
+  host: `"live-restore": true` in Docker's daemon.json.
 - kiss-3 two-pass, live on the next fresh install (13:38-13:56 CET,
   8437fc15 = f8d3fc67 + helm-charts #703): deploy ran without the website,
   then "Deploying again, with KISS's website", exit 0.
