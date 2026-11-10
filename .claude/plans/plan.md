@@ -9832,3 +9832,27 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   after a full tier: the 362 MiB measured at the 19:52 refresh is the
   post-tier value the baseline rule asks for, now in the baseline (231 ->
   362 MiB).
+
+### podiumd 4.10.1 released, deployed from the repository
+
+- Tag podiumd-4.10.1 (513c5fd2, 2026-11-05, #675). Chart files against the
+  deployed 227d8510: only `files/frankgateway/openbao-client.lua`
+  (`invalid_stale = true`, IN-3417) and the release table; the rest docs.
+  podiumd-minikube was down since a host reboot; `start-cluster` brought
+  revision 6 back in 4 minutes (10:00-10:04 CET, 2026-11-10).
+- Bug found live: after `set-podiumd-version 4.10.1` the deploy said
+  "render unchanged" for podiumd. charts/podiumd-4.10.1.tgz was still the
+  package of the 227d8510 checkout (same name as the published tarball;
+  sha256 26a162e3 instead of the repository's a64673c1), so
+  `dependency.sync` skipped `helm dependency update`. Fixed in 04a78f4:
+  `versions.select` removes the chart's tarballs when a selection changes
+  from path to version. The stale tarball was removed by hand once (the
+  recorded selection was already `version`).
+- Revision 7 (10:10 CET): ConfigMap frankgateway-lua has `invalid_stale`.
+  monitoring-logging stays the 1.0.19 checkout (the release ships 1.0.18).
+- Markers (cc94021): 4.10.1 exports the same KC_OPTS in
+  `podiumd.kcadmLogin` and wraps the realm imports, PABC's groups Job, the
+  admin user Job and the catalogi and objecttypen Jobs in
+  `podiumd.retryCommand`; `tune_kcadm` and those RETRIED_CONTAINERS entries
+  are marked `podiumd<4.10.1`. The Keycloak probe and builder CPU speed-up
+  has no counterpart in 4.10.1 and stays unmarked.
