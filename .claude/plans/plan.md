@@ -9856,3 +9856,8 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   `podiumd.retryCommand`; `tune_kcadm` and those RETRIED_CONTAINERS entries
   are marked `podiumd<4.10.1`. The Keycloak probe and builder CPU speed-up
   has no counterpart in 4.10.1 and stays unmarked.
+- podiumd-tests smoke on revision 7: 20261110-091502 (10:15 CET) 179
+  passed, 0 failed, 2 skipped, 7 xfailed, 1 xpassed (Grafana HSTS,
+  podiumd-chart-1: fixed in the monitoring-logging 1.0.19 checkout).
+  OpenBao's security headers pass without xfail (podiumd-chart-23, fixed in
+  4.10.1).
