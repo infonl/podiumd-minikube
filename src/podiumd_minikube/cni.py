@@ -5,13 +5,12 @@ handed to `minikube start --cni=<file>`; minikube rereads that file on every
 start, so it lives at a fixed path.
 """
 
-from typing import Any
-
 import yaml
 
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHART_DIR
 
 CILIUM_REPO = "https://helm.cilium.io"
@@ -30,7 +29,7 @@ AGENT_RESOURCES = {"requests": {"cpu": "50m", "memory": "192Mi"}, "limits": {"me
 OPERATOR_RESOURCES = {"requests": {"cpu": "10m", "memory": "64Mi"}, "limits": {"memory": "192Mi"}}
 
 
-def values() -> dict[str, Any]:
+def values() -> Doc:
     """ExternalsPodiumD's cilium-config (t-dimp, o-dimp) without its Azure parts."""
     return {
         "kubeProxyReplacement": True,

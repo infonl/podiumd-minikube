@@ -8,7 +8,6 @@ more than one pod). `off` does the reverse. A deploy resets the counts, not the 
 
 import json
 
-from typing import Any
 from typing import cast
 
 from podiumd_minikube import deploy
@@ -18,6 +17,7 @@ from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube import services
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 
 # StatefulSet -> (the value that sets its pod count, the chart's default count).
@@ -32,17 +32,17 @@ READY_TIMEOUT = 300
 Key = tuple[str, str, str]
 
 
-def _key(doc: manifests.Doc) -> Key:
+def _key(doc: Doc) -> Key:
     return doc["apiVersion"], doc["kind"], manifests.name_of(doc)
 
 
-def merge_patch(old: Any, new: Any) -> Any:
+def merge_patch(old: object, new: object) -> object:
     """The JSON merge patch (RFC 7386) that turns old into new; lists are replaced whole."""
     if not isinstance(old, dict) or not isinstance(new, dict):
         return new
-    before = cast("manifests.Doc", old)
-    after = cast("manifests.Doc", new)
-    patch: manifests.Doc = {key: None for key in before if key not in after}
+    before = cast("Doc", old)
+    after = cast("Doc", new)
+    patch: Doc = {key: None for key in before if key not in after}
     for key, value in after.items():
         if key not in before:
             patch[key] = value
@@ -52,8 +52,9 @@ def merge_patch(old: Any, new: Any) -> Any:
 
 
 def changes(
-    source: list[manifests.Doc], target: list[manifests.Doc]
-) -> tuple[list[manifests.Doc], dict[Key, Any], list[Key]]:
+    source: list[Doc],
+    target: list[Doc],
+) -> tuple[list[Doc], dict[Key, object], list[Key]]:
     """(objects to create, merge patches per object, objects to delete) that turn source into target."""
     before = {_key(doc): doc for doc in source}
     after = {_key(doc): doc for doc in target}
@@ -75,7 +76,7 @@ def _counted(counts: dict[str, int]) -> list[str] | None:
 
 
 @lock.holding("replicas")
-def _apply_changes(source: list[manifests.Doc], target: list[manifests.Doc]) -> None:
+def _apply_changes(source: list[Doc], target: list[Doc]) -> None:
     """Creates, patches and deletes the live objects so that source becomes target."""
     created, patches, deleted = changes(source, target)
     if created:

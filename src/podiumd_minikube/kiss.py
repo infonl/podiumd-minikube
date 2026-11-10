@@ -8,14 +8,15 @@ from urllib.parse import urlparse
 
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 
 WEBSITE_OFF = ["--set", "podiumd.kiss.settings.syncJobs.website=null"]
 _HOOK_SUFFIX = "-crawler-index-template"
 
 
-def _admits(policy: manifests.Doc, peer: manifests.Doc) -> bool:
-    rules: list[manifests.Doc] = manifests.section(policy, "spec").get("ingress") or []
+def _admits(policy: Doc, peer: Doc) -> bool:
+    rules: list[Doc] = manifests.section(policy, "spec").get("ingress") or []
     return any(peer in (rule.get("from") or []) for rule in rules)
 
 
@@ -25,7 +26,7 @@ def website_hook_blocked(podiumd: manifests.Render) -> str:
     if hook is None:
         return ""
     template = (podiumd.named("Job", hook) or {})["spec"]["template"]
-    env: list[manifests.Doc] = template["spec"]["containers"][0].get("env", [])
+    env: list[Doc] = template["spec"]["containers"][0].get("env", [])
     url: str = next(item["value"] for item in env if item["name"] == "ELASTIC_BASE_URL")
     service = (urlparse(url).hostname or "").split(".")[0]
     if not kube.exists(f"service/{service}"):
@@ -42,6 +43,6 @@ def website_hook_blocked(podiumd: manifests.Render) -> str:
     )
 
 
-def _live_admits(name: str, peer: manifests.Doc) -> bool:
+def _live_admits(name: str, peer: Doc) -> bool:
     """Whether the NetworkPolicy called name exists in the cluster and admits peer."""
     return kube.exists(f"networkpolicy/{name}") and _admits(kube.get_json("networkpolicy", name, "-n", NAMESPACE), peer)

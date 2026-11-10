@@ -1,7 +1,12 @@
 """podiumd_minikube.tls: the edge certificate."""
 
+from typing import TYPE_CHECKING
+
 from podiumd_minikube import manifests
 from podiumd_minikube import tls
+
+if TYPE_CHECKING:
+    from podiumd_minikube.objects import Doc
 
 
 def test_certificate_covers_the_hosts_in_the_namespace():
@@ -13,7 +18,7 @@ def test_certificate_covers_the_hosts_in_the_namespace():
 
 
 def test_ingress_hosts_are_sorted_and_unique():
-    docs: list[manifests.Doc] = [
+    docs: list[Doc] = [
         {"kind": "Ingress", "spec": {"rules": [{"host": "zac.local"}, {"host": "a.local"}]}},
         {"kind": "Ingress", "spec": {"rules": [{"host": "zac.local"}, {"http": {}}]}},
         {"kind": "Service", "spec": {"rules": [{"host": "not.local"}]}},

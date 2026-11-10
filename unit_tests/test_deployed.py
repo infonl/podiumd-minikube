@@ -2,8 +2,6 @@
 
 import json
 
-from typing import Any
-
 import pytest
 import yaml
 
@@ -12,12 +10,13 @@ from conftest import FakeRun
 from podiumd_minikube import dependency
 from podiumd_minikube import deployed
 from podiumd_minikube import manifests
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 
 CHARTS = {"Deployment/openzaak": "podiumd", "Prometheus/podiumd-minikube-prometheus": "monitoring-logging"}
 
 
-def _pod(name: str, owner: dict[str, str] | None, states: list[str], namespace: str = NAMESPACE) -> dict[str, Any]:
+def _pod(name: str, owner: dict[str, str] | None, states: list[str], namespace: str = NAMESPACE) -> Doc:
     return {
         "metadata": {"namespace": namespace, "name": name, "ownerReferences": [owner] if owner else []},
         "status": {"containerStatuses": [{"state": {state: {}}} for state in states]},

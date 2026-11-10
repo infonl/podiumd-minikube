@@ -5,7 +5,6 @@ import json
 
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -35,6 +34,7 @@ from podiumd_minikube import process
 from podiumd_minikube import provision
 from podiumd_minikube import releases
 from podiumd_minikube import tunnel
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OLD_NAMESPACE
@@ -116,7 +116,7 @@ def test_rolled_out_reads_ecks_own_status_for_elasticsearch():
     assert not deploy.rolled_out(elasticsearch(1, "green", "Ready"))
 
 
-def _doc(kind: str, name: str) -> dict[str, Any]:
+def _doc(kind: str, name: str) -> Doc:
     return {"kind": kind, "metadata": {"name": name}}
 
 
@@ -177,15 +177,15 @@ def test_apply_crds_gives_templated_crds_the_releases_ownership(fake_run: FakeRu
     }
 
 
-def _job_status(condition: str) -> dict[str, Any]:
+def _job_status(condition: str) -> Doc:
     return {**_doc("Job", "openzaak-config"), "status": {"conditions": [{"type": condition, "status": "True"}]}}
 
 
 @pytest.fixture
-def live(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def live(monkeypatch: pytest.MonkeyPatch) -> Doc:
     """`kubectl get -o json` answers by resource: zac rolled out, the Job complete."""
     status = {"observedGeneration": 1, "replicas": 1, "updatedReplicas": 1, "readyReplicas": 1}
-    answers: dict[str, Any] = {
+    answers: Doc = {
         "deployment": {
             "items": [{"kind": "Deployment", "metadata": {"name": "zac", "generation": 1}, "status": status}]
         },
@@ -306,14 +306,14 @@ def test_deploy_refuses_the_namespace_of_the_kubectl_apply_deploys(fake_run: Fak
 
 
 @pytest.mark.usefixtures("called")
-def test_deploy_fails_on_a_failed_job(live: dict[str, Any]):
+def test_deploy_fails_on_a_failed_job(live: Doc):
     live["job"]["items"] = [_job_status("Failed")]
     with pytest.raises(process.UserError, match=r"^Job\(s\) failed: openzaak-config: "):
         _deploy()
 
 
 @pytest.mark.usefixtures("called", "poll_once")
-def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(live: dict[str, Any]):
+def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(live: Doc):
     live["job"]["items"] = [{"metadata": {"name": "openzaak-config"}, "status": {}}]
     live["deployment"]["items"][0]["status"]["readyReplicas"] = 0
     with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac; running: openzaak-config$"):
@@ -321,9 +321,7 @@ def test_deploy_names_stuck_workloads_and_running_jobs_on_timeout(live: dict[str
 
 
 @pytest.mark.usefixtures("called", "poll_once")
-def test_deploy_names_a_held_zac_on_timeout(
-    fake_run: FakeRun, live: dict[str, Any], renders: dict[str, manifests.Render]
-):
+def test_deploy_names_a_held_zac_on_timeout(fake_run: FakeRun, live: Doc, renders: dict[str, manifests.Render]):
     zac = {**_doc("Deployment", "zac"), "spec": {"replicas": 1}}
     renders[releases.PODIUMD] = manifests.Render(docs=[zac, _doc("Job", "openzaak-config")], large_configmaps=[])
     fake_run.on("kubectl", "get", "deployment/zac", returncode=1)
@@ -369,7 +367,7 @@ def test_render_without_lookup_runs_one_plain_helm_template(fake_run: FakeRun):
 
 
 @pytest.mark.usefixtures("called", "poll_once")
-def test_deploy_names_a_workload_not_created_yet_as_stuck(live: dict[str, Any]):
+def test_deploy_names_a_workload_not_created_yet_as_stuck(live: Doc):
     live["deployment"]["items"] = []
     with pytest.raises(process.UserError, match=r"not rolled out: deployment/zac;"):
         _deploy()
@@ -388,7 +386,7 @@ def test_zac_state(fake_run: FakeRun, ready: int, log: str, state: str | None):
 
 
 @pytest.mark.usefixtures("called")
-def test_deploy_restarts_zac_once_when_its_boot_failed(live: dict[str, Any], monkeypatch: pytest.MonkeyPatch):
+def test_deploy_restarts_zac_once_when_its_boot_failed(live: Doc, monkeypatch: pytest.MonkeyPatch):
     zac = live["deployment"]["items"][0]
     zac["status"]["readyReplicas"] = 0
     restarts: list[str] = []
@@ -407,7 +405,7 @@ def test_deploy_restarts_zac_once_when_its_boot_failed(live: dict[str, Any], mon
 @pytest.mark.parametrize("name", deploy.ZAC_JOBS)
 @pytest.mark.usefixtures("called")
 def test_deploy_restarts_zac_only_after_its_jobs_completed(
-    live: dict[str, Any],
+    live: Doc,
     monkeypatch: pytest.MonkeyPatch,
     renders: dict[str, manifests.Render],
     name: str,
@@ -425,7 +423,7 @@ def test_deploy_restarts_zac_only_after_its_jobs_completed(
     events: list[str] = []
     answer = kube.get_json
 
-    def get_json(resource: str, *args: str) -> Any:
+    def get_json(resource: str, *args: str) -> Doc:
         if resource == "job":
             events.append("poll")
             if events.count("poll") == 3:
@@ -447,7 +445,7 @@ def test_deploy_restarts_zac_only_after_its_jobs_completed(
 def test_deploy_starts_zac_on_a_fresh_install_only_after_its_jobs_finished(
     fake_run: FakeRun,
     called: list[str],
-    live: dict[str, Any],
+    live: Doc,
     monkeypatch: pytest.MonkeyPatch,
     renders: dict[str, manifests.Render],
 ):
@@ -459,7 +457,7 @@ def test_deploy_starts_zac_on_a_fresh_install_only_after_its_jobs_finished(
     job["status"] = {}
     answer = kube.get_json
 
-    def get_json(resource: str, *args: str) -> Any:
+    def get_json(resource: str, *args: str) -> Doc:
         if resource == "job":
             called.append("poll")
             if called.count("poll") == 2:

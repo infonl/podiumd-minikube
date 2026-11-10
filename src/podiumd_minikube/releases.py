@@ -15,13 +15,13 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from typing import Any
 
 import yaml
 
 from podiumd_minikube import chart
 from podiumd_minikube import manifests
 from podiumd_minikube import process
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import MONITORING_RELEASE
@@ -53,7 +53,7 @@ class Release:
     name: str
     namespace: str
     chart: Path
-    values: dict[str, Any]
+    values: Doc
     sets: list[str] = field(default_factory=list[str])
 
 

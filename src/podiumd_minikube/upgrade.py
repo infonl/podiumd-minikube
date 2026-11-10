@@ -3,6 +3,7 @@
 import re
 
 from podiumd_minikube import manifests
+from podiumd_minikube.objects import Doc
 
 # ExternalsPodiumD pipelines/application.yml, step "Delete stale one-shot Jobs":
 # deleted before each `helm upgrade`, since a Job's pod template is immutable.
@@ -17,13 +18,13 @@ _VARYING_NAME = re.compile(r"-(?:[0-9a-f]{10}|\d+)$")
 _OURS = "podiumd-minikube"
 
 
-def undeleted_fixed_jobs(docs: list[manifests.Doc]) -> list[str]:
+def undeleted_fixed_jobs(docs: list[Doc]) -> list[str]:
     """The chart's non-hook Jobs with a fixed name that ExternalsPodiumD does not delete before `helm upgrade`."""
     jobs = [doc for doc in docs if doc.get("kind") == "Job"]
     return sorted(manifests.name_of(job) for job in jobs if _fixed_upgraded_job(job))
 
 
-def _fixed_upgraded_job(job: manifests.Doc) -> bool:
+def _fixed_upgraded_job(job: Doc) -> bool:
     """Whether job is no hook, not ours, has a fixed name and is not in EXTERNALS_DELETED_JOBS."""
     meta = manifests.section(job, "metadata")
     name = manifests.name_of(job)

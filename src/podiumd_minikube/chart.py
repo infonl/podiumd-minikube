@@ -6,11 +6,11 @@ import tarfile
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from typing import Any
 from typing import cast
 
 import yaml
 
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHARTS_DIR
 
 # The metrics profile: monitoring-logging and the exporters it scrapes, as kees00 and
@@ -148,19 +148,19 @@ def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
     return sets
 
 
-def merged(base: Any, override: Any) -> Any:
+def merged(base: object, override: object) -> object:
     """override deep-merged onto base, as Helm merges values: maps per key, everything else replaced."""
     if isinstance(base, dict) and isinstance(override, dict):
-        old = cast("dict[str, Any]", base)
-        new = cast("dict[str, Any]", override)
+        old = cast("Doc", base)
+        new = cast("Doc", override)
         result = dict(old)
         for key, value in new.items():
             result[key] = merged(old.get(key), value)
         return result
-    return cast("Any", base if override is None else override)
+    return cast("object", base if override is None else override)
 
 
-def podiumd_defaults(charts_dir: Path = CHARTS_DIR) -> dict[str, Any]:
+def podiumd_defaults(charts_dir: Path = CHARTS_DIR) -> Doc:
     """podiumd's values.yaml with each subchart's own defaults under its key, as podiumd's templates see them.
 
     Empty before a fetch.
@@ -169,7 +169,7 @@ def podiumd_defaults(charts_dir: Path = CHARTS_DIR) -> dict[str, Any]:
     text = member_text(tgz, "podiumd/values.yaml") if tgz else None
     if tgz is None or text is None:
         return {}
-    values: dict[str, Any] = yaml.safe_load(text)
+    values: Doc = yaml.safe_load(text)
     for dependency in yaml.safe_load(member_text(tgz, "podiumd/Chart.yaml") or "{}").get("dependencies", []):
         own = member_text(tgz, f"podiumd/charts/{dependency['name']}/values.yaml")
         key = dependency.get("alias") or dependency["name"]

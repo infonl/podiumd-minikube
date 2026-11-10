@@ -10,7 +10,6 @@ import time
 from dataclasses import dataclass
 from datetime import UTC
 from datetime import datetime
-from typing import Any
 
 from podiumd_minikube import deployed
 from podiumd_minikube import disk
@@ -20,6 +19,7 @@ from podiumd_minikube import memory
 from podiumd_minikube import process
 from podiumd_minikube import tunnel
 from podiumd_minikube.manifests import section
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
@@ -78,7 +78,7 @@ def enabled_profiles(pod_names: list[str]) -> dict[str, bool]:
     }
 
 
-def pods() -> list[dict[str, Any]]:
+def pods() -> list[Doc]:
     """Every pod in every namespace."""
     return kube.get_json("pods", "-A")["items"]
 
@@ -105,7 +105,7 @@ def reclaimable_kernel_mib() -> int:
     return round(int(found) / MIB)
 
 
-def workloads(items: list[dict[str, Any]]) -> dict[str, str]:
+def workloads(items: list[Doc]) -> dict[str, str]:
     """Workload name per 'namespace/pod': a ReplicaSet's Deployment, else the pod's owner, else the pod."""
     names: dict[str, str] = {}
     for pod in items:
@@ -118,7 +118,7 @@ def workloads(items: list[dict[str, Any]]) -> dict[str, str]:
     return names
 
 
-def _crictl(*args: str) -> Any:
+def _crictl(*args: str) -> Doc:
     return json.loads(kube.node(" ".join(["sudo", "crictl", *args, "-o", "json"])))
 
 
@@ -127,13 +127,13 @@ def _key(label: dict[str, str], names: dict[str, str]) -> str:
     return f"{namespace}/{names.get(f'{namespace}/{pod}', pod)}/{label['io.kubernetes.container.name']}"
 
 
-def _cpu_nanoseconds(stat: dict[str, Any] | None) -> int | None:
+def _cpu_nanoseconds(stat: Doc | None) -> int | None:
     """A crictl stat's CPU counter; None for a container without one yet (starting or stopping)."""
     value = section(section(stat or {}, "cpu"), "usageCoreNanoSeconds").get("value")
     return None if value is None else int(value)
 
 
-def sampled_cores(first: dict[str, Any], later: dict[str, Any] | None) -> float:
+def sampled_cores(first: Doc, later: Doc | None) -> float:
     """Cores a container used between two crictl stats CPU_SAMPLE_SECONDS apart; 0 without both counters."""
     start, end = _cpu_nanoseconds(first), _cpu_nanoseconds(later)
     if start is None or end is None:
@@ -141,7 +141,7 @@ def sampled_cores(first: dict[str, Any], later: dict[str, Any] | None) -> float:
     return (end - start) / 1e9 / CPU_SAMPLE_SECONDS
 
 
-def container_usage(items: list[dict[str, Any]], *, cpu: bool = True) -> dict[str, Usage]:
+def container_usage(items: list[Doc], *, cpu: bool = True) -> dict[str, Usage]:
     """Usage per running container, keyed 'namespace/workload/container'; replicas add up."""
     labels = {container["id"]: container["labels"] for container in _crictl("ps")["containers"]}
     names = workloads(items)
@@ -162,7 +162,7 @@ def container_usage(items: list[dict[str, Any]], *, cpu: bool = True) -> dict[st
     return dict(sorted(usage.items()))
 
 
-def youngest_container_seconds(items: list[dict[str, Any]]) -> float:
+def youngest_container_seconds(items: list[Doc]) -> float:
     """Seconds since the most recent container start among the running pods."""
     starts = [
         datetime.fromisoformat(status["state"]["running"]["startedAt"])
@@ -178,7 +178,7 @@ def budget_mib(profiles: dict[str, bool]) -> int:
     return memory.FULL_BUDGET_MB if any(profiles.values()) else memory.DEFAULT_BUDGET_MB
 
 
-def _recently_restarted(container: dict[str, Any], now: datetime) -> bool:
+def _recently_restarted(container: Doc, now: datetime) -> bool:
     terminated = container.get("lastState", {}).get("terminated", {})
     finished = terminated.get("finishedAt")
     if not finished or (terminated.get("reason"), terminated.get("exitCode")) == NODE_STOPPED:
@@ -187,8 +187,8 @@ def _recently_restarted(container: dict[str, Any], now: datetime) -> bool:
 
 
 def problems(
-    items: list[dict[str, Any]],
-    jobs: list[dict[str, Any]],
+    items: list[Doc],
+    jobs: list[Doc],
 ) -> list[str]:
     """Pods not Ready or restarted in the last hour (not by a node stop), and failed Jobs, one line each."""
     found: list[str] = []
@@ -197,7 +197,7 @@ def problems(
         meta, status = pod["metadata"], pod["status"]
         if any(ref.get("kind") == "Job" for ref in meta.get("ownerReferences", [])):
             continue
-        containers: list[dict[str, Any]] = status.get("containerStatuses", [])
+        containers: list[Doc] = status.get("containerStatuses", [])
         ready = sum(1 for container in containers if container.get("ready"))
         recent = [container["name"] for container in containers if _recently_restarted(container, now)]
         if status.get("phase") != "Running" or ready < len(containers) or recent:

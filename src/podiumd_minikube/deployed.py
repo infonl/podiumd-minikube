@@ -11,12 +11,12 @@ from dataclasses import field
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from podiumd_minikube import dependency
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -74,12 +74,12 @@ def last_digests() -> dict[str, str]:
     return json.loads(read().get("digests") or "{}")
 
 
-def _running(pod: dict[str, Any]) -> int:
-    statuses: list[dict[str, Any]] = pod.get("status", {}).get("containerStatuses") or []
+def _running(pod: Doc) -> int:
+    statuses: list[Doc] = pod.get("status", {}).get("containerStatuses") or []
     return sum(1 for container in statuses if "running" in container.get("state", {}))
 
 
-def running_containers(items: list[dict[str, Any]], charts: dict[str, str]) -> Counter[str]:
+def running_containers(items: list[Doc], charts: dict[str, str]) -> Counter[str]:
     """Running containers per chart in NAMESPACES: the chart of a pod's nearest rendered owner, else OTHER."""
     owners = _Owners(charts)
     counts: Counter[str] = Counter()
@@ -95,9 +95,9 @@ class _Owners:
     """The live owners of pods in NAMESPACES, fetched once per kind; charts: "Kind/name" -> chart."""
 
     charts: dict[str, str]
-    live: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    live: dict[str, Doc] = field(default_factory=dict[str, Doc])
 
-    def owner(self, reference: dict[str, str]) -> dict[str, Any] | None:
+    def owner(self, reference: dict[str, str]) -> Doc | None:
         """The metadata of the object reference names."""
         kinds = kube.reference(reference["apiVersion"], reference["kind"])
         if kinds not in self.live:
@@ -105,7 +105,7 @@ class _Owners:
             self.live[kinds] = {item["metadata"]["name"]: item["metadata"] for item in found}
         return self.live[kinds].get(reference["name"])
 
-    def chart_of(self, metadata: dict[str, Any] | None) -> str:
+    def chart_of(self, metadata: Doc | None) -> str:
         """The chart of metadata's nearest rendered owner, else OTHER."""
         while metadata and metadata.get("ownerReferences"):
             reference = metadata["ownerReferences"][0]
@@ -116,7 +116,7 @@ class _Owners:
         return OTHER
 
 
-def lines(items: list[dict[str, Any]]) -> list[str]:
+def lines(items: list[Doc]) -> list[str]:
     """show-cluster-status' lines on the last deploy and the running containers per chart."""
     deployed = read()
     if not deployed:

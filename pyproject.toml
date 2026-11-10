@@ -312,6 +312,7 @@ reportInvalidCast = "error"
 reportPrivateLocalImportUsage = "error"
 reportUnannotatedClassAttribute = "error"
 reportUnusedParameter = "error"
+reportExplicitAny = "error"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "unit_tests"

@@ -3,7 +3,6 @@
 import json
 
 from datetime import datetime
-from typing import Any
 
 import pytest
 
@@ -13,15 +12,16 @@ from podiumd_minikube import deploy
 from podiumd_minikube import provision
 from podiumd_minikube import restart
 from podiumd_minikube import tunnel
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.process import UserError
 
 
-def _workload(name: str, ready: int) -> dict[str, Any]:
+def _workload(name: str, ready: int) -> Doc:
     status = {"observedGeneration": 1, "replicas": 1, "updatedReplicas": 1, "readyReplicas": ready}
     return {"kind": "Deployment", "metadata": {"name": name, "generation": 1}, "status": status}
 
 
-def _pod(name: str, ready_since: str, owner: str = "ReplicaSet") -> dict[str, Any]:
+def _pod(name: str, ready_since: str, owner: str = "ReplicaSet") -> Doc:
     return {
         "metadata": {"name": name, "ownerReferences": [{"kind": owner}]},
         "status": {"conditions": [{"type": "Ready", "status": "True", "lastTransitionTime": ready_since}]},
@@ -77,7 +77,7 @@ def test_start_waits_for_the_workloads_then_starts_the_tunnel(fake_run: FakeRun,
     ],
 )
 def test_start_names_what_is_not_ready(
-    fake_run: FakeRun, started: list[str], answer: str, items: list[dict[str, Any]], error: str
+    fake_run: FakeRun, started: list[str], answer: str, items: list[Doc], error: str
 ):
     fake_run.on("kubectl", "get", answer, stdout=json.dumps({"items": items}))
     with pytest.raises(UserError, match=error):

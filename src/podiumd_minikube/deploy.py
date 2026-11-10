@@ -8,7 +8,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from dataclasses import field
 from dataclasses import replace
-from typing import Any
 
 from podiumd_minikube import chart
 from podiumd_minikube import crds
@@ -35,6 +34,7 @@ from podiumd_minikube import releases
 from podiumd_minikube import tunnel
 from podiumd_minikube import upgrade
 from podiumd_minikube import volumes
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OLD_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -364,7 +364,7 @@ def _rendered(selected: Options) -> tuple[list[releases.Release], dict[str, mani
     return found, {release.name: selected.render_release(release) for release in found}
 
 
-def rolled_out(workload: dict[str, Any]) -> bool:
+def rolled_out(workload: Doc) -> bool:
     """Whether a workload runs its current spec and is ready.
 
     Elasticsearch and Kibana: ECK's own status (its StatefulSets are not rendered); a
@@ -381,7 +381,7 @@ def rolled_out(workload: dict[str, Any]) -> bool:
     return current and updated >= wanted and old_gone and status.get("readyReplicas", 0) >= wanted
 
 
-def unfinished_jobs(live: list[manifests.Doc], names: list[str]) -> tuple[list[str], list[str]]:
+def unfinished_jobs(live: list[Doc], names: list[str]) -> tuple[list[str], list[str]]:
     """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live.
 
     A missing Job counts as finished: helm upgrade creates every rendered Job, and the chart's
@@ -456,7 +456,7 @@ class _Rollout:
         """The workloads that have not rolled out."""
         kinds = ",".join(sorted({workload.split("/")[0] for workload in self.workloads}))
         # One kubectl call per poll: one per workload took 2.4 s with --full.
-        found: list[dict[str, Any]] = kube.get_json(kinds, "-n", NAMESPACE)["items"] if kinds else []
+        found: list[Doc] = kube.get_json(kinds, "-n", NAMESPACE)["items"] if kinds else []
         live = {f"{item['kind'].lower()}/{manifests.name_of(item)}": item for item in found}
         return [workload for workload in self.workloads if workload not in live or not rolled_out(live[workload])]
 

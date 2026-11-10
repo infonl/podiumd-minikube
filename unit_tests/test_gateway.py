@@ -10,16 +10,14 @@ import yaml
 from conftest import FakeRun
 
 from podiumd_minikube import gateway
-from podiumd_minikube import manifests
 from podiumd_minikube import polling
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import EDGE_SERVICE
 from podiumd_minikube.process import UserError
 
 
-def _ingress(
-    host: str, service: str, port: dict[str, object], annotations: dict[str, str] | None = None
-) -> manifests.Doc:
+def _ingress(host: str, service: str, port: dict[str, object], annotations: dict[str, str] | None = None) -> Doc:
     backend = {"service": {"name": service, "port": port}}
     return {
         "kind": "Ingress",
@@ -29,7 +27,7 @@ def _ingress(
 
 
 def test_routes_follow_externalspodiumd_and_resolve_named_ports():
-    keycloak_service: manifests.Doc = {
+    keycloak_service: Doc = {
         "kind": "Service",
         "metadata": {"name": "keycloak"},
         "spec": {"ports": [{"name": "http", "port": 8080}]},

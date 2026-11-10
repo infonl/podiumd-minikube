@@ -2,10 +2,9 @@
 
 import json
 
-from typing import Any
-
 from podiumd_minikube import polling
 from podiumd_minikube import process
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import EDGE_SERVICE
 from podiumd_minikube.paths import NAMESPACE
@@ -51,7 +50,7 @@ def node(command: str) -> str:
     return process.output(["minikube", "ssh", "-p", PROFILE, "--", command])
 
 
-def get_json(*args: str) -> Any:
+def get_json(*args: str) -> Doc:
     """Parsed `kubectl get <args> -o json`."""
     return json.loads(kubectl("get", *args, "-o", "json"))
 
@@ -86,13 +85,13 @@ def edge_ip() -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def true_conditions(resource: dict[str, Any]) -> set[str]:
+def true_conditions(resource: Doc) -> set[str]:
     """The types of resource's status conditions that are True."""
-    conditions: list[dict[str, Any]] = resource.get("status", {}).get("conditions") or []
+    conditions: list[Doc] = resource.get("status", {}).get("conditions") or []
     return {str(condition["type"]) for condition in conditions if condition.get("status") == "True"}
 
 
-def serving_pod(pods: list[dict[str, Any]]) -> str:
+def serving_pod(pods: list[Doc]) -> str:
     """Name of the first pod that is Ready and not terminating; "" when none is.
 
     Right after `rollout status` succeeds, the old pod is still listed while it

@@ -2,8 +2,6 @@
 
 import json
 
-from typing import Any
-
 import pytest
 
 from conftest import FakeRun
@@ -13,6 +11,7 @@ from podiumd_minikube import openbao
 from podiumd_minikube import provision
 from podiumd_minikube import teardown
 from podiumd_minikube import tunnel
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import PROFILE
 from podiumd_minikube.process import UserError
@@ -42,7 +41,7 @@ def test_reset_namespace_deletes_the_namespace_its_volumes_and_its_cluster_objec
     fake_run: FakeRun,
     forgotten: list[str],
     capsys: pytest.CaptureFixture[str],
-    volumes: dict[str, list[dict[str, Any]]],
+    volumes: dict[str, list[Doc]],
     node_code: int,
     monkeypatch: pytest.MonkeyPatch,
 ):

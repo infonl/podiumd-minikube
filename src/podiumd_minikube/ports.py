@@ -4,9 +4,9 @@ import sys
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any
 
 from podiumd_minikube import kube
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 
 TRAFFIC_TYPE = {
@@ -35,7 +35,7 @@ class Route:
     port: str
 
 
-def routes(ingresses: list[Any]) -> list[Route]:
+def routes(ingresses: list[Doc]) -> list[Route]:
     """Sorted unique routes of the Ingress items (port is a number or a port name)."""
     found: set[Route] = set()
     for ingress in ingresses:
@@ -48,7 +48,7 @@ def routes(ingresses: list[Any]) -> list[Route]:
     return sorted(found, key=lambda route: (route.host, route.service, route.port))
 
 
-def port_number(route: Route, services: dict[str, Any]) -> str:
+def port_number(route: Route, services: Doc) -> str:
     """route's numeric port; a port name is looked up in the Service."""
     if route.port.isdigit():
         return route.port

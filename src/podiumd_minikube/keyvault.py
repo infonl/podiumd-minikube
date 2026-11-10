@@ -10,8 +10,8 @@ import stat
 import sys
 
 from pathlib import Path
-from typing import Any
 
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import OPENBAO_DIR
 
 KEYVAULT_DIR = OPENBAO_DIR / "keyvault"
@@ -32,7 +32,7 @@ def write(name: str, value: str) -> None:
 
 # The `az keyvault secret` arguments podiumd's openbao-activate.sh passes.
 # Its flags and add_argument options.
-Argument = tuple[tuple[str, ...], dict[str, Any]]
+Argument = tuple[tuple[str, ...], Doc]
 AZ_ARGUMENTS: tuple[Argument, ...] = (
     (("group",), {"choices": ["keyvault"]}),
     (("kind",), {"choices": ["secret"]}),

@@ -10,12 +10,11 @@ import base64
 import json
 import shlex
 
-from typing import Any
-
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import process
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 
 REALM = "podiumd"
@@ -27,7 +26,7 @@ CHART_REPAIR_JOB_PREFIX = "keycloak-repair-client-scopes"
 IMPORT_TIMEOUT = 900
 # Keycloak's own clients keep their scopes.
 # A client or client scope from the admin API.
-Representation = dict[str, Any]
+Representation = Doc
 BUILTIN_CLIENTS = {"account", "account-console", "admin-cli", "broker", "realm-management", "security-admin-console"}
 _CONFIG = "/tmp/kcadm-podiumd-minikube.cfg"  # nosec B108  # noqa: S108 - inside the Keycloak container
 

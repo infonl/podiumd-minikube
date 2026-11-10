@@ -6,14 +6,13 @@ the Gateway's https listener (podiumd_minikube.gateway). HTTP keeps working next
 as in ExternalsPodiumD.
 """
 
-from typing import Any
-
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.pki import ISSUER
 
 CERTIFICATE = "podiumd-tls"
 
 
-def certificate(name: str, namespace: str, hosts: list[str]) -> dict[str, Any]:
+def certificate(name: str, namespace: str, hosts: list[str]) -> Doc:
     """The Certificate (and its Secret) name for hosts in namespace, issued by the local CA."""
     return {
         "apiVersion": "cert-manager.io/v1",

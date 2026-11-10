@@ -18,9 +18,9 @@ import yaml
 
 from podiumd_minikube import chart
 from podiumd_minikube import kube
-from podiumd_minikube.manifests import Doc
 from podiumd_minikube.manifests import name_of
 from podiumd_minikube.manifests import section
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHARTS_DIR
 from podiumd_minikube.process import UserError
 

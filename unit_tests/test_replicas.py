@@ -1,7 +1,5 @@
 """podiumd_minikube.replicas: the merge patches and the on/off switch."""
 
-from typing import Any
-
 import pytest
 
 from podiumd_minikube import deploy
@@ -9,9 +7,10 @@ from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube import replicas
+from podiumd_minikube.objects import Doc
 
 
-def _keycloak(instances: int) -> dict[str, Any]:
+def _keycloak(instances: int) -> Doc:
     return {
         "apiVersion": "k8s.keycloak.org/v2alpha1",
         "kind": "Keycloak",

@@ -14,7 +14,7 @@ import tempfile
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import yaml
 
@@ -31,6 +31,9 @@ from podiumd_minikube import pki
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube.paths import PROFILE
+
+if TYPE_CHECKING:
+    from podiumd_minikube.objects import Doc
 
 # Fully parallel loads once filled /tmp on the host.
 BATCH_SIZE = 6
@@ -139,7 +142,7 @@ def with_control_plane_env(manifest: str) -> str | None:
     pod = yaml.safe_load(manifest)
     wanted = CONTROL_PLANE_ENV[pod["metadata"]["name"]]
     container = pod["spec"]["containers"][0]
-    before: list[dict[str, Any]] = list(container.get("env") or [])
+    before: list[Doc] = list(container.get("env") or [])
     kept = [item for item in before if item.get("name") not in wanted]
     added = [{"name": name, "value": value} for name, value in wanted.items()]
     container["env"] = [*kept, *added]
@@ -153,9 +156,9 @@ def _tuned_and_ready(name: str) -> bool:
         pod = kube.get_json("pod", "-n", "kube-system", f"{name}-{PROFILE}")
     except process.ProcessError:
         return False
-    env_items: list[dict[str, Any]] = pod["spec"]["containers"][0].get("env") or []
+    env_items: list[Doc] = pod["spec"]["containers"][0].get("env") or []
     env = {item["name"]: item.get("value") for item in env_items}
-    statuses: list[dict[str, Any]] = pod["status"].get("containerStatuses") or []
+    statuses: list[Doc] = pod["status"].get("containerStatuses") or []
     wanted = CONTROL_PLANE_ENV[name]
     tuned = all(env.get(key) == value for key, value in wanted.items())
     return tuned and bool(statuses) and all(status.get("ready") for status in statuses)

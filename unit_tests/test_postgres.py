@@ -4,7 +4,6 @@ import json
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
@@ -15,6 +14,7 @@ from podiumd_minikube import manifests
 from podiumd_minikube import postgres
 from podiumd_minikube import process
 from podiumd_minikube import provision
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 
 INIT_SQL = r"""-- comment
@@ -136,7 +136,7 @@ def test_rename_rows_updates_only_old_values_whose_new_one_is_absent(cluster: Fa
 
 
 def _render(major: int) -> manifests.Render:
-    def doc(kind: str, name: str) -> dict[str, Any]:
+    def doc(kind: str, name: str) -> Doc:
         return {"kind": kind, "metadata": {"name": name}}
 
     postgres_deployment = doc("Deployment", "postgres") | {

@@ -3,7 +3,6 @@
 import sys
 
 from datetime import datetime
-from typing import Any
 
 from podiumd_minikube import deploy
 from podiumd_minikube import kube
@@ -12,11 +11,12 @@ from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube import provision
 from podiumd_minikube import tunnel
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import PROFILE
 
 
-def _workloads() -> list[dict[str, Any]]:
+def _workloads() -> list[Doc]:
     return kube.get_json("deployment,statefulset", "-n", NAMESPACE)["items"]
 
 
@@ -27,7 +27,7 @@ def node_started() -> datetime:
     )
 
 
-def stale_pods(pods: list[dict[str, Any]], boot: datetime) -> list[str]:
+def stale_pods(pods: list[Doc], boot: datetime) -> list[str]:
     """Pods (not Jobs') whose Ready condition dates from before boot: their status, and their workload's, is stale.
 
     Right after `minikube start` they still report Ready from before the stop,
@@ -38,8 +38,8 @@ def stale_pods(pods: list[dict[str, Any]], boot: datetime) -> list[str]:
         meta = pod["metadata"]
         if any(ref.get("kind") == "Job" for ref in meta.get("ownerReferences", [])):
             continue
-        conditions: list[dict[str, Any]] = pod["status"].get("conditions") or []
-        none: dict[str, Any] = {}
+        conditions: list[Doc] = pod["status"].get("conditions") or []
+        none: Doc = {}
         ready = next((condition for condition in conditions if condition["type"] == "Ready"), none)
         changed = str(ready.get("lastTransitionTime") or "")
         if not changed or datetime.fromisoformat(changed) < boot:

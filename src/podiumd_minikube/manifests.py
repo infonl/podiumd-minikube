@@ -11,7 +11,6 @@ import re
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from typing import Any
 from typing import cast
 
 import yaml
@@ -20,18 +19,19 @@ from podiumd_minikube import memory
 from podiumd_minikube import pki
 from podiumd_minikube import process
 from podiumd_minikube import tls
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
 
-Doc = dict[str, Any]
 # libyaml: a --full render loads in 0.3 s instead of 3.1 s, dumps in 0.06 s instead of 0.5 s.
 _LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 _DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
 
 
-def _load(text: str) -> Any:
-    return yaml.load(text, _LOADER)  # nosec B506  # noqa: S506 - a safe loader
+def _load(text: str) -> Doc | None:
+    """The YAML document text holds: a mapping for every rendered object, None when empty."""
+    return cast("Doc | None", yaml.load(text, _LOADER))  # nosec B506  # noqa: S506 - a safe loader
 
 
 # The apps' BRP/KvK/BAG base URL (values.yaml), and Frank!Gateway's outway, which
@@ -722,7 +722,7 @@ def _is_test_or_delete_hook(doc: Doc) -> bool:
     return any(hook.startswith("test") or hook.endswith("-delete") for hook in hooks)
 
 
-def _configuration_yaml(doc: Doc, configmap: str) -> Any | None:
+def _configuration_yaml(doc: Doc, configmap: str) -> Doc | None:
     if not _is_configmap(doc, configmap):
         return None
     raw = section(doc, "data").get("configuration.yaml")

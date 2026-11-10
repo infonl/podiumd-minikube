@@ -10,7 +10,6 @@ import json
 import tempfile
 
 from pathlib import Path
-from typing import Any
 
 import certifi
 import yaml
@@ -19,6 +18,7 @@ from podiumd_minikube import kube
 from podiumd_minikube import memory
 from podiumd_minikube import polling
 from podiumd_minikube import process
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -54,12 +54,12 @@ def ensure_ca() -> bool:
     return True
 
 
-def cert_manager_values() -> dict[str, Any]:
+def cert_manager_values() -> Doc:
     """ExternalsPodiumD's pipelines/values/cert-manager.yml without its AKS parts (ACR images, nodeSelector)."""
     # The cainjector caches every Secret and CRD it watches: 98 MiB at the Go default GOGC 100.
     go_env = {"GOGC": "50", **memory.GO_NO_HUGE_PAGES}
 
-    def component(request: str, limit: str) -> dict[str, Any]:
+    def component(request: str, limit: str) -> Doc:
         return {
             "image": {"tag": CERT_MANAGER_IMAGE_TAG},
             "replicaCount": 1,

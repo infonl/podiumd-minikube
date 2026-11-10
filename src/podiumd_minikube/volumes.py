@@ -7,11 +7,12 @@ data written under another user needs it: podiumd 4.10 runs frankgateway's etcd 
 
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
+from podiumd_minikube.objects import Doc
 
 _WORKLOADS = ("Deployment", "StatefulSet")
 
 
-def wanted(docs: list[manifests.Doc]) -> dict[str, int]:
+def wanted(docs: list[Doc]) -> dict[str, int]:
     """PVC name, or StatefulSet claim prefix ending in "-", -> the fsGroup of the pod template that mounts it."""
     found: dict[str, int] = {}
     for doc in docs:
@@ -20,16 +21,16 @@ def wanted(docs: list[manifests.Doc]) -> dict[str, int]:
     return found
 
 
-def _claim_groups(workload: manifests.Doc) -> dict[str, int]:
+def _claim_groups(workload: Doc) -> dict[str, int]:
     """The claims and claim prefixes workload mounts -> its pod template's fsGroup; {} without one."""
     spec = manifests.section(workload, "spec")
     pod = manifests.section(manifests.section(spec, "template"), "spec")
     group = manifests.section(pod, "securityContext").get("fsGroup")
     if group is None:
         return {}
-    mounted: list[manifests.Doc] = pod.get("volumes") or []
+    mounted: list[Doc] = pod.get("volumes") or []
     claims = [str(manifests.section(volume, "persistentVolumeClaim").get("claimName") or "") for volume in mounted]
-    templates: list[manifests.Doc] = spec.get("volumeClaimTemplates") or []
+    templates: list[Doc] = spec.get("volumeClaimTemplates") or []
     prefixes = [f"{manifests.name_of(template)}-{manifests.name_of(workload)}-" for template in templates]
     return dict.fromkeys([*filter(None, claims), *prefixes], int(group))
 
@@ -41,15 +42,15 @@ def _group_of(claim: str, groups: dict[str, int]) -> int | None:
     return next((group for prefix, group in prefixes.items() if claim.startswith(prefix)), None)
 
 
-def _host_path(volume: manifests.Doc) -> str:
+def _host_path(volume: Doc) -> str:
     """volume's spec.hostPath.path; "" for other volumes."""
     return str(manifests.section(manifests.section(volume, "spec"), "hostPath").get("path") or "")
 
 
 def changes(
     groups: dict[str, int],
-    claims: list[manifests.Doc],
-    volumes: list[manifests.Doc],
+    claims: list[Doc],
+    volumes: list[Doc],
 ) -> dict[str, int]:
     """Host path -> fsGroup for each bound claim of groups on a hostPath volume."""
     paths = {manifests.name_of(volume): _host_path(volume) for volume in volumes}
@@ -71,7 +72,7 @@ def script(found: dict[str, int]) -> str:
     )
 
 
-def apply_fs_groups(docs: list[manifests.Doc], namespace: str) -> None:
+def apply_fs_groups(docs: list[Doc], namespace: str) -> None:
     """Gives the existing hostPath volumes of docs' pod templates in namespace their fsGroup."""
     groups = wanted(docs)
     if not groups:

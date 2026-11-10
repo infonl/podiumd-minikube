@@ -5,7 +5,6 @@ import json
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 import certifi
 import pytest
@@ -15,6 +14,7 @@ from conftest import FakeRun
 
 from podiumd_minikube import pki
 from podiumd_minikube import process
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import EDGE_NAMESPACE
 
 
@@ -47,11 +47,11 @@ def test_issuer_manifests_carry_the_ca(pki_dir: Path):
 def openssl(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch) -> FakeRun:
     """fake_run that writes openssl's -keyout and -out files with their flag as content."""
 
-    def run(args: Sequence[str], **options: Any):
+    def run(args: Sequence[str], *, stdin: str | None = None, check: bool = True, **options: bool):
         for flag in ("-keyout", "-out"):
             if args[0] == "openssl" and flag in args:
                 Path(args[list(args).index(flag) + 1]).write_text(flag, encoding="utf-8")
-        return fake_run(args, **options)
+        return fake_run(args, stdin=stdin, check=check, **options)
 
     monkeypatch.setattr(process, "run", run)
     return fake_run
@@ -76,9 +76,7 @@ def test_install_cert_manager_skips_the_running_version_and_moves_an_old_release
 @pytest.mark.parametrize(
     ("version", "values"), [("v1.0.0", {}), (pki.CERT_MANAGER_VERSION, {"cainjector": {"replicaCount": 1}})]
 )
-def test_install_cert_manager_installs_another_version_or_values(
-    fake_run: FakeRun, version: str, values: dict[str, Any]
-):
+def test_install_cert_manager_installs_another_version_or_values(fake_run: FakeRun, version: str, values: Doc):
     fake_run.on("helm", "list", "-n", EDGE_NAMESPACE, stdout=json.dumps([{"chart": f"cert-manager-{version}"}]))
     fake_run.on("helm", "get", "values", stdout=json.dumps(values))
     pki.install_cert_manager()

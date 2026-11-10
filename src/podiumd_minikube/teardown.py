@@ -4,7 +4,6 @@ import json
 import sys
 
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
 
 from podiumd_minikube import kube
 from podiumd_minikube import lock
@@ -15,6 +14,7 @@ from podiumd_minikube import provision
 from podiumd_minikube import tunnel
 from podiumd_minikube.manifests import name_of
 from podiumd_minikube.manifests import section
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import MONITORING_RELEASE
 from podiumd_minikube.paths import NAMESPACE
@@ -38,7 +38,7 @@ def confirmed(summary: str, *, yes: bool) -> bool:
     return False
 
 
-def bound_volumes(volumes: list[Any], namespace: str = NAMESPACE) -> list[str]:
+def bound_volumes(volumes: list[Doc], namespace: str = NAMESPACE) -> list[str]:
     """Names of PersistentVolumes whose claimRef is in namespace.
 
     Covers storage-hooks.yaml's Retain PVs and dynamic Delete PVs that
@@ -77,7 +77,7 @@ def clear_finalizers(namespace: str) -> int:
     kinds = kube.kubectl("api-resources", "--verbs=list,delete", "--namespaced", "-o", "name").split()
     # A kind the API server cannot list does not stop the others: kubectl prints what it found.
     listed = process.run(["kubectl", "get", ",".join(kinds), "-n", namespace, "-o", "json"], check=False)
-    items: list[dict[str, Any]] = json.loads(listed.stdout or "{}").get("items") or []
+    items: list[Doc] = json.loads(listed.stdout or "{}").get("items") or []
     held = [item for item in items if item["metadata"].get("finalizers")]
     for item in held:
         group = item["apiVersion"].split("/")[0] if "/" in item["apiVersion"] else ""
@@ -121,7 +121,7 @@ def _empty(namespace: str) -> str:
 CLUSTER_KINDS = "clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration,crd"
 
 
-def cluster_leftovers(items: list[Any]) -> list[str]:
+def cluster_leftovers(items: list[Doc]) -> list[str]:
     """kind/name of the cluster-scoped objects of RESET_INSTANCES: by label, or by Helm's release annotation.
 
     Some carry no instance label (the Keycloak and ZooKeeper operators' ClusterRoles); a release that

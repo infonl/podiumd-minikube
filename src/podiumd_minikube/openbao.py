@@ -16,7 +16,6 @@ import tempfile
 import time
 
 from pathlib import Path
-from typing import Any
 
 from podiumd_minikube import dependency
 from podiumd_minikube import keyvault
@@ -25,6 +24,7 @@ from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube import values
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OPENBAO_DIR
 from podiumd_minikube.paths import PODIUMD_RELEASE
@@ -80,7 +80,7 @@ def _bao(
     return process.run([*command, "sh", *args], stdin=f"{token}\n{stdin}", check=check)
 
 
-def _status() -> dict[str, Any] | None:
+def _status() -> Doc | None:
     """`bao status` of pod 0; None while it does not answer."""
     result = _bao("status", "-format=json", check=False)
     try:

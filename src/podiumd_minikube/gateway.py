@@ -10,8 +10,6 @@ live (dimp test and ontw, read 2026-10-13), not in its git. The routes come from
 host is defined once.
 """
 
-from typing import Any
-
 import yaml
 
 from podiumd_minikube import kube
@@ -19,6 +17,7 @@ from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube import tls
+from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import EDGE_SERVICE
 from podiumd_minikube.paths import NAMESPACE
@@ -43,7 +42,7 @@ FORWARDED_HOST_ANNOTATION = "podiumd-minikube/forwarded-host"
 NGF_RESOURCES = {"requests": {"cpu": "50m", "memory": "128Mi"}, "limits": {"cpu": "200m", "memory": "256Mi"}}
 
 
-def ngf_values(dns_ip: str) -> dict[str, Any]:
+def ngf_values(dns_ip: str) -> Doc:
     """ExternalsPodiumD's ngf.yml without its AKS parts (ACR images, nodeSelector, fixed IP, client-IP rewrite)."""
     return {
         "nginxGateway": {
@@ -105,7 +104,7 @@ def ngf_template() -> str:
     return process.fetch(["helm", "template", *NGF_CHART_ARGS])
 
 
-def gateway_manifest() -> dict[str, Any]:
+def gateway_manifest() -> Doc:
     """ExternalsPodiumD's public-gateway, without its Azure load balancer annotations."""
     return {
         "apiVersion": "gateway.networking.k8s.io/v1",
@@ -127,7 +126,7 @@ def gateway_manifest() -> dict[str, Any]:
     }
 
 
-def _gateway_policy(kind: str, name: str, spec: dict[str, Any]) -> dict[str, Any]:
+def _gateway_policy(kind: str, name: str, spec: Doc) -> Doc:
     """An NGF policy on public-gateway."""
     return {
         "apiVersion": "gateway.nginx.org/v1alpha1",
@@ -137,7 +136,7 @@ def _gateway_policy(kind: str, name: str, spec: dict[str, Any]) -> dict[str, Any
     }
 
 
-def proxy_settings_manifest() -> dict[str, Any]:
+def proxy_settings_manifest() -> Doc:
     """ExternalsPodiumD's live default-proxy-settings: response buffers far above nginx's 4 KB default.
 
     KISS's /signin-oidc answer carries about 5 KB of headers; with 4 KB nginx
@@ -149,19 +148,19 @@ def proxy_settings_manifest() -> dict[str, Any]:
     )
 
 
-def client_settings_manifest() -> dict[str, Any]:
+def client_settings_manifest() -> Doc:
     """ExternalsPodiumD's live default-client-settings: no request-body limit (maxSize 0)."""
     return _gateway_policy(
         "ClientSettingsPolicy", "default-client-settings", {"targetRef": GATEWAY_REF, "body": {"maxSize": "0"}}
     )
 
 
-def _service_port(docs: list[manifests.Doc], service: str, port: Any) -> int:
+def _service_port(docs: list[Doc], service: str, port: int | str) -> int:
     """The number of a backend port, which may be a Service port name."""
     if isinstance(port, int):
         return port
     found = manifests.find(docs, "Service", service)
-    entries: list[manifests.Doc] = manifests.section(found, "spec").get("ports") or [] if found else []
+    entries: list[Doc] = manifests.section(found, "spec").get("ports") or [] if found else []
     named = next((entry for entry in entries if entry.get("name") == port), None)
     if named is not None:
         return int(named["port"])
@@ -169,18 +168,18 @@ def _service_port(docs: list[manifests.Doc], service: str, port: Any) -> int:
     raise process.UserError(msg)
 
 
-def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
+def route_manifests(docs: list[Doc]) -> list[Doc]:
     """Per Ingress host an HTTPRoute in ExternalsPodiumD's shape, plus the ExternalName Services they target.
 
     An Ingress with FORWARDED_HOST_ANNOTATION sends that host upstream for each of its hosts.
     """
-    services: dict[str, dict[str, Any]] = {}
-    routes: list[dict[str, Any]] = []
+    services: dict[str, Doc] = {}
+    routes: list[Doc] = []
     for doc in docs:
         if doc.get("kind") != "Ingress":
             continue
-        rules: list[manifests.Doc] = manifests.section(doc, "spec").get("rules") or []
-        annotations: manifests.Doc = manifests.section(manifests.section(doc, "metadata"), "annotations")
+        rules: list[Doc] = manifests.section(doc, "spec").get("rules") or []
+        annotations: Doc = manifests.section(manifests.section(doc, "metadata"), "annotations")
         namespace = manifests.section(doc, "metadata").get("namespace", NAMESPACE)
         for rule in rules:
             forwarded = str(annotations.get(FORWARDED_HOST_ANNOTATION, rule["host"]))
@@ -190,15 +189,14 @@ def route_manifests(docs: list[manifests.Doc]) -> list[dict[str, Any]]:
     return [*services.values(), *routes]
 
 
-def _service_and_route(
-    docs: list[manifests.Doc], rule: manifests.Doc, forwarded: str, namespace: str
-) -> tuple[dict[str, Any], dict[str, Any]]:
+def _service_and_route(docs: list[Doc], rule: Doc, forwarded: str, namespace: str) -> tuple[Doc, Doc]:
     """The ExternalName Service and the HTTPRoute for an Ingress rule of namespace."""
     host = str(rule["host"])
-    paths: list[manifests.Doc] = manifests.section(rule, "http").get("paths") or []
-    backend: manifests.Doc = manifests.section(manifests.section(paths[0], "backend"), "service")
+    paths: list[Doc] = manifests.section(rule, "http").get("paths") or []
+    backend: Doc = manifests.section(manifests.section(paths[0], "backend"), "service")
     ports = manifests.section(backend, "port")
-    port = _service_port(docs, str(backend["name"]), ports.get("number", ports.get("name")))
+    number: int | str = ports.get("number") or str(ports.get("name"))
+    port = _service_port(docs, str(backend["name"]), number)
     service = {
         "apiVersion": "v1",
         "kind": "Service",
@@ -236,7 +234,7 @@ def _service_and_route(
     return service, route
 
 
-def _delete_stale(wanted: dict[tuple[str, str], manifests.Doc]) -> None:
+def _delete_stale(wanted: dict[tuple[str, str], Doc]) -> None:
     """Deletes the edge's labelled objects not in wanted ((kind, name) -> spec) or with another externalName."""
     kinds = ("HTTPRoute", "Service", "ProxySettingsPolicy", "ClientSettingsPolicy")
     live = [
@@ -272,7 +270,7 @@ def _pin_cluster_ip() -> None:
         raise process.UserError(msg)
 
 
-def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
+def apply(docs: list[Doc], hosts: list[str]) -> None:
     """Applies the certificate, Gateway and routes; deletes routes no longer rendered."""
     if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
         msg = f"NGINX Gateway Fabric is not in namespace {EDGE_NAMESPACE!r}: run `podiumd-minikube provision-cluster`"

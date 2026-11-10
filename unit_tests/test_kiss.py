@@ -1,19 +1,18 @@
 """kiss.website_hook_blocked: when KISS's crawler hook cannot reach Elasticsearch yet."""
 
-from typing import Any
-
 import pytest
 
 from podiumd_minikube import kiss
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
+from podiumd_minikube.objects import Doc
 
 HOOK = "kiss-crawler-index-template"
 PEER = {"podSelector": {"matchLabels": {"batch.kubernetes.io/job-name": HOOK}}}
 OTHER = {"podSelector": {"matchLabels": {"app": "kibana"}}}
 
 
-def _hook() -> manifests.Doc:
+def _hook() -> Doc:
     env = [{"name": "ELASTIC_BASE_URL", "value": "https://kiss-es-http.podiumd.svc:9200"}]
     return {
         "kind": "Job",
@@ -22,7 +21,7 @@ def _hook() -> manifests.Doc:
     }
 
 
-def _policy(*peers: manifests.Doc) -> manifests.Doc:
+def _policy(*peers: Doc) -> Doc:
     return {
         "kind": "NetworkPolicy",
         "metadata": {"name": "podiumd-elasticsearch"},
@@ -30,14 +29,14 @@ def _policy(*peers: manifests.Doc) -> manifests.Doc:
     }
 
 
-def _render(*docs: manifests.Doc) -> manifests.Render:
+def _render(*docs: Doc) -> manifests.Render:
     return manifests.Render(docs=list(docs), large_configmaps=[])
 
 
 @pytest.fixture
-def cluster(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def cluster(monkeypatch: pytest.MonkeyPatch) -> Doc:
     """Live objects by "kind/name"; kube.exists and kube.get_json read them."""
-    live: dict[str, Any] = {}
+    live: Doc = {}
     monkeypatch.setattr(kube, "exists", lambda resource, *_args, **_kwargs: resource in live)
     monkeypatch.setattr(kube, "get_json", lambda kind, name, *_args: live[f"{kind}/{name}"])
     return live
@@ -53,7 +52,7 @@ def test_blocked_before_elasticsearch_exists():
     assert kiss.website_hook_blocked(_render(_hook(), _policy(PEER))) == "Service kiss-es-http does not exist yet"
 
 
-def test_blocked_while_the_live_policy_lacks_the_hooks_peer(cluster: dict[str, Any]):
+def test_blocked_while_the_live_policy_lacks_the_hooks_peer(cluster: Doc):
     cluster["service/kiss-es-http"] = {}
     cluster["networkpolicy/podiumd-elasticsearch"] = _policy(OTHER)
     assert kiss.website_hook_blocked(_render(_hook(), _policy(OTHER, PEER))) == (
@@ -61,7 +60,7 @@ def test_blocked_while_the_live_policy_lacks_the_hooks_peer(cluster: dict[str, A
     )
 
 
-def test_not_blocked_once_the_live_policy_admits_the_hook(cluster: dict[str, Any]):
+def test_not_blocked_once_the_live_policy_admits_the_hook(cluster: Doc):
     cluster["service/kiss-es-http"] = {}
     cluster["networkpolicy/podiumd-elasticsearch"] = _policy(OTHER, PEER)
     assert kiss.website_hook_blocked(_render(_hook(), _policy(OTHER, PEER))) == ""

@@ -8,15 +8,16 @@ import pytest
 import yaml
 
 from podiumd_minikube import manifests
+from podiumd_minikube.objects import Doc
 
 DIGEST = "a" * 64
 
 
-def _docs(text: str) -> list[manifests.Doc]:
+def _docs(text: str) -> list[Doc]:
     return [doc for doc in yaml.safe_load_all(text) if doc]
 
 
-def _names(docs: list[manifests.Doc]) -> list[str]:
+def _names(docs: list[Doc]) -> list[str]:
     return [manifests.name_of(doc) for doc in docs]
 
 
@@ -184,7 +185,7 @@ metadata: {name: postgres}
     }
 
 
-def _configmap(name: str, configuration: object) -> manifests.Doc:
+def _configmap(name: str, configuration: object) -> Doc:
     return {
         "kind": "ConfigMap",
         "metadata": {"name": name},
@@ -230,7 +231,7 @@ def test_fix_up_splits_off_large_configmaps():
 
 
 def test_trust_ca_mounts_the_ca_in_workloads_and_jobs():
-    docs: list[manifests.Doc] = [
+    docs: list[Doc] = [
         {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "SSL_CERT_FILE", "value": "/own"}]}]}}}},
         {"kind": "Job", "metadata": {"name": "openzaak-config"}, "spec": {"template": {"spec": {"containers": [{"name": "job"}]}}}},
         {"kind": "Job", "metadata": {"name": "storage-permissions-fix"}, "spec": {"template": {"spec": {"containers": [{"name": "job"}]}}}},
@@ -249,12 +250,12 @@ def test_trust_ca_mounts_the_ca_in_workloads_and_jobs():
 
 
 def test_serve_postgres_tls_adds_the_certificate_and_turns_on_ssl():
-    postgres: manifests.Doc = {
+    postgres: Doc = {
         "kind": "Deployment",
         "metadata": {"name": "postgres"},
         "spec": {"template": {"spec": {"containers": [{"name": "postgres", "args": ["postgres"]}]}}},
     }
-    other: manifests.Doc = {
+    other: Doc = {
         "kind": "Deployment",
         "metadata": {"name": "zac"},
         "spec": {"template": {"spec": {"containers": []}}},
@@ -275,7 +276,7 @@ def test_serve_postgres_tls_adds_the_certificate_and_turns_on_ssl():
 
 
 def test_limit_runtimes_adds_capacity_env_unless_the_container_sets_it():
-    docs: list[manifests.Doc] = [
+    docs: list[Doc] = [
         {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"name": "app", "env": [{"name": "DOTNET_gcServer", "value": "1"}]}]}}}},
         {"kind": "CronJob", "spec": {"jobTemplate": {"spec": {"template": {"spec": {"containers": [{"name": "sync"}]}}}}}},
         {"kind": "Service", "spec": {}},
@@ -289,7 +290,7 @@ def test_limit_runtimes_adds_capacity_env_unless_the_container_sets_it():
 
 
 def test_limit_runtimes_reaches_the_containers_of_eck_pod_templates():
-    docs: list[manifests.Doc] = [
+    docs: list[Doc] = [
         {"kind": "Elasticsearch", "spec": {"nodeSets": [{"name": "default", "podTemplate": {"spec": {"containers": [{"name": "elasticsearch"}]}}}]}},
         {"kind": "Kibana", "spec": {"podTemplate": {"spec": {"containers": [{"name": "kibana"}]}}}},
     ]  # fmt: skip
@@ -301,7 +302,7 @@ def test_limit_runtimes_reaches_the_containers_of_eck_pod_templates():
 
 
 def test_limit_runtimes_reaches_the_prometheus_container_the_operator_builds():
-    docs: list[manifests.Doc] = [{"kind": "Prometheus", "spec": {"resources": {"limits": {"memory": "512Mi"}}}}]
+    docs: list[Doc] = [{"kind": "Prometheus", "spec": {"resources": {"limits": {"memory": "512Mi"}}}}]
     manifests.limit_runtimes(docs)
     (prometheus,) = docs[0]["spec"]["containers"]
     assert prometheus["name"] == "prometheus"
@@ -310,7 +311,7 @@ def test_limit_runtimes_reaches_the_prometheus_container_the_operator_builds():
 
 
 def test_limit_runtimes_gives_containers_with_a_memory_limit_gomemlimit():
-    docs: list[manifests.Doc] = [
+    docs: list[Doc] = [
         {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [
             {"name": "tempo", "resources": {"limits": {"memory": "256Mi"}}},
             {"name": "zac", "resources": {"requests": {"memory": "1Gi"}}},
@@ -329,8 +330,8 @@ def test_limit_runtimes_gives_containers_with_a_memory_limit_gomemlimit():
 
 
 def test_tune_solr_sets_the_solr_and_zookeeper_jvm_env():
-    provided: manifests.Doc = {"replicas": 1}
-    spec: manifests.Doc = {"zookeeperRef": {"provided": provided}}
+    provided: Doc = {"replicas": 1}
+    spec: Doc = {"zookeeperRef": {"provided": provided}}
     manifests.tune_solr([{"kind": "SolrCloud", "spec": spec}])
     pod_options = manifests.section(manifests.section(spec, "customSolrKubeOptions"), "podOptions")
     assert {"name": "GC_TUNE", "value": "-XX:+UseSerialGC"} in pod_options["envVars"]
@@ -340,14 +341,14 @@ def test_tune_solr_sets_the_solr_and_zookeeper_jvm_env():
 
 
 def test_mount_zaakbrug_role_mapping_mounts_both_files_only_with_the_configmap():
-    def deployment() -> manifests.Doc:
+    def deployment() -> Doc:
         return {
             "kind": "Deployment",
             "metadata": {"name": "zaakbrug"},
             "spec": {"template": {"spec": {"containers": [{"name": "zaakbrug"}]}}},
         }
 
-    configmap: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": manifests.ZAAKBRUG_ROLE_MAPPING}}
+    configmap: Doc = {"kind": "ConfigMap", "metadata": {"name": manifests.ZAAKBRUG_ROLE_MAPPING}}
     mounted = deployment()
     manifests.mount_zaakbrug_role_mapping([configmap, mounted])
     spec = mounted["spec"]["template"]["spec"]
@@ -362,16 +363,16 @@ def test_mount_zaakbrug_role_mapping_mounts_both_files_only_with_the_configmap()
 
 
 def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
-    resources: manifests.Doc = {"limits": {"memory": "768Mi"}}
-    builder: manifests.Doc = {"name": "keycloak-builder"}
-    server: manifests.Doc = {"name": "keycloak"}
-    container: manifests.Doc = {"name": "operator"}
-    template: manifests.Doc = {"spec": {"initContainers": [builder], "containers": [server]}}
-    keycloak: manifests.Doc = {
+    resources: Doc = {"limits": {"memory": "768Mi"}}
+    builder: Doc = {"name": "keycloak-builder"}
+    server: Doc = {"name": "keycloak"}
+    container: Doc = {"name": "operator"}
+    template: Doc = {"spec": {"initContainers": [builder], "containers": [server]}}
+    keycloak: Doc = {
         "kind": "Keycloak",
         "spec": {"resources": resources, "unsupported": {"podTemplate": template}},
     }
-    operator: manifests.Doc = {
+    operator: Doc = {
         "kind": "Deployment",
         "metadata": {"name": manifests.KEYCLOAK_OPERATOR},
         "spec": {"template": {"spec": {"containers": [container]}}},
@@ -387,23 +388,23 @@ def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
 
 
 def test_tune_kcadm_sets_kc_opts_only_in_jobs_on_the_keycloak_image():
-    kcadm: manifests.Doc = {"name": "repair", "image": "quay.io/keycloak/keycloak:26.8.1"}
-    config_cli: manifests.Doc = {"name": "kc-config-cli", "image": "adorsys/keycloak-config-cli:6.5.1-26.5.5"}
-    job: manifests.Doc = {"kind": "Job", "spec": {"template": {"spec": {"containers": [kcadm, config_cli]}}}}
+    kcadm: Doc = {"name": "repair", "image": "quay.io/keycloak/keycloak:26.8.1"}
+    config_cli: Doc = {"name": "kc-config-cli", "image": "adorsys/keycloak-config-cli:6.5.1-26.5.5"}
+    job: Doc = {"kind": "Job", "spec": {"template": {"spec": {"containers": [kcadm, config_cli]}}}}
     manifests.tune_kcadm([job])
     assert kcadm["env"] == [{"name": "KC_OPTS", "value": manifests.KCADM_ENV["KC_OPTS"]}]
     assert "env" not in config_cli
 
 
 def test_speed_up_keycloak_start_sets_probes_and_the_builder_cpu():
-    builder: manifests.Doc = {"name": "keycloak-builder", "resources": {"limits": {"cpu": "1000m", "memory": "1Gi"}}}
-    server: manifests.Doc = {
+    builder: Doc = {"name": "keycloak-builder", "resources": {"limits": {"cpu": "1000m", "memory": "1Gi"}}}
+    server: Doc = {
         "name": "keycloak",
         "readinessProbe": {"initialDelaySeconds": 60, "periodSeconds": 10},
         "startupProbe": {"initialDelaySeconds": 30, "periodSeconds": 10, "failureThreshold": 30},
         "livenessProbe": {"initialDelaySeconds": 120},
     }
-    template: manifests.Doc = {"spec": {"initContainers": [builder], "containers": [server]}}
+    template: Doc = {"spec": {"initContainers": [builder], "containers": [server]}}
     manifests.speed_up_keycloak_start([{"kind": "Keycloak", "spec": {"unsupported": {"podTemplate": template}}}])
     assert builder["resources"]["limits"] == {"cpu": "2", "memory": "1Gi"}
     assert server["readinessProbe"] == {"initialDelaySeconds": 0, "periodSeconds": 10}
@@ -425,9 +426,9 @@ def test_speed_up_keycloak_start_sets_probes_and_the_builder_cpu():
 def test_retry_in_container_reruns_the_command_in_a_bounded_retry(
     kind: str, name: str, container: str, command: list[str], args: list[str] | None
 ):
-    retried: manifests.Doc = {"name": container, "command": command, **({"args": args} if args else {})}
-    other: manifests.Doc = {"name": "other", "command": ["sh", "-c", "curl c"]}
-    doc: manifests.Doc = {
+    retried: Doc = {"name": container, "command": command, **({"args": args} if args else {})}
+    other: Doc = {"name": "other", "command": ["sh", "-c", "curl c"]}
+    doc: Doc = {
         "kind": kind,
         "metadata": {"name": name},
         "spec": {"template": {"spec": {"initContainers": [retried], "containers": [other]}}},
@@ -450,8 +451,8 @@ def test_retry_in_container_reruns_the_command_in_a_bounded_retry(
 def test_retry_in_container_leaves_a_command_that_retries_itself():
     retry = 'end=$(($(date +%s) + 600)); until "$@"; do sleep 5; done'
     command = ["/bin/sh", "-c", retry, "retry", "/bin/sh", "-c", "exec java -jar x.jar"]
-    container: manifests.Doc = {"name": manifests.KC_CONFIG_CLI, "command": list(command)}
-    doc: manifests.Doc = {
+    container: Doc = {"name": manifests.KC_CONFIG_CLI, "command": list(command)}
+    doc: Doc = {
         "kind": "Job",
         "metadata": {"name": "import-master-realm-job"},
         "spec": {"template": {"spec": {"containers": [container]}}},
@@ -461,8 +462,8 @@ def test_retry_in_container_leaves_a_command_that_retries_itself():
 
 
 def test_retry_in_container_leaves_a_name_that_only_starts_alike():
-    container: manifests.Doc = {"name": manifests.KC_CONFIG_CLI}
-    doc: manifests.Doc = {
+    container: Doc = {"name": manifests.KC_CONFIG_CLI}
+    doc: Doc = {
         "kind": "Job",
         "metadata": {"name": "import-podiumd-realm-jobs"},
         "spec": {"template": {"spec": {"containers": [container]}}},
@@ -474,8 +475,8 @@ def test_retry_in_container_leaves_a_name_that_only_starts_alike():
 def test_retry_in_container_keeps_set_e_of_the_script(tmp_path: Path):
     marker = tmp_path / "attempts"
     script = f"set -e; echo x >> {marker}; [ $(wc -l < {marker}) -ge 2 ]; echo done"
-    container: manifests.Doc = {"name": manifests.ZAC_SOLR_INIT, "command": ["sh", "-c", script]}
-    doc: manifests.Doc = {
+    container: Doc = {"name": manifests.ZAC_SOLR_INIT, "command": ["sh", "-c", script]}
+    doc: Doc = {
         "kind": "Deployment",
         "metadata": {"name": "zac"},
         "spec": {"template": {"spec": {"initContainers": [container]}}},
@@ -486,7 +487,7 @@ def test_retry_in_container_keeps_set_e_of_the_script(tmp_path: Path):
 
 
 def test_ease_solr_start_sets_zookeeper_probes_and_the_solr_startup_probe():
-    solr: manifests.Doc = {
+    solr: Doc = {
         "kind": "SolrCloud",
         "metadata": {"name": "zac-solr"},
         "spec": {"zookeeperRef": {"provided": {"replicas": 1}}},
@@ -498,7 +499,7 @@ def test_ease_solr_start_sets_zookeeper_probes_and_the_solr_startup_probe():
 
 
 def test_ease_solr_start_adds_the_live_node_wait_with_solrs_image():
-    solr: manifests.Doc = {
+    solr: Doc = {
         "kind": "SolrCloud",
         "metadata": {"name": "zac-solr"},
         "spec": {"solrImage": {"repository": "library/solr", "tag": "9.11.0-slim"}},
@@ -531,20 +532,20 @@ metadata: {name: b}
 
 
 def test_route_outbound_only_with_the_outway():
-    config: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": "zac"}, "data": {"BRP": "http://api-proxy/x"}}
+    config: Doc = {"kind": "ConfigMap", "metadata": {"name": "zac"}, "data": {"BRP": "http://api-proxy/x"}}
     manifests.route_outbound([config])
     assert config["data"]["BRP"] == "http://api-proxy/x"
-    outway: manifests.Doc = {"kind": "Service", "metadata": {"name": manifests.OUTWAY_SERVICE}}
+    outway: Doc = {"kind": "Service", "metadata": {"name": manifests.OUTWAY_SERVICE}}
     manifests.route_outbound([config, outway])
     assert config["data"]["BRP"] == "http://frankgateway-outway:9080/x"
 
 
 def test_route_outbound_rolls_the_pods_that_read_a_routed_configmap():
-    def deployment(configmap: str) -> manifests.Doc:
+    def deployment(configmap: str) -> Doc:
         container = {"name": "app", "envFrom": [{"configMapRef": {"name": configmap}}]}
         return {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [container]}}}}
 
-    config: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": "zac"}, "data": {"BRP": "http://api-proxy/x"}}
+    config: Doc = {"kind": "ConfigMap", "metadata": {"name": "zac"}, "data": {"BRP": "http://api-proxy/x"}}
     reader, other = deployment("zac"), deployment("pabc")
     manifests.route_outbound([config, reader, other])
     annotations = reader["spec"]["template"]["metadata"]["annotations"]
@@ -554,9 +555,9 @@ def test_route_outbound_rolls_the_pods_that_read_a_routed_configmap():
 
 def test_limit_nginx_workers_rewrites_auto_and_rolls_its_readers():
     conf = "worker_processes auto;\nevents {}\n"
-    config: manifests.Doc = {"kind": "ConfigMap", "metadata": {"name": "proxy"}, "data": {"nginx.conf": conf}}
+    config: Doc = {"kind": "ConfigMap", "metadata": {"name": "proxy"}, "data": {"nginx.conf": conf}}
     volume = {"name": "c", "configMap": {"name": "proxy"}}
-    reader: manifests.Doc = {
+    reader: Doc = {
         "kind": "Deployment",
         "spec": {"template": {"spec": {"volumes": [volume], "containers": [{"name": "nginx"}]}}},
     }
@@ -566,7 +567,7 @@ def test_limit_nginx_workers_rewrites_auto_and_rolls_its_readers():
     assert annotations[manifests.NGINX_WORKERS_ANNOTATION] == manifests.NGINX_WORKERS
 
 
-def _ingress(service: str) -> manifests.Doc:
+def _ingress(service: str) -> Doc:
     backend = {"service": {"name": service, "port": {"number": 80}}}
     return {
         "kind": "Ingress",
@@ -575,8 +576,8 @@ def _ingress(service: str) -> manifests.Doc:
 
 
 def test_route_through_nginx_only_when_the_nginx_service_is_rendered():
-    with_nginx: list[manifests.Doc] = [_ingress("zac"), {"kind": "Service", "metadata": {"name": "zac-nginx"}}]
-    without: list[manifests.Doc] = [_ingress("zac")]
+    with_nginx: list[Doc] = [_ingress("zac"), {"kind": "Service", "metadata": {"name": "zac-nginx"}}]
+    without: list[Doc] = [_ingress("zac")]
     manifests.route_through_nginx(with_nginx)
     manifests.route_through_nginx(without)
     assert with_nginx[0]["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"]["name"] == "zac-nginx"
@@ -585,7 +586,7 @@ def test_route_through_nginx_only_when_the_nginx_service_is_rendered():
 
 def test_drop_duplicate_env_keeps_the_last_entry_per_name():
     env = [{"name": "A", "value": "chart"}, {"name": "B", "value": "1"}, {"name": "A", "value": "ours"}]
-    doc: manifests.Doc = {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"env": env}]}}}}
+    doc: Doc = {"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"env": env}]}}}}
     manifests.drop_duplicate_env([doc])
     assert doc["spec"]["template"]["spec"]["containers"][0]["env"] == [
         {"name": "B", "value": "1"},
