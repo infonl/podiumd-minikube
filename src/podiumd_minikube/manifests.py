@@ -475,6 +475,7 @@ def tune_keycloak(docs: list[Doc]) -> None:
                 add_env(container, KEYCLOAK_OPERATOR_ENV)
 
 
+# podiumd<4.10.1: podiumd.kcadmLogin exports the same KC_OPTS since.
 def tune_kcadm(docs: list[Doc]) -> None:
     """Sets KCADM_ENV on the containers of Jobs that run the Keycloak image (kcadm.sh)."""
     for doc in docs:
@@ -512,6 +513,7 @@ def speed_up_keycloak_start(docs: list[Doc]) -> None:
 ZAC_SOLR_INIT = "init-solr-zac-core"
 KC_CONFIG_CLI = "kc-config-cli"
 # The ENTRYPOINT of a retried container's image, which sets no command (crictl inspecti).
+# podiumd<4.10.1: only the realm imports need it.
 IMAGE_ENTRYPOINTS = {KC_CONFIG_CLI: ["/bin/sh", "-c", "exec java $JAVA_OPTS -jar /app/keycloak-config-cli.jar"]}
 KEYCLOAK_ADMIN_USER = "ensure-podiumd-admin-user"
 OPEN_INWONER_SEARCH_INDEX = "openinwoner-search-index"
@@ -524,19 +526,20 @@ OPEN_INWONER_SEARCH_INDEX = "openinwoner-search-index"
 # OpenBao's schema and config, Open VTB's and Open Beheer's config: Postgres or OpenBao still starting.
 # The realm imports and PABC's groups Job: they race each other on a fresh install (401, 409 on a PABC
 # role; known issue podiumd-chart-31). A name matches with or without its hash suffix.
+# podiumd<4.10.1: podiumd.retryCommand wraps the entries marked so since.
 RETRIED_CONTAINERS = {
-    ("Job", "import-podiumd-realm-job", KC_CONFIG_CLI),
-    ("Job", "import-master-realm-job", KC_CONFIG_CLI),
-    ("Job", "pabc-keycloak-groups-job", "pabc-keycloak-groups"),
+    ("Job", "import-podiumd-realm-job", KC_CONFIG_CLI),  # podiumd<4.10.1
+    ("Job", "import-master-realm-job", KC_CONFIG_CLI),  # podiumd<4.10.1
+    ("Job", "pabc-keycloak-groups-job", "pabc-keycloak-groups"),  # podiumd<4.10.1
     ("Job", "openbeheer-config", "openbeheer"),
     ("Job", "openbao-db-schema", "schema"),
     ("Job", "openbao-config", "config"),
     ("Job", "openvtb-config", "openvtb"),
     ("Deployment", ZAC_DEPLOYMENT, ZAC_SOLR_INIT),
-    ("Job", KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_USER),
+    ("Job", KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_USER),  # podiumd<4.10.1
     ("Deployment", "openinwoner", OPEN_INWONER_SEARCH_INDEX),
-    ("Job", "create-required-catalogi-job", "create-required-catalogi"),
-    ("Job", "create-required-objecttypen-job", "create-required-objecttypen"),
+    ("Job", "create-required-catalogi-job", "create-required-catalogi"),  # podiumd<4.10.1
+    ("Job", "create-required-objecttypen-job", "create-required-objecttypen"),  # podiumd<4.10.1
 }
 RETRY_ATTEMPTS = 150
 
@@ -557,7 +560,7 @@ def retry_in_container(docs: list[Doc]) -> None:
             if not _retried(str(doc.get("kind")), name_of(doc), str(container.get("name"))):
                 continue
             command = container.get("command") or IMAGE_ENTRYPOINTS[str(container["name"])]
-            # podiumd's own retry (podiumd.retryCommand, helm-charts #666) wraps the same way.
+            # podiumd<4.10.1: podiumd's own retry (podiumd.retryCommand) wraps the same way.
             if len(command) > 2 and 'until "$@"' in str(command[2]):
                 continue
             # A process of its own: an until condition would turn off a script's `set -e`.
