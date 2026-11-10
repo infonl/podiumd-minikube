@@ -9861,3 +9861,50 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   podiumd-chart-1: fixed in the monitoring-logging 1.0.19 checkout).
   OpenBao's security headers pass without xfail (podiumd-chart-23, fixed in
   4.10.1).
+
+### podiumd-chart-37 reproduction for podiumd-tests (2026-11-10)
+
+- zacSeed.enabled (0acb0ba) leaves templates/zac's seed Job out, so the
+  upgrade shows what ZAC does itself. Cycle 1 (16:06-16:42 CET): fresh
+  published 4.9.6 `--full` without Frank!Gateway, OpenBao (no
+  openbao-activate.sh before 4.10.0) and the seed Job; the seed Job applied
+  once by hand (16:30, zaaktype version c7dbdf7b), then `deploy --full` to
+  4.10.1. podiumd's helm upgrade 16:34:04; create-required-catalogi-job
+  created 16:34:18, published version 5979d2a5 and notified at 16:37:35,
+  complete 16:37:40; new ZAC pod scheduled 16:34:23, Ready 16:38:14, old
+  pod failing its probes from 16:36:50 and killed 16:38:14. podiumd-tests:
+  the notification reached the OLD 4.9.6 ZAC (Open Notificaties 204), which
+  copied the parameters: no reproduction in this order (known-issues
+  8f6ac65).
+- Cycle 2 (2026-11-03's order, the Job only after ZAC 5.9.1 is Ready):
+  4.9.6 and seed done 17:06 (zaaktype version 3f71a59e); step 2 deploys
+  4.10.1 with podiumd.openzaak.create_required_catalogi_job.enabled=false
+  (drops the Job, its Secret and ConfigMap) and applies those three,
+  rendered from the 4.10.1 release, after the rollout. Scripts and evidence
+  in infonl/chart37-repro/.
+- Found live, ours: cycle 1's deploy was still in its second pass (KISS
+  website) when cycle 2's reset ran; reset-namespace deleted the namespaces
+  and PVs and only then refused on the lock. It must take the lock before
+  deleting. To fix.
+- The helm-charts worktree helm-charts-podiumd-4.10.0-verify (our
+  monitoring-logging 1.0.19 checkout) was deleted again by someone (second
+  time after 2026-11-04); recreated detached at 0f40c6df.
+- Deploy timings from the timestamped logs: fresh 4.9.6 --full pre-steps
+  2m21, podiumd helm upgrade 5m47, readiness wait 6m27; upgrade to 4.10.1
+  pre-steps 2m06, helm upgrade 7m19, rest 0m51. As on kees00
+  (podiumd-infra: 329 of 376 s in the helm upgrade). Phase timings in the
+  deploy, as podiumd-infra 0471a55, are next (Kees's yes).
+
+### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
+
+- flake8 with wemake-python-styleguide, bugbear B907/B042,
+  class-attributes-order CCE001 (magic methods after __init__, as WPS338),
+  functions-names FNE005/FNE008; ruff PL with preview rules, D401,
+  ANN201/202; basedpyright strict plus reportExplicitAny (one Any, in
+  objects.Doc) and seven more; coverage branch and precision 2; deptry;
+  ruff target py312 (the minimum, Kees). About 400 findings fixed; the
+  --full render is unchanged (only the passwords Helm generates without a
+  lookup differ).
+- pip-audit only warns in run_python_checks and runs weekly in its own
+  workflow; run_python_checks runs every step at once (podiumd-tests
+  875251e): 58 s -> 16 s on 24 cores.
