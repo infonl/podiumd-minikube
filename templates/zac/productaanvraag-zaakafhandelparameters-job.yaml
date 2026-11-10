@@ -14,7 +14,7 @@ The script logs in as its own Keycloak user in group beheerders (see its
 header): every zaakafhandelparameters endpoint requires a user with the
 beheerder PABC role, not a service account.
 */}}
-{{- if .Values.podiumd.zac.enabled }}
+{{- if and .Values.podiumd.zac.enabled .Values.zacSeed.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
