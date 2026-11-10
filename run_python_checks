@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Runs the "Before committing" checks on all Python code in this repository,
-# fastest first, stopping at the first failure. Tool settings live in
+# all at the same time, and lists every failed step. Tool settings live in
 # pyproject.toml and .jscpd.json.
 set -euo pipefail
 
@@ -10,11 +10,11 @@ usage() {
 Usage: run_python_checks [-h|--help]
 
 Runs ruff check, shellcheck, ruff format --check, flake8
-(wemake-python-styleguide), jscpd, pymarkdown, vulture, deptry, bandit,
-basedpyright, pylint and pytest (unit_tests/ only, with the coverage
-threshold from pyproject.toml; tests/ needs a live cluster) on src/,
-unit_tests/ and tests/, fastest first. Stops at the first failure. Then
-pip-audit on the packages of .venv, which only warns. Upgrades pip and
+(wemake-python-styleguide and plugins), jscpd, pymarkdown, vulture, deptry,
+bandit, basedpyright, pylint, pytest (unit_tests/ only, with the coverage
+threshold from pyproject.toml; tests/ needs a live cluster) and pip-audit
+(only warns) on src/, unit_tests/ and tests/, all at the same time; prints
+each step's log in that order and lists every failed step. Upgrades pip and
 .venv first when it was last upgraded over a day ago or pyproject.toml
 changed since.
 HELP
@@ -38,17 +38,6 @@ if [[ -x .venv/bin/python3 ]]; then
     fi
 fi
 
-# Prints the step's name, runs it and prints its time, to keep the
-# fastest-first order honest; set -e stops at a failure.
-step() {
-    local name=$1 start=${EPOCHREALTIME//[!0-9]/}
-    shift
-    echo "=== $name ==="
-    "$@"
-    local hundredths=$(((${EPOCHREALTIME//[!0-9]/} - start) / 10000))
-    printf '    (%d.%02d s)\n' $((hundredths / 100)) $((hundredths % 100))
-}
-
 # Arrays keep each file name one argument (SC2046). set -e misses failures
 # inside <(...), so `wait "$!"` checks each one (SC2312).
 mapfile -t unit_test_files < <(find unit_tests -name '*.py' -not -path '*/__pycache__/*' | sort)
@@ -71,37 +60,95 @@ import tomllib
 with open("pyproject.toml", "rb") as f:
     print(",".join(tomllib.load(f)["tool"]["podiumd-minikube"]["pylint-tests"]["disable"]))')
 
-step "ruff check" ruff check .
-if ((${#shell_scripts[@]})); then
-    step "shellcheck (${#shell_scripts[@]} shell script(s))" shellcheck "${shell_scripts[@]}"
-fi
-step "ruff format --check" ruff format --check .
-# Settings in pyproject.toml [tool.flake8] (flake8-pyproject).
-step "flake8 (wemake-python-styleguide)" flake8 "${code[@]}" unit_tests tests
-step "jscpd (duplicate code)" jscpd "${code[@]}"
-step "pymarkdown (${#markdown_files[@]} file(s))" pymarkdown --config pyproject.toml scan "${markdown_files[@]}"
-step "vulture (dead code)" vulture "${code[@]}"
-step "deptry (dependencies)" deptry src
+# Each check is a step function. Its output goes to its own log; the logs are printed in order once all steps end.
+logs=$(mktemp -d)
+trap 'rm -rf "$logs"' EXIT
+
+step_ruff_check() { ruff check .; }
+
+step_shellcheck() {
+    if ((${#shell_scripts[@]})); then
+        shellcheck "${shell_scripts[@]}"
+    fi
+}
+
+step_ruff_format() { ruff format --check .; }
+
+# Settings in pyproject.toml [tool.flake8] (flake8-pyproject): only the rules ruff does not have.
+step_flake8() { flake8 "${code[@]}" unit_tests tests; }
+
+step_jscpd() { jscpd "${code[@]}"; }
+
+step_pymarkdown() { pymarkdown --config pyproject.toml scan "${markdown_files[@]}"; }
+
+step_vulture() { vulture "${code[@]}"; }
+
+step_deptry() { deptry src; }
+
 # Test directories excluded: every assert would flag B101.
-step "bandit (security)" bandit -c pyproject.toml -r "${code[@]}" -q
-step "basedpyright (type checking)" basedpyright "${code[@]}" unit_tests tests
-step "pylint (src)" pylint "${code[@]}"
-# Separate runs: each test directory imports its own conftest. PYTHONPATH
-# lets pylint resolve conftest without analyzing it.
-step "pylint (unit_tests)" env PYTHONPATH=unit_tests pylint --disable="$tests_pylint_disable" "${unit_test_files[@]}"
-step "pylint (tests)" env PYTHONPATH=tests pylint --disable="$tests_pylint_disable" "${live_test_files[@]}"
-# Coverage source and threshold: [tool.coverage] in pyproject.toml.
-step "pytest (unit_tests, with coverage)" python3 -m pytest -q --cov --cov-report=term-missing:skip-covered
+step_bandit() { bandit -c pyproject.toml -r "${code[@]}" -q; }
+
+step_basedpyright() { basedpyright "${code[@]}" unit_tests tests; }
+
+# -j 0: one process per CPU. Separate runs for the test directories: each
+# imports its own conftest; PYTHONPATH lets pylint resolve it without analyzing it.
+step_pylint_src() { pylint -j 0 "${code[@]}"; }
+
+step_pylint_unit_tests() {
+    PYTHONPATH=unit_tests pylint -j 0 --disable="$tests_pylint_disable" "${unit_test_files[@]}"
+}
+
+step_pylint_tests() { PYTHONPATH=tests pylint -j 0 --disable="$tests_pylint_disable" "${live_test_files[@]}"; }
+
+# Coverage source and threshold: [tool.coverage] in pyproject.toml. More than 8 workers start slower than they gain.
+step_pytest() { python3 -m pytest -q -n auto --maxprocesses 8 --cov --cov-report=term-missing:skip-covered; }
 
 # Known vulnerabilities in the packages of .venv, as a warning: a new advisory appears without a code change and must
 # not block a commit; the pip-audit workflow reports it. --skip-editable: podiumd-minikube itself is not on PyPI. Own
 # cache: pip-audit cannot read the cache entries of a newer pip.
-echo "=== pip-audit (.venv packages, warning only) ==="
-if python3 -c 'import socket; socket.create_connection(("pypi.org", 443), 5).close()' 2> /dev/null; then
-    pip-audit --progress-spinner off --skip-editable --cache-dir .venv/.pip-audit-cache ||
-        echo "WARNING: pip-audit found known vulnerabilities: upgrade the package named above"
-else
-    echo "WARNING: pypi.org not reachable, pip-audit skipped"
-fi
+step_pip_audit() {
+    if python3 -c 'import socket; socket.create_connection(("pypi.org", 443), 5).close()' 2> /dev/null; then
+        pip-audit --progress-spinner off --skip-editable --cache-dir .venv/.pip-audit-cache ||
+            echo "WARNING: pip-audit found known vulnerabilities: upgrade the package named above"
+    else
+        echo "WARNING: pypi.org not reachable, pip-audit skipped"
+    fi
+}
 
+# Runs one step, its output in its own log; records "<seconds> ok|FAILED".
+run_step() {
+    local start=$SECONDS
+    if "step_$1" > "$logs/$1.log" 2>&1; then
+        echo "$((SECONDS - start)) ok" > "$logs/$1.status"
+    else
+        echo "$((SECONDS - start)) FAILED" > "$logs/$1.status"
+        return 1
+    fi
+}
+
+# All steps start at the same time (every step is short, so fail-fast groups take longer), and the run lists every
+# failed step. pip-audit only waits on PyPI and never fails.
+steps=(
+    ruff_check shellcheck ruff_format flake8 jscpd pymarkdown vulture deptry bandit
+    basedpyright pylint_src pylint_unit_tests pylint_tests pytest pip_audit
+)
+pids=()
+for name in "${steps[@]}"; do
+    run_step "$name" &
+    pids+=("$!")
+done
+for pid in "${pids[@]}"; do
+    wait "$pid" || true
+done
+failed=()
+for name in "${steps[@]}"; do
+    read -r seconds status < "$logs/$name.status"
+    echo "=== $name (${seconds}s, $status) ==="
+    cat "$logs/$name.log"
+    [[ $status == ok ]] || failed+=("$name")
+done
+if ((${#failed[@]})); then
+    echo "=== FAILED: ${failed[*]} ==="
+    exit 1
+fi
 echo "=== all checks passed ==="

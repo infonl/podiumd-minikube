@@ -17,6 +17,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov",  # coverage of the unit tests (run_python_checks)
+    "pytest-xdist",  # pytest -n in run_python_checks
     "requests>=2.31",
     "ruff",
     "pymarkdownlnt",
