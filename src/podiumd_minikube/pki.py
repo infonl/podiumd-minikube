@@ -39,7 +39,7 @@ ISSUER = "podiumd-local-ca"
 
 
 def ensure_ca() -> bool:
-    """Creates .pki/ca.key and .pki/ca.crt unless both exist; True when created."""
+    """Create .pki/ca.key and .pki/ca.crt unless both exist; True when created."""
     if CA_CERT.is_file() and CA_KEY.is_file():
         return False
     PKI_DIR.mkdir(mode=0o700, exist_ok=True)
@@ -99,7 +99,7 @@ def _move_from_old_namespace() -> None:
 
 
 def _installed() -> bool:
-    """True when the cert-manager release runs CERT_MANAGER_VERSION with cert_manager_values()."""
+    """Return True when the cert-manager release runs CERT_MANAGER_VERSION with cert_manager_values()."""
     releases = json.loads(process.output(["helm", "list", "-n", CERT_MANAGER_NAMESPACE, "-o", "json"]))
     if not any(release["chart"] == f"cert-manager-{CERT_MANAGER_VERSION}" for release in releases):
         return False
@@ -113,7 +113,7 @@ def _add_jetstack_repo() -> None:
 
 
 def cert_manager_template() -> str:
-    """The cert-manager chart rendered as install_cert_manager installs it."""
+    """Return the cert-manager chart rendered as install_cert_manager installs it."""
     _add_jetstack_repo()
     return process.fetch(
         ["helm", "template", *CERT_MANAGER_CHART_ARGS, "-f", "-"], stdin=yaml.safe_dump(cert_manager_values())
@@ -138,7 +138,7 @@ def install_cert_manager() -> None:
 
 
 def issuer_manifests() -> str:
-    """The CA Secret (from .pki/) and the ClusterIssuer that signs with it."""
+    """Return the CA Secret (from .pki/) and the ClusterIssuer that signs with it."""
     secret = {
         "apiVersion": "v1",
         "kind": "Secret",
@@ -159,7 +159,7 @@ def issuer_manifests() -> str:
 
 
 def install_issuer() -> None:
-    """Applies the CA Secret and ClusterIssuer; idempotent.
+    """Apply the CA Secret and ClusterIssuer; idempotent.
 
     Retried: after cert-manager's pods are replaced, its webhook has no CA until
     the new cainjector takes over the old leader lease (75 s after a move).
@@ -219,7 +219,7 @@ def trust_configmap(namespace: str) -> str:
 
 
 def apply_trust(namespace: str) -> None:
-    """Applies TRUST_CONFIGMAP (server-side: it exceeds client-side apply's annotation limit)."""
+    """Apply TRUST_CONFIGMAP (server-side: it exceeds client-side apply's annotation limit)."""
     kube.kubectl_shown(
         "apply", "--server-side", "--force-conflicts", "-n", namespace, "-f", "-", stdin=trust_configmap(namespace)
     )

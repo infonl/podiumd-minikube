@@ -80,7 +80,7 @@ MAX_PODS = 150
 
 
 def start_minikube(cpus: int, memory_mb: int) -> None:
-    """Starts the profile with the docker driver and Cilium, or checks the running one's memory."""
+    """Start the profile with the docker driver and Cilium, or check the running one's memory."""
     cni_manifest = cni.write_manifest()
     if process.succeeds(["minikube", "status", "-p", PROFILE]):
         print(f"minikube profile {PROFILE!r} is already running - leaving it as-is.")
@@ -102,12 +102,12 @@ def cpuset_args(cpus: int, host_cpus: int) -> list[str]:
 
 
 def default_cpus(host_cpus: int) -> int:
-    """The node's CPUs: at most 8 and at least 2; above 4 host CPUs, a quarter of them (at least 2) stays free."""
+    """Return the node's CPUs: 2 to 8; above 4 host CPUs, a quarter of them (at least 2) stays free."""
     return max(2, min(8, host_cpus - max(2, host_cpus // 4)))
 
 
 def _nothing() -> None:
-    """Does nothing: start_node's default while_starting."""
+    """Do nothing: start_node's default while_starting."""
 
 
 def start_node(while_starting: Callable[[], None] = _nothing) -> None:
@@ -138,7 +138,7 @@ def start_node(while_starting: Callable[[], None] = _nothing) -> None:
 
 
 def with_control_plane_env(manifest: str) -> str | None:
-    """The static pod manifest with its CONTROL_PLANE_ENV values on its container; None when it has them already."""
+    """Return the static pod manifest with CONTROL_PLANE_ENV on its container; None when it has them already."""
     pod = yaml.safe_load(manifest)
     wanted = CONTROL_PLANE_ENV[pod["metadata"]["name"]]
     container = pod["spec"]["containers"][0]
@@ -165,7 +165,7 @@ def _tuned_and_ready(name: str) -> bool:
 
 
 def _write_node_file(path: str, content: str, mode: str) -> None:
-    """Writes content to path on the node, staged and renamed: the kubelet would read a half-written file."""
+    """Write content to path on the node, staged and renamed: the kubelet would read a half-written file."""
     name = Path(path).name
     staged = f"/etc/kubernetes/.{name}"
     with tempfile.TemporaryDirectory() as directory:
@@ -186,7 +186,7 @@ def nameservers_only(resolv_conf: str) -> str:
 
 
 def with_pod_resolv_conf(config: str) -> str | None:
-    """The kubelet configuration with resolvConf POD_RESOLV_CONF; None when it has it already."""
+    """Return the kubelet configuration with resolvConf POD_RESOLV_CONF; None when it has it already."""
     parsed = yaml.safe_load(config)
     if parsed.get("resolvConf") == POD_RESOLV_CONF:
         return None
@@ -211,7 +211,7 @@ def isolate_pod_dns() -> bool:
 
 
 def service_drop_in(env: dict[str, str]) -> str:
-    """A systemd drop-in that adds env to its service."""
+    """Return a systemd drop-in that adds env to its service."""
     lines = ["[Service]", *(f"Environment={name}={value}" for name, value in env.items())]
     return "".join(f"{line}\n" for line in lines)
 
@@ -226,7 +226,7 @@ def node_drop_ins() -> dict[str, tuple[str, str]]:
 
 
 def tune_node_services() -> list[str]:
-    """Writes node_drop_ins(); returns the services whose drop-in changed."""
+    """Write node_drop_ins(); return the services whose drop-in changed."""
     changed: list[str] = []
     for service, (path, wanted) in node_drop_ins().items():
         if kube.node(f"cat {path} 2>/dev/null || true").strip() == wanted.strip():
@@ -245,7 +245,7 @@ def restart_node_services(services: list[str]) -> None:
 
 
 def tune_control_plane() -> list[str]:
-    """Adds CONTROL_PLANE_ENV to the static pods; returns the changed ones (minikube start rewrites their files)."""
+    """Add CONTROL_PLANE_ENV to the static pods; return the changed ones (minikube start rewrites their files)."""
     changed: list[str] = []
     for name in CONTROL_PLANE_ENV:
         path = f"{STATIC_PODS}/{name}.yaml"
@@ -260,7 +260,7 @@ def tune_control_plane() -> list[str]:
 
 
 def wait_for_control_plane(changed: list[str]) -> None:
-    """Waits until the static pods changed run with CONTROL_PLANE_ENV and are ready."""
+    """Wait until the static pods changed run with CONTROL_PLANE_ENV and are ready."""
     for name in changed:
         if not polling.wait_until(functools.partial(_tuned_and_ready, name), timeout=CONTROL_PLANE_TIMEOUT, interval=5):
             msg = f"{name} not ready {CONTROL_PLANE_TIMEOUT}s after its env change: see `minikube logs -p {PROFILE}`"
@@ -284,7 +284,7 @@ def _repository(image: str) -> str:
 
 
 def old_tags(images: list[str], local: list[str]) -> list[str]:
-    """The local images (repository:tag) of images' repositories with a tag images do not use."""
+    """Return the local images (repository:tag) of images' repositories with a tag images do not use."""
     wanted = {f"{_repository(image)}:{image.rpartition(':')[2]}" for image in images}
     repositories = {_repository(image) for image in images}
     return [
@@ -297,7 +297,7 @@ def old_tags(images: list[str], local: list[str]) -> list[str]:
 
 
 def remove_old_tags(images: list[str]) -> None:
-    """Removes the host's older tags of images' repositories; an image a container uses stays (docker rmi refuses)."""
+    """Remove the host's older tags of images' repositories; an image a container uses stays (docker rmi refuses)."""
     local = process.output(["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"]).split()
     old = old_tags(images, local)
     if old:
@@ -333,7 +333,7 @@ def _tarball(directory: str, image: str) -> str:
 
 
 def _save(directory: str, image: str) -> process.ProcessError | None:
-    """Saves image to its tarball in directory: loading by reference looks up the node's arch and fails."""
+    """Save image to its tarball in directory: loading by reference looks up the node's arch and fail."""
     try:
         process.run(["docker", "save", "--platform", PLATFORM, image, "-o", _tarball(directory, image)])
     except process.ProcessError as error:
@@ -355,7 +355,7 @@ def _in_batches(
     action: Callable[[str], process.ProcessError | None],
     workers: int = BATCH_SIZE,
 ) -> list[str]:
-    """Runs action on images; returns those it succeeded for."""
+    """Run action on images; return those it succeeded for."""
     done: list[str] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for image, error in zip(images, pool.map(action, images), strict=True):
@@ -367,7 +367,7 @@ def _in_batches(
 
 
 def _import(images: list[str]) -> None:
-    """Loads the host's images into minikube."""
+    """Load the host's images into minikube."""
     print(f"Loading batch into minikube: {' '.join(images)}")
     with tempfile.TemporaryDirectory() as directory:
         # Saves in parallel: 6 s for 701 MB each.
@@ -390,7 +390,7 @@ def _digests_by_tag(lines: list[ImageNames]) -> dict[str, set[str]]:
 
 
 def stale_images(pinned: list[str]) -> list[str]:
-    """The pinned images (repository:tag@sha256:...) whose tag the node holds for another digest.
+    """Return the pinned images (repository:tag@sha256:...) whose tag the node holds for another digest.
 
     An image loaded from the host has no digest on the node: the host's tag tells which one it was.
     """
@@ -415,7 +415,7 @@ def stale_images(pinned: list[str]) -> list[str]:
 
 
 def refresh_images(stale: list[str]) -> None:
-    """Pulls stale (repository:tag@sha256:...) on the host by digest and loads them into minikube under their tag."""
+    """Pull stale (repository:tag@sha256:...) on the host by digest and load them into minikube under their tag."""
     if not stale:
         return
     print(f"{len(stale)} image(s) changed digest under the same tag: {' '.join(stale)}")
@@ -430,7 +430,7 @@ def refresh_images(stale: list[str]) -> None:
 
 
 def load_images(images: list[str]) -> None:
-    """Pulls images on the host and loads them into minikube, BATCH_SIZE at a time."""
+    """Pull images on the host and load them into minikube, BATCH_SIZE at a time."""
     loaded = process.output(["minikube", "image", "ls", "-p", PROFILE]).splitlines()
     to_fetch = missing_images(images, loaded)
     if not to_fetch:
@@ -452,7 +452,7 @@ def load_images(images: list[str]) -> None:
 
 @lock.holding("provision-cluster")
 def provision() -> None:
-    """Runs every provisioning step; each skips what is already done."""
+    """Run every provisioning step; each skips what is already done."""
     disk.check(disk.PROVISION)
     print("Running helm dependency update...")
     dependency.sync()
@@ -471,7 +471,7 @@ def provision() -> None:
 
 
 def _provisioned_images() -> list[str]:
-    """The images of this chart's fully-enabled render, the edge and cert-manager."""
+    """Return the images of this chart's fully-enabled render, the edge and cert-manager."""
     print("Deriving the image list from the currently-selected podiumd version...")
     # The kubelet pulls one image at a time; loaded first, the edge and cert-manager wait for none.
     edge = f"{gateway.ngf_template()}\n---\n{pki.cert_manager_template()}"
@@ -481,7 +481,7 @@ def _provisioned_images() -> list[str]:
 
 
 def _install_edge() -> None:
-    """The Gateway API CRDs, NGINX Gateway Fabric and cert-manager (in parallel), then the cluster issuer."""
+    """Return the Gateway API CRDs, NGINX Gateway Fabric and cert-manager (in parallel), then the cluster issuer."""
     gateway.install_crds()
     with ThreadPoolExecutor() as pool:
         installs = [pool.submit(gateway.install), pool.submit(pki.install_cert_manager)]

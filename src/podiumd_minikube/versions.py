@@ -9,7 +9,7 @@ from podiumd_minikube.process import UserError
 
 
 def _selection(argument: str) -> dependency.Selection:
-    """A local chart checkout when argument is a directory or contains a slash, else a published version."""
+    """Return a local chart checkout when argument is a directory or contains a slash, else a published version."""
     checkout = Path(argument)
     if "/" not in argument and not checkout.is_dir():
         return dependency.Selection("version", argument)
@@ -26,7 +26,7 @@ def select(
     versions_file: Path = VERSIONS_FILE,
     charts_dir: Path = CHARTS_DIR,
 ) -> None:
-    """Selects each dependency as a published version or a local chart checkout and fetches them.
+    """Select each dependency as a published version or a local chart checkout and fetch them.
 
     Without monitoring_logging: a podiumd checkout's sibling monitoring-logging/, else the recorded selection.
     """
@@ -62,7 +62,7 @@ def _monitoring_logging(
 
 
 def _drop_packaged_checkout(key: str, selected: dependency.Selection, versions_file: Path, charts_dir: Path) -> None:
-    """Removes key's tarballs when selected changes it from a checkout to a published version.
+    """Remove key's tarballs when selected changes it from a checkout to a published version.
 
     The checkout's package has the published tarball's name, so sync would take it as fetched.
     """
@@ -105,7 +105,7 @@ def describe(key: str, charts_dir: Path = CHARTS_DIR, versions_file: Path = VERS
 
 
 def show(charts_dir: Path = CHARTS_DIR, versions_file: Path = VERSIONS_FILE) -> None:
-    """Prints each dependency's selection; raises for missing selections."""
+    """Print each dependency's selection; raise for missing selections."""
     missing: list[str] = []
     for key, chart in dependency.DEPENDENCIES.items():
         print(f"{chart}:")

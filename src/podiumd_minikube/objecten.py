@@ -38,7 +38,7 @@ def merging(installed: manifests.Render, podiumd: manifests.Render) -> bool:
 
 
 def import_objecttypes() -> None:
-    """Imports the objecttypes, then the objecttypen-only tokens (podiumd's scripts/migrate-objecttypen-tokens.sh)."""
+    """Import the objecttypes, then the objecttypen-only tokens (podiumd's scripts/migrate-objecttypen-tokens.sh)."""
     print("\nImporting the objecttypes into objecten before the upgrade to Open Object...")
     shell = ["python", "src/manage.py", "shell", "-c", IMPORT]
     kube.kubectl_shown("exec", "deploy/objecten", "-c", "objecten", "-n", NAMESPACE, "--", *shell)

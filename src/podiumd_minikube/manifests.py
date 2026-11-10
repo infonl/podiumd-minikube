@@ -30,7 +30,7 @@ _DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
 
 
 def _load(text: str) -> Doc | None:
-    """The YAML document text holds: a mapping for every rendered object, None when empty."""
+    """Return the YAML document in text: a mapping for every rendered object, None when empty."""
     return cast("Doc | None", yaml.load(text, _LOADER))  # nosec B506  # noqa: S506 - a safe loader
 
 
@@ -114,7 +114,7 @@ _JOB_POD_SPEC_PATHS = {**_POD_SPEC_PATHS, "Job": ("spec", "template", "spec")}
 
 
 def strip_image_digests(text: str) -> str:
-    """Drops "@sha256:..." from tagged image references.
+    """Drop "@sha256:..." from tagged image references.
 
     minikube has no registry access; images are loaded by tag, and kubelet
     does not match a tag-only image to a digest reference.
@@ -144,7 +144,7 @@ def _record_digests(doc: Doc, chunk: str) -> None:
 
 
 def _pod_annotations(doc: Doc) -> list[Doc]:
-    """The annotations of doc's pod templates (else of doc), created when missing."""
+    """Return the annotations of doc's pod templates (else of doc), created when missing."""
     kind, body = doc.get("kind", ""), section(doc, "spec")
     # SolrCloud's podOptions carry the annotations without metadata.
     if kind == "SolrCloud":
@@ -195,7 +195,7 @@ def _mapping(node: Doc, *keys: str) -> Doc:
 
 
 def find(docs: list[Doc], kind: str, name: str) -> Doc | None:
-    """The doc of kind called name, or None."""
+    """Return the doc of kind called name, or None."""
     of_kind = (doc for doc in docs if doc.get("kind") == kind)
     return next((doc for doc in of_kind if name_of(doc) == name), None)
 
@@ -215,7 +215,7 @@ def _is_configmap(doc: Doc, name: str) -> bool:
 
 
 def disable_service_links(docs: list[Doc]) -> None:
-    """Sets enableServiceLinks: false on every workload's pod spec.
+    """Set enableServiceLinks: false on every workload's pod spec.
 
     Injected <SERVICE>_PORT=tcp://... variables broke Solr and
     opennotificaties-worker. Bare Jobs are skipped: their pod template is
@@ -239,13 +239,13 @@ def route_outbound(docs: list[Doc]) -> None:
 
 
 def _replace_in_configmaps(docs: list[Doc], old: str, new: str) -> set[str]:
-    """Replaces old by new in every ConfigMap value; returns the names of the ConfigMaps that had it."""
+    """Replace old by new in every ConfigMap value; return the names of the ConfigMaps that had it."""
     configmaps = [doc for doc in docs if doc.get("kind") == "ConfigMap"]
     return {name_of(doc) for doc in configmaps if _replace_in(doc.get("data") or {}, old, new)}
 
 
 def _replace_in(data: Doc, old: str, new: str) -> bool:
-    """Replaces old by new in data's string values; whether one had it."""
+    """Replace old by new in data's string values; return whether one had it."""
     keys = [key for key, value in data.items() if isinstance(value, str) and old in value]
     for key in keys:
         data[key] = data[key].replace(old, new)
@@ -270,7 +270,7 @@ NGINX_WORKERS_ANNOTATION = "podiumd-minikube/nginx-workers"
 
 
 def limit_nginx_workers(docs: list[Doc]) -> None:
-    """Sets NGINX_WORKERS in ConfigMaps with NGINX_AUTO_WORKERS and rolls the pods that read them."""
+    """Set NGINX_WORKERS in ConfigMaps with NGINX_AUTO_WORKERS and roll the pods that read them."""
     changed = _replace_in_configmaps(docs, NGINX_AUTO_WORKERS, f"worker_processes {NGINX_WORKERS};")
     _roll_readers(docs, changed, NGINX_WORKERS_ANNOTATION, NGINX_WORKERS)
 
@@ -294,7 +294,7 @@ NGINX_FRONTS = {ZAC_DEPLOYMENT: "zac-nginx"}
 
 
 def _ingress_rules(docs: list[Doc]) -> list[Doc]:
-    """The rules of every Ingress in docs."""
+    """Return the rules of every Ingress in docs."""
     rules: list[Doc] = []
     for doc in docs:
         if doc.get("kind") == "Ingress":
@@ -320,7 +320,7 @@ def ingress_hosts(docs: list[Doc]) -> list[str]:
 
 
 def drop_duplicate_env(docs: list[Doc]) -> None:
-    """Keeps only the last env entry per name, the one Kubernetes uses.
+    """Keep only the last env entry per name, the one Kubernetes uses.
 
     A chart value and extraEnvVars can both set a variable (Open Inwoner's
     low-latency worker: CELERY_WORKER_CONCURRENCY); kubectl apply warns that
@@ -335,7 +335,7 @@ def drop_duplicate_env(docs: list[Doc]) -> None:
 
 
 def allow_rolling_updates(docs: list[Doc]) -> None:
-    """Drops required pod anti-affinity from Deployments.
+    """Drop required pod anti-affinity from Deployments.
 
     On one node a rolling update's new pod stays Pending next to the old one
     (Loki's gateway). StatefulSets replace their pod in place and keep it.
@@ -410,7 +410,7 @@ _POSTGRES_TLS_DIR = "/etc/postgres-tls"
 
 
 def serve_postgres_tls(docs: list[Doc]) -> list[Doc]:
-    """Turns on TLS in the Postgres Deployment, with a Certificate from the local CA added to docs.
+    """Turn on TLS in the Postgres Deployment, with a Certificate from the local CA added to docs.
 
     podiumd's apps connect with sslmode require, as to the reference
     environments' Azure Postgres. Postgres refuses a key file that its user
@@ -461,7 +461,7 @@ def is_unused_zac_collector(doc: Doc) -> bool:
 
 
 def tune_keycloak(docs: list[Doc]) -> None:
-    """Sets the JVM flags of Keycloak and its operator, and the Keycloak resource's resources on its container.
+    """Set the JVM flags of Keycloak and its operator, and the Keycloak resource's resources on its container.
 
     The operator takes the container's resources from the podTemplate over spec.resources.
     """
@@ -483,7 +483,7 @@ def _tune_keycloak_resource(keycloak: Doc) -> None:
 
 # podiumd<4.10.1: podiumd.kcadmLogin exports the same KC_OPTS since.
 def tune_kcadm(docs: list[Doc]) -> None:
-    """Sets KCADM_ENV on the containers of Jobs that run the Keycloak image (kcadm.sh)."""
+    """Set KCADM_ENV on the containers of Jobs that run the Keycloak image (kcadm.sh)."""
     jobs = [doc for doc in docs if doc.get("kind") == "Job"]
     for container in _all_containers(jobs):
         if "/keycloak/keycloak:" in str(container.get("image")):
@@ -502,7 +502,7 @@ KEYCLOAK_BUILDER_CPU = "2"
 
 
 def speed_up_keycloak_start(docs: list[Doc]) -> None:
-    """Sets KEYCLOAK_PROBES on the Keycloak container and KEYCLOAK_BUILDER_CPU on keycloak-builder."""
+    """Set KEYCLOAK_PROBES on the Keycloak container and KEYCLOAK_BUILDER_CPU on keycloak-builder."""
     keycloaks = [doc for doc in docs if doc.get("kind") == "Keycloak"]
     for container in _all_containers(keycloaks):
         probes = [probe for probe in KEYCLOAK_PROBES if isinstance(container.get(probe), dict)]
@@ -557,7 +557,7 @@ def _retried(kind: str, name: str, container: str) -> bool:
 
 
 def retry_in_container(docs: list[Doc]) -> None:
-    """Makes RETRIED_CONTAINERS rerun their command every 2 s, RETRY_ATTEMPTS times, instead of failing."""
+    """Make RETRIED_CONTAINERS rerun their command every 2 s, RETRY_ATTEMPTS times, instead of failing."""
     for doc in docs:
         for container in _containers(_pod_spec(doc) or {}):
             if _retried(str(doc.get("kind")), name_of(doc), str(container.get("name"))):
@@ -568,7 +568,7 @@ RETRY_SCRIPT = f'i=0; until "$@"; do i=$((i + 1)); [ "$i" -ge {RETRY_ATTEMPTS} ]
 
 
 def _retry(container: Doc) -> None:
-    """Wraps container's command in RETRY_SCRIPT, unless it retries itself."""
+    """Wrap container's command in RETRY_SCRIPT, unless it retries itself."""
     command = container.get("command") or IMAGE_ENTRYPOINTS[str(container["name"])]
     # podiumd<4.10.1: podiumd's own retry (podiumd.retryCommand) wraps the same way.
     if len(command) > SCRIPT_ARG and 'until "$@"' in str(command[SCRIPT_ARG]):
@@ -579,7 +579,7 @@ def _retry(container: Doc) -> None:
 
 
 def tune_solr(docs: list[Doc]) -> None:
-    """Sets the JVM settings and CAPACITY_ENV of the pods the solr-operator builds from ZAC's SolrCloud."""
+    """Set the JVM settings and CAPACITY_ENV of the pods the solr-operator builds from ZAC's SolrCloud."""
     for doc in docs:
         if doc.get("kind") != "SolrCloud":
             continue
@@ -627,7 +627,7 @@ def _solr_live_node_wait(solr_cloud: str, body: Doc) -> Doc:
 
 
 def ease_solr_start(docs: list[Doc]) -> None:
-    """Sets ZOOKEEPER_PROBES, SOLR_STARTUP_PROBE and the SOLR_LIVE_NODE_WAIT init container in ZAC's SolrCloud."""
+    """Set ZOOKEEPER_PROBES, SOLR_STARTUP_PROBE and the SOLR_LIVE_NODE_WAIT init container in ZAC's SolrCloud."""
     for doc in docs:
         if doc.get("kind") != "SolrCloud":
             continue
@@ -668,7 +668,7 @@ def mount_zaakbrug_role_mapping(docs: list[Doc]) -> None:
 
 
 def limit_runtimes(docs: list[Doc]) -> None:
-    """Adds CAPACITY_ENV to every container of every workload, Job and operator pod template; GOMEMLIMIT where limited.
+    """Add CAPACITY_ENV to every container of every workload, Job and operator pod template; GOMEMLIMIT where limited.
 
     Without GOMEMLIMIT the Go runtime only collects when its heap has doubled
     and runs into the OOM killer under a peak (Tempo, at 256Mi); the value
@@ -689,22 +689,22 @@ def _containers(spec: Doc) -> list[Doc]:
 
 
 def _all_containers(docs: list[Doc]) -> list[Doc]:
-    """The containers of every doc's pod specs (_runtime_pod_specs)."""
+    """Return the containers of every doc's pod specs (_runtime_pod_specs)."""
     return [container for doc in docs for container in _runtime_containers(doc)]
 
 
 def _runtime_containers(doc: Doc) -> list[Doc]:
-    """The containers of doc's pod specs (_runtime_pod_specs)."""
+    """Return the containers of doc's pod specs (_runtime_pod_specs)."""
     return [container for spec in _runtime_pod_specs(doc) for container in _containers(spec)]
 
 
 def add_env(container: Doc, values: dict[str, str], key: str = "env") -> None:
-    """Appends values to container's env (or another list under key); a variable already set wins."""
+    """Append values to container's env (or another list under key); a variable already set wins."""
     _merge_env(container, [{"name": name, "value": value} for name, value in values.items()], key)
 
 
 def _add_env_from(container: Doc, sources: dict[str, Doc]) -> None:
-    """Appends variables taken from valueFrom sources; a variable the container already sets wins."""
+    """Append variables taken from valueFrom sources; a variable the container already sets wins."""
     _merge_env(container, [{"name": name, "valueFrom": source} for name, source in sources.items()])
 
 
@@ -748,7 +748,7 @@ OBJECTEN_SELF_SERVICE = "objecttypen-api"
 
 # podiumd<4.10: values.yaml configures the classic shape; this adapts it to Open Object.
 def fixup_merged_objecten(docs: list[Doc]) -> None:
-    """Merged objecten shape only: removes what only the classic shape accepts.
+    """Remove what only the classic objecten shape accepts (merged shape only).
 
     objecten's setup_configuration rejects objecttypes service_identifier
     (Pydantic extra_forbidden). podiumd's create-required-objecttypen Job
@@ -813,7 +813,7 @@ class Render:
         return [name_of(doc) for doc in self.docs if doc.get("kind") == "Job"]
 
     def named(self, kind: str, name: str) -> Doc | None:
-        """The doc of kind called name, or None."""
+        """Return the doc of kind called name, or None."""
         return find(self.docs, kind, name)
 
     @property
@@ -823,7 +823,7 @@ class Render:
 
 
 def _loaded(text: str) -> list[tuple[Doc | None, str]]:
-    """The YAML documents of rendered text with their text: image digests stripped, in IMAGE_DIGESTS_ANNOTATION."""
+    """Return rendered text's YAML documents with their text; digests stripped, kept in IMAGE_DIGESTS_ANNOTATION."""
     loaded: list[tuple[Doc | None, str]] = []
     for chunk in re.split(r"^---$", text, flags=re.MULTILINE):
         doc: Doc | None = _load(strip_image_digests(chunk))
@@ -834,7 +834,7 @@ def _loaded(text: str) -> list[tuple[Doc | None, str]]:
 
 
 def fix_up(text: str, *, objecten_merged: bool, ca_trust: bool = False) -> Render:
-    """Applies every local fixup to `helm template` output."""
+    """Apply every local fixup to `helm template` output."""
     loaded = _loaded(text)
     sources = [(doc, _SOURCE.search(chunk)) for doc, chunk in loaded]
     matched = [(doc, source) for doc, source in sources if doc and source]
@@ -876,7 +876,7 @@ POST_RENDER_STEPS = (
 
 
 def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> list[Doc]:
-    """The local fixups of a rendered manifest, as the Helm post-renderer plugin applies them.
+    """Return docs with the local fixups, as the Helm post-renderer plugin applies them.
 
     hold_zac: ZAC's Deployment at 0 replicas (deploy.hold_zac).
     """
@@ -896,7 +896,7 @@ def post_render(docs: list[Doc], *, objecten_merged: bool, ca_trust: bool, hold_
 
 
 def documents(text: str) -> list[Doc]:
-    """The objects of a rendered manifest, image digests stripped."""
+    """Return the objects of a rendered manifest, image digests stripped."""
     return [doc for doc, _ in _loaded(text) if doc]
 
 

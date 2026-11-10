@@ -71,7 +71,7 @@ def _version(doc: Doc) -> tuple[int, ...]:
 
 
 def crd_documents(tgz_path: str) -> list[Doc]:
-    """The CustomResourceDefinitions in tgz_path's *.yaml members, the newest per name.
+    """Return the CustomResourceDefinitions in tgz_path's *.yaml members, the newest per name.
 
     Loki's bundled grafana-agent-operator carries an old copy of the
     Prometheus operator's CRDs; applied after kube-prometheus-stack's, it
@@ -93,7 +93,7 @@ def crd_documents(tgz_path: str) -> list[Doc]:
 
 
 def _crds_in(text: str) -> list[Doc]:
-    """The CustomResourceDefinitions in a YAML file's text."""
+    """Return the CustomResourceDefinitions in a YAML file's text."""
     # Templates are not YAML yet; only CRD files are parsed.
     if "kind: CustomResourceDefinition" not in text.splitlines():
         return []
@@ -107,7 +107,7 @@ def needed(docs: list[dict[str, object]]) -> bool:
 
 
 def apply_monitoring_logging_crds() -> None:
-    """Applies the CRDs server-side (some exceed client-side apply's annotation limit)."""
+    """Apply the CRDs server-side (some exceed client-side apply's annotation limit)."""
     tgz = chart.tarball("monitoring-logging")
     if not tgz:
         msg = "no charts/monitoring-logging-*.tgz: run provision-cluster or deploy first (helm dependency update)"

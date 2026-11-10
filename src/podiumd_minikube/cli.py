@@ -33,7 +33,7 @@ Command = Callable[[list[str]], int | None]
 
 
 def _parser(command: Command) -> argparse.ArgumentParser:
-    """The argument parser of a command, described by its docstring."""
+    """Return the argument parser of a command, described by its docstring."""
     return argparse.ArgumentParser(
         prog=f"{PROG} {_name(command)}",
         description=command.__doc__,
@@ -47,14 +47,14 @@ def _name(command: Command) -> str:
 
 
 def _yes(command: Command, argv: list[str]) -> bool:
-    """Parses a command whose only option is --yes."""
+    """Parse a command whose only option is --yes."""
     parser = _parser(command)
     parser.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
     return parser.parse_args(argv).yes
 
 
 def cluster_lock(argv: list[str]) -> int:
-    """Shows, takes or releases the lock on the shared cluster (also taken by deploy and the other changing commands).
+    """Show, take or release the lock on the shared cluster (also taken by deploy and the other changing commands).
 
     status: who holds it and since when. take/release: around manual changes.
     run: holds it while a command runs. break: removes a stale lock.
@@ -162,7 +162,7 @@ def flush_redis(argv: list[str]) -> None:
 
 
 def provision_cluster(argv: list[str]) -> None:
-    """Creates the minikube cluster: minikube, NGINX Gateway Fabric, dependencies and every image the chart uses.
+    """Create the minikube cluster: minikube, NGINX Gateway Fabric, dependencies and every image the chart uses.
 
     Sizes from MINIKUBE_CPUS (default: at most 8, a quarter of the host's left free) and MINIKUBE_MEMORY
     in MB (default: half the memory Docker sees).
@@ -172,19 +172,19 @@ def provision_cluster(argv: list[str]) -> None:
 
 
 def replicas(argv: list[str]) -> None:
-    """Runs Redis (3) and Keycloak (2) with the chart's pod counts (on) or one pod each (off), without a deploy."""
+    """Run Redis (3) and Keycloak (2) with the chart's pod counts (on) or one pod each (off), without a deploy."""
     parser = _parser(replicas)
     parser.add_argument("action", choices=["on", "off"])
     multi_pod.switch(on=parser.parse_args(argv).action == "on")
 
 
 def reset_namespace(argv: list[str]) -> int:
-    """Empties the releases' namespaces and their cluster-wide leftovers, after confirmation."""
+    """Empty the releases' namespaces and their cluster-wide leftovers, after confirmation."""
     return teardown.reset_namespace(yes=_yes(reset_namespace, argv))
 
 
 def set_podiumd_version(argv: list[str]) -> None:
-    """Selects podiumd and monitoring-logging, each a published version or a local chart checkout, and fetches them.
+    """Select podiumd and monitoring-logging, each a published version or a local chart checkout, and fetch them.
 
     The selection lives in .podiumd-versions.yaml (gitignored); Chart.yaml keeps placeholders.
     After a podiumd change, re-check the image.tag pins in values.yaml (openzaak, objecten,
@@ -202,7 +202,7 @@ def set_podiumd_version(argv: list[str]) -> None:
 
 
 def setup_tunnel(argv: list[str]) -> None:
-    """Starts minikube tunnel in the background and waits for the edge's external IP; `stop` stops it.
+    """Start minikube tunnel in the background and wait for the edge's external IP; `stop` stops it.
 
     sudo asks for your password in the foreground (for the route), unless `setup-tunnel sudoers` installed
     a rule for it. Do not run with sudo.
@@ -222,7 +222,7 @@ def setup_tunnel(argv: list[str]) -> None:
 
 
 def show_cluster_status(argv: list[str]) -> None:
-    """Shows memory, CPU, disk, the last deploy, containers per chart, profiles, problems, access and lock.
+    """Show memory, CPU, disk, the last deploy, containers per chart, profiles, problems, access and lock.
 
     Reads only; containers are compared with tests/memory-baseline.json.
     """
@@ -235,30 +235,30 @@ def show_cluster_status(argv: list[str]) -> None:
 
 
 def show_podiumd_version(argv: list[str]) -> None:
-    """Shows the selected podiumd and monitoring-logging versions and whether they are fetched."""
+    """Show the selected podiumd and monitoring-logging versions and whether they are fetched."""
     _parser(show_podiumd_version).parse_args(argv)
     versions.show()
 
 
 def show_port_mappings(argv: list[str]) -> None:
-    """Shows the edge's entry point and each live Ingress host's backend Service and port."""
+    """Show the edge's entry point and each live Ingress host's backend Service and port."""
     _parser(show_port_mappings).parse_args(argv)
     ports.show_port_mappings()
 
 
 def start_cluster(argv: list[str]) -> None:
-    """Starts the stopped cluster after a reboot: minikube, the apps (ZAC restarted if its boot failed), the tunnel."""
+    """Start the stopped cluster after a reboot: minikube, the apps (ZAC restarted if its boot failed), the tunnel."""
     _parser(start_cluster).parse_args(argv)
     restart.start()
 
 
 def teardown_cluster(argv: list[str]) -> int:
-    """Deletes the whole minikube cluster and stops minikube tunnel, after confirmation."""
+    """Delete the whole minikube cluster and stop minikube tunnel, after confirmation."""
     return teardown.teardown_cluster(yes=_yes(teardown_cluster, argv))
 
 
 def update_hosts(argv: list[str]) -> None:
-    """Writes the *.local -> edge IP line to /etc/hosts, replacing earlier ones (uses sudo)."""
+    """Write the *.local -> edge IP line to /etc/hosts, replacing earlier ones (uses sudo)."""
     _parser(update_hosts).parse_args(argv)
     tunnel.update_hosts()
 
@@ -301,7 +301,7 @@ COMMANDS: dict[str, Command] = {
 
 
 def run(argv: list[str]) -> int | None:
-    """Runs the command argv names."""
+    """Run the command argv names."""
     summaries = {name: (command.__doc__ or "").splitlines()[0] for name, command in COMMANDS.items()}
     listing = "\n".join(f"  {name:22} {summary}" for name, summary in summaries.items())
     parser = argparse.ArgumentParser(

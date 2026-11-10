@@ -73,7 +73,7 @@ def values() -> Doc:
 
 
 def render() -> str:
-    """The Cilium chart rendered with values(), CAPACITY_ENV and GOMEMLIMIT added."""
+    """Return the Cilium chart rendered with values(), CAPACITY_ENV and GOMEMLIMIT added."""
     if not CHART.is_file():
         CHART.parent.mkdir(exist_ok=True)
         process.fetch(
@@ -88,14 +88,14 @@ def render() -> str:
 
 
 def write_manifest() -> str:
-    """Writes render() to MANIFEST; returns its path for `minikube start --cni`."""
+    """Write render() to MANIFEST; return its path for `minikube start --cni`."""
     MANIFEST.parent.mkdir(exist_ok=True)
     MANIFEST.write_text(render(), encoding="utf-8")
     return str(MANIFEST)
 
 
 def apply() -> None:
-    """Applies MANIFEST, so a running node gets changed values; refuses a node that still runs kindnet."""
+    """Apply MANIFEST, so a running node gets changed values; refuse a node that still runs kindnet."""
     if kube.exists("daemonset/kindnet", "kube-system"):
         msg = "the cluster runs kindnet, not Cilium: run `podiumd-minikube teardown-cluster`, then `provision-cluster`"
         raise process.UserError(msg)

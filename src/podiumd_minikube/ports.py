@@ -59,7 +59,7 @@ def port_number(route: Route, services: Doc) -> str:
 
 
 def show_port_mappings() -> None:
-    """Prints the edge's entry point and every live Ingress host's backend (the routes follow the Ingresses)."""
+    """Print the edge's entry point and every live Ingress host's backend (the routes follow the Ingresses)."""
     kube.require_minikube_context()
     ip = kube.edge_ip()
     edge = (

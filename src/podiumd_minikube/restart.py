@@ -49,7 +49,7 @@ def stale_pods(pods: list[Doc], boot: datetime) -> list[str]:
 
 @lock.holding("start-cluster")
 def start() -> None:
-    """Starts the node, waits for the apps, restarts ZAC once if its boot failed, then starts the tunnel."""
+    """Start the node, wait for the apps, restart ZAC once if its boot failed, then start the tunnel."""
     provision.start_node()
     boot = node_started()
     print("\nWaiting until every pod reports its state since the node started...")

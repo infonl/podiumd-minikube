@@ -25,7 +25,7 @@ SUDOERS_FILE = "/etc/sudoers.d/podiumd-minikube-tunnel"
 
 
 def _ip() -> str:
-    """The ip binary's real path: sudoers rules name commands by full path."""
+    """Return the ip binary's real path: sudoers rules name commands by full path."""
     found = shutil.which("ip")
     return str(Path(found).resolve()) if found else "ip"
 
@@ -36,7 +36,7 @@ def route_args(action: str, node_ip: str) -> list[str]:
 
 
 def sudoers_rule() -> str:
-    """A sudoers.d rule that lets this user add and remove the tunnel's route without a password."""
+    """Return a sudoers.d rule that lets this user add and remove the tunnel's route without a password."""
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
     routes = [route_args(action, node_ip)[1:] for action in ("replace", "del")]
     commands = ", ".join(" ".join(route) for route in routes)
@@ -44,7 +44,7 @@ def sudoers_rule() -> str:
 
 
 def install_sudoers() -> None:
-    """Checks sudoers_rule() with visudo, installs it as SUDOERS_FILE (sudo asks once) and verifies it."""
+    """Check sudoers_rule() with visudo, install it as SUDOERS_FILE (sudo asks once) and verify it."""
     rule = sudoers_rule()
     print(f"Installing {SUDOERS_FILE}:\n{rule}")
     node_ip = process.output(["minikube", "ip", "-p", PROFILE]).strip()
@@ -62,7 +62,7 @@ def install_sudoers() -> None:
 
 
 def routed_via() -> str | None:
-    """The gateway the service network is routed via, or None without a route."""
+    """Return the gateway the service network is routed via, or None without a route."""
     shown = process.output(["ip", "route", "show", SERVICE_CIDR]).split()
     return shown[2] if shown[1:2] == ["via"] else None
 
@@ -83,7 +83,7 @@ def require_sudo(command: str, sudo_args: list[str]) -> None:
 
 
 def setup_tunnel(*, ask: bool = True) -> bool:
-    """Adds the route in the foreground (sudo asks here), then runs minikube tunnel in the background.
+    """Add the route in the foreground (sudo asks here), then run minikube tunnel in the background.
 
     ask=False (deploy, start-cluster): only when sudo needs no password for the route; else
     prints the manual step and returns False.
@@ -112,7 +112,7 @@ def setup_tunnel(*, ask: bool = True) -> bool:
 
 
 def _wait_for_edge_ip() -> str:
-    """The edge's external IP once the tunnel gives it one; UserError with the tunnel log's tail after the timeout."""
+    """Return the edge's external IP once the tunnel gives one; UserError with the tunnel log's tail on timeout."""
     print("Waiting for the edge's external IP...")
     ip = polling.wait_until(kube.edge_ip, timeout=TIMEOUT_SECONDS, interval=2)
     if not ip:
@@ -145,7 +145,7 @@ def _route(*, ask: bool) -> bool:
 
 @lock.holding("setup-tunnel stop")
 def stop_tunnel() -> None:
-    """Stops the background minikube tunnel and removes its route (sudo may ask)."""
+    """Stop the background minikube tunnel and remove its route (sudo may ask)."""
     if process.running(TUNNEL_PATTERN):
         print("Stopping 'minikube tunnel'...")
         process.run(["pkill", "-f", TUNNEL_PATTERN], check=False)
@@ -166,12 +166,12 @@ def replace_hosts_line(text: str, line: str) -> str:
 
 
 def wanted_hosts_line(ip: str) -> str:
-    """The /etc/hosts line update-hosts writes for ip."""
+    """Return the /etc/hosts line update-hosts writes for ip."""
     return hosts.hosts_line(ip, hosts.chart_hosts())
 
 
 def hosts_hint(ip: str) -> str:
-    """What to do about /etc/hosts for ip: run update-hosts, or nothing."""
+    """Return what to do about /etc/hosts for ip: run update-hosts, or nothing."""
     current = ETC_HOSTS.read_text(encoding="utf-8")
     if replace_hosts_line(current, wanted_hosts_line(ip)) == current:
         return "/etc/hosts already points the *.local hosts at it."
@@ -179,7 +179,7 @@ def hosts_hint(ip: str) -> str:
 
 
 def update_hosts() -> None:
-    """Writes the current edge IP line to /etc/hosts (backup in /etc/hosts.bak)."""
+    """Write the current edge IP line to /etc/hosts (backup in /etc/hosts.bak)."""
     kube.require_minikube_context()
     ip = kube.edge_ip()
     if not ip:

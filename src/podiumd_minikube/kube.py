@@ -36,7 +36,7 @@ def kubectl(*args: str, stdin: str | None = None) -> str:
 
 
 def kubectl_shown(*args: str, stdin: str | None = None) -> None:
-    """Runs kubectl args with its output on the terminal; raises ProcessError on failure."""
+    """Run kubectl args with its output on the terminal; raise ProcessError on failure."""
     process.run(["kubectl", *args], stdin=stdin, capture=False)
 
 
@@ -51,7 +51,7 @@ def node(command: str) -> str:
 
 
 def get_json(*args: str) -> Doc:
-    """Parsed `kubectl get <args> -o json`."""
+    """Return the parsed `kubectl get <args> -o json`."""
     return json.loads(kubectl("get", *args, "-o", "json"))
 
 
@@ -68,7 +68,7 @@ def exists(resource: str, namespace: str = NAMESPACE) -> bool:
 
 
 def edge_ip() -> str:
-    """The edge's LoadBalancer IP, or "" when minikube tunnel has not assigned one."""
+    """Return the edge's LoadBalancer IP, or "" when minikube tunnel has not assigned one."""
     result = process.run(
         [
             "kubectl",
@@ -86,7 +86,7 @@ def edge_ip() -> str:
 
 
 def true_conditions(resource: Doc) -> set[str]:
-    """The types of resource's status conditions that are True."""
+    """Return the types of resource's status conditions that are True."""
     conditions: list[Doc] = resource.get("status", {}).get("conditions") or []
     return {str(condition["type"]) for condition in conditions if condition.get("status") == "True"}
 

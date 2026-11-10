@@ -90,7 +90,7 @@ def _mib(size: str) -> int:
 
 
 def node_usage() -> Usage:
-    """The minikube container's memory (inactive page cache excluded) and CPU, as docker stats reports them."""
+    """Return the minikube container's memory (inactive page cache excluded) and CPU, as docker stats reports them."""
     line = process.output(["docker", "stats", PROFILE, "--no-stream", "--format", "{{.MemUsage}}|{{.CPUPerc}}"])
     used, cpu = line.strip().split("|")
     cores = float(cpu.rstrip("%")) / 100
@@ -128,7 +128,7 @@ def _key(label: dict[str, str], names: dict[str, str]) -> str:
 
 
 def _cpu_nanoseconds(stat: Doc | None) -> int | None:
-    """A crictl stat's CPU counter; None for a container without one yet (starting or stopping)."""
+    """Return a crictl stat's CPU counter; None for a container without one yet (starting or stopping)."""
     value = section(section(stat or {}, "cpu"), "usageCoreNanoSeconds").get("value")
     return None if value is None else int(value)
 
@@ -174,7 +174,7 @@ def youngest_container_seconds(items: list[Doc]) -> float:
 
 
 def budget_mib(profiles: dict[str, bool]) -> int:
-    """The node's memory budget: --full's when any optional profile runs."""
+    """Return the node's memory budget: --full's when any optional profile runs."""
     return memory.FULL_BUDGET_MB if any(profiles.values()) else memory.DEFAULT_BUDGET_MB
 
 
@@ -269,7 +269,7 @@ PROBLEM_SEPARATOR = "\n            "
 
 
 def report(top: int) -> None:
-    """Prints the status; top limits the container list (0: all)."""
+    """Print the status; top limits the container list (0: all)."""
     items = pods()
     ours = [pod["metadata"] for pod in items if pod["metadata"]["namespace"] in {NAMESPACE, MONITORING_NAMESPACE}]
     profiles = enabled_profiles([meta["name"] for meta in ours])

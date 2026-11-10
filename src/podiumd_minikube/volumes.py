@@ -22,7 +22,7 @@ def wanted(docs: list[Doc]) -> dict[str, int]:
 
 
 def _claim_groups(workload: Doc) -> dict[str, int]:
-    """The claims and claim prefixes workload mounts -> its pod template's fsGroup; {} without one."""
+    """Return the claims and claim prefixes workload mounts -> its pod template's fsGroup; {} without one."""
     spec = manifests.section(workload, "spec")
     pod = manifests.section(manifests.section(spec, "template"), "spec")
     group = manifests.section(pod, "securityContext").get("fsGroup")
@@ -64,7 +64,7 @@ def changes(
 
 
 def script(found: dict[str, int]) -> str:
-    """The node commands that give each path its group, as the kubelet's OnRootMismatch; prints each changed path."""
+    """Return node commands that give each path its group, as the kubelet's OnRootMismatch; they print what changed."""
     return "\n".join(
         f'[ "$(sudo stat -c %g {path})" = {group} ] || {{ sudo chgrp -R {group} {path}'
         f" && sudo chmod -R g+rwX {path} && sudo find {path} -type d -exec chmod g+s {{}} + && echo {path}; }}"
@@ -73,7 +73,7 @@ def script(found: dict[str, int]) -> str:
 
 
 def apply_fs_groups(docs: list[Doc], namespace: str) -> None:
-    """Gives the existing hostPath volumes of docs' pod templates in namespace their fsGroup."""
+    """Give the existing hostPath volumes of docs' pod templates in namespace their fsGroup."""
     groups = wanted(docs)
     if not groups:
         return

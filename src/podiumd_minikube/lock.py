@@ -43,7 +43,7 @@ class Hold:
 
 
 def parse(line: str) -> Hold:
-    """A Hold from "<who> <what> <ISO start time>"; what may contain spaces."""
+    """Return a Hold from "<who> <what> <ISO start time>"; what may contain spaces."""
     parts = line.split()
     since = None
     if len(parts) >= HOLD_FIELDS:
@@ -56,7 +56,7 @@ def parse(line: str) -> Hold:
 
 
 def current(path: Path | None = None) -> Hold | None:
-    """The hold, or None when the lock is free."""
+    """Return the hold, or None when the lock is free."""
     path = path or LOCK_FILE
     try:
         line = path.read_text(encoding="utf-8").strip()
@@ -82,7 +82,7 @@ def _ours(hold: Hold | None) -> bool:
 
 
 def take(what: str, *, who: str = HOLDER, path: Path | None = None) -> bool:
-    """Takes the lock; False when this process already holds it. UserError names the holder when busy."""
+    """Take the lock; False when this process already holds it. UserError names the holder when busy."""
     path = path or LOCK_FILE
     if _ours(current(path)):
         return False
@@ -100,7 +100,7 @@ def take(what: str, *, who: str = HOLDER, path: Path | None = None) -> bool:
 
 
 def release(path: Path | None = None) -> None:
-    """Removes the lock if this process holds it."""
+    """Remove the lock if this process holds it."""
     path = path or LOCK_FILE
     if _ours(current(path)):
         path.unlink(missing_ok=True)
@@ -109,7 +109,7 @@ def release(path: Path | None = None) -> None:
 
 @contextmanager
 def held(what: str, *, who: str = HOLDER, path: Path | None = None) -> Generator[None]:
-    """Holds the lock while the block runs; a nested hold of the same process is a no-op."""
+    """Hold the lock while the block runs; a nested hold of the same process is a no-op."""
     path = path or LOCK_FILE
     taken = take(what, who=who, path=path)
     try:
@@ -120,7 +120,7 @@ def held(what: str, *, who: str = HOLDER, path: Path | None = None) -> Generator
 
 
 def holding[**P, R](what: str) -> Callable[[Callable[P, R]], Callable[P, R]]:  # noqa: WPS111 - type parameters
-    """Decorator: the function runs while holding the lock (see held)."""
+    """Return a decorator that runs the function while holding the lock (see held)."""
 
     def wrap(function: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(function)
@@ -134,12 +134,12 @@ def holding[**P, R](what: str) -> Callable[[Callable[P, R]], Callable[P, R]]:  #
 
 
 def person() -> str:
-    """The holder name for a lock taken by hand."""
+    """Return the holder name for a lock taken by hand."""
     return getpass.getuser()
 
 
 def release_held_by(who: str, path: Path | None = None) -> Hold | None:
-    """Removes the lock when who holds it (taken by hand, in another process); returns the hold found."""
+    """Remove the lock when who holds it (taken by hand, in another process); return the hold found."""
     path = path or LOCK_FILE
     hold = current(path)
     if hold is not None and hold.who == who:
@@ -148,7 +148,7 @@ def release_held_by(who: str, path: Path | None = None) -> Hold | None:
 
 
 def break_lock(path: Path | None = None) -> Hold | None:
-    """Removes the lock whoever holds it; returns the hold that was removed."""
+    """Remove the lock whoever holds it; return the hold that was removed."""
     path = path or LOCK_FILE
     hold = current(path)
     path.unlink(missing_ok=True)
@@ -156,7 +156,7 @@ def break_lock(path: Path | None = None) -> Hold | None:
 
 
 def run(what: str, command: list[str], *, who: str, path: Path | None = None) -> int:
-    """Runs command while holding the lock; scripts it starts see the hold as their own."""
+    """Run command while holding the lock; scripts it starts see the hold as their own."""
     path = path or LOCK_FILE
     with held(what, who=who, path=path):
         return process.run(command, check=False, capture=False).returncode

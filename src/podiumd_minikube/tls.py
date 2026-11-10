@@ -13,7 +13,7 @@ CERTIFICATE = "podiumd-tls"
 
 
 def certificate(name: str, namespace: str, hosts: list[str]) -> Doc:
-    """The Certificate (and its Secret) name for hosts in namespace, issued by the local CA."""
+    """Return the Certificate (and its Secret) name for hosts in namespace, issued by the local CA."""
     return {
         "apiVersion": "cert-manager.io/v1",
         "kind": "Certificate",

@@ -46,7 +46,7 @@ def verdict(total: int, free: int, need: Need) -> tuple[str, str]:
 
 
 def check(need: Need) -> None:
-    """Stops when the disk cannot fit need; warns when it is getting tight."""
+    """Stop when the disk cannot fit need; warn when it is getting tight."""
     root = docker_root()
     usage = shutil.disk_usage(root)
     level, message = verdict(usage.total, usage.free, need)

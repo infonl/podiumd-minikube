@@ -73,25 +73,25 @@ def _pairs(helm_args: list[str]) -> list[tuple[str, str]]:
 
 
 def _split(helm_args: list[str], prefix: str) -> list[str]:
-    """The --set pairs of helm_args under prefix, with the prefix removed."""
+    """Return the --set pairs of helm_args under prefix, with the prefix removed."""
     pairs = [(flag, value.removeprefix(prefix)) for flag, value in _prefixed(helm_args, prefix)]
     return [arg for pair in pairs for arg in pair]
 
 
 def _prefixed(helm_args: list[str], prefix: str) -> list[tuple[str, str]]:
-    """The (flag, key=value) pairs of helm_args whose key=value starts with prefix."""
+    """Return the (flag, key=value) pairs of helm_args whose key=value starts with prefix."""
     return [(flag, value) for flag, value in _pairs(helm_args) if value.startswith(prefix)]
 
 
 def _enabled(helm_args: list[str], key: str, *, default: bool) -> bool:
-    """The last `--set key=true|false` in helm_args, else default."""
+    """Return the last `--set key=true|false` in helm_args, else default."""
     values = [value for _, value in _pairs(helm_args) if value.startswith(f"{key}=")]
     found = [value.split("=", 1)[1] == "true" for value in values]
     return found[-1] if found else default
 
 
 def releases(helm_args: list[str]) -> list[Release]:
-    """This chart's own release, podiumd, and monitoring-logging when the metrics profile is on; install order."""
+    """Return this chart's release, podiumd, and monitoring-logging with the metrics profile; install order."""
     values = yaml.safe_load(VALUES_YAML.read_text(encoding="utf-8"))
     podiumd_tgz = chart.tarball(PODIUMD)
     if podiumd_tgz is None:
@@ -184,7 +184,7 @@ def template(release: Release, *extra: str) -> str:
 
 
 def installed(release: Release) -> manifests.Render:
-    """What release's last `helm upgrade` installed, post-rendered, without hooks; objects carry their namespace.
+    """Return what release's last `helm upgrade` installed, post-rendered, without hooks; objects carry their namespace.
 
     Not `helm template`: it renders .Release.Revision as 1, and keeps hook Jobs Helm deletes once they succeeded.
     """

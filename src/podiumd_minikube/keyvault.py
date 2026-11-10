@@ -18,12 +18,12 @@ KEYVAULT_DIR = OPENBAO_DIR / "keyvault"
 
 
 def item(name: str) -> Path:
-    """The file of item name."""
+    """Return the file of item name."""
     return KEYVAULT_DIR / name
 
 
 def write(name: str, value: str) -> None:
-    """Stores value as item name, readable by the owner only."""
+    """Store value as item name, readable by the owner only."""
     KEYVAULT_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = item(name)
     path.touch(mode=0o600)
@@ -56,7 +56,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
-    """Runs one `az keyvault secret show|set|set-attributes` call; 1 for a missing item or another call."""
+    """Run one `az keyvault secret show|set|set-attributes` call; 1 for a missing item or another call."""
     try:
         args = _parser().parse_args(argv)
     except (argparse.ArgumentError, SystemExit):

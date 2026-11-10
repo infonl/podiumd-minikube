@@ -50,7 +50,7 @@ def selected(key: str) -> str:
 
 
 def record(command: str, render: manifests.Render, digests: dict[str, str]) -> None:
-    """Writes the deploy's command, the selections, render.charts and each release's digest to the cluster."""
+    """Write the deploy's command, the selections, render.charts and each release's digest to the cluster."""
     data = {
         "time": datetime.now(UTC).isoformat(timespec="seconds"),
         "command": command,
@@ -63,7 +63,7 @@ def record(command: str, render: manifests.Render, digests: dict[str, str]) -> N
 
 
 def read() -> dict[str, str]:
-    """The last deploy's record; {} before a deploy wrote one."""
+    """Return the last deploy's record; {} before a deploy wrote one."""
     if not kube.exists(f"configmap/{CONFIGMAP}"):
         return {}
     return kube.get_json(f"configmap/{CONFIGMAP}", "-n", NAMESPACE).get("data") or {}
@@ -80,7 +80,7 @@ def _running(pod: Doc) -> int:
 
 
 def running_containers(items: list[Doc], charts: dict[str, str]) -> Counter[str]:
-    """Running containers per chart in NAMESPACES: the chart of a pod's nearest rendered owner, else OTHER."""
+    """Return the running containers per chart in NAMESPACES: a pod's nearest rendered owner's chart, else OTHER."""
     owners = _Owners(charts)
     counts: Counter[str] = Counter()
     for pod in items:
@@ -98,7 +98,7 @@ class _Owners:
     live: dict[str, Doc] = field(default_factory=dict[str, Doc])
 
     def owner(self, reference: dict[str, str]) -> Doc | None:
-        """The metadata of the object reference names."""
+        """Return the metadata of the object reference names."""
         kinds = kube.reference(reference["apiVersion"], reference["kind"])
         if kinds not in self.live:
             found = [item for ns in NAMESPACES for item in kube.get_json(kinds, "-n", ns)["items"]]
@@ -106,7 +106,7 @@ class _Owners:
         return self.live[kinds].get(reference["name"])
 
     def chart_of(self, metadata: Doc | None) -> str:
-        """The chart of metadata's nearest rendered owner, else OTHER."""
+        """Return the chart of metadata's nearest rendered owner, else OTHER."""
         while metadata and metadata.get("ownerReferences"):
             reference = metadata["ownerReferences"][0]
             chart = self.charts.get(f"{reference['kind']}/{reference['name']}")

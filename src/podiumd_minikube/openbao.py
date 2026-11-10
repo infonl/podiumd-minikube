@@ -56,7 +56,7 @@ def _write_private(path: Path, value: str) -> None:
 
 
 def forget_vault() -> None:
-    """Moves the recovery key aside once the vault's database is gone; keeps the seal key."""
+    """Move the recovery key aside once the vault's database is gone; keep the seal key."""
     path = keyvault.item(KEY_ITEM)
     if path.is_file():
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -96,7 +96,7 @@ def unsealed() -> bool:
 
 
 def activate_script(work: Path) -> Path:
-    """The selected podiumd chart's openbao-activate.sh (dependency.podiumd_script)."""
+    """Return the selected podiumd chart's openbao-activate.sh (dependency.podiumd_script)."""
     found = dependency.podiumd_script(SCRIPT, work)
     if not found.is_file():
         selected = dependency.selection("podiumd")
@@ -107,7 +107,7 @@ def activate_script(work: Path) -> Path:
 
 
 def _root_token() -> str:
-    """A temporary root token from the recovery key (generate-root); the caller revokes it."""
+    """Return a temporary root token from the recovery key (generate-root); the caller revokes it."""
     attempt = json.loads(_bao("read", "-format=json", "sys/generate-root/attempt", addr=LOCAL_ADDR).stdout)
     if attempt["data"].get("started"):
         msg = f"a generate-root attempt runs on {POD}: cancel it with `bao operator generate-root -cancel` there"
@@ -125,7 +125,7 @@ def _root_token() -> str:
 
 
 def _write_outway_keys() -> None:
-    """Stores the outway's API keys in OpenBao with a temporary root token, revoked afterwards."""
+    """Store the outway's API keys in OpenBao with a temporary root token, revoked afterwards."""
     root = _root_token()
     with contextlib.ExitStack() as revoke:
         revoke.callback(_bao, "token", "revoke", "-self", token=root)
@@ -142,7 +142,7 @@ def _write_outway_keys() -> None:
 
 
 def activate(render: manifests.Render) -> None:
-    """Runs podiumd's openbao-activate.sh against the keyvault stand-in, then stores the outway's API keys."""
+    """Run podiumd's openbao-activate.sh against the keyvault stand-in, then store the outway's API keys."""
     # The render, not the cluster: a pruned StatefulSet still exists while it terminates.
     if CONFIG_JOB not in render.jobs:
         return

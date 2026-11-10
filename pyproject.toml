@@ -113,6 +113,7 @@ select = [
     "YTT",  # flake8-2020
     "ANN201",  # public function without a return annotation (production code; tests ignore it)
     "ANN202",  # private function without a return annotation (production code; tests ignore it)
+    "D401",    # docstring's first line in the imperative mood (production code; tests ignore it)
     # Preview rules, each selected by its code (explicit-preview-rules):
     "PLR0904",  # too many public methods
     "PLR0914",  # too many locals
@@ -163,7 +164,7 @@ check-typed-exception = true  # Enable additional checks for try-except-pass
 # setup and assert together in a try (PLW0717), many tests (PLR0904) and
 # locals (PLR0914).
 "{tests,unit_tests}/**" = [
-    "S101", "INP001", "RUF059", "S603", "S607", "S105", "ANN201", "ANN202",
+    "S101", "INP001", "RUF059", "S603", "S607", "S105", "ANN201", "ANN202", "D401",
     "PLR2004", "PLR0913", "PLR0917", "PLC0415", "PLW0717", "PLR0904", "PLR0914",
 ]
 # files/: scripts an app's `manage.py shell` runs, not a package.

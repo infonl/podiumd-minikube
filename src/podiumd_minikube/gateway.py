@@ -74,7 +74,7 @@ def ngf_values(dns_ip: str) -> Doc:
 
 
 def install_crds() -> None:
-    """Applies the Gateway API CRDs, which NGF and cert-manager (enableGatewayAPI) both watch."""
+    """Apply the Gateway API CRDs, which NGF and cert-manager (enableGatewayAPI) both watch."""
     print(f"Installing the Gateway API CRDs {GATEWAY_API_VERSION}...")
     crds = (
         f"https://github.com/kubernetes-sigs/gateway-api/releases/download/{GATEWAY_API_VERSION}/standard-install.yaml"
@@ -100,7 +100,7 @@ def install() -> None:
 
 
 def ngf_template() -> str:
-    """The NGF chart rendered with its defaults; ngf_values() sets no image."""
+    """Return the NGF chart rendered with its defaults; ngf_values() sets no image."""
     return process.fetch(["helm", "template", *NGF_CHART_ARGS])
 
 
@@ -127,7 +127,7 @@ def gateway_manifest() -> Doc:
 
 
 def _gateway_policy(kind: str, name: str, spec: Doc) -> Doc:
-    """An NGF policy on public-gateway."""
+    """Return an NGF policy on public-gateway."""
     return {
         "apiVersion": "gateway.nginx.org/v1alpha1",
         "kind": kind,
@@ -156,7 +156,7 @@ def client_settings_manifest() -> Doc:
 
 
 def _service_port(docs: list[Doc], service: str, port: int | str) -> int:
-    """The number of a backend port, which may be a Service port name."""
+    """Return the number of a backend port, which may be a Service port name."""
     if isinstance(port, int):
         return port
     found = manifests.find(docs, "Service", service)
@@ -190,7 +190,7 @@ def route_manifests(docs: list[Doc]) -> list[Doc]:
 
 
 def _service_and_route(docs: list[Doc], rule: Doc, forwarded: str, namespace: str) -> tuple[Doc, Doc]:
-    """The ExternalName Service and the HTTPRoute for an Ingress rule of namespace."""
+    """Return the ExternalName Service and the HTTPRoute for an Ingress rule of namespace."""
     host = str(rule["host"])
     paths: list[Doc] = manifests.section(rule, "http").get("paths") or []
     backend: Doc = manifests.section(manifests.section(paths[0], "backend"), "service")
@@ -235,7 +235,7 @@ def _service_and_route(docs: list[Doc], rule: Doc, forwarded: str, namespace: st
 
 
 def _delete_stale(wanted: dict[tuple[str, str], Doc]) -> None:
-    """Deletes the edge's labelled objects not in wanted ((kind, name) -> spec) or with another externalName."""
+    """Delete the edge's labelled objects not in wanted ((kind, name) -> spec) or with another externalName."""
     kinds = ("HTTPRoute", "Service", "ProxySettingsPolicy", "ClientSettingsPolicy")
     live = [
         (kind, item)
@@ -271,7 +271,7 @@ def _pin_cluster_ip() -> None:
 
 
 def apply(docs: list[Doc], hosts: list[str]) -> None:
-    """Applies the certificate, Gateway and routes; deletes routes no longer rendered."""
+    """Apply the certificate, Gateway and routes; delete routes no longer rendered."""
     if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
         msg = f"NGINX Gateway Fabric is not in namespace {EDGE_NAMESPACE!r}: run `podiumd-minikube provision-cluster`"
         raise process.UserError(msg)

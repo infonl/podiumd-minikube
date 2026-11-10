@@ -13,5 +13,5 @@ def chart_hosts() -> list[str]:
 
 
 def hosts_line(ip: str, hostnames: list[str]) -> str:
-    """The /etc/hosts line mapping hostnames to ip, with this project's marker."""
+    """Return the /etc/hosts line mapping hostnames to ip, with this project's marker."""
     return f"{ip} {' '.join(hostnames)}  {MARKER}"

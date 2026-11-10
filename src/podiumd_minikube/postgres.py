@@ -105,7 +105,7 @@ def _psql(query: str) -> str:
 
 
 def major_of(image: str) -> int:
-    """The Postgres major of a postgis/postgis:<major>-<postgis> image."""
+    """Return the Postgres major of a postgis/postgis:<major>-<postgis> image."""
     return int(image.rsplit(":", 1)[1].split("-", maxsplit=1)[0])
 
 
@@ -119,7 +119,7 @@ def restore_errors(stderr: str) -> list[str]:
 
 
 def prepare(render: manifests.Render) -> None:
-    """The database steps before an upgrade: major version, renames, missing databases, Azure's settings."""
+    """Run the database steps before an upgrade: major version, renames, missing databases, Azure's settings."""
     migrate_major(render)
     rename_databases()
     create_missing_databases()
@@ -128,7 +128,7 @@ def prepare(render: manifests.Render) -> None:
 
 
 def migrate_major(render: manifests.Render) -> None:
-    """Dumps every database and restores it into a fresh data directory when the rendered major differs.
+    """Dump every database and restore it into a fresh data directory when the rendered major differs.
 
     Clients are restarted afterwards; writes between the dump and the restore are lost.
     """
@@ -180,7 +180,7 @@ def restore(dump: Path, major: int, render: manifests.Render) -> None:
 
 
 def create_missing_databases() -> None:
-    """Creates the init SQL's databases that the running Postgres lacks."""
+    """Create the init SQL's databases that the running Postgres lacks."""
     if not kube.exists("deployment/postgres"):
         return
     databases = _names("select datname from pg_database;")
@@ -197,7 +197,7 @@ def create_missing_databases() -> None:
 
 
 def align_with_azure() -> None:
-    """Gives each app database to postgres with ALL granted to its owner, and installs the extension allow-list.
+    """Give each app database to postgres with ALL granted to its owner, and install the extension allow-list.
 
     As the init SQL, for clusters provisioned before it; idempotent. Also drops
     openzaak's unused "uuid-ossp", which Azure does not allow.
@@ -231,7 +231,7 @@ def align_with_azure() -> None:
 
 
 def rename_databases() -> None:
-    """Renames RENAMED_DATABASES and their roles in place; runs before create_missing_databases."""
+    """Rename RENAMED_DATABASES and their roles in place; run before create_missing_databases."""
     if not kube.exists("deployment/postgres"):
         return
     databases = _names("select datname from pg_database;")
@@ -256,7 +256,7 @@ def rename_databases() -> None:
 
 
 def rename_rows() -> None:
-    """Applies RENAMES in the databases and tables that exist; an old value whose new one exists stays."""
+    """Apply RENAMES in the databases and tables that exist; an old value whose new one exists stays."""
     if not kube.exists("deployment/postgres"):
         return
     databases = _names("select datname from pg_database;")
@@ -277,7 +277,7 @@ def _rename_values(
     renames: dict[str, str],
     database: str,
 ) -> None:
-    """Applies renames to target's (table, column) values through psql; an old value whose new one exists stays."""
+    """Apply renames to target's (table, column) values through psql; an old value whose new one exists stays."""
     table, column = target
     names = ["-v", f"table={table}", "-v", f"column={column}"]
     values = kube.kubectl(*psql, *names, "-f", "-", stdin='select :"column" from :"table";\n').split()

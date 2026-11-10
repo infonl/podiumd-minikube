@@ -95,7 +95,7 @@ def options(*, full: bool, extra: list[str]) -> Options:
 
 
 def _delete_jobs(names: list[str]) -> None:
-    """Deletes Jobs so the next `helm upgrade` recreates and re-runs them (a Job's pod template is immutable)."""
+    """Delete Jobs so the next `helm upgrade` recreates and re-runs them (a Job's pod template is immutable)."""
     if names:
         print(f"Deleting {len(names)} Job(s) so this deploy re-runs them...")
         # No wait: Jobs carry no finalizers, so each is gone before the upgrade (waiting took 5 s for 37).
@@ -103,12 +103,12 @@ def _delete_jobs(names: list[str]) -> None:
 
 
 def one_shot_jobs(own: manifests.Render, podiumd: manifests.Render) -> list[str]:
-    """The Jobs deleted before the upgrades: ExternalsPodiumD's list among podiumd's, and all of this chart's."""
+    """Return the Jobs deleted before the upgrades: ExternalsPodiumD's list among podiumd's, and all of this chart's."""
     return [*own.jobs, *(name for name in podiumd.jobs if name in upgrade.EXTERNALS_DELETED_JOBS)]
 
 
 def apply_crds(render: manifests.Render, release: str) -> None:
-    """Applies the render's CRDs (the Keycloak operator's from upstream) server-side and waits until established.
+    """Apply the render's CRDs (the Keycloak operator's from upstream) server-side and wait until established.
 
     Before the upgrade: Helm installs a chart's crds/ only when absent, and the adfinis subchart's are older;
     a templated CRD must exist before Helm can map the objects of its kind. Those get release's ownership
@@ -143,7 +143,7 @@ def _refuse_old_namespace() -> None:
 
 
 def _ensure_namespace(namespace: str) -> None:
-    """Creates namespace with the local CA's ConfigMap, which every pod mounts."""
+    """Create namespace with the local CA's ConfigMap, which every pod mounts."""
     print(f"Ensuring namespace {namespace!r} exists...")
     kube.kubectl(
         "apply", "-f", "-", stdin=kube.kubectl("create", "namespace", namespace, "--dry-run=client", "-o", "yaml")
@@ -163,14 +163,14 @@ def combined(renders: list[manifests.Render]) -> manifests.Render:
 
 
 def taken_over(own: manifests.Render, podiumd: manifests.Render, installed: manifests.Render) -> list[str]:
-    """The "Kind/name"s of own that release podiumd installed and its new render drops: Helm refuses to adopt them."""
+    """Return the "Kind/name"s of own that release podiumd installed and its render drops (Helm adopts none)."""
     keep = {manifests.key_of(doc) for doc in podiumd.docs}
     owned = {manifests.key_of(doc) for doc in installed.docs} - keep
     return [key for doc in own.docs if (key := manifests.key_of(doc)) in owned]
 
 
 def installed_podiumd(found: list[releases.Release]) -> manifests.Render:
-    """What release podiumd has installed; empty before its first install."""
+    """Return what release podiumd has installed; empty before its first install."""
     release = next(release for release in found if release.name == releases.PODIUMD)
     return (
         releases.installed(release) if releases.is_deployed(release) else manifests.Render(docs=[], large_configmaps=[])
@@ -210,7 +210,7 @@ def _prepare(
 
 
 def _changed(found: list[releases.Release], digests: dict[str, str], *, every: bool) -> list[releases.Release]:
-    """The releases of found to upgrade: digest changed since the last deploy, or no deployed revision (every: all)."""
+    """Return the releases of found to upgrade: digest changed since the last deploy or not deployed (every: all)."""
     last = deployed.last_digests()
     changed = [
         release
@@ -288,7 +288,7 @@ def _upgrade(
 
 @lock.holding("deploy")
 def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool = False) -> None:
-    """Syncs dependencies, then the Helm releases with the steps around them; every: also unchanged releases.
+    """Sync dependencies, then the Helm releases with the steps around them; every: also unchanged releases.
 
     Twice while KISS's crawler hook cannot reach Elasticsearch: first without the website (kiss.website_hook_blocked).
     """
@@ -328,7 +328,7 @@ def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool
 
 
 def _after_upgrades(command: str, found: list[releases.Release], render: manifests.Render, upgraded: Upgraded) -> None:
-    """Records what Helm installed, repairs Keycloak, activates OpenBao and waits until everything runs."""
+    """Record what Helm installed, repair Keycloak, activate OpenBao and wait until everything runs."""
     # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
     installed = {release.name: releases.installed(release) for release in found}
     live = combined([installed[RELEASE_NAME], installed[releases.PODIUMD]])
@@ -342,7 +342,7 @@ def _after_upgrades(command: str, found: list[releases.Release], render: manifes
 
 
 def _before_upgrades(renders: dict[str, manifests.Render], before: manifests.Render) -> None:
-    """The edge, CoreDNS's hosts and the node's images the upgrades need; the objecttypes import when merging."""
+    """Apply the edge, CoreDNS's hosts and the node's images the upgrades need; import the objecttypes when merging."""
     chart_hosts = hosts.chart_hosts()
     # Before the upgrades: podiumd's hook Jobs reach Keycloak by its host, and Helm waits for them.
     # The Gateway first: NGF creates the Service CoreDNS points at only once the Gateway exists.
@@ -357,7 +357,7 @@ def _before_upgrades(renders: dict[str, manifests.Render], before: manifests.Ren
 
 
 def _rendered(selected: Options) -> tuple[list[releases.Release], dict[str, manifests.Render]]:
-    """The releases selected installs, and each one's render; their namespaces exist."""
+    """Return the releases selected installs, and each one's render; their namespaces exist."""
     found = releases.releases(selected.helm_args)
     for namespace in dict.fromkeys(release.namespace for release in found):
         _ensure_namespace(namespace)
@@ -382,7 +382,7 @@ def rolled_out(workload: Doc) -> bool:
 
 
 def unfinished_jobs(live: list[Doc], names: list[str]) -> tuple[list[str], list[str]]:
-    """(running, failed) among the Jobs called names, from `kubectl get job -o json` items live.
+    """Return (running, failed) among the Jobs called names, from `kubectl get job -o json` items live.
 
     A missing Job counts as finished: helm upgrade creates every rendered Job, and the chart's
     ttlSecondsAfterFinished deletes it once done.
@@ -449,11 +449,11 @@ class _Rollout:
     restarted: list[str] = field(default_factory=list[str])
 
     def job_state(self) -> tuple[list[str], list[str]]:
-        """(running, failed) among the Jobs."""
+        """Return (running, failed) among the Jobs."""
         return unfinished_jobs(kube.get_json("job", "-n", NAMESPACE)["items"], self.jobs)
 
     def stuck(self) -> list[str]:
-        """The workloads that have not rolled out."""
+        """Return the workloads that have not rolled out."""
         kinds = ",".join(sorted({workload.split("/")[0] for workload in self.workloads}))
         # One kubectl call per poll: one per workload took 2.4 s with --full.
         found: list[Doc] = kube.get_json(kinds, "-n", NAMESPACE)["items"] if kinds else []
@@ -475,7 +475,7 @@ class _Rollout:
 
 
 def _wait_ready(render: manifests.Render, held: list[int]) -> None:
-    """Waits until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs.
+    """Wait until the render's workloads have rolled out and its Jobs have completed; UserError on failed Jobs.
 
     held: ZAC's replicas from hold_zac, set once ZAC_JOBS have finished.
     """
@@ -504,7 +504,7 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    """Adds deploy's arguments to parser; unknown ones (--set x=y) go to helm."""
+    """Add deploy's arguments to parser; unknown ones (--set x=y) go to helm."""
     parser.add_argument("--full", action="store_true", help="enable every optional profile")
     parser.add_argument(
         "--otel",

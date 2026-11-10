@@ -43,7 +43,7 @@ class Selection:
     value: str
 
     def tarball(self, chart: str, charts_dir: Path = CHARTS_DIR) -> Path | None:
-        """The fetched charts/<chart>-<version>.tgz; None in path mode or when not fetched."""
+        """Return the fetched charts/<chart>-<version>.tgz; None in path mode or when not fetched."""
         tgz = charts_dir / f"{chart}-{self.value}.tgz"
         return tgz if self.mode == "version" and tgz.is_file() else None
 
@@ -55,7 +55,7 @@ def _load(path: Path) -> dict[str, dict[str, str]]:
 
 
 def write(key: str, mode: Mode, value: str, path: Path = VERSIONS_FILE) -> None:
-    """Sets key's selection, keeping the other dependency's entry."""
+    """Set key's selection, keeping the other dependency's entry."""
     data = _load(path)
     data[key] = {mode: value}
     path.write_text(yaml.safe_dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
@@ -72,7 +72,7 @@ def selection(key: str, path: Path = VERSIONS_FILE) -> Selection | None:
 
 
 def podiumd_script(name: str, work: Path) -> Path:
-    """The selected podiumd chart's scripts/name: in its checkout, else from helm-charts tag podiumd-<version>.
+    """Return the selected podiumd chart's scripts/name: in its checkout, else from helm-charts tag podiumd-<version>.
 
     A published chart leaves scripts/ out (its .helmignore). The path may not exist: older podiumd lacks the script.
     """
@@ -89,7 +89,7 @@ def podiumd_script(name: str, work: Path) -> Path:
 
 
 def missing_error(names: list[str]) -> process.UserError:
-    """The error for dependencies without a selection."""
+    """Return the error for dependencies without a selection."""
     return process.UserError(f"no .podiumd-versions.yaml entry for {', '.join(names)}: {USAGE_HINT}")
 
 
@@ -145,7 +145,7 @@ def _build_subcharts(chart: str) -> None:
 
 
 def sync(versions_file: Path = VERSIONS_FILE, chart_dir: Path = CHART_DIR) -> None:
-    """Makes charts/*.tgz match .podiumd-versions.yaml.
+    """Make charts/*.tgz match .podiumd-versions.yaml.
 
     Skips `helm dependency update` when every published version is already
     fetched; a checkout is then packaged directly (the update refetches every
@@ -172,7 +172,7 @@ def sync(versions_file: Path = VERSIONS_FILE, chart_dir: Path = CHART_DIR) -> No
 
 
 def _package(checkouts: dict[str, str], charts_dir: Path) -> None:
-    """Packages each checkout into charts_dir in place of its earlier tarball."""
+    """Package each checkout into charts_dir in place of its earlier tarball."""
     for chart, checkout in checkouts.items():
         _build_subcharts(checkout)
         for old in charts_dir.glob(f"{chart}-*.tgz"):

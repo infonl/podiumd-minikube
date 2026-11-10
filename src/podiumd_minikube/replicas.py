@@ -37,7 +37,7 @@ def _key(doc: Doc) -> Key:
 
 
 def merge_patch(old: object, new: object) -> object:
-    """The JSON merge patch (RFC 7386) that turns old into new; lists are replaced whole."""
+    """Return the JSON merge patch (RFC 7386) that turns old into new; lists are replaced whole."""
     if not isinstance(old, dict) or not isinstance(new, dict):
         return new
     before = cast("Doc", old)
@@ -77,7 +77,7 @@ def _counted(counts: dict[str, int]) -> list[str] | None:
 
 @lock.holding("replicas")
 def _apply_changes(source: list[Doc], target: list[Doc]) -> None:
-    """Creates, patches and deletes the live objects so that source becomes target."""
+    """Create, patch and delete the live objects so that source becomes target."""
     created, patches, deleted = changes(source, target)
     if created:
         kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(created))
@@ -89,7 +89,7 @@ def _apply_changes(source: list[Doc], target: list[Doc]) -> None:
 
 
 def switch(*, on: bool) -> None:
-    """Applies the chart's pod counts (on) or values.yaml's one pod (off), then waits for the pods."""
+    """Apply the chart's pod counts (on) or values.yaml's one pod (off), then wait for the pods."""
     kube.require_minikube_context()
     selected = deploy.options(full=False, extra=[])
     print("Rendering with one pod and with the chart's pod counts...")

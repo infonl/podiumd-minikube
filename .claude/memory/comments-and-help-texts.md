@@ -22,8 +22,10 @@ vague text rots and hides the one fact that matters.
 - One sentence where one sentence does; no history, no "now/new/changed", no
   references to a session. History and the reasoning behind a fix belong in
   `.claude/plans/plan.md`, not in the code.
-- Docstrings: one line stating what it returns or does. Add a second
-  paragraph only for a real constraint or edge case.
+- Docstrings: one line stating what it returns or does, in the imperative
+  ("Return the hold, or None when the lock is free", "Set ... on ...";
+  ruff D401, as podiumd-tests). Add a second paragraph only for a real
+  constraint or edge case.
 - Usage and help texts: what the option does and its default, in under one
   line; no examples unless the syntax is unclear.
 - Errors, warnings and skip reasons: the fact, the object and the fix in one

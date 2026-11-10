@@ -24,7 +24,7 @@ GO_NO_HUGE_PAGES = {"GODEBUG": "disablethp=1"}
 
 
 def wanted_mb(host_total_mb: int, override: str | None) -> int:
-    """The node's memory: MINIKUBE_MEMORY (MB) when set, else HOST_FRACTION of host_total_mb."""
+    """Return the node's memory: MINIKUBE_MEMORY (MB) when set, else HOST_FRACTION of host_total_mb."""
     return int(override) if override else int(host_total_mb * HOST_FRACTION)
 
 
@@ -39,7 +39,7 @@ def host_cpus() -> int:
 
 
 def node_mb() -> int:
-    """The running profile's memory cap in MB; 0 when it has none or is not running."""
+    """Return the running profile's memory cap in MB; 0 when it has none or is not running."""
     result = process.run(["docker", "inspect", PROFILE, "--format", "{{.HostConfig.Memory}}"], check=False)
     return int(result.stdout.strip() or 0) // MIB if result.returncode == 0 else 0
 

@@ -25,7 +25,7 @@ from podiumd_minikube.paths import RELEASE_NAME
 
 
 def confirmed(summary: str, *, yes: bool) -> bool:
-    """Prints summary; True when yes or the user types 'yes'."""
+    """Print summary; True when yes or the user types 'yes'."""
     print(summary)
     if yes:
         return True
@@ -69,7 +69,7 @@ NAMESPACE_TIMEOUT = 120
 
 
 def clear_finalizers(namespace: str) -> int:
-    """Clears the finalizers of every object left in namespace; returns how many objects had them.
+    """Clear the finalizers of every object left in namespace; return how many objects had them.
 
     The operators that would finish them (Redis, Solr, ECK, Keycloak) go with the namespace, which then
     stays Terminating (podiumd-infra's reset.py does the same).
@@ -169,7 +169,7 @@ def _delete_bound_volumes() -> None:
 
 
 def reset_namespace(*, yes: bool) -> int:
-    """Deletes the namespaces and what they leave behind cluster-wide; 1 when not confirmed."""
+    """Delete the namespaces and what they leave behind cluster-wide; 1 when not confirmed."""
     kube.require_minikube_context()
     if not confirmed(RESET_SUMMARY, yes=yes):
         return 1
@@ -195,7 +195,7 @@ only older tags of this chart's image repositories are removed.
 
 @lock.holding("teardown-cluster")
 def teardown_cluster(*, yes: bool) -> int:
-    """Stops minikube tunnel and deletes the profile; 1 when not confirmed."""
+    """Stop minikube tunnel and delete the profile; 1 when not confirmed."""
     if not confirmed(TEARDOWN_SUMMARY, yes=yes):
         return 1
     tunnel.stop_tunnel()

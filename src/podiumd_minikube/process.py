@@ -43,7 +43,7 @@ def run(
     capture: bool = True,
     merge_stderr: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Runs args; captured output is text, merge_stderr puts stderr in stdout in order.
+    """Run args; captured output is text, merge_stderr puts stderr in stdout in order.
 
     check raises ProcessError on a non-zero exit.
     """
@@ -111,7 +111,7 @@ def running(pattern: str) -> str:
 
 
 def spawn(args: Sequence[str], log: Path) -> None:
-    """Starts args detached from this terminal, output to log; it outlives this script."""
+    """Start args detached from this terminal, output to log; it outlives this script."""
     with log.open("w", encoding="utf-8") as out:
         # Not waited for: it keeps running after this script exits.
         subprocess.Popen(  # pylint: disable=consider-using-with  # nosec B603  # noqa: S603
@@ -120,7 +120,7 @@ def spawn(args: Sequence[str], log: Path) -> None:
 
 
 def main(entry: Callable[[], int | None]) -> None:
-    """Runs a script's entry point, printing a UserError as one line on stderr."""
+    """Run a script's entry point, printing a UserError as one line on stderr."""
     # Child processes write straight to the terminal; keep print() in order with them.
     reconfigure = getattr(sys.stdout, "reconfigure", None)
     if callable(reconfigure):

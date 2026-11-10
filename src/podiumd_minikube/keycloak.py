@@ -67,7 +67,7 @@ def _import_done(render: manifests.Render) -> bool:
 
 
 def repair_default_client_scopes(render: manifests.Render) -> None:
-    """Gives every chart client without default client scopes the realm's, once the realm import has run.
+    """Give every chart client without default client scopes the realm's, once the realm import has run.
 
     Skipped when the chart's own repair Job is rendered: an exec here failed when the deploy replaced keycloak-0.
     """
