@@ -25,7 +25,7 @@ def require_minikube_context() -> None:
     current = result.stdout.strip() if result.returncode == 0 else ""
     if current != PROFILE:
         msg = (
-            f"kubectl context is '{current or '<none>'}', not '{PROFILE}': "
+            f"kubectl context is {current or '<none>'!r}, not {PROFILE!r}: "
             f"run `kubectl config use-context {PROFILE}` and try again"
         )
         raise process.UserError(msg)

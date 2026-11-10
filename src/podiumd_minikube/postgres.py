@@ -251,7 +251,7 @@ def rename_rows() -> None:
         psql = ["exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-d", database, "-tA"]
         for (table, column), renames in tables.items():
             # A database created this deploy has no tables until its app migrates.
-            if not kube.kubectl(*psql, "-c", f"select to_regclass('{table}');").strip():
+            if not kube.kubectl(*psql, "-c", f"select to_regclass({table!r});").strip():
                 continue
             names = ["-v", f"table={table}", "-v", f"column={column}"]
             values = kube.kubectl(*psql, *names, "-f", "-", stdin='select :"column" from :"table";\n').split()

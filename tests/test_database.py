@@ -72,9 +72,9 @@ def test_all_expected_databases_exist(existing_databases):
 @pytest.mark.parametrize("database", sorted(POSTGIS_DATABASES))
 def test_postgis_extension_installed(pods, database, existing_databases):
     if database not in existing_databases:
-        pytest.skip(f"database '{database}' does not exist (profile not deployed)")
+        pytest.skip(f"database {database!r} does not exist (profile not deployed)")
     result = psql(database, "SELECT extname FROM pg_extension WHERE extname = 'postgis';")
-    assert result == "postgis", f"postgis extension missing from '{database}'"
+    assert result == "postgis", f"postgis extension missing from {database!r}"
 
 
 def test_openzaak_knows_zacs_client(pods, existing_databases):

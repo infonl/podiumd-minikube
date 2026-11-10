@@ -42,7 +42,7 @@ def _last_line(*args):
 @pytest.mark.parametrize("app", APPS)
 def test_zgw_service_api_roots_reachable(app, enabled_profiles):
     if not enabled_profiles.get(app):
-        pytest.skip(f"'{app}' profile is not deployed")
+        pytest.skip(f"{app!r} profile is not deployed")
     pod = kubectl(
         "get", "pod", "-n", NAMESPACE, "-l", f"app.kubernetes.io/name={app}", "-o", "jsonpath={.items[0].metadata.name}"
     ).strip()
@@ -50,7 +50,7 @@ def test_zgw_service_api_roots_reachable(app, enabled_profiles):
     services = json.loads(
         _last_line("exec", "-n", NAMESPACE, pod, "--", "python", "/app/src/manage.py", "shell", "-c", query)
     )
-    assert services, f"no zgw_consumers services in '{app}': check its configuration Job"
+    assert services, f"no zgw_consumers services in {app!r}: check its configuration Job"
     failures = [
         f"{s['slug']} ({s['api_root']}): {outcome}"
         for s in services
@@ -59,4 +59,4 @@ def test_zgw_service_api_roots_reachable(app, enabled_profiles):
             outcome := _last_line("exec", "-n", NAMESPACE, pod, "--", "python", "-c", PROBE.format(url=s["api_root"]))
         ).startswith("OK")
     ]
-    assert not failures, f"unreachable api_roots in '{app}': {'; '.join(failures)}"
+    assert not failures, f"unreachable api_roots in {app!r}: {'; '.join(failures)}"

@@ -60,7 +60,7 @@ def check(*, full: bool) -> None:
         return
     raise_to = max(wanted(), FULL_BUDGET_MB) // 1024
     print(
-        f"WARNING: minikube profile '{PROFILE}' has {cap // 1024} GiB, below the ~{FULL_BUDGET_MB // 1024} GiB "
+        f"WARNING: minikube profile {PROFILE!r} has {cap // 1024} GiB, below the ~{FULL_BUDGET_MB // 1024} GiB "
         f"a deploy --full needs. Raise it live: docker update --memory={raise_to}g --memory-swap=-1 {PROFILE} "
         "(lost on `minikube delete`).",
         file=sys.stderr,

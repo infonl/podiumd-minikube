@@ -5,6 +5,7 @@ script's PATH runs this module (shim_dir); any other az call fails, so a new cal
 """
 
 import argparse
+import shlex
 import stat
 import sys
 
@@ -69,7 +70,9 @@ def main(argv: list[str]) -> int:
 def shim_dir(directory: Path) -> Path:
     """directory with an executable `az` that runs main with this Python; put it first on PATH."""
     az = directory / "az"
-    az.write_text(f'#!/bin/sh\nexec "{sys.executable}" -m podiumd_minikube.keyvault "$@"\n', encoding="utf-8")
+    az.write_text(
+        f'#!/bin/sh\nexec {shlex.quote(sys.executable)} -m podiumd_minikube.keyvault "$@"\n', encoding="utf-8"
+    )
     az.chmod(az.stat().st_mode | stat.S_IXUSR)
     return directory
 

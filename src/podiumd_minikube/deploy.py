@@ -144,7 +144,7 @@ def _refuse_old_namespace() -> None:
 
 def _ensure_namespace(namespace: str) -> None:
     """Creates namespace with the local CA's ConfigMap, which every pod mounts."""
-    print(f"Ensuring namespace '{namespace}' exists...")
+    print(f"Ensuring namespace {namespace!r} exists...")
     kube.kubectl(
         "apply", "-f", "-", stdin=kube.kubectl("create", "namespace", namespace, "--dry-run=client", "-o", "yaml")
     )

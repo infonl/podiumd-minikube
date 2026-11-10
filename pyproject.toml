@@ -227,8 +227,8 @@ disable = [
 
 [tool.flake8]
 # Only the WPS rules (wemake-python-styleguide) that ruff and pylint lack.
-# B042 (flake8-bugbear): a bugbear rule ruff lacks.
-select = ["WPS", "B042"]
+# B042 and B907 (flake8-bugbear): the two bugbear rules ruff lacks.
+select = ["WPS", "B042", "B907"]
 max-line-length = 120
 # Jones complexity of a line (default 14): only the really dense lines
 max-line-complexity = 20

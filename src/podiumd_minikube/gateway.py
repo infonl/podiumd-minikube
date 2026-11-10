@@ -250,7 +250,7 @@ def _pin_cluster_ip() -> None:
 def apply(docs: list[manifests.Doc], hosts: list[str]) -> None:
     """Applies the certificate, Gateway and routes; deletes routes no longer rendered."""
     if not kube.exists(f"deployment/{NGF_RELEASE}", EDGE_NAMESPACE):
-        msg = f"NGINX Gateway Fabric is not in namespace '{EDGE_NAMESPACE}': run `podiumd-minikube provision-cluster`"
+        msg = f"NGINX Gateway Fabric is not in namespace {EDGE_NAMESPACE!r}: run `podiumd-minikube provision-cluster`"
         raise process.UserError(msg)
     print("\nApplying the NGINX Gateway Fabric Gateway and routes (gateway.py)...")
     objects = [

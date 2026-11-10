@@ -80,7 +80,7 @@ def start_minikube(cpus: int, memory_mb: int) -> None:
     """Starts the profile with the docker driver and Cilium, or checks the running one's memory."""
     cni_manifest = cni.write_manifest()
     if process.succeeds(["minikube", "status", "-p", PROFILE]):
-        print(f"minikube profile '{PROFILE}' is already running - leaving it as-is.")
+        print(f"minikube profile {PROFILE!r} is already running - leaving it as-is.")
         print("(delete it first with podiumd-minikube teardown-cluster if you want a genuinely fresh start)")
         memory.check(full=True)
         return

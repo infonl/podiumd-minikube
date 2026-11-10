@@ -171,7 +171,7 @@ def reset_namespace(*, yes: bool) -> int:
     return 0
 
 
-TEARDOWN_SUMMARY = f"""This permanently deletes the '{PROFILE}' minikube cluster:
+TEARDOWN_SUMMARY = f"""This permanently deletes the {PROFILE!r} minikube cluster:
   - every object and all hostPath data (Postgres, Solr, every app's media)
   - the minikube container itself
 Docker images on the host survive, so a new cluster loads them without downloading;
@@ -185,7 +185,7 @@ def teardown_cluster(*, yes: bool) -> int:
     if not confirmed(TEARDOWN_SUMMARY, yes=yes):
         return 1
     tunnel.stop_tunnel()
-    print(f"Deleting minikube profile '{PROFILE}'...")
+    print(f"Deleting minikube profile {PROFILE!r}...")
     process.run(["minikube", "delete", "-p", PROFILE], capture=False)
     openbao.forget_vault()
     provision.remove_old_tags(provision.chart_images())

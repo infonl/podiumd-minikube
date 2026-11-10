@@ -52,6 +52,6 @@ def test_describe_shows_the_age_and_hints_at_a_stale_lock():
 
 
 def test_run_marks_the_hold_for_its_child(private_lock: Path):
-    child = [sys.executable, "-c", f"import os; assert os.environ['{lock.HOLD_ENV}'].startswith('kees rebuild ')"]
+    child = [sys.executable, "-c", f"import os; assert os.environ[{lock.HOLD_ENV!r}].startswith('kees rebuild ')"]
     assert lock.run("rebuild", child, who="kees") == 0
     assert lock.current() is None

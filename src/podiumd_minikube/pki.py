@@ -89,7 +89,7 @@ def _move_from_old_namespace() -> None:
     """
     if not process.output(["helm", "list", "-n", OLD_CERT_MANAGER_NAMESPACE, "-q", "-f", "^cert-manager$"]).strip():
         return
-    print(f"Moving cert-manager from namespace '{OLD_CERT_MANAGER_NAMESPACE}' to '{CERT_MANAGER_NAMESPACE}'...")
+    print(f"Moving cert-manager from namespace {OLD_CERT_MANAGER_NAMESPACE!r} to {CERT_MANAGER_NAMESPACE!r}...")
     kube.kubectl(
         "annotate", "crd", "-l", "app.kubernetes.io/instance=cert-manager", "--overwrite",
         "helm.sh/resource-policy=keep", f"meta.helm.sh/release-namespace={CERT_MANAGER_NAMESPACE}",
@@ -124,7 +124,7 @@ def install_cert_manager() -> None:
     """Installs or upgrades cert-manager to CERT_MANAGER_VERSION and its values; skips it when both run."""
     _move_from_old_namespace()
     if _installed():
-        print(f"cert-manager {CERT_MANAGER_VERSION} already installed in '{CERT_MANAGER_NAMESPACE}' - skipping.")
+        print(f"cert-manager {CERT_MANAGER_VERSION} already installed in {CERT_MANAGER_NAMESPACE!r} - skipping.")
         return
     print(f"Installing cert-manager {CERT_MANAGER_VERSION}...")
     _add_jetstack_repo()

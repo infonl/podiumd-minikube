@@ -8,6 +8,7 @@ a fetched subchart against Chart.yaml's version constraint.
 """
 
 import contextlib
+import json
 import re
 import shutil
 import tempfile
@@ -106,9 +107,9 @@ def set_chart_dependency(text: str, name: str, repository: str, version: str) ->
         elif line.startswith("  - name: "):
             in_block = False
         elif in_block and "repository:" in line:
-            lines[index] = re.sub(r'repository: "[^"]*"', f'repository: "{repository}"', line)
+            lines[index] = re.sub(r'repository: "[^"]*"', f"repository: {json.dumps(repository)}", line)
         elif in_block:
-            lines[index] = re.sub(r'version:\s*"[^"]*"', f'version: "{version}"', line)
+            lines[index] = re.sub(r'version:\s*"[^"]*"', f"version: {json.dumps(version)}", line)
     return "".join(lines)
 
 
