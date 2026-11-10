@@ -812,14 +812,14 @@ class Render:
         """Names of the Jobs in docs (all idempotent)."""
         return [name_of(doc) for doc in self.docs if doc.get("kind") == "Job"]
 
-    def named(self, kind: str, name: str) -> Doc | None:
-        """Return the doc of kind called name, or None."""
-        return find(self.docs, kind, name)
-
     @property
     def manifest(self) -> str:
         """docs as YAML."""
         return dump(self.docs)
+
+    def named(self, kind: str, name: str) -> Doc | None:
+        """Return the doc of kind called name, or None."""
+        return find(self.docs, kind, name)
 
 
 def _loaded(text: str) -> list[tuple[Doc | None, str]]:

@@ -30,6 +30,8 @@ dev = [
     "flake8-pyproject",  # flake8 reads [tool.flake8] in pyproject.toml
     "wemake-python-styleguide",  # flake8 plugin, brings its own pinned flake8
     "flake8-bugbear",  # B907 and B042 only ([tool.flake8] select)
+    "flake8-class-attributes-order",  # CCE001
+    "deptry",
     "pip-audit",
 ]
 
@@ -136,8 +138,8 @@ ignore = [
     "E501", # line-too-long: pylint's job now (C0301), avoid flagging the same line twice
     "ERA001", # commented-out-code: current hits are prose that resembles code
 ]
-# The WPS codes in noqa comments belong to flake8 (wemake-python-styleguide), not to ruff.
-external = ["WPS"]
+# The flake8 plugins' codes in noqa comments (WPS, CCE, FNE, bugbear's B907 and B042), not ruff's.
+external = ["WPS", "CCE", "FNE", "B907", "B042"]
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
 unfixable = []
@@ -227,8 +229,12 @@ disable = [
 
 [tool.flake8]
 # Only the WPS rules (wemake-python-styleguide) that ruff and pylint lack.
-# B042 and B907 (flake8-bugbear): the two bugbear rules ruff lacks.
-select = ["WPS", "B042", "B907"]
+# B042 and B907 (flake8-bugbear): the two bugbear rules ruff lacks; CCE001
+# (flake8-class-attributes-order): the order of a class's members.
+select = ["WPS", "B042", "B907", "CCE001"]
+# Magic methods right after __init__, where WPS338 wants them (the default puts them last);
+# no Django save/delete special case.
+class-attributes-order = "docstring,pass,meta_class,nested_class,constant,field,outer_field,if,expression,__new__,__init__,__post_init__,magic_method,property_method,static_method,class_method,method,protected_property_method,protected_static_method,protected_class_method,protected_method,private_property_method,private_static_method,private_class_method,private_method"
 max-line-length = 120
 # Jones complexity of a line (default 14): only the really dense lines
 max-line-complexity = 18
@@ -357,4 +363,11 @@ branch = true
 source = ["src/podiumd_minikube"]
 
 [tool.coverage.report]
+# Without it the total is rounded before fail_under compares (95.996 passes 96).
+precision = 2
 fail_under = 85
+
+# deptry: runtime imports of src/ against [project] dependencies; [dev] holds the tools.
+[tool.deptry]
+known_first_party = ["podiumd_minikube"]
+optional_dependencies_dev_groups = ["dev"]

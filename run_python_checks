@@ -10,7 +10,7 @@ usage() {
 Usage: run_python_checks [-h|--help]
 
 Runs ruff check, shellcheck, ruff format --check, flake8
-(wemake-python-styleguide), jscpd, pymarkdown, vulture, bandit,
+(wemake-python-styleguide), jscpd, pymarkdown, vulture, deptry, bandit,
 basedpyright, pylint and pytest (unit_tests/ only, with the coverage
 threshold from pyproject.toml; tests/ needs a live cluster) on src/,
 unit_tests/ and tests/, fastest first, then pip-audit on the packages of
@@ -80,6 +80,7 @@ step "flake8 (wemake-python-styleguide)" flake8 "${code[@]}" unit_tests tests
 step "jscpd (duplicate code)" jscpd "${code[@]}"
 step "pymarkdown (${#markdown_files[@]} file(s))" pymarkdown --config pyproject.toml scan "${markdown_files[@]}"
 step "vulture (dead code)" vulture "${code[@]}"
+step "deptry (dependencies)" deptry src
 # Test directories excluded: every assert would flag B101.
 step "bandit (security)" bandit -c pyproject.toml -r "${code[@]}" -q
 step "basedpyright (type checking)" basedpyright "${code[@]}" unit_tests tests
