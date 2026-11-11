@@ -40,6 +40,16 @@ def kubectl_shown(*args: str, stdin: str | None = None) -> None:
     process.run(["kubectl", *args], stdin=stdin, capture=False)
 
 
+def apply(manifest: str, *args: str, shown: bool = False) -> None:
+    """Apply manifest server-side, taking over fields other managers own; shown: kubectl's output on the terminal.
+
+    Client-side apply of the edge's 50 objects took 15 s (it fetches the OpenAPI v2 spec), server-side 2 s.
+    """
+    (kubectl_shown if shown else kubectl)(
+        "apply", "--server-side", "--force-conflicts", *args, "-f", "-", stdin=manifest
+    )
+
+
 def is_kubectl_ok(*args: str) -> bool:
     """Whether kubectl args succeeds; output is discarded."""
     return process.succeeds(["kubectl", *args])

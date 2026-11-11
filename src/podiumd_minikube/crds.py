@@ -116,7 +116,7 @@ def apply_monitoring_logging_crds() -> None:
     if not crds:
         msg = f"no CustomResourceDefinition in {tgz}: check the monitoring-logging version"
         raise UserError(msg)
-    kube.kubectl_shown("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=yaml.safe_dump_all(crds))
+    kube.apply(yaml.safe_dump_all(crds), shown=True)
 
 
 def keycloak_version(charts_dir: Path = CHARTS_DIR) -> str | None:

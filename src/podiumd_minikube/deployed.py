@@ -59,7 +59,7 @@ def record(command: str, render: manifests.Render, digests: dict[str, str]) -> N
         "digests": json.dumps(digests, sort_keys=True),
     }
     doc = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": CONFIGMAP}, "data": data}
-    kube.kubectl("apply", "--server-side", "--force-conflicts", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump([doc]))
+    kube.apply(manifests.dump([doc]), "-n", NAMESPACE)
 
 
 def read() -> dict[str, str]:

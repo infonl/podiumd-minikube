@@ -89,7 +89,7 @@ def install() -> None:
     """
     print(f"Installing NGINX Gateway Fabric {NGF_VERSION}...")
     ngf_crds = process.fetch(["helm", "show", "crds", NGF_CHART, "--version", NGF_VERSION])
-    kube.kubectl("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=ngf_crds)
+    kube.apply(ngf_crds)
     dns_ip = kube.kubectl("get", "svc", "kube-dns", "-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")
     process.fetch(
         ["helm", "upgrade", "--install", *NGF_CHART_ARGS,
@@ -286,7 +286,7 @@ def apply(docs: list[Doc], hosts: list[str]) -> None:
     # NGF keeps an ExternalName Service's old target when it changes in place: such a Service is recreated.
     wanted = {(doc["kind"], manifests.name_of(doc)): manifests.section(doc, "spec") for doc in objects}
     _delete_stale(wanted)
-    kube.kubectl("apply", "-f", "-", stdin=manifests.dump(objects))
+    kube.apply(manifests.dump(objects))
     if not polling.wait_until(
         lambda: kube.is_present(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3
     ):

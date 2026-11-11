@@ -106,7 +106,11 @@ def test_apply_applies_the_edge_and_deletes_routes_no_longer_rendered(
     edge: FakeRun, capsys: pytest.CaptureFixture[str]
 ):
     gateway.apply([_ingress("zac.local", "zac", {"number": 8080})], ["zac.local"])
-    applied = list(yaml.safe_load_all(edge.stdins[edge.calls.index(["kubectl", "apply", "-f", "-"])] or ""))
+    applied = list(
+        yaml.safe_load_all(
+            edge.stdins[edge.calls.index(["kubectl", "apply", "--server-side", "--force-conflicts", "-f", "-"])] or ""
+        )
+    )
     assert [doc["kind"] for doc in applied] == [
         "Certificate", "Gateway", "ProxySettingsPolicy", "ClientSettingsPolicy", "Service", "HTTPRoute",
     ]  # fmt: skip
@@ -128,7 +132,9 @@ def test_apply_recreates_a_backend_service_with_another_target(edge: FakeRun, ca
     gateway.apply(docs, ["zac.local", "kept.local"])
     deleted = edge.ran("kubectl", "delete")
     assert ["kubectl", "delete", "service", "zac", "-n", EDGE_NAMESPACE] in deleted
-    assert edge.calls.index(deleted[-1]) < edge.calls.index(["kubectl", "apply", "-f", "-"])
+    assert edge.calls.index(deleted[-1]) < edge.calls.index(
+        ["kubectl", "apply", "--server-side", "--force-conflicts", "-f", "-"]
+    )
     assert "deleted Service zac (retargeted)" in capsys.readouterr().out
     assert not [call for call in deleted if "kept" in call]
 

@@ -129,7 +129,7 @@ def apply_crds(render: manifests.Render, release: str) -> None:
                 "meta.helm.sh/release-namespace": NAMESPACE,
             }
     print(f"\nApplying {len(docs)} CRD(s) first...")
-    kube.kubectl_shown("apply", "--server-side", "--force-conflicts", "-f", "-", stdin=manifests.dump(docs))
+    kube.apply(manifests.dump(docs), shown=True)
     names = [f"crd/{manifests.name_of(doc)}" for doc in docs]
     kube.kubectl_shown("wait", "--for=condition=Established", *names, "--timeout=60s")
 

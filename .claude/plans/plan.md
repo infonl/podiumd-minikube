@@ -9910,8 +9910,16 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
 - Done 2026-11-11: `timing.timed` (a copy of podiumd-infra's) prints each
   phase's seconds; the readiness wait prints each workload and Job as it
   settles. First live run, no-change `deploy --full`: 62 s, of which render
-  16 s and Postgres, edge, CoreDNS and node images 32 s (larger than
-  expected for a no-op; not analysed yet).
+  16 s and Postgres, edge, CoreDNS and node images 32 s.
+- The 32 s, profiled per process (no-op): Postgres checks 3.3 s (25 kubectl
+  calls), hosts.chart_hosts 5 s (helm template 1.6 s, fix_up 3.4 s),
+  gateway.apply 18 s, of which 15 s one client-side `kubectl apply` of the
+  edge's 50 objects (75 requests and the 9 MB OpenAPI v2 spec); as a
+  server-side dry run 2.1 s. Every apply now goes through `kube.apply`
+  (server-side, --force-conflicts; it merged four copies). Live: the first
+  deploy migrated the field managers without errors; the next no-change
+  deploy: pre-steps 11 s, deploy 36 s (was 62). Left: render 15 s, of
+  which helm template 6 s.
 
 ### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
 
