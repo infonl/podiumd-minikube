@@ -10264,3 +10264,22 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
   the budget. The check stays somewhat strict after a day of deploys; a
   cluster restart resets it. Not measured: which files the 700 MiB hold and
   each deploy's share (no cgroup numbers from before 18:34).
+
+## Dropped: transparent huge pages madvise for the JVMs (Kees, 2026-11-11)
+
+- The laptop kernel's transparent_hugepage is `always`; GODEBUG=disablethp
+  covers the Go runtimes, the JVMs and Elasticsearch still got huge pages:
+  Open Inwoner Elasticsearch 460 of 529 MiB anonymous, KISS Elasticsearch
+  264 of 532, ZAC 254 of 759, ZaakBrug 228 of 631, Solr about 70 of 275
+  per node (after full tiers). Java has no per-process opt-out and the
+  images have no prctl tool; minikube's /sys is read-only, so only the
+  host can switch it.
+- Experiment: Kees set the host to `madvise` (21:00 CET), Open Inwoner's
+  Elasticsearch restarted at 21:04, podiumd-tests' full tier
+  20261111-200741 (21:07:41-21:21:51 CET, no timeouts). After it: 488 MiB
+  anonymous, 0 in huge pages (529 / 460 under `always`); working set 560
+  MiB (601 before, baseline 588). KISS's Elasticsearch, still on its huge
+  pages, stayed at 532 MiB: the tier itself moved nothing.
+- About 40 MiB, 9% of the huge-page share; over all JVMs (about 1.4 GiB in
+  huge pages) an estimated 125 MiB. Not worth a laptop-wide kernel setting
+  on every cluster start. Dropped; Kees sets the host back to `always`.
