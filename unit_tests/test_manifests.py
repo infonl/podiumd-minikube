@@ -362,6 +362,34 @@ def test_mount_zaakbrug_role_mapping_mounts_both_files_only_with_the_configmap()
     assert "volumes" not in untouched["spec"]["template"]["spec"]
 
 
+def test_fork_open_inwoner_workers_starts_only_the_web_container_without_lazy_apps():
+    containers: list[Doc] = [{"name": "openinwoner"}, {"name": "sidecar"}]
+    web: Doc = {
+        "kind": "Deployment",
+        "metadata": {"name": "openinwoner"},
+        "spec": {"template": {"spec": {"containers": containers}}},
+    }
+    manifests.fork_open_inwoner_workers([web])
+    assert containers[0]["command"] == manifests.START_WITHOUT_LAZY_APPS
+    assert "command" not in containers[1]
+    manifests.fork_open_inwoner_workers([])
+
+
+def test_start_without_lazy_apps_drops_only_that_line(tmp_path: Path):
+    script = tmp_path / "start.sh"
+    script.write_text(
+        r"""echo "$0"
+exec echo \
+    --strict \
+    --lazy-apps \
+    --static-map /static
+"""
+    )
+    shell, flag, command, _ = manifests.START_WITHOUT_LAZY_APPS
+    ran = subprocess.run([shell, flag, command, str(script)], capture_output=True, text=True, check=True)
+    assert ran.stdout == f"{script}\n--strict --static-map /static\n"
+
+
 def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():
     resources: Doc = {"limits": {"memory": "768Mi"}}
     builder: Doc = {"name": "keycloak-builder"}

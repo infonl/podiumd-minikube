@@ -674,6 +674,20 @@ def mount_zaakbrug_role_mapping(docs: list[Doc]) -> None:
         container["volumeMounts"] = [*(container.get("volumeMounts") or []), *added]
 
 
+# Open Inwoner's /start.sh runs uWSGI with --lazy-apps: each recycled worker loads the app (11-20 s). Without it,
+# workers fork from the loaded master as in the other Maykin apps. Upstream added it for Python 3.13 crashes.
+START_WITHOUT_LAZY_APPS = ["/bin/sh", "-c", 'eval "$(sed "/^ *--lazy-apps/d" "$0")"', "/start.sh"]
+
+
+def fork_open_inwoner_workers(docs: list[Doc]) -> None:
+    """Start Open Inwoner's web container with its /start.sh minus --lazy-apps."""
+    web = find(docs, "Deployment", "openinwoner")
+    spec = None if web is None else _pod_spec(web)
+    for container in [] if spec is None else _containers(spec):
+        if container.get("name") == "openinwoner":
+            container["command"] = START_WITHOUT_LAZY_APPS
+
+
 def limit_runtimes(docs: list[Doc]) -> None:
     """Add CAPACITY_ENV to every container of every workload, Job and operator pod template; GOMEMLIMIT where limited.
 
@@ -878,6 +892,7 @@ POST_RENDER_STEPS = (
     tune_solr,
     ease_solr_start,
     mount_zaakbrug_role_mapping,
+    fork_open_inwoner_workers,
     limit_runtimes,
 )
 

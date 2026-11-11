@@ -10076,3 +10076,35 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
 - Found on the way: `.chart-sources/` (1b298b4) was not in .helmignore, so
   the podiumd-minikube release Secret exceeded 1 MiB ("Too long: may not be
   more than 1048576 bytes") on its first upgrade since.
+
+## Open Inwoner without --lazy-apps, 1 uWSGI process (Kees, 2026-11-11)
+
+- Cause of the 15-26 s Open Inwoner responses and podiumd-tests' read
+  timeouts under a full tier: its /start.sh runs uWSGI with --lazy-apps, so
+  every recycled worker (every 100 requests, static files included: 23 an
+  hour in a tier) loads the app itself, 11-20 s under load, and the single
+  worker leaves nothing serving. The other Maykin apps load the app in the
+  master and fork, so their recycles are free (Open Zaak 16 in 6 h). CPU was
+  not the limit: the web container has no CPU limit, nr_throttled 0.
+- Tried first: 2 processes (+250 MiB: lazy-apps workers share nothing);
+  both reached 100 together under even load. `UWSGI_MAX_REQUESTS_DELTA` 100
+  (limits 200/300): still a gap, the remaining worker hit its limit while
+  the other reloaded. 1000 requests only makes the gap rarer.
+- Kept: `manifests.fork_open_inwoner_workers` starts the container with
+  /start.sh minus `--lazy-apps` (Kees: a deviation from prod, but the app
+  then behaves as the other Django apps), 1 process, the image's 8 threads
+  and recycle every 100. Upstream restored --lazy-apps on 2026-09-02 for
+  Python 3.13 workers that segfaulted when forked; Open Inwoner is the only
+  app on 3.13 (3.13.18; the others 3.12).
+- Live: recycles under 350 requests, worst 2.3 s (first request of a fresh
+  worker), container 325 MiB. podiumd-tests' full tier
+  20261111-152549 (16:25-16:44 CET): 20 recycles, no segfault, no restart,
+  no 500/502/timeout from Open Inwoner; slowest Open Inwoner request 10.9 s
+  (OIDC callbacks and mijn-zaken status pages, which call other apps).
+- The /search/ 404 in podiumd-tests' runs is not this: Open Inwoner raises
+  Http404 while SiteConfiguration.search_enabled is false
+  (search/views.py:49); in that tier every /search/ request answered 404
+  from 15:27:57 to 15:28:20 UTC and 200 before and after, without a worker
+  restart or an admin request, so something outside the web requests
+  flipped the setting (handed to podiumd-tests). The `--lazy-apps` race
+  reproduction (Kees's go) is moot.

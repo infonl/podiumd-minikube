@@ -1192,8 +1192,10 @@ podiumd:
             - domain: openinwoner.local
               name: Open Inwoner
     settings:
-      # Laptop budget: 1 web process (image default 4). Threads (8) and the recycle
-      # every 100 requests stay the image's, as ExternalsPodiumD: fewer hid a hang.
+      # Laptop budget: 1 web process (image default 4); it recycles in
+      # milliseconds without --lazy-apps (manifests.fork_open_inwoner_workers).
+      # Threads (8) and the recycle every 100 requests stay the image's, as
+      # ExternalsPodiumD: fewer hid a hang.
       uwsgi:
         processes: 1
       secretKey: openInwonerSecretKey
