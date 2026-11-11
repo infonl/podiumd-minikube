@@ -10211,3 +10211,16 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
   after the commit). podiumd's values say an environment that sets these
   keys must repeat the items; they are repeated now. Open Zaak's new
   `extraEnvVars` repeats podiumd's OPENZAAK_PORT.
+- Open Formulieren's slab over podiumd-tests' full tier 20261111-181056
+  (19:10:56-19:22:51 CET, first tier after the bytecode cache), sampled
+  every 30 s: web 28 -> 29 MiB, worker 22 -> 24 MiB. Before the cache the
+  web container had 294 MiB after a day of tiers; with it the growth per
+  tier is about 1 MiB, so nothing left to chase. The web container's
+  anonymous memory peaked at 920 MiB at 19:21 CET (during the tier's Open
+  Formulieren submissions) and was back at 494 MiB 1 minute later.
+- The cache files stay inactive page cache (Open Formulieren web 190 MiB,
+  the other containers 31-73 MiB): neither docker stats nor crictl's
+  working set counts them.
+- Baseline refreshed after that tier: node 17217 MiB against the 17920 MiB
+  budget (16733 after the previous tier; reclaimable kernel caches 1.4 GiB),
+  containers 15628 MiB without their kernel caches.
