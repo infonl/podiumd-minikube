@@ -9931,6 +9931,13 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   hash the same before and after. Live no-change deploy: render 9 s,
   deploy 26 s (was 36; 62 this morning). What is left is mostly helm
   template (6 s) and one parse of the render (1.5 s).
+- Memory baseline refreshed 2026-11-11 11:35 CET on published 4.10.1
+  --full, 5 minutes after podiumd-tests' full tier
+  20261111-101457_minikube_full_26111110141a59 (708 passed, 3 failed,
+  15m22s): node 16200 -> 15473 MiB, containers 14345 -> 14328 MiB. Down:
+  kube-apiserver -129, Loki -58, etcd -37 MiB; up: Alloy +147 (log-file
+  cache after the 15-minute tier), office converter +70, Open Formulieren
+  worker +38, cert-manager webhook +35, Grafana +32 MiB.
 
 ### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
 
