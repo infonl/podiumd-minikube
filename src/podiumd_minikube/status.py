@@ -105,6 +105,11 @@ def reclaimable_kernel_mib() -> int:
     return round(int(found) / MIB)
 
 
+def budgeted_mib(node: Usage, reclaimable: int) -> int:
+    """Return the node's memory the budget counts: without the kernel caches, as docker stats leaves out page cache."""
+    return node.mib - reclaimable
+
+
 def workloads(items: list[Doc]) -> dict[str, str]:
     """Workload name per 'namespace/pod': a ReplicaSet's Deployment, else the pod's owner, else the pod."""
     names: dict[str, str] = {}
@@ -232,12 +237,16 @@ def _node_lines(profiles: dict[str, bool], node: Usage, usage: dict[str, Usage])
     cores = "all host" if nano_cpus in {"", "0"} else f"{int(nano_cpus) / 1e9:g}"
     root = disk.docker_root()
     space = shutil.disk_usage(root)
+    reclaimable = reclaimable_kernel_mib()
     return [
         (
             f"Node        memory {_gib(node.mib)} / {_gib(cap) if cap else '?'} GiB cap, "
             f"budget {_gib(budget_mib(profiles))} GiB, containers {_gib(containers)} GiB"
         ),
-        f"            of which {_gib(reclaimable_kernel_mib())} GiB kernel caches, freed under memory pressure",
+        (
+            f"            of which {_gib(reclaimable)} GiB kernel caches, freed under memory pressure; "
+            f"{_gib(budgeted_mib(node, reclaimable))} GiB against the budget"
+        ),
         f"            CPU {node.cpu:.1f} / {cores} cores",
         f"Disk        {root}: {disk.verdict(space.total, space.free, disk.DEPLOY)[1]}",
     ]

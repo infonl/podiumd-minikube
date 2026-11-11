@@ -19,7 +19,8 @@ def _measure():
     """(pods, node MiB, MiB per container) of the minikube node now."""
     items = status.pods()
     usage = status.container_usage(items, cpu=False)
-    return items, status.node_usage().mib, {key: used.mib for key, used in usage.items()}
+    node = status.budgeted_mib(status.node_usage(), status.reclaimable_kernel_mib())
+    return items, node, {key: used.mib for key, used in usage.items()}
 
 
 @pytest.fixture(scope="module")

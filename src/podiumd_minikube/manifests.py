@@ -75,8 +75,8 @@ KEYCLOAK_OPERATOR_ENV = {
     "QUARKUS_OPERATOR_SDK_CONCURRENT_RECONCILIATION_THREADS": "2",
     "QUARKUS_OPERATOR_SDK_CONCURRENT_WORKFLOW_THREADS": "2",
 }
-# Solr's default G1 settings replaced: the serial GC lets the heap follow what is in use.
-SOLR_ENV = {"GC_TUNE": "-XX:+UseSerialGC"}
+# Solr's default G1 settings replaced: the serial GC with Keycloak's free ratios gives the heap back after a full GC.
+SOLR_ENV = {"GC_TUNE": "-XX:+UseSerialGC -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30"}
 # zkEnv.sh's ZK_SERVER_HEAP (MB) defaults to 1000. -XX:-UseContainerSupport: the
 # image's JDK 11.0.16 throws a NullPointerException reading cgroup v2 metrics on
 # kernel 7.x (its JMX agent then exits); heap and CPU count are set explicitly.

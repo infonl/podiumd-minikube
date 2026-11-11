@@ -336,7 +336,7 @@ def test_tune_solr_sets_the_solr_and_zookeeper_jvm_env():
     spec: Doc = {"zookeeperRef": {"provided": provided}}
     manifests.tune_solr([{"kind": "SolrCloud", "spec": spec}])
     pod_options = manifests.section(manifests.section(spec, "customSolrKubeOptions"), "podOptions")
-    assert {"name": "GC_TUNE", "value": "-XX:+UseSerialGC"} in pod_options["envVars"]
+    assert {"name": "GC_TUNE", "value": manifests.SOLR_ENV["GC_TUNE"]} in pod_options["envVars"]
     zookeeper_env = manifests.section(provided, "zookeeperPodPolicy")["env"]
     assert {"name": "ZK_SERVER_HEAP", "value": "128"} in zookeeper_env
     assert {"name": "MALLOC_ARENA_MAX", "value": "2"} in zookeeper_env

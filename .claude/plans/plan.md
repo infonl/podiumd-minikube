@@ -10166,3 +10166,17 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
   binaries, 141 and 72 MiB mapped), now counted as active. New: the WAF
   52 MiB, the inway about 90 MiB. --full budget 17 -> 17.5 GiB
   (memory.FULL_BUDGET_MB); baseline refreshed after the next full tier.
+
+## Memory budget without reclaimable kernel caches; Solr heap free ratios (Kees, 2026-11-11)
+
+- The node's working set counted 1.2 GiB of reclaimable slab (dentries and
+  inodes, freed under memory pressure); Open Formulieren alone held 264 MiB
+  of it. `tests/test_memory.py` now checks the node without it
+  (`status.budgeted_mib`); show-cluster-status prints both numbers.
+- Solr's serial GC kept its peak heap committed. `GC_TUNE` adds
+  `-XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30` (`manifests.SOLR_ENV`),
+  as Keycloak. After podiumd-tests' full tier 20261111-171820 (14 min 48 s,
+  no timeouts, nothing Solr-related among its 3 failures): the 3 nodes
+  1006 -> 771 MiB, java RSS 261-294 MiB per node.
+- Baseline refreshed after that tier: node 16733 MiB against the budget
+  (17.5 GiB = 17920 MiB), containers 16552 MiB.

@@ -228,7 +228,7 @@ def test_report_shows_node_profiles_access_and_containers_against_the_baseline(c
     status.report(top=2)
     out = capsys.readouterr().out
     assert "Node        memory 4.0 / 16.0 GiB cap, budget 17.5 GiB, containers 0.3 GiB" in out
-    assert "of which 0.5 GiB kernel caches, freed under memory pressure" in out
+    assert "of which 0.5 GiB kernel caches, freed under memory pressure; 3.5 GiB against the budget" in out
     assert "CPU 1.5 / 6 cores" in out
     assert "Deployed    by deploy --full\nProfiles    kiss\n" in out
     assert "youngest container 60 min ago (settled)" in out
