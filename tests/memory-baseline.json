@@ -1,13 +1,14 @@
 {
   "measured": "2026-11-11T10:35:34+00:00",
   "node_mib": 15473,
-  "containers_mib": 14328,
+  "containers_mib": 14380,
   "containers": {
     "ingress-basic/cert-manager-cainjector/cert-manager-cainjector": 50,
     "ingress-basic/cert-manager-webhook/cert-manager-webhook": 55,
     "ingress-basic/cert-manager/cert-manager-controller": 25,
     "ingress-basic/nginx-gateway-fabric/nginx-gateway": 74,
     "ingress-basic/public-gateway-nginx/nginx": 87,
+    "ingress-basic/waf/waf": 52,
     "kube-system/cilium-operator/cilium-operator": 52,
     "kube-system/cilium/cilium-agent": 173,
     "kube-system/coredns/coredns": 27,

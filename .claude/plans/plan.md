@@ -10029,3 +10029,13 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   15 s ReadTimeout on Open Inwoner's document download (the upstream above);
   the other is a ZAC zaaktype version without zaakNietOntvankelijkResultaattype,
   made on podiumd-tests' side, not the WAF.
+- WAF memory after the full tier (2 nginx workers): working set 52 MiB,
+  memory.current 57 MiB (anon 54); request 256Mi, limit 512Mi; CPU limit 1,
+  throttled 35 of 9359 periods (0.4 s). Added to tests/memory-baseline.json
+  alone: the other containers stayed within the tolerance (node 15473 ->
+  16169 MiB, warm caches after a second tier), so their entries stay.
+- Open Inwoner's web pod has no CPU limit (request 200m) and was never
+  throttled (nr_throttled 0). Its slow requests come from one uWSGI process
+  (8 threads behind one GIL, at most one core of Python) while the node ran
+  at its 8-CPU cap; Prometheus does not scrape cAdvisor, so its per-minute
+  CPU in the tier is not recorded.
