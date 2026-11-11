@@ -9938,6 +9938,12 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   kube-apiserver -129, Loki -58, etcd -37 MiB; up: Alloy +147 (log-file
   cache after the 15-minute tier), office converter +70, Open Formulieren
   worker +38, cert-manager webhook +35, Grafana +32 MiB.
+- That tier's 3 failures (ITA afdeling forward; Open Inwoner search read
+  timeout 15 s; Open Inwoner submit button click timeout 30 s) raised the
+  question whether Open Inwoner's 1 uWSGI process (our capacity setting)
+  changes what the tests see. A second full tier right after it, nothing
+  changed (20261111-105041, 11:50-12:05 CET): 715 passed, 0 failed; all
+  three passed. Kept at 1 process; revisit if they come back.
 
 ### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
 
