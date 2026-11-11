@@ -10239,3 +10239,28 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
 - ITA's reminder CronJob (verlopenContactverzoekHerinneringNotificatie)
   stays off: podiumd 4.10.1 sets it false (DRT-726), ExternalsPodiumD keeps
   that, podiumd-infra has it commented out on kees00 and jim00.
+
+## The node's 484 MiB rise after the bytecode-cache deploy: page cache of gone pods (Kees, 2026-11-11)
+
+- Node against the budget after podiumd-tests' full tier: 16733 MiB at
+  18:34 CET, 17217 MiB at 19:27 CET (17215 at 19:45). Same 93 containers;
+  their working sets (with their slab, as the old baseline) 16552 -> 16198
+  MiB, Open Formulieren web -287. containerd 132 MiB anonymous, its 87
+  shims 478 MiB, kubelet 153 MiB: in line with earlier numbers.
+- The rise is outside the containers: the kubepods cgroups held 700 MiB of
+  active page cache no running container owns (kubepods-burstable 476 MiB,
+  kubepods-besteffort 224 MiB; all containers together 1043 MiB active).
+  A file page stays charged to the cgroup that read it first; when that
+  container goes away, the charge moves up to the parent and stays there,
+  active while running containers keep using the page. Today's two deploys
+  (19:07 replaced 16 Maykin pods, whose old copies had read all their
+  site-packages sources to compile them), the config Jobs and ITA's
+  CronJob put it there.
+- The bytecode cache is not it: the running containers wrote those files
+  and hold them as inactive cache, which the budget does not count.
+- No change: clean file cache, freed under memory pressure, limited to the
+  image files in use; mostly program files running containers really use,
+  as OpenTelemetry's and OpenBao's binaries before, so not subtracted from
+  the budget. The check stays somewhat strict after a day of deploys; a
+  cluster restart resets it. Not measured: which files the 700 MiB hold and
+  each deploy's share (no cgroup numbers from before 18:34).
