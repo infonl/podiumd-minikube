@@ -82,6 +82,10 @@ LOG_FIELDS = {
     "seconds": "$request_time",
     "upstream": "$upstream_addr",
     "upstream_status": "$upstream_status",
+    # Not in the Application Gateway's log: tells the WAF's own time from NGF's and the apps'.
+    "upstream_seconds": "$upstream_response_time",
+    "body_bytes": "$request_length",
+    "worker": "$pid",
     "sni": "$ssl_server_name",
     "client_verify": "$ssl_client_verify",
 }

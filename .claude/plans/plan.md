@@ -10013,3 +10013,14 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   frankgateway.networkPolicies.enabled and ingressNamespace ingress-basic,
   the test CA and identities in keyvault.py, the 7-case check), and the
   WAF's log after podiumd-tests' full tier.
+- WAF under podiumd-tests' full tier (2026-11-11 14:41-14:59 CET, 23267
+  requests): the WAF's own time (`seconds` minus `upstream_seconds`, the
+  latter logged for this) is p50 0 ms, p99 9 ms, max 157 ms; both nginx
+  workers carry half the load and half the slow requests. All 255 requests
+  over 5 s wait on the upstream: Open Inwoner 14:41-14:46 (pages and its
+  static bundles 16-26 s, one uWSGI process with 8 threads while the node
+  ran at 440-780% of its 800% CPU cap), ZAC 14:50-14:53. The WAF needs no
+  change; its timeouts in the first tier came from upstream, not from
+  ModSecurity's body inspection. Audit log: one 920340 on ZAC's WebDAV.
+  The container log rotates at 10 MiB (about 20 minutes of a full tier):
+  read the rotated file on the node, not `kubectl logs`.
