@@ -9944,6 +9944,11 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   changes what the tests see. A second full tier right after it, nothing
   changed (20261111-105041, 11:50-12:05 CET): 715 passed, 0 failed; all
   three passed. Kept at 1 process; revisit if they come back.
+- Alloy's +147 MiB in that baseline (62 -> 209 MiB) checked, 12:1x CET
+  after the second tier: memory.current 234 MiB = anon 65 + file 164
+  (active_file 146) + kernel 4. The growth is the page cache of the log
+  files Alloy tails (the working set counts active file pages); anon is
+  as before (74 MiB in the memory-tuning table). No leak; nothing changed.
 
 ### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
 
