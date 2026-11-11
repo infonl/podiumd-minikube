@@ -160,17 +160,19 @@ _SOURCE = re.compile(r"^# Source: ([^/]+)/(?:charts/([^/]+)/)?", re.MULTILINE)
 _TEMPLATE_SOURCE = re.compile(r"^# Source: \S*/templates/", re.MULTILINE)
 
 
-_ELASTICSEARCH_KIND = re.compile(r"^kind:\s*[\"']?Elasticsearch[\"']?\s*$", re.MULTILINE)
+def of_kind(text: str, kind: str) -> list[Doc]:
+    """Return the documents of kind in rendered text, parsing no other document (a --full render takes 2 s)."""
+    pattern = re.compile(rf"^kind:\s*[\"']?{re.escape(kind)}[\"']?\s*$", re.MULTILINE)
+    chunks = [chunk for chunk in re.split(r"^---$", text, flags=re.MULTILINE) if pattern.search(chunk)]
+    return [doc for chunk in chunks if (doc := parse_yaml(chunk)) and doc.get("kind") == kind]
 
 
 def images(text: str) -> list[str]:
     """Sorted unique images in rendered text, including those operators start from their resources."""
     found = set(_IMAGE_LINE.findall(text)) | set(_RELOADER_ARG.findall(text))
     found |= {f"{repository}:{tag}" for _, repository, tag in _REPOSITORY_TAG.findall(text)}
-    # Only Elasticsearch documents are parsed: loading every document took 2 s per --full render.
-    for chunk in re.split(r"^---$", text, flags=re.MULTILINE):
-        doc: Doc | None = parse_yaml(chunk) if _ELASTICSEARCH_KIND.search(chunk) else None
-        spec = section(doc, "spec") if doc and doc.get("kind") == "Elasticsearch" else {}
+    for doc in of_kind(text, "Elasticsearch"):
+        spec = section(doc, "spec")
         if spec.get("version") and not spec.get("image"):
             found.add(f"{_ELASTICSEARCH_IMAGE}:{spec['version']}")
     return sorted(found)
@@ -193,8 +195,8 @@ def _mapping(node: Doc, *keys: str) -> Doc:
 
 def find(docs: list[Doc], kind: str, name: str) -> Doc | None:
     """Return the doc of kind called name, or None."""
-    of_kind = (doc for doc in docs if doc.get("kind") == kind)
-    return next((doc for doc in of_kind if name_of(doc) == name), None)
+    matching = (doc for doc in docs if doc.get("kind") == kind)
+    return next((doc for doc in matching if name_of(doc) == name), None)
 
 
 def name_of(doc: Doc) -> str:

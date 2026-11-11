@@ -7,6 +7,7 @@ data directory of another major.
 
 import re
 
+from dataclasses import dataclass
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
@@ -94,14 +95,37 @@ def _connected(statements: list[str]) -> list[tuple[str, str]]:
     return found
 
 
-def _names(query: str) -> set[str]:
-    return set(_psql(query).split())
+# One query for what every step reads: the major, each database's owner, the roles.
+FACTS_SQL = (
+    "select 'major|' || current_setting('server_version_num')::int / 10000"
+    " union all select 'database|' || datname || '|' || pg_get_userbyid(datdba)"
+    " from pg_database where datname <> 'template0'"
+    " union all select 'role|' || rolname from pg_roles;"
+)
 
 
-def _psql(query: str) -> str:
-    return kube.kubectl(
-        "exec", "-n", NAMESPACE, kube.first_pod("app=postgres"), "--", "psql", "-U", "postgres", "-tA", "-c", query
-    )  # fmt: skip
+@dataclass(frozen=True)
+class Server:
+    """The running Postgres: its pod, major, databases with their owners, and roles."""
+
+    pod: str
+    major: int
+    owners: dict[str, str]
+    roles: set[str]
+
+
+def server() -> Server:
+    """Return the running Postgres, read with one psql call."""
+    pod = kube.first_pod("app=postgres")
+    rows = [line.split("|") for line in _psql(pod, "-tA", "-c", FACTS_SQL).splitlines() if line]
+    major = next(int(row[1]) for row in rows if row[0] == "major")
+    owners = {row[1]: row[2] for row in rows if row[0] == "database"}
+    return Server(pod, major, owners, {row[1] for row in rows if row[0] == "role"})
+
+
+def _psql(pod: str, *args: str, stdin: str | None = None) -> str:
+    """Return psql's stdout, run as postgres in pod with args."""
+    return kube.kubectl("exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", *args, stdin=stdin)
 
 
 def major_of(image: str) -> int:
@@ -120,36 +144,45 @@ def restore_errors(stderr: str) -> list[str]:
 
 def prepare(render: manifests.Render) -> None:
     """Run the database steps before an upgrade: major version, renames, missing databases, Azure's settings."""
-    migrate_major(render)
-    rename_databases()
-    create_missing_databases()
-    align_with_azure()
-    rename_rows()
+    if not kube.is_present("deployment/postgres"):
+        return
+    current = server()
+    # A step that changed the server is followed by a fresh read for the next one.
+    if migrate_major(render, current) is not None:
+        current = server()
+    if rename_databases(current):
+        current = server()
+    if create_missing_databases(current):
+        current = server()
+    align_with_azure(current)
+    rename_rows(current)
 
 
-def migrate_major(render: manifests.Render) -> None:
-    """Dump every database and restore it into a fresh data directory when the rendered major differs.
+def migrate_major(render: manifests.Render, current: Server) -> Path | None:
+    """Dump every database and restore it into a fresh data directory when the rendered major differs; return the dump.
 
     Clients are restarted afterwards; writes between the dump and the restore are lost.
     """
     rendered = render.named("Deployment", "postgres")
-    if rendered is None or not kube.is_present("deployment/postgres"):
-        return
+    if rendered is None:
+        return None
     template = rendered["spec"]["template"]
     image = template["spec"]["containers"][0]["image"]
-    wanted, running = major_of(image), int(_psql("show server_version_num").strip()) // 10000
+    wanted, running = major_of(image), current.major
     if wanted == running:
-        return
+        return None
     print(f"\nPostgres {running} -> {wanted}: dump, fresh data directory, restore...")
     DUMP_DIR.mkdir(exist_ok=True)
     dump = DUMP_DIR / f"pg{running}-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.sql"
-    pod = kube.first_pod("app=postgres")
-    dump.write_text(kube.kubectl("exec", "-n", NAMESPACE, pod, "--", "pg_dumpall", "-U", "postgres"), encoding="utf-8")
+    dump.write_text(
+        kube.kubectl("exec", "-n", NAMESPACE, current.pod, "--", "pg_dumpall", "-U", "postgres"), encoding="utf-8"
+    )
     print(f"Dumped to {dump}.")
     provision.load_images([image])
     kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump([rendered]))
     kube.kubectl_shown("rollout", "status", "deployment/postgres", "-n", NAMESPACE, "--timeout=600s")
     restore(dump, wanted, render)
+    return dump
 
 
 def restore(dump: Path, major: int, render: manifests.Render) -> None:
@@ -181,37 +214,27 @@ def restore(dump: Path, major: int, render: manifests.Render) -> None:
     print(f"Postgres {major} restored; old data directories removed, dump kept in {dump}.")
 
 
-def create_missing_databases() -> None:
-    """Create the init SQL's databases that the running Postgres lacks."""
-    if not kube.is_present("deployment/postgres"):
-        return
-    databases = _names("select datname from pg_database;")
-    roles = _names("select rolname from pg_roles;")
-    missing, script = missing_sql(INIT_SQL.read_text(encoding="utf-8"), databases, roles)
+def create_missing_databases(current: Server) -> list[str]:
+    """Create the init SQL's databases that the running Postgres lacks; return their names."""
+    missing, script = missing_sql(INIT_SQL.read_text(encoding="utf-8"), set(current.owners), current.roles)
     if not missing:
-        return
+        return []
     kube.kubectl_shown(
-        "exec", "-i", "-n", NAMESPACE, kube.first_pod("app=postgres"), "--",
+        "exec", "-i", "-n", NAMESPACE, current.pod, "--",
         "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-q", "-f", "-",
         stdin=script,
     )  # fmt: skip
     print(f"Created database(s) {', '.join(missing)} from {INIT_SQL.name}.")
+    return missing
 
 
-def align_with_azure() -> None:
+def align_with_azure(current: Server) -> None:
     """Give each app database to postgres with ALL granted to its owner, and install the extension allow-list.
 
     As the init SQL, for clusters provisioned before it; idempotent. Also drops
     openzaak's unused "uuid-ossp", which Azure does not allow.
     """
-    if not kube.is_present("deployment/postgres"):
-        return
-    owners = dict(
-        line.split("|")
-        for line in _psql("select datname, pg_get_userbyid(datdba) from pg_database where datname <> 'template0';")
-        .strip()
-        .splitlines()
-    )
+    owners = current.owners
     script = [r"\set ON_ERROR_STOP on"]
     for database, owner in owners.items():
         script += [f"\\c {database}", ALLOW_LIST_SQL.read_text(encoding="utf-8")]
@@ -223,28 +246,21 @@ def align_with_azure() -> None:
             ]
     if "openzaak" in owners:
         script += [r"\c openzaak", 'DROP EXTENSION IF EXISTS "uuid-ossp";']
-    pod = kube.first_pod("app=postgres")
-    kube.kubectl(
-        "exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-q", "-f", "-", stdin="\n".join(script)
-    )
+    _psql(current.pod, "-q", "-f", "-", stdin="\n".join(script))
     moved = sorted(database for database, owner in owners.items() if owner != "postgres")
     if moved:
         print(f"Databases given to postgres, with grants to their app role: {', '.join(moved)}")
 
 
-def rename_databases() -> None:
-    """Rename RENAMED_DATABASES and their roles in place; run before create_missing_databases."""
-    if not kube.is_present("deployment/postgres"):
-        return
-    databases = _names("select datname from pg_database;")
-    pod = kube.first_pod("app=postgres")
+def rename_databases(current: Server) -> list[str]:
+    """Rename RENAMED_DATABASES and their roles in place; return the old names renamed."""
+    renamed: list[str] = []
     for old, new in RENAMED_DATABASES.items():
-        if old not in databases or new in databases:
+        if old not in current.owners or new in current.owners:
             continue
         # Postgres renames no database with sessions; its clients reconnect after the deploy rolls them.
-        kube.kubectl(
-            "exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-q", "-v", "ON_ERROR_STOP=1",
-            "-v", f"old={old}", "-v", f"new={new}", "-f", "-",
+        _psql(
+            current.pod, "-q", "-v", "ON_ERROR_STOP=1", "-v", f"old={old}", "-v", f"new={new}", "-f", "-",
             stdin=(
                 'ALTER DATABASE :"old" ALLOW_CONNECTIONS false;\n'
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'old';\n"
@@ -255,38 +271,57 @@ def rename_databases() -> None:
             ),
         )  # fmt: skip
         print(f"Renamed database and role {old} to {new}.")
+        renamed.append(old)
+    return renamed
 
 
-def rename_rows() -> None:
+def rename_rows(current: Server) -> None:
     """Apply RENAMES in the databases and tables that exist; an old value whose new one exists stays."""
-    if not kube.is_present("deployment/postgres"):
-        return
-    databases = _names("select datname from pg_database;")
-    pod = kube.first_pod("app=postgres")
+    found = _column_values(current)
+    for (database, table, column), values in found.items():
+        for old, new in RENAMES[database][table, column].items():
+            if old in values and new not in values:
+                _psql(
+                    current.pod, "-d", database, "-v", "ON_ERROR_STOP=1",
+                    "-v", f"table={table}", "-v", f"column={column}", "-v", f"old={old}", "-v", f"new={new}", "-f", "-",
+                    stdin='UPDATE :"table" SET :"column" = :\'new\' WHERE :"column" = :\'old\';\n',
+                )  # fmt: skip
+                print(f"Renamed {table}.{column} {old} to {new} in {database}.")
+
+
+# A row of rename_rows_script's output: database|table|column|values.
+_FIELDS = 4
+
+
+def rename_rows_script(databases: set[str]) -> str:
+    r"""Return the psql script that prints "database|table|column|values" for each RENAMES column that exists.
+
+    A database created this deploy has no tables until its app migrates: `\if` skips them.
+    """
+    lines: list[str] = []
     for database, tables in RENAMES.items():
         if database not in databases:
             continue
-        psql = ["exec", "-i", "-n", NAMESPACE, pod, "--", "psql", "-U", "postgres", "-d", database, "-tA"]
-        for (table, column), renames in tables.items():
-            # A database created this deploy has no tables until its app migrates.
-            if kube.kubectl(*psql, "-c", f"select to_regclass({table!r});").strip():
-                _rename_values(psql, (table, column), renames, database)
+        lines.append(f"\\c {database}")
+        for table, column in tables:
+            # Names from RENAMES, never from input.
+            values = f"coalesce(string_agg({column}::text, ' '), '')"
+            select = f"select '{database}|{table}|{column}|' || {values} from {table};"  # noqa: S608  # nosec B608
+            lines.extend(
+                [f"select to_regclass({table!r}) is not null as found \\gset", r"\if :found", select, r"\endif"]
+            )
+    return "".join(f"{line}\n" for line in lines)
 
 
-def _rename_values(
-    psql: list[str],
-    target: tuple[str, str],
-    renames: dict[str, str],
-    database: str,
-) -> None:
-    """Apply renames to target's (table, column) values through psql; an old value whose new one exists stays."""
-    table, column = target
-    names = ["-v", f"table={table}", "-v", f"column={column}"]
-    values = kube.kubectl(*psql, *names, "-f", "-", stdin='select :"column" from :"table";\n').split()
-    for old, new in renames.items():
-        if old in values and new not in values:
-            kube.kubectl(
-                *psql, *names, "-v", "ON_ERROR_STOP=1", "-v", f"old={old}", "-v", f"new={new}", "-f", "-",
-                stdin='UPDATE :"table" SET :"column" = :\'new\' WHERE :"column" = :\'old\';\n',
-            )  # fmt: skip
-            print(f"Renamed {table}.{column} {old} to {new} in {database}.")
+def _column_values(current: Server) -> dict[tuple[str, str, str], set[str]]:
+    """Return the values of each RENAMES column that exists, read with one psql call."""
+    script = rename_rows_script(set(current.owners))
+    if not script:
+        return {}
+    output = _psql(current.pod, "-q", "-tA", "-v", "ON_ERROR_STOP=1", "-f", "-", stdin=script)
+    rows = [line.split("|", _FIELDS - 1) for line in output.splitlines()]
+    complete = [row for row in rows if len(row) == _FIELDS]
+    found: dict[tuple[str, str, str], set[str]] = {}
+    for database, table, column, values in complete:
+        found[database, table, column] = set(values.split())
+    return found

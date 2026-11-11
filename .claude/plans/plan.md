@@ -9959,6 +9959,15 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   monitoring-logging to .chart-sources/monitoring-logging-0f40c6df (the
   same commit, feature/monitoring-logging-1.0.19 with #697; 1.0.19 is not
   published); all three release digests unchanged.
+- Pre-upgrade leftovers (Kees: inefficient, worth doing): postgres.prepare
+  checks presence and finds the pod once, reads major, owners and roles
+  with one query (postgres.server, again only after a step changed
+  something) and every RENAMES column with one psql script (`\if` skips a
+  table an app has not migrated yet): 25 processes, 3.3 s -> 5, 0.6 s.
+  hosts.chart_hosts parses only the Ingresses (no fixup changes a host;
+  manifests.of_kind, which images uses for Elasticsearch too): 3.5 -> 1.7
+  s, same hosts. Live no-change deploys at 14:01 ran on a host at load 44,
+  so their totals (39 and 49 s) say nothing; the process counts do.
 
 ### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
 

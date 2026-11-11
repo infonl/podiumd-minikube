@@ -2,7 +2,6 @@
 
 import json
 
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -68,7 +67,11 @@ def test_restore_errors_skip_what_the_init_sql_created():
 
 
 POD = "postgres-0"
-PSQL = ("kubectl", "exec", "-n", NAMESPACE, POD, "--", "psql", "-U", "postgres", "-tA", "-c")
+PSQL = ("kubectl", "exec", "-i", "-n", NAMESPACE, POD, "--", "psql", "-U", "postgres")
+
+
+def _server(owners: dict[str, str] | None = None, roles: set[str] | None = None, major: int = 16) -> postgres.Server:
+    return postgres.Server(POD, major, owners or {}, roles or set())
 
 
 @pytest.fixture
@@ -79,14 +82,30 @@ def cluster(fake_run: FakeRun) -> FakeRun:
     return fake_run
 
 
-@pytest.mark.parametrize(
-    "step",
-    [postgres.create_missing_databases, postgres.align_with_azure, postgres.rename_databases, postgres.rename_rows],
-)
-def test_steps_skip_a_cluster_without_postgres(fake_run: FakeRun, step: Callable[[], None]):
+def test_prepare_skips_a_cluster_without_postgres(fake_run: FakeRun):
     fake_run.on("kubectl", "get", "deployment/postgres", returncode=1)
-    step()
+    postgres.prepare(_render(16))
     assert fake_run.calls == [["kubectl", "get", "deployment/postgres", "-n", NAMESPACE]]
+
+
+def test_server_reads_major_owners_and_roles_with_one_query(cluster: FakeRun):
+    rows = "major|15\ndatabase|openzaak|postgres\ndatabase|objects|objects\nrole|openzaak\nrole|objects\n"
+    cluster.on(*PSQL, "-tA", "-c", postgres.FACTS_SQL, stdout=rows)
+    assert postgres.server() == postgres.Server(
+        POD, 15, {"openzaak": "postgres", "objects": "objects"}, {"openzaak", "objects"}
+    )
+
+
+@pytest.mark.parametrize(("facts", "reads"), [("major|16\n", 1), ("major|16\ndatabase|objecttypes|objecttypes\n", 2)])
+def test_prepare_reads_the_server_again_only_after_a_change(
+    cluster: FakeRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, facts: str, reads: int
+):
+    monkeypatch.setattr(postgres, "INIT_SQL", tmp_path / "init.sql")
+    postgres.INIT_SQL.write_text("", encoding="utf-8")
+    cluster.on("kubectl", "get", "deployment/postgres")
+    cluster.on(*PSQL, "-tA", "-c", postgres.FACTS_SQL, stdout=facts)
+    postgres.prepare(_render(16))
+    assert len(cluster.ran(*PSQL, "-tA", "-c", postgres.FACTS_SQL)) == reads
 
 
 @pytest.mark.parametrize(("databases", "script"), [("a\n", "CREATE ROLE b WITH LOGIN"), ("a\nb\n", None)])
@@ -95,9 +114,8 @@ def test_create_missing_databases_runs_the_missing_part_of_the_init_sql(
 ):
     monkeypatch.setattr(postgres, "INIT_SQL", tmp_path / "init.sql")
     postgres.INIT_SQL.write_text(INIT_SQL, encoding="utf-8")
-    cluster.on(*PSQL, "select datname from pg_database;", stdout=databases)
-    cluster.on(*PSQL, "select rolname from pg_roles;", stdout="a\n")
-    postgres.create_missing_databases()
+    current = _server(dict.fromkeys(databases.split(), "postgres"), {"a"})
+    assert bool(postgres.create_missing_databases(current)) == (script is not None)
     created = [stdin for call, stdin in zip(cluster.calls, cluster.stdins, strict=True) if "ON_ERROR_STOP=1" in call]
     if script is None:
         assert created == []
@@ -108,8 +126,8 @@ def test_create_missing_databases_runs_the_missing_part_of_the_init_sql(
 
 
 def test_rename_databases_renames_only_an_old_name_without_its_new_one(cluster: FakeRun):
-    cluster.on(*PSQL, "select datname from pg_database;", stdout="objects\nobjecten\nobjecttypes\n")
-    postgres.rename_databases()
+    owners = dict.fromkeys(["objects", "objecten", "objecttypes"], "postgres")
+    assert postgres.rename_databases(_server(owners)) == ["objecttypes"]
     renames = [call[call.index("-f") - 4 :] for call in cluster.ran("kubectl", "exec", "-i")]
     assert renames == [["-v", "old=objecttypes", "-v", "new=objecttypen", "-f", "-"]]
 
@@ -124,15 +142,15 @@ def test_rename_rows_updates_only_old_values_whose_new_one_is_absent(cluster: Fa
             "absent": {("t3", "c3"): {"x": "y"}},
         },
     )
-    cluster.on(*PSQL, "select datname from pg_database;", stdout="db1\ndb2\n")
-    db1 = ("kubectl", "exec", "-i", "-n", NAMESPACE, POD, "--", "psql", "-U", "postgres", "-d", "db1", "-tA")
-    cluster.on(*db1, "-c", "select to_regclass('t');", stdout="t\n")
-    cluster.on(*db1, "-v", "table=t", "-v", "column=c", "-f", "-", stdout="x\np\nq\n")
-    postgres.rename_rows()
-    updates = [call[-6:] for call in cluster.calls if "ON_ERROR_STOP=1" in call]
+    # db2's table does not exist yet: psql prints no row for it.
+    cluster.on(*PSQL, "-q", "-tA", stdout="db1|t|c|x p q\n")
+    postgres.rename_rows(_server(dict.fromkeys(["db1", "db2"], "postgres")))
+    script = cluster.stdins[cluster.calls.index(cluster.ran(*PSQL, "-q", "-tA")[0])]
+    assert script is not None
+    assert r"\c db2" in script
+    assert "absent" not in script
+    updates = [call[-6:] for call in cluster.ran(*PSQL, "-d")]
     assert updates == [["-v", "old=x", "-v", "new=y", "-f", "-"]]
-    assert not [call for call in cluster.calls if "-d" in call and call[call.index("-d") + 1] == "absent"]
-    assert not [call for call in cluster.calls if "table=t2" in call]
 
 
 def _render(major: int) -> manifests.Render:
@@ -150,8 +168,7 @@ def _render(major: int) -> manifests.Render:
     "render", [manifests.Render(docs=[], large_configmaps=[]), _render(16)], ids=["not rendered", "same major"]
 )
 def test_migrate_major_leaves_postgres_alone(cluster: FakeRun, render: manifests.Render):
-    cluster.on(*PSQL, "show server_version_num", stdout="160004\n")
-    postgres.migrate_major(render)
+    assert postgres.migrate_major(render, _server()) is None
     assert not cluster.ran("kubectl", "exec", "-n", NAMESPACE, POD, "--", "pg_dumpall")
     assert not cluster.ran("kubectl", "apply")
 
@@ -162,11 +179,10 @@ def test_migrate_major_dumps_restores_and_restarts_the_clients(
     monkeypatch.setattr(postgres, "DUMP_DIR", tmp_path / "dumps")
     loaded: list[list[str]] = []
     monkeypatch.setattr(provision, "load_images", loaded.append)
-    cluster.on(*PSQL, "show server_version_num", stdout="160004\n")
     cluster.on("kubectl", "exec", "-n", NAMESPACE, POD, "--", "pg_dumpall", stdout="DUMP")
     cluster.on("kubectl", "exec", "-i", "-n", NAMESPACE, POD, "--", "psql", stderr='ERROR:  role "a" already exists\n')
     cluster.on("kubectl", "get", "statefulset/solr", returncode=1)
-    postgres.migrate_major(_render(17))
+    assert postgres.migrate_major(_render(17), _server()) is not None
     (dump,) = (tmp_path / "dumps").glob("pg16-*.sql")
     assert dump.read_text(encoding="utf-8") == "DUMP"
     assert loaded == [["postgis/postgis:17-3.5"]]
@@ -192,9 +208,7 @@ def test_restore_errors_keep_the_dump_and_the_old_data(cluster: FakeRun, tmp_pat
 
 
 def test_align_with_azure_moves_app_databases_and_installs_the_allow_list_everywhere(cluster: FakeRun):
-    query = "select datname, pg_get_userbyid(datdba) from pg_database where datname <> 'template0';"
-    cluster.on(*PSQL, query, stdout="template1|postgres\nopenzaak|openzaak\n")
-    postgres.align_with_azure()
+    postgres.align_with_azure(_server({"template1": "postgres", "openzaak": "openzaak"}))
     [script] = [stdin for call, stdin in zip(cluster.calls, cluster.stdins, strict=True) if call[-2:] == ["-f", "-"]]
     assert script is not None
     assert script.count("CREATE EVENT TRIGGER azure_extension_allow_list") == 2
