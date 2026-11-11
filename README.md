@@ -168,7 +168,7 @@ deploy applied (its command and the podiumd and monitoring-logging selections,
 from ConfigMap `podiumd-minikube-deployed`) and the running containers per chart.
 
 Budgets (`tests/test_memory.py`): the default profile at most 9 GiB for the
-minikube node (measured 7.0 GiB, 2026-10-14), `--full` at most 17 GiB. Measured with `--full` after a full
+minikube node (measured 7.0 GiB, 2026-10-14), `--full` at most 17.5 GiB (17 until the WAF and the inway, 2026-11-11). Measured with `--full` after a full
 podiumd-tests run (2026-10-20, with Open VTB, ZaakBrug, the Office add-in and
 the exporters): node 16.0 GiB, containers 13.9 GiB, of which ZaakBrug 0.8 GiB
 and monitoring-logging (profile `metrics`) about 1.2 GiB.
@@ -197,7 +197,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | Command | What it does |
 |---|---|
 | `podiumd-minikube provision-cluster` | Starts minikube (sized for the full stack) with Cilium, installs NGINX Gateway Fabric, pre-pulls every image (only those the host lacks), runs `helm dependency update`; removes the host's older tags of the chart's image repositories |
-| `podiumd-minikube deploy [--full] [--otel] [--skip-roles]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml` and installs the Helm releases (`--full` for every profile; see "Helm releases" below). On a fresh install ZAC starts only once `openzaak-config` and `create-required-catalogi-job` have finished: its boot reads what they create and does not retry (known issues zac-8, podiumd-chart-30). The realm import creates the realm and client roles and the groups (`keycloak.config.skipRoles/skipGroups: false`, as the chart docs advise for O/T); `--skip-roles` uses the chart default true instead, as long-lived realms do; a fresh realm then lacks the roles and podiumd-tests' bootstrap fails. `--otel`: the Maykin apps and ZAC send OpenTelemetry metrics to the metrics profile's collector, as ExternalsPodiumD dim1/info/mayk (off by default: about 50 MiB per Maykin web pod, and `--full` is near its 17 GiB budget). Warns about fixed-name Jobs ExternalsPodiumD does not delete before `helm upgrade`. An image whose chart digest changed under the same tag is pulled by digest and loaded under its tag, and its workloads restart (the digests in annotation `podiumd-minikube/image-digests`; minikube runs images by tag) |
+| `podiumd-minikube deploy [--full] [--otel] [--skip-roles]` | Syncs `charts/*.tgz` against `.podiumd-versions.yaml` and installs the Helm releases (`--full` for every profile; see "Helm releases" below). On a fresh install ZAC starts only once `openzaak-config` and `create-required-catalogi-job` have finished: its boot reads what they create and does not retry (known issues zac-8, podiumd-chart-30). The realm import creates the realm and client roles and the groups (`keycloak.config.skipRoles/skipGroups: false`, as the chart docs advise for O/T); `--skip-roles` uses the chart default true instead, as long-lived realms do; a fresh realm then lacks the roles and podiumd-tests' bootstrap fails. `--otel`: the Maykin apps and ZAC send OpenTelemetry metrics to the metrics profile's collector, as ExternalsPodiumD dim1/info/mayk (off by default: about 50 MiB per Maykin web pod, and `--full` is near its 17.5 GiB budget). Warns about fixed-name Jobs ExternalsPodiumD does not delete before `helm upgrade`. An image whose chart digest changed under the same tag is pulled by digest and loaded under its tag, and its workloads restart (the digests in annotation `podiumd-minikube/image-digests`; minikube runs images by tag) |
 | `podiumd-minikube show-cluster-status` | Node and per-container memory and CPU (against the budget and `tests/memory-baseline.json`), the last deploy, running containers per chart, profiles, recent restarts and failed Jobs, tunnel, lock and disk; reads only (`--top N`, `--all`) |
 | `podiumd-minikube start-cluster` | After a reboot: starts minikube, waits until every pod reports its state since the start and the apps are ready, restarts ZAC once if its boot failed (Open Zaak was down), then runs `setup-tunnel` |
 | `podiumd-minikube cluster-lock` | Shows, takes, releases or breaks the lock on the shared cluster; `run` holds it around a command (see "Shared cluster: the lock") |
@@ -339,7 +339,7 @@ profile combinations a few times.** Usually an under-provisioned minikube
 VM thrashing under memory pressure — check with `docker stats minikube`
 or `minikube ssh -- free -h`. `provision-cluster` sizes the node at half the
 memory Docker sees (override with `MINIKUBE_MEMORY` in MB); `deploy --full` and
-`provision-cluster` warn when the running node is below the 17 GiB a
+`provision-cluster` warn when the running node is below the 17.5 GiB a
 `deploy --full` needs, and print the command to raise it live without
 restarting:
 

@@ -227,7 +227,7 @@ def cluster(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 def test_report_shows_node_profiles_access_and_containers_against_the_baseline(capsys: pytest.CaptureFixture[str]):
     status.report(top=2)
     out = capsys.readouterr().out
-    assert "Node        memory 4.0 / 16.0 GiB cap, budget 17.0 GiB, containers 0.3 GiB" in out
+    assert "Node        memory 4.0 / 16.0 GiB cap, budget 17.5 GiB, containers 0.3 GiB" in out
     assert "of which 0.5 GiB kernel caches, freed under memory pressure" in out
     assert "CPU 1.5 / 6 cores" in out
     assert "Deployed    by deploy --full\nProfiles    kiss\n" in out

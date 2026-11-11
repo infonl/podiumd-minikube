@@ -814,9 +814,8 @@ podiumd:
     settings:
       # As ExternalsPodiumD (admins sign in through Keycloak).
       disable2fa: true
-      # Laptop budget: 1 web process (podiumd sets 2); podiumd's uwsgi threads stay.
-      uwsgi:
-        processes: 1
+      # podiumd's 2 web processes: with 1 (4 threads, one core of Python) ZAC's
+      # notification handling in a full tier queued Open Zaak's requests.
       # Required: Django refuses every request without SECRET_KEY.
       secretKey: openZaakSecretKey
       # As ExternalsPodiumD: the public host, its nginx Service, and two proxies (edge, nginx).
@@ -1192,12 +1191,14 @@ podiumd:
             - domain: openinwoner.local
               name: Open Inwoner
     settings:
-      # Laptop budget: 1 web process (image default 4); it recycles in
-      # milliseconds without --lazy-apps (manifests.fork_open_inwoner_workers).
+      # Laptop budget: 2 web processes (image default 4), forked without
+      # --lazy-apps (manifests.fork_open_inwoner_workers), so they share the
+      # app. One is not enough: a recycling worker first finishes its running
+      # requests, and one slow request left nothing serving (70 s, liveness kill).
       # Threads (8) and the recycle every 100 requests stay the image's, as
       # ExternalsPodiumD: fewer hid a hang.
       uwsgi:
-        processes: 1
+        processes: 2
       secretKey: openInwonerSecretKey
       allowedHosts: openinwoner.local,openinwoner-nginx.podiumd.svc.cluster.local
       isHttps: true

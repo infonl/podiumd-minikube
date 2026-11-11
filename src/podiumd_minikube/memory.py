@@ -14,10 +14,10 @@ from podiumd_minikube.paths import PROFILE
 MIB = 1024**2
 # Share of the memory Docker sees (the host, or Docker Desktop's VM).
 HOST_FRACTION = 0.5
-# .claude/memory/laptop-resources.md: the default profile within 9 GiB, --full within 17 GiB.
+# .claude/memory/laptop-resources.md: the default profile within 9 GiB, --full within 17.5 GiB.
 # tests/test_memory.py holds usage to them; a --full node needs at least the --full budget.
 DEFAULT_BUDGET_MB = 9 * 1024
-FULL_BUDGET_MB = 17 * 1024
+FULL_BUDGET_MB = 17 * 1024 + 512
 # The host kernel's transparent huge pages ("always") keep heap memory the Go runtime
 # has released charged until memory runs short: containers, control plane, node services.
 GO_NO_HUGE_PAGES = {"GODEBUG": "disablethp=1"}
@@ -58,9 +58,9 @@ def check(*, full: bool) -> None:
     cap = node_mb()
     if not full or not cap or cap >= FULL_BUDGET_MB:
         return
-    raise_to = max(wanted(), FULL_BUDGET_MB) // 1024
+    raise_to = -(-max(wanted(), FULL_BUDGET_MB) // 1024)
     print(
-        f"WARNING: minikube profile {PROFILE!r} has {cap // 1024} GiB, below the ~{FULL_BUDGET_MB // 1024} GiB "
+        f"WARNING: minikube profile {PROFILE!r} has {cap // 1024} GiB, below the ~{FULL_BUDGET_MB / 1024:g} GiB "
         f"a deploy --full needs. Raise it live: docker update --memory={raise_to}g --memory-swap=-1 {PROFILE} "
         "(lost on `minikube delete`).",
         file=sys.stderr,

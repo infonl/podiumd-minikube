@@ -10140,3 +10140,29 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
 - Memory after the day's deploys: node 17531 MiB, over the 17408 budget
   right after a deploy; otel-collector 35 -> 174 MiB and OpenBao 29 ->
   101 MiB above the baseline. To re-measure settled.
+
+## Open Zaak 2 processes, Open Inwoner 2 forked processes, --full budget 17.5 GiB (Kees, 2026-11-11)
+
+- ZAC's read timeouts in full tiers came from Open Zaak's capacity: at
+  16:36-16:38 CET ZAC made about 1000 Open Zaak calls a minute (mostly while
+  handling notification callbacks from test setup and cleanup) and Open Zaak's
+  response times summed 1157 s in one minute (19 requests in flight on 1
+  process x 4 threads, one core of Python). Open Zaak back to podiumd's 2
+  processes (our override removed). Tier 20261111-161334: ZAC read timeouts
+  8 -> 1, the tier 19 -> 15 minutes.
+- Open Inwoner in the same tier: a stall of about 70 s from 17:15:57 CET and a
+  liveness kill. The worker reached its 100 requests while an eHerkenning
+  callback hung (35 s+); uWSGI lets a recycling worker finish its running
+  requests before it forks the next, so the single process accepted nothing
+  ("The work of process 2724 is done", no respawn, then SIGTERM). Without
+  --lazy-apps a second worker is cheap (forked from the loaded master), so 2
+  processes again: right after the deploy the container used 407 MiB.
+- KISS's company search timeouts (16:17-16:22 UTC): the outway waited 15 s
+  on KvK's external test API (api.kvk.nl/test); 0.15 s again afterwards.
+  Not ours.
+- Memory, settled after the day's deploys: node 17.1 GiB, of which 1.2 GiB
+  kernel caches. OpenTelemetry collector and OpenBao own memory unchanged
+  (anon 34 and 30 MiB); the rest is their program text (341 MB and 182 MB
+  binaries, 141 and 72 MiB mapped), now counted as active. New: the WAF
+  52 MiB, the inway about 90 MiB. --full budget 17 -> 17.5 GiB
+  (memory.FULL_BUDGET_MB); baseline refreshed after the next full tier.

@@ -27,7 +27,9 @@ def test_wanted_is_half_of_what_docker_sees(fake_run: FakeRun, monkeypatch: pyte
     assert memory.wanted() == 32 * 1024
 
 
-@pytest.mark.parametrize(("full", "cap_gib", "warned"), [(True, 8, True), (True, 17, False), (False, 8, False)])
+@pytest.mark.parametrize(
+    ("full", "cap_gib", "warned"), [(True, 8, True), (True, 17, True), (True, 18, False), (False, 8, False)]
+)
 def test_check_warns_only_for_a_small_full_node(
     fake_run: FakeRun, capsys: pytest.CaptureFixture[str], *, full: bool, cap_gib: int, warned: bool
 ):
@@ -36,4 +38,4 @@ def test_check_warns_only_for_a_small_full_node(
     memory.check(full=full)
     err = capsys.readouterr().err
     assert ("docker update --memory=32g --memory-swap=-1 minikube" in err) is warned
-    assert ("has 8 GiB" in err) is warned
+    assert (f"has {cap_gib} GiB, below the ~17.5 GiB" in err) is warned
