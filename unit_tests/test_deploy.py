@@ -34,6 +34,7 @@ from podiumd_minikube import process
 from podiumd_minikube import provision
 from podiumd_minikube import releases
 from podiumd_minikube import tunnel
+from podiumd_minikube import waf
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
@@ -151,6 +152,7 @@ STEPS = [
     (pki, "apply_trust"),
     (postgres, "prepare"),
     (gateway, "apply"),
+    (waf, "apply"),
     (dns, "apply_hosts"),
     (deployed, "record"),
     (keycloak, "repair_default_client_scopes"),
@@ -246,6 +248,7 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         "sync",
         "apply_trust",
         "prepare",
+        "apply",
         "apply",
         "apply_hosts",
         "apply --server-side --force-conflicts -f -",

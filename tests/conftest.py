@@ -29,7 +29,7 @@ from podiumd_minikube.paths import NAMESPACE
 
 # The edge: NGINX Gateway Fabric's Service for Gateway public-gateway (src/podiumd_minikube/paths.py).
 EDGE_NAMESPACE = "ingress-basic"
-EDGE_SERVICE = "public-gateway-nginx"
+EDGE_SERVICE = "waf"
 REQUEST_TIMEOUT = 10
 # The local CA that signs every ingress host's certificate (src/podiumd_minikube/pki.py);
 # requests verifies against it everywhere in this suite.

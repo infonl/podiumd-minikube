@@ -14,7 +14,7 @@ See [`../README.md`](../README.md) for provisioning and deploying the cluster.
   `podiumd-minikube deploy --full`.
 - `kubectl` points at the cluster.
 - The edge has an external IP: run `podiumd-minikube setup-tunnel` first if
-  `kubectl get svc public-gateway-nginx -n ingress-basic` shows `<pending>`.
+  `kubectl get svc waf -n ingress-basic` shows `<pending>`.
 
 No `/etc/hosts` edits are needed: `*.local` resolves to the edge inside the
 test process.

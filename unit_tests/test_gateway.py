@@ -2,18 +2,14 @@
 
 import json
 
-from collections.abc import Callable
-
 import pytest
 import yaml
 
 from conftest import FakeRun
 
 from podiumd_minikube import gateway
-from podiumd_minikube import polling
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import EDGE_NAMESPACE
-from podiumd_minikube.paths import EDGE_SERVICE
 from podiumd_minikube.process import UserError
 
 
@@ -74,7 +70,10 @@ def test_install_applies_ngfs_crds_then_upgrades_ngf_with_the_cluster_dns(fake_r
     assert fake_run.calls[upgrade][3:5] == [gateway.NGF_RELEASE, gateway.NGF_CHART]
     values = yaml.safe_load(fake_run.stdins[upgrade] or "")
     assert values["nginx"]["config"]["dnsResolver"]["addresses"] == [{"type": "IPAddress", "value": "10.96.0.10"}]
-    assert values["nginx"]["service"]["patches"][0]["value"]["spec"]["clusterIP"] == gateway.EDGE_CLUSTER_IP
+    assert values["nginx"]["service"] == {"type": "ClusterIP"}
+    assert values["nginx"]["config"]["rewriteClientIP"]["trustedAddresses"] == [
+        {"type": "CIDR", "value": "10.244.0.0/16"}
+    ]
 
 
 def test_route_to_an_unknown_port_name_is_an_error():
@@ -82,19 +81,16 @@ def test_route_to_an_unknown_port_name_is_an_error():
         gateway.route_manifests([_ingress("zac.local", "zac", {"name": "http"})])
 
 
-CLUSTER_IP = ("kubectl", "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}")
-EXTERNAL_IP = (
-    "kubectl", "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}",
-)  # fmt: skip
+NGF_SERVICE = gateway.NGF_SERVICE
+CLUSTER_IP = ("kubectl", "get", "svc", NGF_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}")
 
 
 @pytest.fixture
 def edge(request: pytest.FixtureRequest, fake_run: FakeRun) -> FakeRun:
-    """NGF installed with the pinned ClusterIP; each wait probes once; only a stale route is live."""
+    """NGF installed behind the WAF (another ClusterIP); each wait probes once; only a stale route is live."""
     request.getfixturevalue("poll_once")
     request.getfixturevalue("monkeypatch")
-    fake_run.on(*CLUSTER_IP, stdout=gateway.EDGE_CLUSTER_IP)
-    fake_run.on(*EXTERNAL_IP, stdout="10.96.0.200")
+    fake_run.on(*CLUSTER_IP, stdout="10.96.12.34")
     for kind in ("service", "proxysettingspolicy", "clientsettingspolicy"):
         fake_run.on("kubectl", "get", kind, "-n", EDGE_NAMESPACE, stdout='{"items": []}')
     live = {"items": [{"metadata": {"name": "hr-zac"}}, {"metadata": {"name": "hr-old"}}]}
@@ -117,9 +113,8 @@ def test_apply_applies_the_edge_and_deletes_routes_no_longer_rendered(
     assert applied[0]["spec"]["dnsNames"] == ["zac.local"]
     assert edge.ran("kubectl", "delete") == [["kubectl", "delete", "httproute", "hr-old", "-n", EDGE_NAMESPACE]]
     assert edge.ran("kubectl", "wait")
-    out = capsys.readouterr().out
-    assert "deleted HTTPRoute hr-old (no longer rendered)" in out
-    assert f"{EDGE_NAMESPACE}/{EDGE_SERVICE}: external IP 10.96.0.200" in out
+    assert "deleted HTTPRoute hr-old (no longer rendered)" in capsys.readouterr().out
+    assert not edge.ran("kubectl", "delete", "svc")
 
 
 def test_apply_recreates_a_backend_service_with_another_target(edge: FakeRun, capsys: pytest.CaptureFixture[str]):
@@ -139,35 +134,21 @@ def test_apply_recreates_a_backend_service_with_another_target(edge: FakeRun, ca
     assert not [call for call in deleted if "kept" in call]
 
 
-def test_apply_recreates_an_edge_service_with_another_cluster_ip(edge: FakeRun, monkeypatch: pytest.MonkeyPatch):
-    edge.on(*CLUSTER_IP, stdout="10.96.12.34")
-    edge.on("kubectl", "delete", "svc", EDGE_SERVICE)
-    waits: list[str] = []
-
-    def recreated(probe: Callable[[], object], **_: float) -> object:
-        waits.append("wait")
-        if len(waits) == 2:
-            edge.on(*CLUSTER_IP, stdout=gateway.EDGE_CLUSTER_IP)
-        return probe()
-
-    monkeypatch.setattr(polling, "wait_until", recreated)
+def test_apply_frees_the_edge_ip_from_ngfs_service_from_before_the_waf(edge: FakeRun):
+    edge.on(*CLUSTER_IP, stdout=gateway.EDGE_CLUSTER_IP)
+    edge.on("kubectl", "delete", "svc", NGF_SERVICE)
     gateway.apply([], [])
-    assert ["kubectl", "delete", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE] in edge.calls
-    assert len(waits) == 2
+    assert ["kubectl", "delete", "svc", NGF_SERVICE, "-n", EDGE_NAMESPACE] in edge.calls
 
 
 @pytest.mark.parametrize(
     ("absent", "message"),
     [
         (("kubectl", "get", f"deployment/{gateway.NGF_RELEASE}"), "NGINX Gateway Fabric is not in namespace"),
-        (("kubectl", "get", f"service/{EDGE_SERVICE}"), "NGF created no Service"),
-        (CLUSTER_IP, "did not give public-gateway-nginx ClusterIP 10.96.0.200"),
+        (("kubectl", "get", f"service/{NGF_SERVICE}"), "NGF created no Service"),
     ],
 )
 def test_apply_stops_when_the_edge_does_not_come_up(edge: FakeRun, absent: tuple[str, ...], message: str):
-    if absent == CLUSTER_IP:
-        edge.on(*CLUSTER_IP, stdout="10.96.12.34")
-    else:
-        edge.on(*absent, returncode=1)
+    edge.on(*absent, returncode=1)
     with pytest.raises(UserError, match=message):
         gateway.apply([], [])

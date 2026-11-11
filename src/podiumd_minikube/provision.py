@@ -28,6 +28,7 @@ from podiumd_minikube import memory
 from podiumd_minikube import pki
 from podiumd_minikube import polling
 from podiumd_minikube import process
+from podiumd_minikube import waf
 from podiumd_minikube.paths import PROFILE
 
 if TYPE_CHECKING:
@@ -473,10 +474,10 @@ def provision() -> None:
 
 
 def _provisioned_images() -> list[str]:
-    """Return the images of this chart's fully-enabled render, the edge and cert-manager."""
+    """Return the images of this chart's fully-enabled render, the edge (NGF, the WAF) and cert-manager."""
     print("Deriving the image list from the currently-selected podiumd version...")
     # The kubelet pulls one image at a time; loaded first, the edge and cert-manager wait for none.
-    edge = f"{gateway.ngf_template()}\n---\n{pki.cert_manager_template()}"
+    edge = f"{gateway.ngf_template()}\n---\n{pki.cert_manager_template()}\n---\n{manifests.dump(waf.rendered())}"
     images = sorted({*chart_images(), *manifests.images(edge)})
     print(f"{len(images)} image(s) referenced by this chart's fully-enabled render, the edge and cert-manager.")
     return images

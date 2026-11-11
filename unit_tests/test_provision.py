@@ -22,6 +22,7 @@ from podiumd_minikube import manifests
 from podiumd_minikube import memory
 from podiumd_minikube import pki
 from podiumd_minikube import provision
+from podiumd_minikube import waf
 from podiumd_minikube.paths import PROFILE
 from podiumd_minikube.process import UserError
 
@@ -288,8 +289,8 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
         f"disk {disk.PROVISION.fail_gib}",
         "sync",
         "start_node",
-        "load a/app:1.0 cert-manager:2 ngf:1",
-        "remove old a/app:1.0 cert-manager:2 ngf:1",
+        f"load a/app:1.0 cert-manager:2 ngf:1 {waf.IMAGE}",
+        f"remove old a/app:1.0 cert-manager:2 ngf:1 {waf.IMAGE}",
         "install_crds",
         "install",
         "install_cert_manager",

@@ -10,6 +10,7 @@ live (dimp test and ontw, read 2026-10-13), not in its git. The routes come from
 host is defined once.
 """
 
+from podiumd_minikube import cni
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import polling
@@ -18,7 +19,6 @@ from podiumd_minikube import tls
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.objects import serialize_yaml
 from podiumd_minikube.paths import EDGE_NAMESPACE
-from podiumd_minikube.paths import EDGE_SERVICE
 from podiumd_minikube.paths import NAMESPACE
 
 GATEWAY_API_VERSION = "v1.5.1"
@@ -29,11 +29,14 @@ NGF_CHART_ARGS = [NGF_RELEASE, NGF_CHART, "--version", NGF_VERSION]
 GATEWAY = "public-gateway"
 GATEWAY_CLASS = "nginx"
 GATEWAY_REF = {"group": "gateway.networking.k8s.io", "kind": "Gateway", "name": GATEWAY}
+# NGF's data-plane Service for public-gateway; the WAF (EDGE_SERVICE) proxies to it.
+NGF_SERVICE = f"{GATEWAY}-nginx"
 LABELS = {"app.kubernetes.io/part-of": "podiumd-minikube", "app.kubernetes.io/component": "gateway"}
 _SELECTOR = ",".join(f"{key}={value}" for key, value in LABELS.items())
 # minikube tunnel exposes a LoadBalancer Service at its ClusterIP, which Kubernetes picks
 # at random per Service; fixed, the /etc/hosts line survives a rebuild. In the static band
 # (the first 256 addresses of 10.96.0.0/12) that the allocator leaves to fixed ClusterIPs.
+# The WAF's Service holds it.
 EDGE_CLUSTER_IP = "10.96.0.200"
 # On an Ingress: the host its routes send to the backend instead of their own.
 FORWARDED_HOST_ANNOTATION = "podiumd-minikube/forwarded-host"
@@ -42,7 +45,11 @@ NGF_RESOURCES = {"requests": {"cpu": "50m", "memory": "128Mi"}, "limits": {"cpu"
 
 
 def ngf_values(dns_ip: str) -> Doc:
-    """ExternalsPodiumD's ngf.yml without its AKS parts (ACR images, nodeSelector, fixed IP, client-IP rewrite)."""
+    """ExternalsPodiumD's ngf.yml without its AKS parts (ACR images, nodeSelector, fixed internal IP).
+
+    Behind the WAF, as behind ExternalsPodiumD's Application Gateway: NGF takes the client address from
+    X-Forwarded-For set by the pods' network, and its Service is a ClusterIP.
+    """
     return {
         "nginxGateway": {
             "gatewayClassName": GATEWAY_CLASS,
@@ -62,12 +69,13 @@ def ngf_values(dns_ip: str) -> Doc:
                     "cacheTTL": "30s",
                     "disableIPv6": False,
                 },
+                "rewriteClientIP": {
+                    "mode": "XForwardedFor",
+                    "setIPRecursively": True,
+                    "trustedAddresses": [{"type": "CIDR", "value": cni.POD_CIDR}],
+                },
             },
-            "service": {
-                "type": "LoadBalancer",
-                "externalTrafficPolicy": "Cluster",
-                "patches": [{"type": "Merge", "value": {"spec": {"clusterIP": EDGE_CLUSTER_IP}}}],
-            },
+            "service": {"type": "ClusterIP"},
         },
     }
 
@@ -249,23 +257,17 @@ def _delete_stale(wanted: dict[tuple[str, str], Doc]) -> None:
             print(f"  deleted {kind} {item['metadata']['name']} ({'retargeted' if spec else 'no longer rendered'})")
 
 
-def _pin_cluster_ip() -> None:
-    """Recreates the edge Service once when it lacks EDGE_CLUSTER_IP (a ClusterIP is immutable; NGF recreates it)."""
-    live = kube.kubectl("get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}").strip()
-    if live == EDGE_CLUSTER_IP:
+def free_edge_ip() -> None:
+    """Delete NGF's Service once while it holds EDGE_CLUSTER_IP (from before the WAF); NGF recreates it."""
+    live = kube.kubectl("get", "svc", NGF_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}").strip()
+    if live != EDGE_CLUSTER_IP:
         return
-    print(f"  edge Service has ClusterIP {live}, not {EDGE_CLUSTER_IP}: recreating it; then run update-hosts")
-    kube.kubectl("delete", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE)
-
-    def is_pinned() -> bool:
-        result = process.run(
-            ["kubectl", "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.spec.clusterIP}"],
-            check=False,
-        )
-        return result.stdout.strip() == EDGE_CLUSTER_IP
-
-    if not polling.wait_until(is_pinned, timeout=120, interval=3):
-        msg = f"NGF did not give {EDGE_SERVICE} ClusterIP {EDGE_CLUSTER_IP}: run `podiumd-minikube provision-cluster`"
+    print(f"  {NGF_SERVICE} holds the edge's ClusterIP {EDGE_CLUSTER_IP}: recreating it for the WAF")
+    kube.kubectl("delete", "svc", NGF_SERVICE, "-n", EDGE_NAMESPACE)
+    if not polling.wait_until(
+        lambda: kube.is_present(f"service/{NGF_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3
+    ):
+        msg = f"NGF did not recreate {NGF_SERVICE} within 120s: run `podiumd-minikube provision-cluster`"
         raise process.UserError(msg)
 
 
@@ -287,17 +289,11 @@ def apply(docs: list[Doc], hosts: list[str]) -> None:
     _delete_stale(wanted)
     kube.apply(manifests.dump(objects))
     if not polling.wait_until(
-        lambda: kube.is_present(f"service/{EDGE_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3
+        lambda: kube.is_present(f"service/{NGF_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3
     ):
-        msg = f"NGF created no Service {EDGE_NAMESPACE}/{EDGE_SERVICE} for Gateway {GATEWAY} within 120s"
+        msg = f"NGF created no Service {EDGE_NAMESPACE}/{NGF_SERVICE} for Gateway {GATEWAY} within 120s"
         raise process.UserError(msg)
-    _pin_cluster_ip()
     kube.kubectl_shown(
         "wait", "--for=condition=Ready", f"certificate/{tls.CERTIFICATE}", "-n", EDGE_NAMESPACE, "--timeout=120s"
     )
-    ip = kube.kubectl(
-        "get", "svc", EDGE_SERVICE, "-n", EDGE_NAMESPACE, "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}"
-    )  # fmt: skip
-    print(
-        f"Gateway Service {EDGE_NAMESPACE}/{EDGE_SERVICE}: external IP {ip or '<none - is minikube tunnel running?>'}"
-    )
+    free_edge_ip()

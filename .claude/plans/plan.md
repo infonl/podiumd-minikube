@@ -9982,3 +9982,34 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
 - pip-audit only warns in run_python_checks and runs weekly in its own
   workflow; run_python_checks runs every step at once (podiumd-tests
   875251e): 58 s -> 16 s on 24 cores.
+
+### WAF in front of NGF (2026-11-11)
+
+- podiumd-infra's design (branch feat/aag-equivalent 6146921, docs/waf.md,
+  proven on kees00), ported to `waf.py`: nginx with ModSecurity v3 and CRS
+  3.3 (owasp/modsecurity-crs:3.3.10-nginx-202610180210-lts), DetectionOnly,
+  paranoia 1, in place of ExternalsPodiumD's Application Gateway WAF_v2.
+  Always on (Kees: no switch, the default profile too). Its limits come from
+  gateway.py's NGF policies; its pitfall fixes are copied (runAsUser 101,
+  no gateway LABELS on its objects, ALLOWED_METHODS with PUT/PATCH/DELETE,
+  audit log parts AHZ, NOFILES limit = body limit, the three exclusions on
+  this cluster's hosts: zac., grafana., openinwoner.).
+- The WAF's Service `waf` holds 10.96.0.200 (EDGE_SERVICE); NGF's Service
+  became a ClusterIP and NGF reads the client from X-Forwarded-For trusting
+  the pod CIDR (ExternalsPodiumD trusts its gateway subnet). gateway.apply
+  deletes NGF's Service once while it still holds the edge IP (NGF
+  recreates it); waf.apply runs after gateway.apply in deploy;
+  provision-cluster preloads the image.
+- Deviations: one replica; no preStop sleep or minReadySeconds (they wait
+  for Azure's load balancer probes). Idle memory 21 MiB with 2 or 1 nginx
+  workers (docker, measured locally), so 2 workers as podiumd-infra.
+- Validated in the image first (`nginx -t`: 933 rules loaded). Switch
+  2026-11-11 14:16 (gateway.install for NGF's values, then a no-change
+  deploy; edge away about 10 s): zac.local 302 over http and https,
+  in-cluster calls go through the WAF (CoreDNS points at it), an XSS probe
+  logged 941100/941110/941160/949110 and passed. podiumd-tests switched
+  access.ingress_service to ingress-basic/waf.
+- Open: inway mTLS with the frankgateway profile (needs
+  frankgateway.networkPolicies.enabled and ingressNamespace ingress-basic,
+  the test CA and identities in keyvault.py, the 7-case check), and the
+  WAF's log after podiumd-tests' full tier.

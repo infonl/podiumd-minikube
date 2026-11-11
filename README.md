@@ -73,8 +73,13 @@ As ExternalsPodiumD: NGINX Gateway Fabric with Gateway `public-gateway` in
 namespace `ingress-basic`; `deploy` turns every rendered Ingress into an
 HTTPRoute (`src/podiumd_minikube/gateway.py`), with ExternalsPodiumD's live
 proxy and client settings policies (no request-body limit, 128k buffers).
-The edge Service has the fixed ClusterIP `10.96.0.200`, which `minikube
-tunnel` exposes, so the `/etc/hosts` line stays valid across rebuilds.
+In front of it, always on, a WAF in place of ExternalsPodiumD's Application
+Gateway, as podiumd-infra: nginx with ModSecurity and OWASP CRS 3.3 in
+DetectionOnly (`src/podiumd_minikube/waf.py`; its ModSecurity audit log is
+`kubectl -n ingress-basic logs deploy/waf`). Its Service `waf` has the fixed
+ClusterIP `10.96.0.200`, which `minikube tunnel` exposes, so the
+`/etc/hosts` line stays valid across rebuilds; NGF's Service is a ClusterIP
+behind it.
 
 ### Network
 
@@ -304,7 +309,7 @@ that leaves untested here (podiumd-tests then needs a real environment).
 | Replicas | 1 everywhere: Redis, Keycloak (`instances: 1`), Elasticsearch, ZooKeeper, web pods; Solr 3 as ExternalsPodiumD (ZAC's collection needs its shard replicas on separate nodes) | Redis 3 (ExternalsPodiumD relabels the master in office hours), Keycloak 2 (kees00 with a PDB), Open Inwoner ES 2, KISS ES 3 | failover, Redis master switch, Keycloak cluster cache, PDBs |
 | Storage | hostPath ReadWriteOnce (`templates/storage-hooks.yaml`) | Azure Files SMB/NFS, shared between pods | multi-pod shared media, Azure Files permissions and latency |
 | Postgres | in-cluster PostGIS 15, owned by postgres with grants and the Azure extension allow-list | Azure Flexible Server 15 | Azure TLS and network rules, connection limits, server parameters |
-| Edge | NGINX Gateway Fabric with HTTPRoutes generated from the chart's Ingresses (`podiumd_minikube.gateway`); local CA | ExternalsPodiumD: hand-written HTTPRoutes with `X-Forwarded-*`; public certificates (kees00: NGF since 2026-10-20) | a route the generator derives but the estates write differently, public TLS |
+| Edge | WAF (ModSecurity, CRS 3.3, DetectionOnly) in front of NGINX Gateway Fabric with HTTPRoutes generated from the chart's Ingresses (`podiumd_minikube.waf`, `gateway`); local CA | ExternalsPodiumD: hand-written HTTPRoutes with `X-Forwarded-*`; public certificates (kees00: NGF since 2026-10-20) | a route the generator derives but the estates write differently, public TLS |
 | Pod tuning | service links off, GC and malloc settings, `GOMEMLIMIT`, the local CA in every pod (`manifests.fix_up`) | chart defaults | behaviour that depends on heap size or GC, CA handling through the chart's own options |
 | Keycloak | does not trust the local CA, so the admin IdP stand-in's backchannel is in-cluster http | public https | the IdP's TLS to the acceptance Keycloak |
 | External services | BAG mock with two answers, Mailpit without STARTTLS, ClamAV with only EICAR, IdP stand-in `acc-mock`, Office add-in with placeholder MSAL ids, no e-Suite | Kadaster BAG, relay SMTP, full ClamAV, Dimpact's acceptance Keycloak, Entra ID, e-Suite on some | real data shapes, STARTTLS, real signatures, Office sign-in, e-Suite |

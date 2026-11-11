@@ -35,6 +35,7 @@ from podiumd_minikube import releases
 from podiumd_minikube import tunnel
 from podiumd_minikube import upgrade
 from podiumd_minikube import volumes
+from podiumd_minikube import waf
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OLD_NAMESPACE
@@ -360,6 +361,7 @@ def _before_upgrades(renders: dict[str, manifests.Render], before: manifests.Ren
     if objecten.is_merging(before, renders[releases.PODIUMD]):
         objecten.import_objecttypes()
     gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
+    waf.apply()
     dns.apply_hosts(chart_hosts)
     # Before the upgrades: IfNotPresent pods start from the node's image under their tag.
     pinned = sorted({image for done in renders.values() for image in done.pinned_images})

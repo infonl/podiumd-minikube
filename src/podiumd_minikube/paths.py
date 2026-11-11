@@ -21,6 +21,6 @@ MONITORING_NAMESPACE = "monitoring"
 # The namespace of the kubectl-apply deploys before the Helm releases.
 OLD_NAMESPACE = "podiumd-minikube"
 PROFILE = "minikube"
-# NGINX Gateway Fabric's data-plane Service for Gateway public-gateway (podiumd_minikube.gateway).
+# The edge: the WAF's LoadBalancer Service in front of NGINX Gateway Fabric (podiumd_minikube.waf, gateway).
 EDGE_NAMESPACE = "ingress-basic"
-EDGE_SERVICE = "public-gateway-nginx"
+EDGE_SERVICE = "waf"
