@@ -16,8 +16,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
-
 from podiumd_minikube import chart
 from podiumd_minikube import cni
 from podiumd_minikube import dependency
@@ -34,6 +32,8 @@ from podiumd_minikube.paths import PROFILE
 
 if TYPE_CHECKING:
     from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import parse_yaml
+from podiumd_minikube.objects import serialize_yaml
 
 # Fully parallel loads once filled /tmp on the host.
 BATCH_SIZE = 6
@@ -139,7 +139,7 @@ def start_node(while_starting: Callable[[], None] = _nothing) -> None:
 
 def with_control_plane_env(manifest: str) -> str | None:
     """Return the static pod manifest with CONTROL_PLANE_ENV on its container; None when it has them already."""
-    pod = yaml.safe_load(manifest)
+    pod: Doc = parse_yaml(manifest) or {}
     wanted = CONTROL_PLANE_ENV[pod["metadata"]["name"]]
     container = pod["spec"]["containers"][0]
     before: list[Doc] = list(container.get("env") or [])
@@ -148,7 +148,7 @@ def with_control_plane_env(manifest: str) -> str | None:
     container["env"] = [*kept, *added]
     current = {item["name"]: item.get("value") for item in before if item.get("name") in wanted}
     unchanged = current == wanted
-    return None if unchanged else yaml.safe_dump(pod, sort_keys=False)
+    return None if unchanged else serialize_yaml(pod, sort_keys=False)
 
 
 def _is_tuned_and_ready(name: str) -> bool:
@@ -187,11 +187,11 @@ def nameservers_only(resolv_conf: str) -> str:
 
 def with_pod_resolv_conf(config: str) -> str | None:
     """Return the kubelet configuration with resolvConf POD_RESOLV_CONF; None when it has it already."""
-    parsed = yaml.safe_load(config)
+    parsed: Doc = parse_yaml(config) or {}
     if parsed.get("resolvConf") == POD_RESOLV_CONF:
         return None
     parsed["resolvConf"] = POD_RESOLV_CONF
-    return yaml.safe_dump(parsed, sort_keys=False)
+    return serialize_yaml(parsed, sort_keys=False)
 
 
 def isolate_pod_dns() -> bool:  # noqa: FNE005 - changes the kubelet configuration

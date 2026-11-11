@@ -19,20 +19,13 @@ from podiumd_minikube import memory
 from podiumd_minikube import pki
 from podiumd_minikube import process
 from podiumd_minikube import tls
+from podiumd_minikube.objects import YAML_DUMPER
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import parse_yaml
+from podiumd_minikube.objects import serialize_yaml
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
-
-# libyaml: a --full render loads in 0.3 s instead of 3.1 s, dumps in 0.06 s instead of 0.5 s.
-_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
-
-
-def _load(text: str) -> Doc | None:
-    """Return the YAML document in text: a mapping for every rendered object, None when empty."""
-    return cast("Doc | None", yaml.load(text, _LOADER))  # nosec B506  # noqa: S506 - a safe loader
-
 
 # The apps' BRP/KvK/BAG base URL (values.yaml), and Frank!Gateway's outway, which
 # serves the same paths (podiumd.frankgateway.instances.outway.routes).
@@ -167,12 +160,16 @@ _SOURCE = re.compile(r"^# Source: ([^/]+)/(?:charts/([^/]+)/)?", re.MULTILINE)
 _TEMPLATE_SOURCE = re.compile(r"^# Source: \S*/templates/", re.MULTILINE)
 
 
+_ELASTICSEARCH_KIND = re.compile(r"^kind:\s*[\"']?Elasticsearch[\"']?\s*$", re.MULTILINE)
+
+
 def images(text: str) -> list[str]:
     """Sorted unique images in rendered text, including those operators start from their resources."""
     found = set(_IMAGE_LINE.findall(text)) | set(_RELOADER_ARG.findall(text))
     found |= {f"{repository}:{tag}" for _, repository, tag in _REPOSITORY_TAG.findall(text)}
+    # Only Elasticsearch documents are parsed: loading every document took 2 s per --full render.
     for chunk in re.split(r"^---$", text, flags=re.MULTILINE):
-        doc: Doc | None = _load(chunk)
+        doc: Doc | None = parse_yaml(chunk) if _ELASTICSEARCH_KIND.search(chunk) else None
         spec = section(doc, "spec") if doc and doc.get("kind") == "Elasticsearch" else {}
         if spec.get("version") and not spec.get("image"):
             found.add(f"{_ELASTICSEARCH_IMAGE}:{spec['version']}")
@@ -726,7 +723,7 @@ def _configuration_yaml(doc: Doc, configmap: str) -> Doc | None:
     if not _is_configmap(doc, configmap):
         return None
     raw = section(doc, "data").get("configuration.yaml")
-    return yaml.safe_load(raw) if raw else None
+    return parse_yaml(raw) if raw else None
 
 
 # podiumd's values.yaml example item; the env var is from podiumd.objecten.configuration.secrets.
@@ -758,7 +755,7 @@ def fixup_merged_objecten(docs: list[Doc]) -> None:
         objecten = _configuration_yaml(doc, "objecten-configuration")
         if objecten is not None:
             _fix_objecten_configuration(objecten)
-            doc["data"]["configuration.yaml"] = yaml.safe_dump(objecten, sort_keys=False)
+            doc["data"]["configuration.yaml"] = serialize_yaml(objecten, sort_keys=False)
 
 
 def _fix_objecten_configuration(objecten: Doc) -> None:
@@ -780,12 +777,12 @@ def _fix_objecten_configuration(objecten: Doc) -> None:
 
 
 def _is_large_configmap(doc: Doc) -> bool:
-    return doc.get("kind") == "ConfigMap" and len(yaml.dump(doc, Dumper=_DUMPER)) > LARGE_CONFIGMAP_BYTES
+    return doc.get("kind") == "ConfigMap" and len(serialize_yaml(doc)) > LARGE_CONFIGMAP_BYTES
 
 
 def dump(docs: list[Doc]) -> str:
     """docs as a multi-document YAML stream."""
-    return yaml.dump_all(docs, Dumper=_DUMPER, default_flow_style=False, sort_keys=False)
+    return yaml.dump_all(docs, Dumper=YAML_DUMPER, default_flow_style=False, sort_keys=False)
 
 
 @dataclass(frozen=True)
@@ -826,7 +823,7 @@ def _loaded(text: str) -> list[tuple[Doc | None, str]]:
     """Return rendered text's YAML documents with their text; digests stripped, kept in IMAGE_DIGESTS_ANNOTATION."""
     loaded: list[tuple[Doc | None, str]] = []
     for chunk in re.split(r"^---$", text, flags=re.MULTILINE):
-        doc: Doc | None = _load(strip_image_digests(chunk))
+        doc: Doc | None = parse_yaml(strip_image_digests(chunk))
         if isinstance(doc, dict):
             _record_digests(doc, chunk)
         loaded.append((doc, chunk))

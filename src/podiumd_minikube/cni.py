@@ -11,6 +11,7 @@ from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml
 from podiumd_minikube.paths import CHART_DIR
 
 CILIUM_REPO = "https://helm.cilium.io"
@@ -80,7 +81,7 @@ def render() -> str:
             ["helm", "pull", "cilium", "--repo", CILIUM_REPO, "--version", CILIUM_VERSION, "-d", str(CHART.parent)]
         )
     text = process.output(
-        ["helm", "template", "cilium", str(CHART), "-n", "kube-system", "-f", "-"], stdin=yaml.safe_dump(values())
+        ["helm", "template", "cilium", str(CHART), "-n", "kube-system", "-f", "-"], stdin=serialize_yaml(values())
     )
     docs = [doc for doc in yaml.safe_load_all(text) if doc]
     manifests.limit_runtimes(docs)

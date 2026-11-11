@@ -9920,6 +9920,17 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   deploy migrated the field managers without errors; the next no-change
   deploy: pre-steps 11 s, deploy 36 s (was 62). Left: render 15 s, of
   which helm template 6 s.
+- The render's 15 s, profiled: chart.podiumd_defaults 5 s (member_text
+  opened and gunzipped podiumd's 3.5 MB tarball once per file, 26 times,
+  and parsed with pure-Python yaml.safe_load, 12x slower than libyaml);
+  manifests.images parsed every document again (2 s per render) to find
+  the Elasticsearch resources. Now: the tarball is read once per process
+  (cached on path and mtime), every single YAML document goes through
+  objects.parse_yaml/serialize_yaml (libyaml), and images parses only
+  Elasticsearch documents. The three release renders and the hosts list
+  hash the same before and after. Live no-change deploy: render 9 s,
+  deploy 26 s (was 36; 62 this morning). What is left is mostly helm
+  template (6 s) and one parse of the render (1.5 s).
 
 ### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
 

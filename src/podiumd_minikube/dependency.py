@@ -17,9 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-import yaml
-
 from podiumd_minikube import process
+from podiumd_minikube.objects import parse_yaml
+from podiumd_minikube.objects import serialize_yaml
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import CHART_LOCK
 from podiumd_minikube.paths import CHART_YAML
@@ -51,14 +51,14 @@ class Selection:
 def _load(path: Path) -> dict[str, dict[str, str]]:
     if not path.is_file():
         return {}
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return parse_yaml(path.read_text(encoding="utf-8")) or {}
 
 
 def write(key: str, mode: Mode, value: str, path: Path = VERSIONS_FILE) -> None:
     """Set key's selection, keeping the other dependency's entry."""
     data = _load(path)
     data[key] = {mode: value}
-    path.write_text(yaml.safe_dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
+    path.write_text(serialize_yaml(data, sort_keys=False), encoding="utf-8")
 
 
 def selection(key: str, path: Path = VERSIONS_FILE) -> Selection | None:

@@ -45,6 +45,8 @@ live: the tunnel script's own host list went stale, which is why
    | a fixup every object needs at its creation (Jobs, first pod start) | one more step in `manifests.post_render`, which the Helm post-renderer plugin (`helm-plugins/podiumd-minikube`, `podiumd-minikube post-render`) runs too |
    | YAML sections that may be null, a resource's name | `manifests.section`, `manifests.name_of` |
    | the type of a Kubernetes object or parsed YAML/JSON mapping | `podiumd_minikube.objects.Doc` (the one `Any`) |
+   | parsing or writing one YAML document (libyaml) | `objects.parse_yaml`, `objects.serialize_yaml`; a stream: `manifests.documents`, `manifests.dump` |
+   | a file in a chart tarball | `chart.member_text`, `chart.member_names` (one read per tarball and process) |
    | a rendered object by kind and name | `manifests.find`, `Render.named` |
    | the `*.local` hosts of all Ingresses | `podiumd_minikube.hosts` |
    | what the last deploy applied, running containers per chart | `podiumd_minikube.deployed` (ConfigMap `podiumd-minikube-deployed`) |

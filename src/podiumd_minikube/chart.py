@@ -1,5 +1,6 @@
 """Facts read from the vendored dependency tarballs in charts/."""
 
+import functools
 import itertools
 import tarfile
 
@@ -8,9 +9,8 @@ from dataclasses import field
 from pathlib import Path
 from typing import cast
 
-import yaml
-
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import parse_yaml
 from podiumd_minikube.paths import CHARTS_DIR
 
 # The metrics profile: monitoring-logging and the exporters it scrapes, as kees00 and
@@ -112,20 +112,22 @@ BUNDLED_IMAGES = {
 }
 
 
+@functools.cache
+def _files_of(version: tuple[Path, int]) -> dict[str, bytes]:
+    """Return every file of the tarball (path, mtime) by path, read in one pass (podiumd's: 0.15 s)."""
+    with tarfile.open(version[0]) as archive:
+        return {member.name: archive.extractfile(member).read() for member in archive if member.isfile()}  # pyright: ignore[reportOptionalMemberAccess]
+
+
 def member_names(tgz: Path) -> list[str]:
-    """Paths of all members of tgz."""
-    with tarfile.open(tgz) as archive:
-        return archive.getnames()
+    """Paths of all files in tgz."""
+    return list(_files_of((tgz, tgz.stat().st_mtime_ns)))
 
 
 def member_text(tgz: Path, name: str) -> str | None:
-    """Content of member name in tgz, or None when absent."""
-    with tarfile.open(tgz) as archive:
-        try:
-            member = archive.extractfile(name)
-        except KeyError:
-            return None
-        return member.read().decode() if member else None
+    """Content of file name in tgz, or None when absent."""
+    content = _files_of((tgz, tgz.stat().st_mtime_ns)).get(name)
+    return None if content is None else content.decode()
 
 
 def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
@@ -137,7 +139,7 @@ def bundled_image_sets(charts_dir: Path = CHARTS_DIR) -> list[str]:
     text = member_text(tgz, "podiumd/values.yaml") if tgz else None
     if text is None:
         return []
-    podiumd_values = yaml.safe_load(text)
+    podiumd_values = parse_yaml(text) or {}
     sets: list[str] = []
     for key, path in BUNDLED_IMAGES.items():
         image = podiumd_values
@@ -169,12 +171,12 @@ def podiumd_defaults(charts_dir: Path = CHARTS_DIR) -> Doc:
     text = member_text(tgz, "podiumd/values.yaml") if tgz else None
     if tgz is None or text is None:
         return {}
-    values: Doc = yaml.safe_load(text)
-    for dependency in yaml.safe_load(member_text(tgz, "podiumd/Chart.yaml") or "{}").get("dependencies", []):
+    values: Doc = parse_yaml(text) or {}
+    for dependency in (parse_yaml(member_text(tgz, "podiumd/Chart.yaml") or "") or {}).get("dependencies", []):
         own = member_text(tgz, f"podiumd/charts/{dependency['name']}/values.yaml")
         key = dependency.get("alias") or dependency["name"]
         if own is not None:
-            values[key] = merged(yaml.safe_load(own) or {}, values.get(key))
+            values[key] = merged(parse_yaml(own) or {}, values.get(key))
     return values
 
 

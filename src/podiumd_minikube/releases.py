@@ -16,12 +16,12 @@ from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 
-import yaml
-
 from podiumd_minikube import chart
 from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import parse_yaml
+from podiumd_minikube.objects import serialize_yaml
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import MONITORING_RELEASE
@@ -93,7 +93,7 @@ def _is_enabled(helm_args: list[str], key: str, *, default: bool) -> bool:
 
 def releases(helm_args: list[str]) -> list[Release]:
     """Return this chart's release, podiumd, and monitoring-logging with the metrics profile; install order."""
-    values = yaml.safe_load(VALUES_YAML.read_text(encoding="utf-8"))
+    values = parse_yaml(VALUES_YAML.read_text(encoding="utf-8")) or {}
     podiumd_tgz = chart.tarball(PODIUMD)
     if podiumd_tgz is None:
         msg = "podiumd is not fetched: run podiumd-minikube set-podiumd-version"
@@ -131,7 +131,7 @@ def post_renderer_args(*, objecten_merged: bool, hold_zac: bool = False) -> list
 def values_file(release: Release) -> Generator[str]:
     """release's values in a temporary file, for helm's --values."""
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", encoding="utf-8") as file:
-        yaml.safe_dump(release.values, file)
+        file.write(serialize_yaml(release.values))
         file.flush()
         yield file.name
 

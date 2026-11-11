@@ -10,14 +10,13 @@ live (dimp test and ontw, read 2026-10-13), not in its git. The routes come from
 host is defined once.
 """
 
-import yaml
-
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube import tls
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import EDGE_SERVICE
 from podiumd_minikube.paths import NAMESPACE
@@ -94,7 +93,7 @@ def install() -> None:
     process.fetch(
         ["helm", "upgrade", "--install", *NGF_CHART_ARGS,
          "-n", EDGE_NAMESPACE, "--create-namespace", "--wait", "-f", "-"],
-        stdin=yaml.safe_dump(ngf_values(dns_ip)),
+        stdin=serialize_yaml(ngf_values(dns_ip)),
         shown=True,
     )  # fmt: skip
 

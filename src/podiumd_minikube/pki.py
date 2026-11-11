@@ -19,6 +19,7 @@ from podiumd_minikube import memory
 from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -116,7 +117,7 @@ def cert_manager_template() -> str:
     """Return the cert-manager chart rendered as install_cert_manager installs it."""
     _add_jetstack_repo()
     return process.fetch(
-        ["helm", "template", *CERT_MANAGER_CHART_ARGS, "-f", "-"], stdin=yaml.safe_dump(cert_manager_values())
+        ["helm", "template", *CERT_MANAGER_CHART_ARGS, "-f", "-"], stdin=serialize_yaml(cert_manager_values())
     )
 
 
@@ -132,7 +133,7 @@ def install_cert_manager() -> None:
         ["helm", "upgrade", "--install", *CERT_MANAGER_CHART_ARGS,
          "-n", CERT_MANAGER_NAMESPACE, "--create-namespace", "--reset-values", "--rollback-on-failure",
          "--server-side=false", "--wait", "--timeout=10m", "-f", "-"],
-        stdin=yaml.safe_dump(cert_manager_values()),
+        stdin=serialize_yaml(cert_manager_values()),
         shown=True,
     )  # fmt: skip
 
@@ -215,7 +216,7 @@ def trust_configmap(namespace: str) -> str:
         "data": {"ca.crt": CA_CERT.read_text(encoding="utf-8"), "ca-bundle.pem": bundle},
         "binaryData": {"truststore.p12": p12},
     }
-    return yaml.safe_dump(configmap, sort_keys=False)
+    return serialize_yaml(configmap, sort_keys=False)
 
 
 def apply_trust(namespace: str) -> None:
