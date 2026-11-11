@@ -10024,3 +10024,8 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   ModSecurity's body inspection. Audit log: one 920340 on ZAC's WebDAV.
   The container log rotates at 10 MiB (about 20 minutes of a full tier):
   read the rotated file on the node, not `kubectl logs`.
+  podiumd-tests' run 20261111-134108_minikube_full_2611111341957b: 744
+  passed, 2 failed (first tier through the WAF: 8 read timeouts). One is a
+  15 s ReadTimeout on Open Inwoner's document download (the upstream above);
+  the other is a ZAC zaaktype version without zaakNietOntvankelijkResultaattype,
+  made on podiumd-tests' side, not the WAF.
