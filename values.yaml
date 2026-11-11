@@ -570,6 +570,17 @@ podiumd:
   openzaak:
     enabled: true
     replicaCount: 1
+    # Laptop CPU: the images of Open Zaak, Open Formulieren, Open Archiefbeheer and
+    # Open Inwoner ship no bytecode for their site-packages, in directories their user
+    # cannot write, so every new Python process compiles the libraries again: each
+    # Celery liveness probe (openformulieren-worker 6.3 CPU s every 50 s; 1.5 s from
+    # the cache). OPENZAAK_PORT: podiumd's item (Helm replaces lists).
+    extraEnvVars:
+      - name: OPENZAAK_PORT
+        value: "8000"
+      - &python-bytecode-cache
+        name: PYTHONPYCACHEPREFIX
+        value: /tmp/pycache
     autoscaling:
       enabled: false
     flower:
@@ -1061,6 +1072,7 @@ podiumd:
       # As ExternalsPodiumD (settings.extraEnvVars there; this chart merges both).
       - name: DIGID_METADATA
         value: /app/media/metadata
+      - *python-bytecode-cache
     worker:
       replicaCount: 1
     lowLatencyWorker:
@@ -2107,9 +2119,14 @@ podiumd:
     enabled: false
     # Laptop budget: 2 web processes, 1 thread each (image default 4 x 1); not
     # 1 x 1, see openformulieren. The chart ignores settings.uwsgi.
+    # PYTHONPATH and the podiumd-patches volume: podiumd's items for its
+    # open-archiefbeheer#1103 patch (Helm replaces lists).
     extraEnvVars:
       - name: UWSGI_PROCESSES
         value: "2"
+      - name: PYTHONPATH
+        value: /opt/podiumd-patches
+      - *python-bytecode-cache
     # replicaCount, worker, beat and nginx already default to 1.
     tags:
       redis: false
@@ -2281,10 +2298,16 @@ podiumd:
       - name: no2fa-settings
         configMap:
           name: openarchiefbeheer-no2fa-settings
+      - name: podiumd-patches
+        configMap:
+          name: openarchiefbeheer-patches
     extraVolumeMounts:
       - name: no2fa-settings
         subPath: docker_no2fa.py
         mountPath: /app/src/openarchiefbeheer/conf/docker_no2fa.py
+        readOnly: true
+      - name: podiumd-patches
+        mountPath: /opt/podiumd-patches
         readOnly: true
     ingress:
       enabled: true
@@ -2496,6 +2519,7 @@ podiumd:
     extraEnvVars:
       - name: DISABLE_2FA
         value: "True"
+      - *python-bytecode-cache
     settings:
       # Laptop budget: 2 web processes (image default 4); 1 thread each, as the image and ExternalsPodiumD.
       # Not 1 x 1: a request that calls the app itself would block.

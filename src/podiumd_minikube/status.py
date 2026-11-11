@@ -4,6 +4,7 @@ Also the measuring that tests/test_memory.py checks against tests/memory-baselin
 """
 
 import json
+import re
 import shutil
 import time
 
@@ -64,7 +65,7 @@ PROFILE_PODS = {
 
 @dataclass(frozen=True)
 class Usage:
-    """A container's working set (MiB) and CPU (cores)."""
+    """A container's working set without its reclaimable kernel caches (MiB) and CPU (cores)."""
 
     mib: int
     cpu: float
@@ -103,6 +104,16 @@ def reclaimable_kernel_mib() -> int:
     lines = [line for line in stat.splitlines() if line.startswith("slab_reclaimable ")]
     found = lines[0].split()[1] if lines else "0"
     return round(int(found) / MIB)
+
+
+# A container's slab_reclaimable, as `grep -r` prints it from the kubepods cgroups.
+_CONTAINER_RECLAIMABLE = re.compile(r"cri-containerd-(\w+)\.scope/memory\.stat:slab_reclaimable (\d+)")
+
+
+def _reclaimable_bytes() -> dict[str, int]:
+    """Return each container's kernel caches freed under memory pressure (bytes), by container id."""
+    found = kube.node("grep -r --include=memory.stat '^slab_reclaimable ' /sys/fs/cgroup/kubepods.slice")
+    return {match[1]: int(match[2]) for match in _CONTAINER_RECLAIMABLE.finditer(found)}
 
 
 def budgeted_mib(node: Usage, reclaimable: int) -> int:
@@ -154,6 +165,7 @@ def container_usage(items: list[Doc], *, cpu: bool = True) -> dict[str, Usage]:
     if cpu:
         time.sleep(CPU_SAMPLE_SECONDS)  # a measuring interval, not a wait for a condition
     second = {stat["attributes"]["id"]: stat for stat in _crictl("stats")["stats"]} if cpu else {}
+    reclaimable = _reclaimable_bytes()
     usage: dict[str, Usage] = {}
     for stat in first:
         label = labels.get(stat["attributes"]["id"])
@@ -161,7 +173,8 @@ def container_usage(items: list[Doc], *, cpu: bool = True) -> dict[str, Usage]:
             continue
         key = _key(label, names)
         before = usage.get(key, Usage(0, 0))
-        mib = round(int(stat["memory"]["workingSetBytes"]["value"]) / MIB)
+        working_set = int(stat["memory"]["workingSetBytes"]["value"])
+        mib = round((working_set - reclaimable.get(stat["attributes"]["id"], 0)) / MIB)
         cores = sampled_cores(stat, second.get(stat["attributes"]["id"]))
         usage[key] = Usage(before.mib + mib, before.cpu + cores)
     return dict(sorted(usage.items()))

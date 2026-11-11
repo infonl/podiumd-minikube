@@ -10180,3 +10180,34 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
   1006 -> 771 MiB, java RSS 261-294 MiB per node.
 - Baseline refreshed after that tier: node 16733 MiB against the budget
   (17.5 GiB = 17920 MiB), containers 16552 MiB.
+
+## Python bytecode cache, per-container check without kernel caches, Open Archiefbeheer's patch back (Kees, 2026-11-11)
+
+- Open Formulieren's +218 MiB above the baseline was no leak: web 522 MiB
+  anonymous (two uWSGI workers 173-186 MiB PSS, normal) plus 294 MiB
+  reclaimable slab; the worker 277 + 142 MiB. The worker's slab grew about
+  340 KiB a minute while idle: each liveness probe (`celery inspect active`,
+  every 50 s, a fresh Python process) added about 287 KiB. The web
+  container's slab did not grow idle or under 500 plain requests; it comes
+  from something the full tier does.
+- tests/test_memory.py's per-container check now leaves out each
+  container's own slab_reclaimable too (`status._reclaimable_bytes`, one
+  `grep -r` over the kubepods cgroups), as the node check does.
+- The probes: the images of Open Zaak, Open Formulieren, Open Archiefbeheer
+  and Open Inwoner ship 322 .pyc files for 5000-11000 site-packages modules,
+  in root-owned directories, so every new Python process compiles the
+  libraries again. Probe CPU per run, cold -> with a cache: Open Formulieren
+  6.3 -> 1.5 s (every 50 s), Open Archiefbeheer 3.5 -> 1.3 s (every 30 s),
+  Open Zaak 4.1 -> 1.4 s, Open Inwoner 1.2 -> 0.4 s; all seven worker probes
+  used about 0.46 of a core, the fix saves about 0.24. Objecten, Open Klant
+  and Open Notificaties ship their bytecode: no change there.
+  `PYTHONPYCACHEPREFIX=/tmp/pycache` through `extraEnvVars` (the charts'
+  deployment.yaml passes it to web, worker and beat); a manifests fixup
+  would have pushed manifests.py over pylint's 1000 lines.
+- Found on the way: our `openarchiefbeheer.extraEnvVars`, `extraVolumes`
+  and `extraVolumeMounts` replaced podiumd 4.10.1's lists, so minikube ran
+  without podiumd's open-archiefbeheer#1103 patch (sitecustomize.py from
+  ConfigMap openarchiefbeheer-patches: process_review_response queued only
+  after the commit). podiumd's values say an environment that sets these
+  keys must repeat the items; they are repeated now. Open Zaak's new
+  `extraEnvVars` repeats podiumd's OPENZAAK_PORT.

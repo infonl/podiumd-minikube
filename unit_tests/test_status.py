@@ -113,6 +113,11 @@ def _crictl(fake_run: FakeRun, what: str, payload: dict[str, object]) -> None:
     fake_run.on("minikube", "ssh", "-p", "minikube", "--", f"sudo crictl {what} -o json", stdout=json.dumps(payload))
 
 
+def _reclaimable(fake_run: FakeRun, found: str = "") -> None:
+    command = "grep -r --include=memory.stat '^slab_reclaimable ' /sys/fs/cgroup/kubepods.slice"
+    fake_run.on("minikube", "ssh", "-p", "minikube", "--", command, stdout=found)
+
+
 def test_container_usage_adds_replicas_and_samples_cpu(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     owner = [{"kind": "ReplicaSet", "name": "zac-cc96"}]
     items = [
@@ -129,6 +134,8 @@ def test_container_usage_adds_replicas_and_samples_cpu(fake_run: FakeRun, monkey
         "stats",
         {"stats": [_stat("1", 100, 0), _stat("2", 50, 0), _stat("3", 10, None), _stat("gone", 99, 0)]},
     )
+    scope = "/sys/fs/cgroup/kubepods.slice/kubepods-burstable.slice/pod.slice/cri-containerd-1.scope/memory.stat"
+    _reclaimable(fake_run, f"{scope}:slab_reclaimable {20 * status.MIB}\n")
     slept: list[float] = []
 
     def sleep(seconds: float) -> None:
@@ -138,7 +145,7 @@ def test_container_usage_adds_replicas_and_samples_cpu(fake_run: FakeRun, monkey
     monkeypatch.setattr(time, "sleep", sleep)
     assert status.container_usage(items) == {
         "ns/etcd/app": status.Usage(10, 0.0),
-        "ns/zac/app": status.Usage(150, 0.75),
+        "ns/zac/app": status.Usage(130, 0.75),
     }
     assert slept == [status.CPU_SAMPLE_SECONDS]
 
@@ -147,8 +154,9 @@ def test_container_usage_without_cpu_takes_one_sample(fake_run: FakeRun, monkeyp
     monkeypatch.setattr(time, "sleep", pytest.fail)
     _crictl(fake_run, "ps", {"containers": [_container("1", "clamav-0")]})
     _crictl(fake_run, "stats", {"stats": [_stat("1", 19, 5)]})
+    _reclaimable(fake_run)
     assert status.container_usage([], cpu=False) == {"ns/clamav-0/app": status.Usage(19, 0.0)}
-    assert len(fake_run.ran("minikube", "ssh")) == 2
+    assert len(fake_run.ran("minikube", "ssh")) == 3
 
 
 def test_youngest_container_seconds_skips_containers_that_do_not_run():
