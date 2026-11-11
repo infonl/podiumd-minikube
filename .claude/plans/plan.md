@@ -9907,6 +9907,11 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   pre-steps 2m06, helm upgrade 7m19, rest 0m51. As on kees00
   (podiumd-infra: 329 of 376 s in the helm upgrade). Phase timings in the
   deploy, as podiumd-infra 0471a55, are next (Kees's yes).
+- Done 2026-11-11: `timing.timed` (a copy of podiumd-infra's) prints each
+  phase's seconds; the readiness wait prints each workload and Job as it
+  settles. First live run, no-change `deploy --full`: 62 s, of which render
+  16 s and Postgres, edge, CoreDNS and node images 32 s (larger than
+  expected for a no-op; not analysed yet).
 
 ### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
 

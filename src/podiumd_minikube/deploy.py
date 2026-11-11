@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import time
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -38,6 +39,7 @@ from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OLD_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
+from podiumd_minikube.timing import timed
 
 # templates/storage-hooks.yaml's chmod of the PersistentVolumes.
 STORAGE_PERMISSIONS_JOB = "storage-permissions-fix"
@@ -257,7 +259,8 @@ def _upgrade(
     digests = {release.name: releases.digest(renders[release.name], post[release.name]) for release in found}
     changed = _changed(found, digests, every=every)
     names = [release.name for release in changed]
-    moved = _prepare(names, renders, found, before)
+    with timed("CRDs and one-shot Jobs"):
+        moved = _prepare(names, renders, found, before)
     own_release = next((release for release in changed if release.name == RELEASE_NAME), None)
     if own_release:
         releases.upgrade(own_release, post[RELEASE_NAME])
@@ -293,31 +296,38 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool
     kube.require_minikube_context()
     disk.check(disk.DEPLOY)
     memory.check(full=full)
-    dependency.sync()
-    selected = options(full=full, extra=extra)
     _refuse_old_namespace()
     if not pki.CA_CERT.is_file():
         msg = f"no local CA in {pki.PKI_DIR}: run podiumd-minikube provision-cluster (it creates the CA and its issuer)"
         raise process.UserError(msg)
-    if _deploy(selected, command, every=every, defer_website=True):
-        print("\nDeploying again, with KISS's website...")
-        _deploy(selected, command, every=every, defer_website=False)
+    with timed("deploy"):
+        with timed("chart dependencies"):
+            dependency.sync()
+        selected = options(full=full, extra=extra)
+        if _deploy(selected, command, every=every, defer_website=True):
+            print("\nDeploying again, with KISS's website...")
+            _deploy(selected, command, every=every, defer_website=False)
 
 
 def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool) -> bool:  # noqa: FNE005 - deploys
     """One deploy of the releases; defer_website: without KISS's website while its hook is blocked (then True)."""
-    found, renders = _rendered(selected)
-    blocked = kiss.website_hook_blocked(renders[releases.PODIUMD]) if defer_website else ""
-    if blocked:
-        print(f"\nKISS's crawler index-template hook cannot reach Elasticsearch ({blocked}): first without the website")
-        selected = replace(selected, helm_args=[*selected.helm_args, *kiss.WEBSITE_OFF])
+    with timed("render"):
         found, renders = _rendered(selected)
+        blocked = kiss.website_hook_blocked(renders[releases.PODIUMD]) if defer_website else ""
+        if blocked:
+            print(
+                f"\nKISS's crawler index-template hook cannot reach Elasticsearch ({blocked}):",
+                "first without the website",
+            )
+            selected = replace(selected, helm_args=[*selected.helm_args, *kiss.WEBSITE_OFF])
+            found, renders = _rendered(selected)
     # The podiumd namespace's objects; monitoring-logging's `helm upgrade --wait` covers its own.
     render = combined([renders[RELEASE_NAME], renders[releases.PODIUMD]])
-    postgres.prepare(render)
-    print()
-    before = installed_podiumd(found)
-    _before_upgrades(renders, before)
+    with timed("Postgres, edge, CoreDNS, node images"):
+        postgres.prepare(render)
+        print()
+        before = installed_podiumd(found)
+        _before_upgrades(renders, before)
     upgraded = _upgrade(selected, found, renders, before, every=every)
     _after_upgrades(command, found, render, upgraded)
     print("\nDeployed.")
@@ -328,15 +338,17 @@ def _deploy(selected: Options, command: str, *, every: bool, defer_website: bool
 def _after_upgrades(command: str, found: list[releases.Release], render: manifests.Render, upgraded: Upgraded) -> None:
     """Record what Helm installed, repair Keycloak, activate OpenBao and wait until everything runs."""
     # What Helm installed: the template render has revision 1's Job names and hook Jobs Helm deleted.
-    installed = {release.name: releases.installed(release) for release in found}
-    live = combined([installed[RELEASE_NAME], installed[releases.PODIUMD]])
-    deployed.record(command, combined(list(installed.values())), upgraded.digests)
-    print()
-    keycloak.repair_default_client_scopes(render)
-    # As podiumd-infra: an unchanged podiumd release on an unsealed vault needs no activation.
-    if releases.PODIUMD in upgraded.names or not openbao.is_unsealed():
-        openbao.activate(render)
-    _wait_ready(live, upgraded.held)
+    with timed("deploy record, Keycloak client scopes, OpenBao"):
+        installed = {release.name: releases.installed(release) for release in found}
+        live = combined([installed[RELEASE_NAME], installed[releases.PODIUMD]])
+        deployed.record(command, combined(list(installed.values())), upgraded.digests)
+        print()
+        keycloak.repair_default_client_scopes(render)
+        # As podiumd-infra: an unchanged podiumd release on an unsealed vault needs no activation.
+        if releases.PODIUMD in upgraded.names or not openbao.is_unsealed():
+            openbao.activate(render)
+    with timed("readiness wait"):
+        _wait_ready(live, upgraded.held)
 
 
 def _before_upgrades(renders: dict[str, manifests.Render], before: manifests.Render) -> None:
@@ -438,13 +450,28 @@ def restart_zac() -> None:
 
 
 @dataclass
-class _Rollout:
+class Rollout:
     """What _wait_ready polls: the workloads ("kind/name") and Jobs, and ZAC's held replicas."""
 
     workloads: list[str]
     jobs: list[str]
     held: list[int]
     restarted: list[str] = field(default_factory=list[str])
+    start: float = field(default_factory=time.monotonic)
+    # What the previous poll found not settled; None before the first poll.
+    pending: set[str] | None = None
+
+    def report(self, unsettled: set[str]) -> None:
+        """Print each workload and Job that settled since the previous poll, with the seconds since the wait began."""
+        if self.pending is None:
+            total = len(self.workloads) + len(self.jobs)
+            print(f"{total - len(unsettled)} of {total} workloads and Jobs already settled.")
+        else:
+            seconds = time.monotonic() - self.start
+            for name in sorted(self.pending - unsettled):
+                done = "finished" if name.startswith("job/") else "rolled out"
+                print(f"  {name} {done} after {seconds:.0f} s", flush=True)
+        self.pending = unsettled
 
     def job_state(self) -> tuple[list[str], list[str]]:
         """Return (running, failed) among the Jobs."""
@@ -466,6 +493,7 @@ class _Rollout:
             print("ZAC's Jobs have finished; starting ZAC.")
             kube.kubectl_shown("scale", f"deployment/{ZAC}", f"--replicas={self.held.pop()}", "-n", NAMESPACE)
         waiting = self.stuck()
+        self.report({f"job/{name}" for name in running} | set(waiting))
         if f"deployment/{ZAC}" in waiting and prepared and not self.restarted and has_zac_boot_failed():
             restart_zac()
             self.restarted.append(ZAC)
@@ -483,7 +511,7 @@ def _wait_ready(render: manifests.Render, held: list[int]) -> None:
         for doc in render.docs
         if doc.get("kind") in {"Deployment", "StatefulSet", *manifests.ECK_KINDS}
     ]
-    rollout = _Rollout(workloads, render.jobs, held)
+    rollout = Rollout(workloads, render.jobs, held)
     # Not `rollout status`: it gives up at the progress deadline (600s), which a
     # first deploy passes while pods wait for Elasticsearch, yet still converge.
     result = polling.wait_until(rollout.settled, timeout=READY_TIMEOUT, interval=10)

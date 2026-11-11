@@ -29,6 +29,7 @@ from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import PODIUMD_RELEASE
 from podiumd_minikube.paths import RELEASE_NAME
 from podiumd_minikube.paths import VALUES_YAML
+from podiumd_minikube.timing import timed
 
 PODIUMD = PODIUMD_RELEASE
 MONITORING = MONITORING_RELEASE
@@ -166,7 +167,8 @@ def upgrade(release: Release, post_render: list[str]) -> None:
         args = ["upgrade", "--install", release.name, str(release.chart), "--namespace", release.namespace]
         args += ["--create-namespace", "--values", values, *release.sets, *flags, *HISTORY_ARGS, *post_render]
         print(f"\nhelm upgrade --install {release.name} (namespace {release.namespace})...")
-        process.run(helm(*args), capture=False)
+        with timed(f"helm upgrade {release.name}"):
+            process.run(helm(*args), capture=False)
 
 
 def template(release: Release, *extra: str) -> str:

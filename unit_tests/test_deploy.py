@@ -548,3 +548,19 @@ def test_deploy_imports_the_objecttypes_before_the_edge_routes_objecttypen_to_ob
     monkeypatch.setattr(objecten, "import_objecttypes", lambda: called.append("import_objecttypes"))
     _deploy()
     assert called.index("import_objecttypes") < called.index("apply")
+
+
+def test_rollout_reports_each_workload_and_job_once_it_settles(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    clock = iter([1075.2, 1140.0])
+    monkeypatch.setattr("time.monotonic", lambda: next(clock))
+    rollout = deploy.Rollout(["deployment/zac", "deployment/openzaak"], ["openzaak-config"], [], start=1000.0)
+    rollout.report({"deployment/zac", "job/openzaak-config"})
+    rollout.report({"deployment/zac"})
+    rollout.report(set())
+    assert capsys.readouterr().out == (
+        "1 of 3 workloads and Jobs already settled.\n"
+        "  job/openzaak-config finished after 75 s\n"
+        "  deployment/zac rolled out after 140 s\n"
+    )

@@ -38,6 +38,7 @@ live: the tunnel script's own host list went stale, which is why
    | refuse to run against a non-minikube kubectl context | `kube.require_minikube_context` |
    | kubectl calls, the edge IP, a pod | `podiumd_minikube.kube` (`kubectl`, `kubectl_shown`, `get_json`, `exists`, `edge_ip`, `first_pod`) |
    | waiting for a condition | `polling.wait_until` (never a bare sleep) |
+   | a phase's duration in the deploy log | `timing.timed` |
    | node/container memory and CPU, running profiles, problem pods | `podiumd_minikube.status` (also used by `tests/test_memory.py` and `tests/conftest.py`) |
    | changing the shared cluster | `lock.holding`/`lock.held` (commands), `podiumd-minikube cluster-lock` (by hand) |
    | the rendered manifest, with all local fixups | `deploy.Options.render`; a new fixup is one more step in `manifests.fix_up` |
