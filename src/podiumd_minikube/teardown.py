@@ -139,7 +139,6 @@ def cluster_leftovers(items: list[Doc]) -> list[str]:
     return found
 
 
-@lock.holding("reset-namespace")
 def _clear_host_paths() -> None:
     print("Clearing hostPath data on the minikube node...")
     paths = " ".join(f"/data/{ns}/* /tmp/hostpath-provisioner/{ns}" for ns in RESET_NAMESPACES)
@@ -168,6 +167,7 @@ def _delete_bound_volumes() -> None:
         print("  (none found)")
 
 
+@lock.holding("reset-namespace")
 def reset_namespace(*, yes: bool) -> int:
     """Delete the namespaces and what they leave behind cluster-wide; 1 when not confirmed."""
     kube.require_minikube_context()

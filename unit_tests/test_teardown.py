@@ -2,6 +2,8 @@
 
 import json
 
+from pathlib import Path
+
 import pytest
 
 from conftest import FakeRun
@@ -81,6 +83,13 @@ def test_reset_namespace_deletes_nothing_unconfirmed(
     assert teardown.reset_namespace(yes=False) == 1
     assert fake_run.calls == [["kubectl", "config", "current-context"]]
     assert not forgotten
+
+
+def test_reset_namespace_refuses_on_a_held_lock_before_deleting(fake_run: FakeRun, private_lock: Path):
+    private_lock.write_text("podiumd-tests run full minikube 2026-10-08T12:00:00+00:00\n", encoding="utf-8")
+    with pytest.raises(UserError, match="locked by podiumd-tests"):
+        teardown.reset_namespace(yes=True)
+    assert not fake_run.calls
 
 
 @pytest.mark.parametrize(("answer", "code"), [("yes", 0), ("no", 1)])

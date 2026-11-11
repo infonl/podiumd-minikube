@@ -9884,8 +9884,10 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   in infonl/chart37-repro/.
 - Found live, ours: cycle 1's deploy was still in its second pass (KISS
   website) when cycle 2's reset ran; reset-namespace deleted the namespaces
-  and PVs and only then refused on the lock. It must take the lock before
-  deleting. To fix.
+  and PVs and only then refused on the lock. Cause: 9105bf0 (WPS213 helper
+  extraction) left `@lock.holding("reset-namespace")` on the first extracted
+  helper, `_clear_host_paths`. Fixed 2026-11-11: the decorator is back on
+  `reset_namespace`; a unit test checks it refuses before any call.
 - The helm-charts worktree helm-charts-podiumd-4.10.0-verify (our
   monitoring-logging 1.0.19 checkout) was deleted again by someone (second
   time after 2026-11-04); recreated detached at 0f40c6df.
