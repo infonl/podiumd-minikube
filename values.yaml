@@ -661,9 +661,9 @@ podiumd:
             - identifier: openinwoner
               secret: openinwonerSecret
             - identifier: ita
-              secret: itaSecret
+              secret: itaSecret-hs256-needs-over-32-bytes
             - identifier: contact
-              secret: contactSecret
+              secret: contactSecret-hs256-needs-over-32-bytes
             - identifier: omc
               secret: omcSecret
             - identifier: openbeheer
@@ -3067,7 +3067,7 @@ podiumd:
         apiKey: objectenItaToken
       zaakSysteem:
         baseUrl: https://openzaak.local
-        key: itaSecret
+        key: itaSecret-hs256-needs-over-32-bytes
     afdeling:
       type: https://objecttypen.local/api/v2/objecttypes/c8d301f9-80b8-4575-8b29-3e9431f92994
       typeVersion: 1
@@ -3153,7 +3153,7 @@ podiumd:
           zaaksysteem:
             catalogiBaseUrl: https://openzaak.local/catalogi/api/v1
             clientId: contact
-            clientSecret: contactSecret
+            clientSecret: contactSecret-hs256-needs-over-32-bytes
             documentenBaseUrl: https://openzaak.local/documenten/api/v1
             zakenBaseUrl: https://openzaak.local/zaken/api/v1
             useExperimentalQueries: true

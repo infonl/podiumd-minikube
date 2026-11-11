@@ -10224,3 +10224,18 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
 - Baseline refreshed after that tier: node 17217 MiB against the 17920 MiB
   budget (16733 after the previous tier; reclaimable kernel caches 1.4 GiB),
   containers 15628 MiB without their kernel caches.
+
+## ITA's and KISS's Open Zaak secrets over 32 bytes (podiumd-tests, 2026-11-11)
+
+- podiumd-tests' new K3 test (run 20261111-181056): KISS GET
+  /api/zaken/zaken answered 500, and ITA's koppel-zaak failed. The Open Zaak
+  secrets of clients `ita` (9 characters) and `contact` (13) are too short
+  for .NET's HS256 (IDX10720, IDX10653: over 256 bits). kees00's KISS keys
+  have 32 characters. Both now over 32 bytes, in Open Zaak's
+  vng_api_common_credentials and in ITA's zaakSysteem.key and KISS's
+  registers[0].zaaksysteem.clientSecret, as contactAdapterSecret before.
+  Live: a JWT with the new secrets gets 200 from Open Zaak's zaken API;
+  the old ita secret 403 (the config Job updated the credential).
+- ITA's reminder CronJob (verlopenContactverzoekHerinneringNotificatie)
+  stays off: podiumd 4.10.1 sets it false (DRT-726), ExternalsPodiumD keeps
+  that, podiumd-infra has it commented out on kees00 and jim00.
