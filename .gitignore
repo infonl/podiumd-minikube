@@ -49,6 +49,8 @@ session_memory.json
 .openbao/
 # The rendered Cilium manifest minikube start rereads (src/podiumd_minikube/cni.py).
 .cni/
+# Unreleased charts extracted with `git archive` from helm-charts (its session prefers that to worktrees).
+.chart-sources/
 # pg_dumpall backups of Postgres major migrations (src/podiumd_minikube/postgres.py).
 .postgres-dumps/
 *.egg-info/

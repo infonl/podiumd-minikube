@@ -9949,6 +9949,16 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   (active_file 146) + kernel 4. The growth is the page cache of the log
   files Alloy tails (the working set counts active file pages); anon is
   as before (74 MiB in the memory-tuning table). No leak; nothing changed.
+- helm-charts worktrees: the helm-charts session removed
+  helm-charts-podiumd-4.10.0-verify in Kees-approved cleanups (nobody knew
+  it was ours). Agreed with it (Kees: coordinate everything in helm-charts
+  with its session): unreleased charts come in with `git archive <ref>
+  charts/<chart>` into the gitignored .chart-sources/<chart>-<ref>/, read
+  from its clone, no worktrees; fallback: it creates
+  ../claude-worktree-helm-charts-minikube-<purpose> on request. Switched
+  monitoring-logging to .chart-sources/monitoring-logging-0f40c6df (the
+  same commit, feature/monitoring-logging-1.0.19 with #697; 1.0.19 is not
+  published); all three release digests unchanged.
 
 ### Python checks harmonized with podiumd-tests and podiumd-infra (2026-11-10)
 
