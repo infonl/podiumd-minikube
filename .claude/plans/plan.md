@@ -9882,6 +9882,17 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   (drops the Job, its Secret and ConfigMap) and applies those three,
   rendered from the 4.10.1 release, after the rollout. Scripts and evidence
   in infonl/chart37-repro/.
+- Cycle 2 run 2026-11-11 (after a host reboot, start-cluster 09:33): step 2
+  09:34; podiumd upgrade 09:36:13-09:42:31 (revision 3), ZAC 5.9.1 pod
+  created 09:36:30, Ready 09:39:40; deploy (two passes, KISS website) done
+  09:47:50; catalogi Job applied 09:48:17, complete 09:48:29. podiumd-tests:
+  Open Notificaties delivered create and partial_update of version e2cb5fab
+  to ZAC 5.9.1 (204), ZAC copied the parameters: not reproduced in this
+  order either. Back to normal: removed the hand-applied Job, Secret and
+  ConfigMap (Helm cannot adopt them), `deploy --full` 09:49-09:53 (podiumd
+  revision 5). The upgrade left keycloak-update-job in Init:Error
+  (NoSuchFileException quarkus-application.dat, exit 1: podiumd-chart-36);
+  Keycloak Ready.
 - Found live, ours: cycle 1's deploy was still in its second pass (KISS
   website) when cycle 2's reset ran; reset-namespace deleted the namespaces
   and PVs and only then refused on the lock. Cause: 9105bf0 (WPS213 helper
