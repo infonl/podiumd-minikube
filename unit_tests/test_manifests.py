@@ -1,5 +1,6 @@
 """podiumd_minikube.manifests: the fixups applied to helm template output."""
 
+import json
 import subprocess
 
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 import yaml
 
 from podiumd_minikube import manifests
+from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
 
 DIGEST = "a" * 64
@@ -388,6 +390,59 @@ exec echo \
     shell, flag, command, _ = manifests.START_WITHOUT_LAZY_APPS
     ran = subprocess.run([shell, flag, command, str(script)], capture_output=True, text=True, check=True)
     assert ran.stdout == f"{script}\n--strict --static-map /static\n"
+
+
+KISS_HOOK_SCRIPT = """set -e
+curl -sS -k -f -X PUT \\
+  "${ELASTIC_BASE_URL}/_index_template/kiss-crawler-website" \\
+  -d '{
+    "index_patterns": ["search-*"],
+    "template": {
+      "mappings": {}
+    }
+  }'
+"""
+
+
+def _kiss_hook(script: str) -> Doc:
+    container: Doc = {"name": "hook", "command": ["/bin/sh", "-c", script]}
+    return {
+        "kind": "Job",
+        "metadata": {"name": "contact-crawler-index-template"},
+        "spec": {"template": {"spec": {"containers": [container]}}},
+    }
+
+
+def test_no_replicas_kiss_gives_new_and_existing_indexes_no_replica():
+    hook = _kiss_hook(KISS_HOOK_SCRIPT)
+    manifests.no_replicas_kiss([hook])
+    script = hook["spec"]["template"]["spec"]["containers"][0]["command"][-1]
+    assert f'"settings": {json.dumps(manifests.NO_REPLICAS)},' in script
+    assert '"${ELASTIC_BASE_URL}/search-*/_settings?allow_no_indices=true"' in script
+    assert script.count("curl -sS -k -f -X PUT") == 2
+    assert subprocess.run(["sh", "-n", "-c", script], check=False).returncode == 0
+
+
+def test_no_replicas_kiss_refuses_a_changed_template():
+    with pytest.raises(process.UserError, match="index template changed"):
+        manifests.no_replicas_kiss([_kiss_hook("set -e\ncurl -X PUT")])
+
+
+def test_no_replicas_open_inwoner_puts_a_template_before_the_rebuild():
+    rebuild = "/wait_for_db.sh\n/app/src/manage.py search_index --rebuild -f\n"
+    init: Doc = {"name": "openinwoner-search-index", "command": ["sh", "-c", "retry", "/bin/bash", "-c", rebuild]}
+    web: Doc = {
+        "kind": "Deployment",
+        "metadata": {"name": "openinwoner"},
+        "spec": {"template": {"spec": {"initContainers": [init], "containers": []}}},
+    }
+    manifests.no_replicas_open_inwoner([web])
+    script = init["command"][-1]
+    put, rebuilt = script.split("\n")[1:3]
+    assert put.startswith('curl -sS -f -X PUT "$ES_HOST/_index_template/')
+    assert '"index_patterns": ["products", "cms_pages"]' in put
+    assert rebuilt.startswith("/app/src/manage.py search_index --rebuild")
+    assert subprocess.run(["bash", "-n", "-c", script], check=False).returncode == 0
 
 
 def test_tune_keycloak_sets_jvm_flags_and_the_container_resources():

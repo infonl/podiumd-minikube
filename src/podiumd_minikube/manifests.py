@@ -6,7 +6,9 @@ API request limit. Without a release, Helm hooks never run and the render has
 to be corrected here.
 """
 
+import json
 import re
+import shlex
 
 from dataclasses import dataclass
 from dataclasses import field
@@ -674,6 +676,59 @@ def mount_zaakbrug_role_mapping(docs: list[Doc]) -> None:
         container["volumeMounts"] = [*(container.get("volumeMounts") or []), *added]
 
 
+# KISS's and Open Inwoner's indexes take Elasticsearch's default of 1 replica, which a single node never assigns (the
+# estates run 3 nodes): their Elasticsearch would stay yellow.
+NO_REPLICAS = {"index": {"number_of_replicas": 0}}
+_KISS_INDEX_TEMPLATE_JOB = "-crawler-index-template"
+_KISS_TEMPLATE_OPENING = '"template": {\n'
+# Open Inwoner's index names (its ES_INDEX_PRODUCTS and ES_INDEX_CMS_PAGES defaults); its init container recreates them.
+OPEN_INWONER_INDEXES = ("products", "cms_pages")
+_OPEN_INWONER_REBUILD = "/app/src/manage.py search_index --rebuild"
+
+
+def no_replicas_kiss(docs: list[Doc]) -> None:
+    """Make KISS's index-template hook give search-* indexes no replica, the existing ones too."""
+    for doc in docs:
+        if doc.get("kind") != "Job" or not name_of(doc).endswith(_KISS_INDEX_TEMPLATE_JOB):
+            continue
+        command: list[str] = _containers(_pod_spec(doc) or {})[0]["command"]
+        script = command[-1]
+        if script.count(_KISS_TEMPLATE_OPENING) != 1:
+            msg = f"{name_of(doc)}: its index template changed; update manifests.no_replicas_kiss"
+            raise process.UserError(msg)
+        # The chart's curl with its TLS and retry flags, before the URL.
+        curl = script[: script.index('"${ELASTIC_BASE_URL}')].removeprefix("set -e\n")
+        existing = (
+            f'{curl}"${{ELASTIC_BASE_URL}}/search-*/_settings?allow_no_indices=true" \\\n'
+            f"  -u \"${{ELASTIC_USERNAME}}:${{ELASTIC_PASSWORD}}\" -H 'Content-Type: application/json' \\\n"
+            f"  -d {shlex.quote(json.dumps(NO_REPLICAS))}\n"
+        )
+        settings = f'{_KISS_TEMPLATE_OPENING}      "settings": {json.dumps(NO_REPLICAS)},\n'
+        command[-1] = script.replace(_KISS_TEMPLATE_OPENING, settings) + existing
+
+
+def _open_inwoner_rebuild(docs: list[Doc]) -> list[str] | None:
+    """Return the command of Open Inwoner's init container that rebuilds its search indexes, or None."""
+    web = find(docs, "Deployment", "openinwoner")
+    spec = None if web is None else _pod_spec(web)
+    inits: list[Doc] = [] if spec is None else spec.get("initContainers") or []
+    commands: list[list[str]] = [init.get("command") or [] for init in inits]
+    return next((command for command in commands if command and _OPEN_INWONER_REBUILD in command[-1]), None)
+
+
+def no_replicas_open_inwoner(docs: list[Doc]) -> None:
+    """Make Open Inwoner's search-index init container put an index template without replicas before its rebuild."""
+    args = _open_inwoner_rebuild(docs)
+    if args is None:
+        return
+    template = {"index_patterns": list(OPEN_INWONER_INDEXES), "template": {"settings": NO_REPLICAS}}
+    put = (
+        'curl -sS -f -X PUT "$ES_HOST/_index_template/podiumd-minikube-no-replicas" '
+        f"-H 'Content-Type: application/json' -d {shlex.quote(json.dumps(template))}\n"
+    )
+    args[-1] = args[-1].replace(_OPEN_INWONER_REBUILD, f"{put}{_OPEN_INWONER_REBUILD}")
+
+
 # Open Inwoner's /start.sh runs uWSGI with --lazy-apps: each recycled worker loads the app (11-20 s). Without it,
 # workers fork from the loaded master as in the other Maykin apps. Upstream added it for Python 3.13 crashes.
 START_WITHOUT_LAZY_APPS = ["/bin/sh", "-c", 'eval "$(sed "/^ *--lazy-apps/d" "$0")"', "/start.sh"]
@@ -893,6 +948,8 @@ POST_RENDER_STEPS = (
     ease_solr_start,
     mount_zaakbrug_role_mapping,
     fork_open_inwoner_workers,
+    no_replicas_kiss,
+    no_replicas_open_inwoner,
     limit_runtimes,
 )
 
