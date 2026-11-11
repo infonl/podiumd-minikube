@@ -21,6 +21,7 @@
 .envrc
 .jscpd.json
 .podiumd-versions.yaml
+.chart-sources/
 bin/
 helm-plugins/
 src/
