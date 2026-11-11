@@ -18,6 +18,7 @@ from podiumd_minikube import cli
 from podiumd_minikube import deploy
 from podiumd_minikube import kube
 from podiumd_minikube import lock
+from podiumd_minikube import openbao
 from podiumd_minikube import ports
 from podiumd_minikube import provision
 from podiumd_minikube import restart
@@ -232,3 +233,17 @@ def test_helm_plugin_runs_the_post_render_stub():
     assert plugin["type"] == "postrenderer/v1"
     assert command == "${HELM_PLUGIN_DIR}/../../bin/post-render"
     assert (BIN_DIR / "post-render").readlink() == Path(".stub")
+
+
+def test_openbao_consumers_passes_pairs_and_removals(monkeypatch: pytest.MonkeyPatch):
+    written = []
+    monkeypatch.setattr(openbao, "write_consumers", lambda added, removed: written.append((added, removed)))
+    cli.run(["openbao-consumers", "partner-a=aa", "--remove", "partner-c"])
+    assert written == [({"partner-a": "aa"}, ["partner-c"])]
+
+
+@pytest.mark.parametrize("argv", [[], ["partner-a"], ["=aa"]])
+def test_openbao_consumers_refuses_a_malformed_pair(argv: list[str], capsys: pytest.CaptureFixture[str]):
+    with pytest.raises(SystemExit):
+        cli.run(["openbao-consumers", *argv])
+    assert "give NAME=SHA1 pairs" in capsys.readouterr().err

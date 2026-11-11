@@ -2888,8 +2888,11 @@ podiumd:
       hostname: omc.local
 
   # --- frankgateway + openbao (profile: frankgateway) ---
-  # As ExternalsPodiumD's dim1 Frank!Gateway branch: outway only, OpenBao
+  # As ExternalsPodiumD's dim1 Frank!Gateway branch: outway and inway, OpenBao
   # with a static seal and Keycloak login, one replica each (single node).
+  # The inway as podiumd-infra's kees00: behind the WAF's client-certificate
+  # check on inway.local (podiumd_minikube.waf), consumers from OpenBao
+  # secret/frankgateway/consumers, /echo/* to podiumd-tests' fg-echo fixture.
   # Beyond it (user's choice, the chart runbook's step 6): the outway carries
   # the api-proxy's paths to the same targets, as the chart's reference routes
   # (only KvK's carries its API-key function; BAG's mock needs no key), and
@@ -2910,15 +2913,37 @@ podiumd:
       viewerKey: frankgatewayViewerKeyPodiumdMinikube001
     dashboard:
       enabled: false
+    # As kees00: the chart requires them for the inway's openbao-consumer-auth
+    # (security review NW-06), so only NGF's data plane can set the
+    # client-certificate headers. Cilium enforces them.
     networkPolicies:
-      enabled: false
+      enabled: true
+      ingressNamespace: ingress-basic
     etcd:
       replicas: 1
       podDisruptionBudget:
         enabled: false
     instances:
       inway:
-        enabled: false
+        enabled: true
+        tls:
+          enabled: false
+        routes:
+          inbound-echo:
+            uri: /echo/*
+            labels: { managed-by: iac }
+            plugins:
+              proxy-rewrite:
+                regex_uri: ["^/echo/(.*)", "/$1"]
+              serverless-pre-function:
+                phase: access
+                functions:
+                  - 'local consumer_auth = require("openbao-consumer-auth") return consumer_auth({ path = "frankgateway/consumers", verificationHeader = "X-Client-Cert-Verification", allow = { "partner-a" } })'
+            upstream:
+              type: roundrobin
+              scheme: http
+              pass_host: pass
+              nodes: { "fg-echo.podiumd.svc.cluster.local:8080": 1 }
       internal:
         enabled: false
       outway:

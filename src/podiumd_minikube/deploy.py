@@ -360,8 +360,9 @@ def _before_upgrades(renders: dict[str, manifests.Render], before: manifests.Ren
     # Before the edge: its new routes send objecttypen.local to objecten, which the import reads objecttypen through.
     if objecten.is_merging(before, renders[releases.PODIUMD]):
         objecten.import_objecttypes()
-    gateway.apply([doc for done in renders.values() for doc in done.docs], chart_hosts)
-    waf.apply()
+    docs = [doc for done in renders.values() for doc in done.docs]
+    gateway.apply(docs, chart_hosts)
+    waf.apply(docs)
     dns.apply_hosts(chart_hosts)
     # Before the upgrades: IfNotPresent pods start from the node's image under their tag.
     pinned = sorted({image for done in renders.values() for image in done.pinned_images})

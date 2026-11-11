@@ -10,9 +10,20 @@ from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import EDGE_SERVICE
 from podiumd_minikube.process import UserError
 
+INWAY = {
+    "kind": "Ingress",
+    "spec": {
+        "rules": [{"host": "inway.local", "http": {"paths": [{"backend": {"service": {"name": waf.MTLS_SERVICE}}}]}}]
+    },
+}
+ZAC = {
+    "kind": "Ingress",
+    "spec": {"rules": [{"host": "zac.local", "http": {"paths": [{"backend": {"service": {"name": "zac"}}}]}}]},
+}
+
 
 def test_config_keeps_ngfs_limits_and_proxies_both_listeners_to_ngf():
-    text = waf.config()
+    text = waf.config([])
     assert "client_max_body_size 0;" in text
     assert "proxy_buffers 8 128k;" in text
     assert "proxy_busy_buffers_size 256k;" in text
@@ -23,9 +34,33 @@ def test_config_keeps_ngfs_limits_and_proxies_both_listeners_to_ngf():
 
 
 def test_config_removes_client_certificate_headers_a_client_sent():
-    text = waf.config()
-    for header in waf.CLIENT_CERT_HEADERS:
+    text = waf.config(["inway.local"])
+    for header, variable in waf.CLIENT_CERT_HEADERS.items():
         assert text.count(f'proxy_set_header {header} "";') == 2
+        assert text.count(f"proxy_set_header {header} {variable};") == 1
+
+
+def test_mtls_hosts_are_those_of_ingresses_to_the_inway():
+    assert waf.mtls_hosts([INWAY, ZAC]) == ["inway.local"]
+    assert waf.mtls_hosts([ZAC]) == []
+
+
+def test_an_mtls_host_demands_a_certificate_of_the_client_ca():
+    server = waf.config(["inway.local"]).rsplit("\n\n", maxsplit=1)[-1]
+    assert "server_name inway.local;" in server
+    assert "ssl_verify_client on;" in server
+    assert f"ssl_client_certificate {waf.CLIENT_CA_DIR}/{waf.CLIENT_CA_FILE};" in server
+
+
+def test_the_client_ca_is_a_secret_the_waf_mounts():
+    docs = waf.rendered(["inway.local"], "PEM")
+    secret, deployment = docs[0], docs[2]
+    assert secret["metadata"]["name"] == waf.CLIENT_CA_SECRET
+    assert secret["stringData"] == {waf.CLIENT_CA_FILE: "PEM"}
+    template = deployment["spec"]["template"]
+    assert {"name": "client-ca", "secret": {"secretName": waf.CLIENT_CA_SECRET}} in template["spec"]["volumes"]
+    _, without, _ = waf.rendered([])
+    assert without["spec"]["template"]["metadata"] != template["metadata"]
 
 
 def test_modsecurity_inspects_bodies_up_to_the_images_limit_when_ngf_has_none():
@@ -47,7 +82,7 @@ def test_size_bytes_refuses_another_unit():
 
 
 def test_the_waf_holds_the_edge_ip_without_the_labels_gateway_prunes():
-    configmap, deployment, service = waf.rendered()
+    configmap, deployment, service = waf.rendered([])
     assert service["metadata"]["name"] == EDGE_SERVICE
     assert service["spec"]["clusterIP"] == gateway.EDGE_CLUSTER_IP
     assert service["spec"]["type"] == "LoadBalancer"
@@ -58,5 +93,5 @@ def test_the_waf_holds_the_edge_ip_without_the_labels_gateway_prunes():
 
 
 def test_apply_waits_for_the_rollout(fake_run: FakeRun):
-    waf.apply()
+    waf.apply([ZAC])
     assert fake_run.ran("kubectl", "rollout", "status", f"deployment/{EDGE_SERVICE}")

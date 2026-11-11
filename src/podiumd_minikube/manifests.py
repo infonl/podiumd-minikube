@@ -313,9 +313,17 @@ def route_through_nginx(docs: list[Doc]) -> None:
                 service["name"] = front
 
 
-def ingress_hosts(docs: list[Doc]) -> list[str]:
-    """Sorted unique hosts of the Ingresses in docs."""
-    return sorted({str(rule["host"]) for rule in _ingress_rules(docs) if rule.get("host")})
+def _backends(rule: Doc) -> set[str]:
+    paths: list[Doc] = section(rule, "http").get("paths") or []
+    return {str(section(section(path, "backend"), "service").get("name")) for path in paths}
+
+
+def ingress_hosts(docs: list[Doc], service: str | None = None) -> list[str]:
+    """Sorted unique hosts of the Ingresses in docs; with service, only those of rules with that backend."""
+    rules = [rule for rule in _ingress_rules(docs) if rule.get("host")]
+    if service is not None:
+        rules = [rule for rule in rules if service in _backends(rule)]
+    return sorted({str(rule["host"]) for rule in rules})
 
 
 def drop_duplicate_env(docs: list[Doc]) -> None:

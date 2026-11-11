@@ -166,3 +166,22 @@ def test_script_refuses_a_podiumd_without_it(chart_dir: Path):
     (chart_dir / "scripts" / openbao.SCRIPT).unlink()
     with pytest.raises(process.UserError, match="turn off profile frankgateway"):
         openbao.activate_script(chart_dir)
+
+
+def test_write_consumers_keeps_the_others_and_removes_the_named(cluster: FakeRun):
+    keyvault.write(openbao.KEY_ITEM, "recovery")
+    stored = {"partner-a": "aa", "other": "oo"}
+    cluster.on(*BAO, "kv", "get", stdout=json.dumps({"data": {"data": stored}}))
+    openbao.write_consumers({"partner-b": "bb"}, ["partner-a"])
+    stdins = dict(zip(map(tuple, cluster.calls), cluster.stdins, strict=True))
+    written = stdins[(*BAO, "kv", "put", "-mount=secret", openbao.CONSUMERS_KV_PATH, "-")]
+    assert written == f"{ROOT}\n{json.dumps({'other': 'oo', 'partner-b': 'bb'})}"
+    assert cluster.ran(*BAO, "token", "revoke", "-self")
+
+
+def test_write_consumers_deletes_the_secret_when_none_remain(cluster: FakeRun):
+    keyvault.write(openbao.KEY_ITEM, "recovery")
+    cluster.on(*BAO, "kv", "get", returncode=2)
+    openbao.write_consumers({}, ["partner-a"])
+    assert cluster.ran(*BAO, "kv", "metadata", "delete", "-mount=secret", openbao.CONSUMERS_KV_PATH)
+    assert not cluster.ran(*BAO, "kv", "put")

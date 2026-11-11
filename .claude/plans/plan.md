@@ -10039,3 +10039,40 @@ PRs keep landing. Worktree `dimpact-samenwerking/helm-charts-podiumd-4.10.1`
   (8 threads behind one GIL, at most one core of Python) while the node ran
   at its 8-CPU cap; Prometheus does not scrape cAdvisor, so its per-minute
   CPU in the tier is not recorded.
+
+## Inway mTLS (frankgateway profile), 2026-11-11
+
+As podiumd-infra's kees00 (branch feat/aag-equivalent: waf.py, waf_check.py,
+values/kees00): ExternalsPodiumD's dim1 ontw runs the inway (a mock /hello
+route, HTTPRoute to an ExternalName frankgateway-inway:9080, no client
+certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
+
+- values.yaml: `frankgateway.instances.inway` on with kees00's route
+  (`/echo/*`, openbao-consumer-auth on `frankgateway/consumers`, allow
+  partner-a, upstream fg-echo:8080); `frankgateway.networkPolicies` on with
+  `ingressNamespace: ingress-basic` (the chart's NW-06: only NGF's data plane
+  may reach the inway, so only the edge sets the identity headers). The
+  outway's policy allows its in-namespace targets (brp-personen-mock, the BAG
+  mock) and 443 outside the private ranges (KvK); test_frankgateway passes.
+- templates/frankgateway/ingress-inway.yaml: `inway.local` ->
+  frankgateway-inway:9080; gateway.py makes the HTTPRoute as for every host.
+- waf.py: a server per host of an Ingress to frankgateway-inway, with
+  `ssl_verify_client on` against Secret ingress-basic/waf-client-ca and the
+  identity headers (SHA-1 hex, RFC 2253 subject, SUCCESS); every other
+  server removes them. No mTLS server without the inway, as podiumd-infra.
+- pki.py: test client CA `.pki/client-ca.{crt,key}` (podiumd-infra keeps it
+  in Key Vault `waf-client-ca-<env>`); the cluster gets the certificate only.
+- `podiumd-minikube openbao-consumers`: podiumd-infra's command of the same
+  name, writing name: fingerprint with a temporary root token.
+- Split (test-scope.md): tests/test_waf_mtls.py covers the edge (no
+  certificate 400, another CA 400, a client-CA certificate with forged
+  headers reaches the inway verified); podiumd-tests owns fg-echo, the
+  identities partner-a/b/c, their registration and the consumer cases (on
+  kees00 podiumd-infra's waf-mtls-check --setup owns them, confirmed by
+  podiumd-infra).
+- Memory: one more APISIX pod (the outway's is 93 MiB), profile frankgateway.
+- Live 15:50 CET: deploy --full, live suite 39 of 40 (KISS Elasticsearch
+  yellow: index search-website has 1 replica on one node, not this change).
+- Found on the way: `.chart-sources/` (1b298b4) was not in .helmignore, so
+  the podiumd-minikube release Secret exceeded 1 MiB ("Too long: may not be
+  more than 1048576 bytes") on its first upgrade since.

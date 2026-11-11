@@ -10,6 +10,7 @@ from podiumd_minikube import deploy as deployment
 from podiumd_minikube import kube
 from podiumd_minikube import lock
 from podiumd_minikube import manifests
+from podiumd_minikube import openbao
 from podiumd_minikube import ports
 from podiumd_minikube import process
 from podiumd_minikube import provision
@@ -161,6 +162,19 @@ def flush_redis(argv: list[str]) -> None:
     services.flush_redis(parser.parse_args(argv).db)
 
 
+def openbao_consumers(argv: list[str]) -> None:
+    """Add, replace or remove the Frank!Gateway inway's consumers in OpenBao (profile frankgateway)."""
+    parser = _parser(openbao_consumers)
+    parser.add_argument("consumers", nargs="*", metavar="NAME=SHA1", help="consumer and its certificate's fingerprint")
+    parser.add_argument("--remove", nargs="+", default=[], metavar="NAME", help="consumers to remove")
+    args = parser.parse_args(argv)
+    pairs = [str(pair).partition("=") for pair in args.consumers]
+    malformed = [name for name, sign, fingerprint in pairs if not (sign and name and fingerprint)]
+    if malformed or not (pairs or args.remove):
+        parser.error("give NAME=SHA1 pairs or --remove NAME")
+    openbao.write_consumers({name: fingerprint for name, _, fingerprint in pairs}, args.remove)
+
+
 def provision_cluster(argv: list[str]) -> None:
     """Create the minikube cluster: minikube, NGINX Gateway Fabric, dependencies and every image the chart uses.
 
@@ -284,6 +298,7 @@ COMMANDS: dict[str, Command] = {
         deploy_extended,
         expose_postgres,
         flush_redis,
+        openbao_consumers,
         post_render,
         provision_cluster,
         replicas,

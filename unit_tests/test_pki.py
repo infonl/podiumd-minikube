@@ -23,6 +23,8 @@ def pki_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(pki, "PKI_DIR", tmp_path / ".pki")
     monkeypatch.setattr(pki, "CA_CERT", tmp_path / ".pki" / "ca.crt")
     monkeypatch.setattr(pki, "CA_KEY", tmp_path / ".pki" / "ca.key")
+    monkeypatch.setattr(pki, "CLIENT_CA_CERT", tmp_path / ".pki" / "client-ca.crt")
+    monkeypatch.setattr(pki, "CLIENT_CA_KEY", tmp_path / ".pki" / "client-ca.key")
     return tmp_path / ".pki"
 
 
@@ -31,6 +33,14 @@ def test_ensure_ca_creates_a_ca_once_with_a_private_key(pki_dir: Path):
     assert (pki_dir / "ca.key").stat().st_mode & 0o777 == 0o600
     assert "BEGIN CERTIFICATE" in (pki_dir / "ca.crt").read_text(encoding="utf-8")
     assert not pki.ensure_ca()
+
+
+def test_ensure_client_ca_is_another_ca(pki_dir: Path):
+    pem = pki.ensure_client_ca()
+    assert "BEGIN CERTIFICATE" in pem
+    assert (pki_dir / "client-ca.key").stat().st_mode & 0o777 == 0o600
+    assert not (pki_dir / "ca.crt").exists()
+    assert pki.ensure_client_ca() == pem
 
 
 @pytest.mark.usefixtures("fake_run")

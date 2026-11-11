@@ -15,6 +15,7 @@ import subprocess  # nosec B404 - only for the CompletedProcess type
 import tempfile
 import time
 
+from collections.abc import Generator
 from pathlib import Path
 
 from podiumd_minikube import dependency
@@ -47,6 +48,8 @@ PLACEHOLDER = "pending-init"
 OUTWAY = "frankgateway-outway"
 KV_MOUNT = "secret"
 OUTWAY_KV_PATH = "frankgateway"
+# The inway's openbao-consumer-auth reads consumer name: SHA-1 fingerprint here, cached 300 s.
+CONSUMERS_KV_PATH = f"{OUTWAY_KV_PATH}/consumers"
 
 
 def _write_private(path: Path, value: str) -> None:
@@ -124,11 +127,19 @@ def _root_token() -> str:
     return bytes(left ^ right for left, right in pairs).decode()
 
 
-def _write_outway_keys() -> None:
-    """Store the outway's API keys in OpenBao with a temporary root token, revoked afterwards."""
+@contextlib.contextmanager
+def _as_root() -> Generator[str]:
+    """Yield a temporary root token, revoked afterwards."""
     root = _root_token()
-    with contextlib.ExitStack() as revoke:
-        revoke.callback(_bao, "token", "revoke", "-self", token=root)
+    try:
+        yield root
+    finally:
+        _bao("token", "revoke", "-self", token=root)
+
+
+def _write_outway_keys() -> None:
+    """Store the outway's API keys in OpenBao."""
+    with _as_root() as root:
         _bao(
             "kv",
             "put",
@@ -139,6 +150,24 @@ def _write_outway_keys() -> None:
             stdin=values.kvk_test_api_key(),
         )
     print(f"  stored the outway's API keys in {KV_MOUNT}/{OUTWAY_KV_PATH}")
+
+
+def _consumers(root: str) -> Doc:
+    """Return the inway's consumers, {} when none are stored."""
+    found = _bao("kv", "get", "-format=json", f"-mount={KV_MOUNT}", CONSUMERS_KV_PATH, token=root, check=False)
+    return json.loads(found.stdout)["data"]["data"] if found.returncode == 0 else {}
+
+
+def write_consumers(added: dict[str, str], removed: list[str]) -> None:
+    """Add or replace the consumers in added (name: SHA-1 fingerprint) and remove those in removed; others stay."""
+    with _as_root() as root:
+        consumers = {name: fingerprint for name, fingerprint in _consumers(root).items() if name not in removed}
+        consumers.update(added)
+        if consumers:
+            _bao("kv", "put", f"-mount={KV_MOUNT}", CONSUMERS_KV_PATH, "-", token=root, stdin=json.dumps(consumers))
+        else:
+            _bao("kv", "metadata", "delete", f"-mount={KV_MOUNT}", CONSUMERS_KV_PATH, token=root)
+    print(f"Inway consumers in {KV_MOUNT}/{CONSUMERS_KV_PATH}: {', '.join(sorted(consumers)) or 'none'}")
 
 
 def activate(render: manifests.Render) -> None:

@@ -81,12 +81,21 @@ ClusterIP `10.96.0.200`, which `minikube tunnel` exposes, so the
 `/etc/hosts` line stays valid across rebuilds; NGF's Service is a ClusterIP
 behind it.
 
+With the `frankgateway` profile, `inway.local` routes to Frank!Gateway's
+inway and the WAF demands a client certificate there, as podiumd-infra's
+kees00: from the test CA `.pki/client-ca.crt` (key `.pki/client-ca.key`),
+else 400. It passes the certificate's identity in `X-Client-Cert-Fingerprint`,
+`-Subject` and `-Verification`; every other host removes these headers. The
+inway's consumers live in OpenBao `secret/frankgateway/consumers`
+(`podiumd-minikube openbao-consumers`).
+
 ### Network
 
 As ExternalsPodiumD's ontw and most test clusters: Cilium 1.19 is the CNI and
 replaces kube-proxy, NetworkPolicies are enforced, Hubble and the L7 proxy
-are off (`src/podiumd_minikube/cni.py`). The only policy is the Keycloak
-operator's. A cluster provisioned before Cilium still runs kindnet;
+are off (`src/podiumd_minikube/cni.py`). The policies are the Keycloak
+operator's, podiumd's phase 1 (as kees00) and, with the `frankgateway`
+profile, Frank!Gateway's per traffic class. A cluster provisioned before Cilium still runs kindnet;
 `start-cluster` and `provision-cluster` refuse it: run `teardown-cluster`,
 then `provision-cluster` (this deletes the volumes).
 
@@ -201,6 +210,7 @@ What keeps it small (heaps, worker counts, GC settings, `MALLOC_ARENA_MAX`,
 | `podiumd-minikube expose-postgres [local-port]` | Port-forwards the shared Postgres instance to localhost for a GUI tool |
 | `podiumd-minikube replicas on\|off` | `on`: Redis at 3 pods, Keycloak at 2 (the chart's counts) for tests that need more than one pod; `off`: one each, as `values.yaml` and every deploy. Patches the live objects, no deploy (`on` about 80 s) |
 | `podiumd-minikube flush-redis [--db N]` | Flushes the shared Redis instance (`FLUSHALL` by default) |
+| `podiumd-minikube openbao-consumers [NAME=SHA1 ...] [--remove NAME ...]` | Adds, replaces or removes the Frank!Gateway inway's consumers (client-certificate fingerprints) in OpenBao; the others stay |
 | `podiumd-minikube update-hosts` | Writes the `*.local` → edge IP line to `/etc/hosts` (uses sudo) |
 | `podiumd-minikube post-render [--ca-trust] [--objecten-merged] [--hold-zac]` | Helm post-renderer (plugin `helm-plugins/podiumd-minikube`): reads a rendered manifest on stdin and writes it with this project's fixups (`manifests.post_render`: image digests, capacity settings, the local CA, Keycloak and Solr start-up) |
 | `podiumd-minikube deploy-extended` | `deploy --full` without metrics, with openzaak's and openklant's Celery workers |

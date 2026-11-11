@@ -1,0 +1,7 @@
+{{/*
+inway.local -> Frank!Gateway's inway, as ExternalsPodiumD's HTTPRoute to frankgateway-inway:9080; the WAF demands a
+client certificate on this host (podiumd_minikube.waf).
+*/}}
+{{- if and .Values.podiumd.frankgateway.enabled .Values.podiumd.frankgateway.instances.inway.enabled }}
+{{ include "podiumd-minikube.ingress" (dict "root" . "name" "frankgateway-inway" "host" "inway.local" "service" "frankgateway-inway" "port" 9080) }}
+{{- end }}

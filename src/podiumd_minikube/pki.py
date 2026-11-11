@@ -28,6 +28,9 @@ PKI_DIR = CHART_DIR / ".pki"
 CA_CERT = PKI_DIR / "ca.crt"
 CA_KEY = PKI_DIR / "ca.key"
 CA_DAYS = 3650
+# The CA the WAF trusts for client certificates on the inway; for tests only, as podiumd-infra's waf-client-ca.
+CLIENT_CA_CERT = PKI_DIR / "client-ca.crt"
+CLIENT_CA_KEY = PKI_DIR / "client-ca.key"
 
 # As ExternalsPodiumD; OLD_CERT_MANAGER_NAMESPACE is where clusters provisioned before 2026-10-13 have it.
 CERT_MANAGER_NAMESPACE = EDGE_NAMESPACE
@@ -39,20 +42,32 @@ CERT_MANAGER_CHART_ARGS = ["cert-manager", "jetstack/cert-manager", "--version",
 ISSUER = "podiumd-local-ca"
 
 
-def ensure_ca() -> bool:  # noqa: FNE005 - creates the CA
-    """Create .pki/ca.key and .pki/ca.crt unless both exist; True when created."""
-    if CA_CERT.is_file() and CA_KEY.is_file():
+def _ensure(cert: Path, key: Path, subject: str) -> bool:  # noqa: FNE005 - creates the CA
+    """Create the CA key and certificate unless both exist; True when created."""
+    if cert.is_file() and key.is_file():
         return False
     PKI_DIR.mkdir(mode=0o700, exist_ok=True)
     process.run(
         ["openssl", "req", "-x509", "-newkey", "rsa:4096", "-nodes", "-sha256",
-         "-days", str(CA_DAYS), "-subj", "/CN=podiumd-minikube local CA",
+         "-days", str(CA_DAYS), "-subj", subject,
          "-addext", "basicConstraints=critical,CA:TRUE",
          "-addext", "keyUsage=critical,keyCertSign,cRLSign",
-         "-keyout", str(CA_KEY), "-out", str(CA_CERT)],
+         "-keyout", str(key), "-out", str(cert)],
     )  # fmt: skip
-    CA_KEY.chmod(0o600)
+    key.chmod(0o600)
     return True
+
+
+def ensure_ca() -> bool:  # noqa: FNE005 - creates the CA
+    """Create .pki/ca.key and .pki/ca.crt unless both exist; True when created."""
+    return _ensure(CA_CERT, CA_KEY, "/CN=podiumd-minikube local CA")
+
+
+def ensure_client_ca() -> str:
+    """Create .pki/client-ca.key and .pki/client-ca.crt unless both exist; return the certificate."""
+    if _ensure(CLIENT_CA_CERT, CLIENT_CA_KEY, "/CN=podiumd-minikube client CA"):
+        print(f"Created the WAF's client CA in {PKI_DIR} (test client certificates: sign with {CLIENT_CA_KEY}).")
+    return CLIENT_CA_CERT.read_text(encoding="utf-8")
 
 
 def cert_manager_values() -> Doc:
