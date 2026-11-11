@@ -125,12 +125,28 @@ def body_max_size() -> str:
     return str(_client_settings().get("body", {}).get("maxSize", NGINX_BODY_MAX_SIZE))
 
 
+def _own_response_headers() -> list[str]:
+    """Return gateway.RESPONSE_HEADERS for a response the WAF makes itself (400 without a client certificate, 413).
+
+    NGF's routes set them on what they answer; an empty value adds nothing, so those get no second copy.
+    """
+    lines: list[str] = []
+    for number, (name, value) in enumerate(gateway.RESPONSE_HEADERS.items()):
+        variable = f"$waf_own_header_{number}"
+        lines += [
+            f'map $upstream_status {variable} {{ "" {QUOTE}{value}{QUOTE}; default ""; }}',
+            f"add_header {name} {variable} always;",
+        ]
+    return lines
+
+
 def _http_directives() -> list[str]:
     """Return the http-level directives that keep the WAF's limits and buffers at NGF's."""
     buffering: Doc = gateway.proxy_settings_manifest()["spec"]["buffering"]
     buffers: Doc = buffering["buffers"]
     log_line = json.dumps(LOG_FIELDS, separators=(",", ":"))
     return [
+        *_own_response_headers(),
         "map $http_upgrade $connection_upgrade { default upgrade; '' close; }",
         # nginx quotes the format in single quotes; the JSON holds none.
         f"log_format waf_json escape=json {QUOTE}{log_line}{QUOTE};",

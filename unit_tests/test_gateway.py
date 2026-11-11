@@ -43,6 +43,10 @@ def test_routes_follow_externalspodiumd_and_resolve_named_ports():
     rule = routes["hr-keycloak"]["spec"]["rules"][0]
     assert rule["backendRefs"] == [{"name": "keycloak", "port": 8080}]
     assert rule["filters"][0] == {"type": "URLRewrite", "urlRewrite": {"hostname": "keycloak.local"}}
+    assert rule["filters"][2]["responseHeaderModifier"]["set"] == [
+        {"name": "Strict-Transport-Security", "value": "max-age=31536000"},
+        {"name": "X-Content-Type-Options", "value": "nosniff"},
+    ]
 
 
 def test_forwarded_host_annotation_replaces_the_host_sent_upstream():
@@ -50,7 +54,7 @@ def test_forwarded_host_annotation_replaces_the_host_sent_upstream():
     docs = [_ingress("keycloak.local", "keycloak", {"number": 8080}, annotations)]
     route = next(o for o in gateway.route_manifests(docs) if o["kind"] == "HTTPRoute")
     assert route["spec"]["hostnames"] == ["keycloak.local"]
-    rewrite, headers = route["spec"]["rules"][0]["filters"]
+    rewrite, headers, _ = route["spec"]["rules"][0]["filters"]
     assert rewrite["urlRewrite"]["hostname"] == "keycloak-admin.local"
     assert {"name": "X-Forwarded-Host", "value": "keycloak-admin.local"} in headers["requestHeaderModifier"]["set"]
 

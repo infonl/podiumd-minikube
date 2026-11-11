@@ -40,6 +40,13 @@ def test_config_removes_client_certificate_headers_a_client_sent():
         assert text.count(f"proxy_set_header {header} {variable};") == 1
 
 
+def test_only_the_wafs_own_responses_get_the_routes_response_headers():
+    text = waf.config([])
+    for number, (name, value) in enumerate(gateway.RESPONSE_HEADERS.items()):
+        assert f'map $upstream_status $waf_own_header_{number} {{ "" {value!r}; default ""; }}' in text
+        assert f"add_header {name} $waf_own_header_{number} always;" in text
+
+
 def test_mtls_hosts_are_those_of_ingresses_to_the_inway():
     assert waf.mtls_hosts([INWAY, ZAC]) == ["inway.local"]
     assert waf.mtls_hosts([ZAC]) == []

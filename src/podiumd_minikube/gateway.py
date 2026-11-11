@@ -196,6 +196,10 @@ def route_manifests(docs: list[Doc]) -> list[Doc]:
     return [*services.values(), *routes]
 
 
+# ExternalsPodiumD's routes set these on every response, replacing an app's own.
+RESPONSE_HEADERS = {"Strict-Transport-Security": "max-age=31536000", "X-Content-Type-Options": "nosniff"}
+
+
 def _service_and_route(docs: list[Doc], rule: Doc, forwarded: str, namespace: str) -> tuple[Doc, Doc]:
     """Return the ExternalName Service and the HTTPRoute for an Ingress rule of namespace."""
     host = str(rule["host"])
@@ -233,6 +237,9 @@ def _service_and_route(docs: list[Doc], rule: Doc, forwarded: str, namespace: st
                 "filters": [
                     {"type": "URLRewrite", "urlRewrite": {"hostname": forwarded}},
                     {"type": "RequestHeaderModifier", "requestHeaderModifier": {"set": headers}},
+                    {"type": "ResponseHeaderModifier", "responseHeaderModifier": {"set": [
+                        {"name": name, "value": value} for name, value in RESPONSE_HEADERS.items()
+                    ]}},
                 ],
                 "backendRefs": [{"name": backend["name"], "port": port}],
             }],

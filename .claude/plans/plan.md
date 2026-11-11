@@ -10108,3 +10108,35 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
   restart or an admin request, so something outside the web requests
   flipped the setting (handed to podiumd-tests). The `--lazy-apps` race
   reproduction (Kees's go) is moot.
+
+## Elasticsearch: no replicas on the single node (Kees, 2026-11-11)
+
+- KISS's and Open Inwoner's Elasticsearch were yellow: KISS's crawler
+  indexes (search-website) and Open Inwoner's products and cms_pages take
+  Elasticsearch's default of 1 replica, which a single node never assigns;
+  ExternalsPodiumD runs 3 nodes. podiumd-tests only starts the crawler
+  CronJobs, so the index settings are ours.
+- `manifests.no_replicas_kiss`: the chart's pre-upgrade hook
+  contact-crawler-index-template gets `number_of_replicas: 0` in its
+  search-* template and a second PUT on the existing search-* indexes
+  (allow_no_indices); it stops the deploy when the chart's template text
+  changes. `manifests.no_replicas_open_inwoner`: the search-index init
+  container PUTs a template for products and cms_pages before its
+  `search_index --rebuild` (its script is the init container's command).
+- Live 17:20 CET: both green.
+
+## Edge: ExternalsPodiumD's response headers
+
+- ExternalsPodiumD's HTTPRoutes all set Strict-Transport-Security
+  max-age=31536000 and X-Content-Type-Options nosniff
+  (ResponseHeaderModifier); ours did not (mailpit had neither, ZAC sent its
+  nginx's max-age=15768000, Open Zaak nosniff twice). gateway.RESPONSE_HEADERS
+  now on every route, as podiumd-infra's.
+- The WAF's own responses (the inway's 400 without a client certificate,
+  413) never reach NGF: the WAF adds the same headers when
+  $upstream_status is empty, as podiumd-infra c21a612 (podiumd-tests'
+  test_security_headers[inway]).
+- Live: zac, mailpit, openzaak and the inway's 400 carry one copy each.
+- Memory after the day's deploys: node 17531 MiB, over the 17408 budget
+  right after a deploy; otel-collector 35 -> 174 MiB and OpenBao 29 ->
+  101 MiB above the baseline. To re-measure settled.
