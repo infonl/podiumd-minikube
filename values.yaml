@@ -1350,10 +1350,11 @@ podiumd:
         hostHeader: bag-mock
         targetUrl: http://bag-mock:8080/lvbag/individuelebevragingen/v2/
         # As ExternalsPodiumD's info and icat estates: the BAG's self links become
-        # api-proxy URLs, which Open Zaak fetches to validate a zaakobject.
+        # api-proxy URLs, which Open Zaak fetches to validate a zaakobject. A host
+        # with a dot: Django's URLValidator refuses a single-label host.
         urlRewrite:
           enabled: true
-          internalUrl: http://api-proxy/lvbag/individuelebevragingen/v2/
+          internalUrl: http://api-proxy.podiumd.svc.cluster.local/lvbag/individuelebevragingen/v2/
       brp:
         hostHeader: brp-personen-mock
         targetUrl: http://brp-personen-mock:5010/haalcentraal/api/brp/
@@ -2998,6 +2999,18 @@ podiumd:
             name: apiproxy-bag
             labels:
               managed-by: iac
+            # As kees00 (podiumd-infra #233): the BAG's links become outway URLs,
+            # which Open Zaak fetches to validate a zaakobject; an uncompressed body.
+            plugins:
+              proxy-rewrite:
+                headers:
+                  remove:
+                    - Accept-Encoding
+              response-rewrite:
+                filters:
+                  - regex: 'http://bag-mock:8080/'
+                    scope: global
+                    replace: 'http://frankgateway-outway.podiumd.svc.cluster.local:9080/'
             upstream:
               type: roundrobin
               scheme: http

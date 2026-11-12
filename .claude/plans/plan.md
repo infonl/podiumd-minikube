@@ -10378,3 +10378,15 @@ so `/api/contactmomentendetails` answered 401 "The signature key was not
 found". Now 42 characters; the reference projects set it per environment from
 a secret (kees00: 48). Live: contact-web restarted with the 42-character
 `MANAGEMENTINFORMATIE_API_KEY`.
+
+- Correction (podiumd-tests' rerun, run 20261112-174626): Open Zaak refused
+  `http://bag-mock:8080/...` with 400 "Voer een geldige URL in.": Django's
+  URLValidator accepts no single-label host but localhost, so `http://api-proxy/`
+  fails too. `internalUrl` is now `http://api-proxy.podiumd.svc.cluster.local/...`
+  (as info/ontw), and the outway's `apiproxy-bag` route rewrites the links to
+  `http://frankgateway-outway.podiumd.svc.cluster.local:9080/` with
+  `response-rewrite` `filters`, removing `Accept-Encoding` (as kees00,
+  podiumd-infra #233). route_outbound leaves the FQDN alone: with frankgateway
+  the apps reach the BAG through the outway, not the api-proxy. Live: both
+  paths in `tests/test_bag_mock.py` pass; the outway link passes URLValidator
+  in the Open Zaak pod and answers 200.
