@@ -10283,3 +10283,28 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
 - About 40 MiB, 9% of the huge-page share; over all JVMs (about 1.4 GiB in
   huge pages) an estimated 125 MiB. Not worth a laptop-wide kernel setting
   on every cluster start. Dropped; Kees sets the host back to `always`.
+
+## WAF client certificates in passthrough, as the Application Gateway (podiumd-infra, 2026-11-12)
+
+- podiumd-infra's request (its PR #228, branch feat/waf-mtls-passthrough,
+  Kees's go): the Application Gateway runs mTLS in passthrough mode
+  (IN-3287). It asks for a client certificate, checks none, and forwards it
+  in four headers; the inway decides on the fingerprint. ExternalsPodiumD's
+  dim1 inway route (feature/ontw-dim1-podiumd-4.10.0-frankgateway-hello-routes)
+  already calls consumer_auth without verificationHeader, so both reference
+  projects agree.
+- waf.py: the inway host's server has `ssl_verify_client optional_no_ca`
+  and no client CA or verify depth. It sets X-Client-Cert
+  ($ssl_client_escaped_cert), -Fingerprint, -Subject and -Issuer
+  ($ssl_client_i_dn); every other server removes all four. No
+  X-Client-Cert-Verification. The access log has client_fingerprint
+  instead of client_verify. The waf-client-ca Secret, its mount and its
+  share of the config hash are gone; the live Secret was deleted by hand
+  after the deploy. pki.ensure_client_ca and .pki/client-ca.* are unused
+  (the files stay on disk, gitignored).
+- values.yaml: the inway's echo route drops verificationHeader.
+- Live (deploy 10:43-10:48 CET, podiumd upgraded, 311 s):
+  tests/test_waf_mtls.py: no certificate 401 client_certificate_required;
+  forged headers over http removed (401 or 301); a self-signed certificate
+  with a forged fingerprint 401 unknown_client_certificate (was nginx's 400
+  in both cases).

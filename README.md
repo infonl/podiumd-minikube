@@ -82,11 +82,11 @@ ClusterIP `10.96.0.200`, which `minikube tunnel` exposes, so the
 behind it.
 
 With the `frankgateway` profile, `inway.local` routes to Frank!Gateway's
-inway and the WAF demands a client certificate there, as podiumd-infra's
-kees00: from the test CA `.pki/client-ca.crt` (key `.pki/client-ca.key`),
-else 400. It passes the certificate's identity in `X-Client-Cert-Fingerprint`,
-`-Subject` and `-Verification`; every other host removes these headers. The
-inway's consumers live in OpenBao `secret/frankgateway/consumers`
+inway. The WAF asks for a client certificate there and checks none, as the
+Application Gateway's passthrough mode (IN-3287) and podiumd-infra's kees00:
+it passes the certificate in `X-Client-Cert`, `-Fingerprint`, `-Subject` and
+`-Issuer`; every other host removes these headers. The inway decides on the
+fingerprint: its consumers live in OpenBao `secret/frankgateway/consumers`
 (`podiumd-minikube openbao-consumers`).
 
 ### Network

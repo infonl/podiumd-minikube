@@ -1,5 +1,5 @@
 {{/*
-inway.local -> Frank!Gateway's inway, as ExternalsPodiumD's HTTPRoute to frankgateway-inway:9080; the WAF demands a
+inway.local -> Frank!Gateway's inway, as ExternalsPodiumD's HTTPRoute to frankgateway-inway:9080; the WAF forwards the
 client certificate on this host (podiumd_minikube.waf).
 */}}
 {{- if and .Values.podiumd.frankgateway.enabled .Values.podiumd.frankgateway.instances.inway.enabled }}

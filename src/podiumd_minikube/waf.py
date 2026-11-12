@@ -13,7 +13,6 @@ import re
 from podiumd_minikube import gateway
 from podiumd_minikube import kube
 from podiumd_minikube import manifests
-from podiumd_minikube import pki
 from podiumd_minikube import process
 from podiumd_minikube import tls
 from podiumd_minikube.objects import Doc
@@ -64,20 +63,17 @@ TLS_DIR = "/etc/nginx/tls"
 QUOTE = "'"
 # proxy_set_header with an empty value sends no header.
 REMOVED = '""'
-# The identity of a verified client certificate, in the headers and formats of the Application Gateway's rewrite
-# (var_client_certificate_*): SHA-1 in hex, the subject as RFC 2253, SUCCESS. Every other server removes them.
+# The client certificate as the Application Gateway's passthrough mode forwards it (IN-3287), unchecked: the leaf
+# as URL-encoded PEM, its SHA-1 in lower-case hex, subject and issuer as RFC 2253. The inway decides on the
+# fingerprint. Every other server removes them.
 CLIENT_CERT_HEADERS = {
+    "X-Client-Cert": "$ssl_client_escaped_cert",
     "X-Client-Cert-Fingerprint": "$ssl_client_fingerprint",
     "X-Client-Cert-Subject": "$ssl_client_s_dn",
-    "X-Client-Cert-Verification": "$ssl_client_verify",
+    "X-Client-Cert-Issuer": "$ssl_client_i_dn",
 }
-# The hosts of Ingresses to this Service demand a client certificate (podiumd-infra's waf.mtls.hosts: [inway]).
+# The hosts of Ingresses to this Service ask for a client certificate (podiumd-infra's waf.mtls.hosts: [inway]).
 MTLS_SERVICE = "frankgateway-inway"
-CLIENT_CA_SECRET = "waf-client-ca"  # noqa: S105  # nosec B105
-CLIENT_CA_DIR = "/etc/nginx/client-ca"
-CLIENT_CA_FILE = "ca.crt"
-# A client certificate under an intermediate of the trusted CA verifies too.
-CLIENT_VERIFY_DEPTH = 3
 # nginx's defaults, which NGF keeps where its ClientSettingsPolicy sets nothing.
 NGINX_BODY_MAX_SIZE = "1m"
 NGINX_BODY_TIMEOUT = "60s"
@@ -100,7 +96,7 @@ LOG_FIELDS = {
     "body_bytes": "$request_length",
     "worker": "$pid",
     "sni": "$ssl_server_name",
-    "client_verify": "$ssl_client_verify",
+    "client_fingerprint": "$ssl_client_fingerprint",
 }
 RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"cpu": "1", "memory": "512Mi"}}
 # Not gateway.LABELS: gateway.apply deletes every labelled Service it did not render.
@@ -126,7 +122,7 @@ def body_max_size() -> str:
 
 
 def _own_response_headers() -> list[str]:
-    """Return gateway.RESPONSE_HEADERS for a response the WAF makes itself (400 without a client certificate, 413).
+    """Return gateway.RESPONSE_HEADERS for a response the WAF makes itself (413, 502).
 
     NGF's routes set them on what they answer; an empty value adds nothing, so those get no second copy.
     """
@@ -191,19 +187,13 @@ def _location(scheme: str, port: int, headers: dict[str, str]) -> list[str]:
 
 
 def mtls_hosts(docs: list[Doc]) -> list[str]:
-    """Return the hosts that demand a client certificate: those of the rendered Ingresses to MTLS_SERVICE."""
+    """Return the hosts that ask for a client certificate: those of the rendered Ingresses to MTLS_SERVICE."""
     return manifests.ingress_hosts(docs, MTLS_SERVICE)
 
 
 def _mtls_server(host: str, tls_files: list[str]) -> list[str]:
-    """Return the server of host: a client certificate from the trusted CA or 400, its identity in the headers."""
-    verify = [
-        f"server_name {host};",
-        *tls_files,
-        f"ssl_client_certificate {CLIENT_CA_DIR}/{CLIENT_CA_FILE};",
-        "ssl_verify_client on;",
-        f"ssl_verify_depth {CLIENT_VERIFY_DEPTH};",
-    ]
+    """Return the server of host: any client certificate or none, forwarded in the headers."""
+    verify = [f"server_name {host};", *tls_files, "ssl_verify_client optional_no_ca;"]
     return _server(f"{HTTPS_PORT} ssl", [*verify, *_location("https", 443, CLIENT_CERT_HEADERS)])
 
 
@@ -261,14 +251,12 @@ def _probe() -> Doc:
     return {"httpGet": {"path": "/healthz", "port": HEALTH_PORT}, "periodSeconds": 10}
 
 
-def _container(*, client_ca: bool) -> Doc:
+def _container() -> Doc:
     mounts = [
         {"name": "config", "mountPath": TEMPLATE_PATH, "subPath": TEMPLATE},
         {"name": "config", "mountPath": EXCLUSIONS_PATH, "subPath": EXCLUSIONS_FILE},
         {"name": "tls", "mountPath": TLS_DIR, "readOnly": True},
     ]
-    if client_ca:
-        mounts.append({"name": "client-ca", "mountPath": CLIENT_CA_DIR, "readOnly": True})
     ports = {"http": HTTP_PORT, "https": HTTPS_PORT, "health": HEALTH_PORT}
     return {
         "name": "waf",
@@ -288,21 +276,19 @@ def _container(*, client_ca: bool) -> Doc:
     }
 
 
-def _deployment(text: str, client_ca: str | None) -> Doc:
-    """Return the Deployment; the hash of its config and client CA restarts it when either changes."""
-    digest = hashlib.sha256(f"{text}{client_ca or ''}".encode()).hexdigest()[:16]
+def _deployment(text: str) -> Doc:
+    """Return the Deployment; the hash of its config restarts it when the config changes."""
+    digest = hashlib.sha256(text.encode()).hexdigest()[:16]
     volumes = [
         {"name": "config", "configMap": {"name": EDGE_SERVICE}},
         {"name": "tls", "secret": {"secretName": tls.CERTIFICATE}},
     ]
-    if client_ca is not None:
-        volumes.append({"name": "client-ca", "secret": {"secretName": CLIENT_CA_SECRET}})
     template = {
         "metadata": {"labels": LABELS, "annotations": {"checksum/config": digest}},
         "spec": {
             # Service variables would land in the image's envsubst of its templates.
             "enableServiceLinks": False,
-            "containers": [_container(client_ca=client_ca is not None)],
+            "containers": [_container()],
             "volumes": volumes,
         },
     }
@@ -327,10 +313,8 @@ def _service() -> Doc:
     return {"apiVersion": "v1", "kind": "Service", "metadata": _meta(EDGE_SERVICE), "spec": spec}
 
 
-def rendered(client_certificate_hosts: list[str], client_ca: str | None = None) -> list[Doc]:
-    """Return the WAF's ConfigMap, Deployment and Service, and the Secret of client_ca, the PEM of the CA the mTLS
-    hosts trust.
-    """
+def rendered(client_certificate_hosts: list[str]) -> list[Doc]:
+    """Return the WAF's ConfigMap, Deployment and Service."""
     text = config(client_certificate_hosts)
     configmap = {
         "apiVersion": "v1",
@@ -338,11 +322,7 @@ def rendered(client_certificate_hosts: list[str], client_ca: str | None = None) 
         "metadata": _meta(EDGE_SERVICE),
         "data": {TEMPLATE: text, EXCLUSIONS_FILE: EXCLUSIONS},
     }
-    docs = [configmap, _deployment(text + EXCLUSIONS, client_ca), _service()]
-    if client_ca is not None:
-        secret = {"apiVersion": "v1", "kind": "Secret", "metadata": _meta(CLIENT_CA_SECRET)}
-        docs.insert(0, {**secret, "stringData": {CLIENT_CA_FILE: client_ca}})
-    return docs
+    return [configmap, _deployment(text + EXCLUSIONS), _service()]
 
 
 def apply(docs: list[Doc]) -> None:
@@ -350,8 +330,7 @@ def apply(docs: list[Doc]) -> None:
     wait for it.
     """
     print("\nApplying the WAF in front of NGINX Gateway Fabric (waf.py)...")
-    hosts = mtls_hosts(docs)
-    kube.apply(manifests.dump(rendered(hosts, pki.ensure_client_ca() if hosts else None)))
+    kube.apply(manifests.dump(rendered(mtls_hosts(docs))))
     kube.kubectl_shown("rollout", "status", f"deployment/{EDGE_SERVICE}", "-n", EDGE_NAMESPACE, "--timeout=300s")
     ip = kube.edge_ip()
     shown = ip or "<none - is minikube tunnel running?>"

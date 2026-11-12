@@ -2917,8 +2917,8 @@ podiumd:
   # --- frankgateway + openbao (profile: frankgateway) ---
   # As ExternalsPodiumD's dim1 Frank!Gateway branch: outway and inway, OpenBao
   # with a static seal and Keycloak login, one replica each (single node).
-  # The inway as podiumd-infra's kees00: behind the WAF's client-certificate
-  # check on inway.local (podiumd_minikube.waf), consumers from OpenBao
+  # The inway as podiumd-infra's kees00: behind the WAF, which forwards the
+  # client certificate on inway.local (podiumd_minikube.waf), consumers from OpenBao
   # secret/frankgateway/consumers, /echo/* to podiumd-tests' fg-echo fixture.
   # Beyond it (user's choice, the chart runbook's step 6): the outway carries
   # the api-proxy's paths to the same targets, as the chart's reference routes
@@ -2965,7 +2965,7 @@ podiumd:
               serverless-pre-function:
                 phase: access
                 functions:
-                  - 'local consumer_auth = require("openbao-consumer-auth") return consumer_auth({ path = "frankgateway/consumers", verificationHeader = "X-Client-Cert-Verification", allow = { "partner-a" } })'
+                  - 'local consumer_auth = require("openbao-consumer-auth") return consumer_auth({ path = "frankgateway/consumers", allow = { "partner-a" } })'
             upstream:
               type: roundrobin
               scheme: http

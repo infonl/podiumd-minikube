@@ -52,22 +52,11 @@ def test_mtls_hosts_are_those_of_ingresses_to_the_inway():
     assert waf.mtls_hosts([ZAC]) == []
 
 
-def test_an_mtls_host_demands_a_certificate_of_the_client_ca():
+def test_an_mtls_host_asks_for_any_client_certificate():
     server = waf.config(["inway.local"]).rsplit("\n\n", maxsplit=1)[-1]
     assert "server_name inway.local;" in server
-    assert "ssl_verify_client on;" in server
-    assert f"ssl_client_certificate {waf.CLIENT_CA_DIR}/{waf.CLIENT_CA_FILE};" in server
-
-
-def test_the_client_ca_is_a_secret_the_waf_mounts():
-    docs = waf.rendered(["inway.local"], "PEM")
-    secret, deployment = docs[0], docs[2]
-    assert secret["metadata"]["name"] == waf.CLIENT_CA_SECRET
-    assert secret["stringData"] == {waf.CLIENT_CA_FILE: "PEM"}
-    template = deployment["spec"]["template"]
-    assert {"name": "client-ca", "secret": {"secretName": waf.CLIENT_CA_SECRET}} in template["spec"]["volumes"]
-    _, without, _ = waf.rendered([])
-    assert without["spec"]["template"]["metadata"] != template["metadata"]
+    assert "ssl_verify_client optional_no_ca;" in server
+    assert "ssl_client_certificate" not in server
 
 
 def test_modsecurity_inspects_bodies_up_to_the_images_limit_when_ngf_has_none():
