@@ -10369,3 +10369,12 @@ whole hold and takes over a stale line only under a flock on
 - First deploy attempt refused: the shared kubeconfig's current context was
   `podiumd-kees00-aks` (switched by another session); deployed with a
   private kubeconfig minified to context minikube.
+
+## KISS management information key of 32+ bytes (podiumd-tests, 2026-11-12)
+
+`kiss.settings.managementInformatie.apiKey` was the 27-character placeholder
+`kissManagementInformatieKey`; KISS signs with it (HS256, at least 32 bytes),
+so `/api/contactmomentendetails` answered 401 "The signature key was not
+found". Now 42 characters; the reference projects set it per environment from
+a secret (kees00: 48). Live: contact-web restarted with the 42-character
+`MANAGEMENTINFORMATIE_API_KEY`.

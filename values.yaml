@@ -3152,7 +3152,8 @@ podiumd:
         objectTypeUrl: https://objecttypen.local/api/v2/objecttypes/2eb81bd1-0d2b-4123-84ab-d55b99b9e75a
         token: objectenContactToken
       managementInformatie:
-        apiKey: kissManagementInformatieKey
+        # KISS signs with it (HS256), which needs at least 32 bytes.
+        apiKey: kissManagementInformatieKeyForHs256Signing
       registers:
         - isDefault: true
           zaaksysteem:
