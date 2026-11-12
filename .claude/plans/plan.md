@@ -10308,3 +10308,7 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
   forged headers over http removed (401 or 301); a self-signed certificate
   with a forged fingerprint 401 unknown_client_certificate (was nginx's 400
   in both cases).
+- podiumd-tests' run 20261112-095001 after the deploy: its 5 inway consumer
+  cases passed (registered but not allowed 403, allowed 200; its forged
+  headers over http now accept 401 client_certificate_required, its
+  38843a1).
