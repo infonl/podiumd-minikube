@@ -26,6 +26,17 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+
+# On a laptop the checks yield the CPU to everything else and pytest takes 4
+# workers: all tools at once with 8 took 23 of 24 cores. CI keeps 8.
+workers=8
+if [[ -z "${CI:-}" ]]; then
+    workers=4
+    if [[ -z "${RUN_PYTHON_CHECKS_NICE:-}" ]]; then
+        export RUN_PYTHON_CHECKS_NICE=1
+        exec nice -n 10 "$0" "$@"
+    fi
+fi
 if [[ -x .venv/bin/python3 ]]; then
     PATH="$PWD/.venv/bin:$PATH"
     # CI installs the latest tools; upgrade .venv to them at most once a day
@@ -101,7 +112,7 @@ step_pylint_unit_tests() {
 step_pylint_tests() { PYTHONPATH=tests pylint -j 0 --disable="$tests_pylint_disable" "${live_test_files[@]}"; }
 
 # Coverage source and threshold: [tool.coverage] in pyproject.toml. More than 8 workers start slower than they gain.
-step_pytest() { python3 -m pytest -q -n auto --maxprocesses 8 --cov --cov-report=term-missing:skip-covered; }
+step_pytest() { python3 -m pytest -q -n auto --maxprocesses "$workers" --cov --cov-report=term-missing:skip-covered; }
 
 # Known vulnerabilities in the packages of .venv, as a warning: a new advisory appears without a code change and must
 # not block a commit; the pip-audit workflow reports it. --skip-editable: podiumd-minikube itself is not on PyPI. Own
