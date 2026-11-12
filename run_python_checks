@@ -25,18 +25,20 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     exit 0
 fi
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
-
-# On a laptop the checks yield the CPU to everything else and pytest takes 4
-# workers: all tools at once with 8 took 23 of 24 cores. CI keeps 8.
+# On a laptop the checks yield the CPU to everything else, and pytest and each
+# pylint take 4 workers: all tools at once with 8 took 23 of 24 cores. CI keeps
+# 8 and pylint's one per core. Before the cd: "$0" may be a relative path.
 workers=8
+pylint_jobs=0
 if [[ -z "${CI:-}" ]]; then
     workers=4
+    pylint_jobs=4
     if [[ -z "${RUN_PYTHON_CHECKS_NICE:-}" ]]; then
         export RUN_PYTHON_CHECKS_NICE=1
         exec nice -n 10 "$0" "$@"
     fi
 fi
+cd "$(dirname "${BASH_SOURCE[0]}")"
 if [[ -x .venv/bin/python3 ]]; then
     PATH="$PWD/.venv/bin:$PATH"
     # CI installs the latest tools; upgrade .venv to them at most once a day
@@ -103,13 +105,13 @@ step_basedpyright() { basedpyright "${code[@]}" unit_tests tests; }
 
 # -j 0: one process per CPU. Separate runs for the test directories: each
 # imports its own conftest; PYTHONPATH lets pylint resolve it without analyzing it.
-step_pylint_src() { pylint -j 0 "${code[@]}"; }
+step_pylint_src() { pylint -j "$pylint_jobs" "${code[@]}"; }
 
 step_pylint_unit_tests() {
-    PYTHONPATH=unit_tests pylint -j 0 --disable="$tests_pylint_disable" "${unit_test_files[@]}"
+    PYTHONPATH=unit_tests pylint -j "$pylint_jobs" --disable="$tests_pylint_disable" "${unit_test_files[@]}"
 }
 
-step_pylint_tests() { PYTHONPATH=tests pylint -j 0 --disable="$tests_pylint_disable" "${live_test_files[@]}"; }
+step_pylint_tests() { PYTHONPATH=tests pylint -j "$pylint_jobs" --disable="$tests_pylint_disable" "${live_test_files[@]}"; }
 
 # Coverage source and threshold: [tool.coverage] in pyproject.toml. More than 8 workers start slower than they gain.
 step_pytest() { python3 -m pytest -q -n auto --maxprocesses "$workers" --cov --cov-report=term-missing:skip-covered; }
