@@ -10328,3 +10328,22 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
   and 0.03 each for Objecten and Open Notificaties (50 s).
 - No change: the cache saves nothing here, and a longer probe period would
   differ from the charts and both estates.
+
+## The lock file: flock the hold, guarded break (podiumd-tests, 2026-11-12)
+
+podiumd-tests db3e058 keeps an exclusive flock on `.minikube-lock` for its
+whole hold and takes over a stale line only under a flock on
+`.minikube-lock.guard`; its handoff (eba303e) asked the same of `lock.py`.
+
+- `take` creates the file (O_EXCL) and flocks it under the guard; the open
+  file stays in `_FLOCKED` until `release`, so `cluster-lock run` and every
+  `@lock.holding` command are live holders. A hold taken with
+  `cluster-lock take` ends its process, so it is not live.
+- `current()` sets `Hold.live` from a non-blocking shared flock; `describe`
+  adds ", running" and leaves out the stale hint for a live hold.
+- `break_lock(expected, force=)` re-reads under the guard, removes only the
+  hold the user confirmed, and refuses a live one without `--force`
+  (before: any hold, also a running podiumd-tests run's). `release` and
+  `release_held_by` compare and unlink under the guard too.
+- Checked live on a private lock file: inside `cluster-lock run` the file is
+  flock-ed, `status` says "running", `break --yes` refuses; free after.

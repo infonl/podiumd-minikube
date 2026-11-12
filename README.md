@@ -233,8 +233,11 @@ cluster, so whoever changes it holds the lock file first
 overrides the path). `deploy`, `deploy-extended`, `reset-namespace`,
 `teardown-cluster`, `start-cluster`, `provision-cluster`,
 `flush-redis`, `replicas` and `setup-tunnel stop` take it
-themselves and refuse while someone else holds it. Reading (kubectl get,
-logs, the test suite) needs no lock.
+themselves and refuse while someone else holds it. A running holder (a
+command here, a podiumd-tests run) keeps an flock on the file, so `status`
+shows it as running and `break` refuses it without `--force`; a hold taken
+by hand with `take` has no running holder. Reading (kubectl get, logs, the
+test suite) needs no lock.
 
 ```bash
 podiumd-minikube cluster-lock status                         # who holds it, since when

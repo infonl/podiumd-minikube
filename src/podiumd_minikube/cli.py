@@ -84,6 +84,7 @@ def _lock_parser() -> argparse.ArgumentParser:
     running.add_argument("argv", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
     breaking = actions.add_parser("break", help="remove a stale lock")
     breaking.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
+    breaking.add_argument("--force", action="store_true", help="also remove a hold of a running process")
     return parser
 
 
@@ -111,8 +112,7 @@ def _lock_break(args: argparse.Namespace) -> None:
     if hold is None:
         print("free")
     elif teardown.confirmed(f"Remove the lock held by {lock.describe(hold)}?", yes=args.yes):
-        lock.break_lock()
-        print("removed")
+        print("removed" if lock.break_lock(hold, force=args.force) else "changed meanwhile; nothing removed")
 
 
 LOCK_ACTIONS: dict[str, Callable[[argparse.Namespace], None]] = {

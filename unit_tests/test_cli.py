@@ -149,9 +149,9 @@ def test_cluster_lock_take_status_release(capsys: pytest.CaptureFixture[str]):
     cli.run(["cluster-lock", "--who", "kees", "take", "upgrade"])
     assert capsys.readouterr().out == "taken; release with: podiumd-minikube cluster-lock --who kees release\n"
     cli.run(["cluster-lock", "status"])
-    assert capsys.readouterr().out.startswith("held by kees (upgrade) for 0m")
+    assert capsys.readouterr().out.startswith("held by kees (upgrade")
     cli.run(["cluster-lock", "--who", "other", "release"])
-    assert capsys.readouterr().out.startswith("not held by other: kees (upgrade)")
+    assert capsys.readouterr().out.startswith("not held by other: kees (upgrade")
     cli.run(["cluster-lock", "--who", "kees", "release"])
     assert capsys.readouterr().out == "released\n"
     cli.run(["cluster-lock", "--who", "kees", "release"])
