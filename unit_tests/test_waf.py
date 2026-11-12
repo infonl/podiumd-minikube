@@ -88,6 +88,13 @@ def test_the_waf_holds_the_edge_ip_without_the_labels_gateway_prunes():
     assert container["securityContext"]["runAsUser"] == waf.IMAGE_UID
 
 
+def test_the_memory_limit_fits_a_500_mb_upload_in_each_worker():
+    container = waf.rendered([])[1]["spec"]["template"]["spec"]["containers"][0]
+    limit = waf.size_bytes(container["resources"]["limits"]["memory"].removesuffix("i").lower())
+    workers = int(next(env["value"] for env in container["env"] if env["name"] == "NGINX_WORKER_PROCESSES"))
+    assert limit > workers * 500 * 1024 * 1024
+
+
 def test_apply_waits_for_the_rollout(fake_run: FakeRun):
     waf.apply([ZAC])
     assert fake_run.ran("kubectl", "rollout", "status", f"deployment/{EDGE_SERVICE}")

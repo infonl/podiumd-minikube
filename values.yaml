@@ -1349,6 +1349,11 @@ podiumd:
       bag:
         hostHeader: bag-mock
         targetUrl: http://bag-mock:8080/lvbag/individuelebevragingen/v2/
+        # As ExternalsPodiumD's info and icat estates: the BAG's self links become
+        # api-proxy URLs, which Open Zaak fetches to validate a zaakobject.
+        urlRewrite:
+          enabled: true
+          internalUrl: http://api-proxy/lvbag/individuelebevragingen/v2/
       brp:
         hostHeader: brp-personen-mock
         targetUrl: http://brp-personen-mock:5010/haalcentraal/api/brp/

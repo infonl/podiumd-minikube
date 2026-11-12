@@ -98,7 +98,10 @@ LOG_FIELDS = {
     "sni": "$ssl_server_name",
     "client_fingerprint": "$ssl_client_fingerprint",
 }
-RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"cpu": "1", "memory": "512Mi"}}
+# libmodsecurity 3 reads a request body that nginx buffered to a file whole into memory before it applies
+# SecRequestBodyLimit (Transaction::requestBodyFromFile), so an upload costs its size in one worker: room for both
+# workers (NGINX_WORKER_PROCESSES) taking a ZAC upload of its 500 MB maximum at once.
+RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"cpu": "1", "memory": "1536Mi"}}
 # Not gateway.LABELS: gateway.apply deletes every labelled Service it did not render.
 LABELS = {"app.kubernetes.io/name": EDGE_SERVICE}
 

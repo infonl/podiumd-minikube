@@ -10347,3 +10347,25 @@ whole hold and takes over a stale line only under a flock on
   `release_held_by` compare and unlink under the guard too.
 - Checked live on a private lock file: inside `cluster-lock run` the file is
   flock-ed, `status` says "running", `break --yes` refuses; free after.
+
+## WAF memory 1536Mi, BAG self links via the api-proxy (podiumd-tests, 2026-11-12)
+
+- WAF `limits.memory` 512Mi -> 1536Mi, as podiumd-infra #234 (merged): a
+  500 MB + 1 byte ZAC upload OOMKilled the WAF. libmodsecurity 3.0.17 reads
+  a body nginx buffered to a file whole into memory
+  (`Transaction::requestBodyFromFile`) before `SecRequestBodyLimit`; v3 has
+  no `SecRequestBodyInMemoryLimit`. Room for both workers at 500 MB; the
+  request stays 256Mi, settled usage unchanged. Unit test as podiumd-infra's.
+- BAG: the vendored bodies link to `bag-wiremock.local:8080`, which Open Zaak
+  cannot resolve, so ZAC answered 400 to a zaak with `bagObjecten`. podiumd's
+  `apiproxy.locations.bag.urlRewrite` (sub_filter of `targetUrl` to
+  `internalUrl`) is on, as ExternalsPodiumD's info/ontw and icat/ontw (off
+  in dim1-3, dimp, mayk; podiumd-infra does not set it); the bag-mock's nginx
+  rewrites its links to `targetUrl`, as the Kadaster's point at itself.
+  `manifests.route_outbound` also rewrites the api-proxy's own ConfigMap, so
+  with frankgateway the links are outway URLs, like every other app's BAG
+  URL. Live: `tests/test_bag_mock.py` passes on --full; Open Zaak fetches the
+  link (200).
+- First deploy attempt refused: the shared kubeconfig's current context was
+  `podiumd-kees00-aks` (switched by another session); deployed with a
+  private kubeconfig minified to context minikube.
