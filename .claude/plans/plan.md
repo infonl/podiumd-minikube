@@ -10312,3 +10312,19 @@ certificates); podiumd-infra adds the Application Gateway's mTLS in its WAF.
   cases passed (registered but not allowed 403, allowed 200; its forged
   headers over http now accept 401 client_certificate_required, its
   38843a1).
+
+## Dropped: the bytecode cache for Open Klant, Objecten and Open Notificaties (Kees, 2026-11-12)
+
+- Open Klant's worker liveness probe (`celery inspect ... active`, every
+  30 s) took a full core in a host snapshot. Measured in the container
+  (CPU of the probe command, 4 runs each, host under load 40-60): without
+  PYTHONPYCACHEPREFIX 1.3-2.1 s, with it 1.2-1.8 s (after the first run,
+  5.7 s while it filled the cache). The ranges overlap: within the noise.
+- Why: unlike Open Zaak (629 .pyc for 8023 .py), these images ship
+  bytecode for their site-packages: Open Klant 6314 .pyc for 6575 .py,
+  Objecten 6493/6736, Open Notificaties 6492/6685. /app/src belongs to the
+  app user, so Python writes its .pyc there once. The probe's cost is
+  importing Django and Celery itself, about 0.05 core for Open Klant (30 s)
+  and 0.03 each for Objecten and Open Notificaties (50 s).
+- No change: the cache saves nothing here, and a longer probe period would
+  differ from the charts and both estates.
