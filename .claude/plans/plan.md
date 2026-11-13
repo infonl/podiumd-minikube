@@ -10402,3 +10402,21 @@ Application Gateway's SSL policy is in no repository; this only removes
 weak suites. Live: AES256-SHA, CAMELLIA256-SHA, ARIA256-GCM-SHA384 and
 ECDHE-RSA-AES128-SHA fail the handshake; ECDHE-RSA-AES256-GCM-SHA384 and
 TLS 1.3 connect.
+
+## OMC: besluit, taak and bericht scenarios for podiumd-tests' zaaktype (podiumd-tests, 2026-11-13)
+
+ExternalsPodiumD (dim1, icat) whitelists `niet-bestaande-id` for taskAssigned
+and decisionMade; podiumd-infra comments the whitelist out (chart default
+"*") and sets placeholder objecttype uuids. minikube now whitelists only
+`ptest-bootstrap-klacht`, so real zaaktypen keep ExternalsPodiumD's
+behaviour and the scenarios are testable as on podiumd-infra. Added: email
+templates taskAssigned and messageBox (the Notify mock accepts any),
+`decisionInfoObjectType.uuids` 320da3a6-... (informatieobjecttype
+ptest-bootstrap-bijlage) and `taskObjectType.uuid` 81a4f784-... (objecttype
+ptest-bootstrap-taak), both uuid5 values podiumd-tests' bootstrap creates.
+`whitelist.message.allowed: false` stays as ExternalsPodiumD writes it; the
+chart's `default "true"` renders "true" (omc-7), as on the estates.
+OMC's Objecten token gets no permission on the taak objecttype here: the
+Objecten token step fails when an objecttype does not exist yet (before
+podiumd-tests' bootstrap); podiumd-tests' step grants it (update_or_create
+leaves unlisted permissions alone). Live: ConfigMap `omc` holds the values.
