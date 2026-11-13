@@ -98,6 +98,16 @@ LOG_FIELDS = {
     "sni": "$ssl_server_name",
     "client_fingerprint": "$ssl_client_fingerprint",
 }
+# TLS 1.2: NCSC's good and sufficient suites only (ECDHE with AES-GCM or ChaCha20-Poly1305); nginx's default
+# HIGH:!aNULL:!MD5 also accepts static RSA, CAMELLIA and ARIA. TLS 1.3's suites are all good.
+TLS12_CIPHERS = (
+    "ECDHE-ECDSA-AES256-GCM-SHA384",
+    "ECDHE-RSA-AES256-GCM-SHA384",
+    "ECDHE-ECDSA-CHACHA20-POLY1305",
+    "ECDHE-RSA-CHACHA20-POLY1305",
+    "ECDHE-ECDSA-AES128-GCM-SHA256",
+    "ECDHE-RSA-AES128-GCM-SHA256",
+)
 # libmodsecurity 3 reads a request body that nginx buffered to a file whole into memory before it applies
 # SecRequestBodyLimit (Transaction::requestBodyFromFile), so an upload costs its size in one worker: room for both
 # workers (NGINX_WORKER_PROCESSES) taking a ZAC upload of its 500 MB maximum at once.
@@ -156,6 +166,8 @@ def _http_directives() -> list[str]:
         f"proxy_busy_buffers_size {buffering['busyBuffersSize']};",
         "proxy_http_version 1.1;",
         "ssl_protocols TLSv1.2 TLSv1.3;",
+        f"ssl_ciphers {':'.join(TLS12_CIPHERS)};",
+        "ssl_prefer_server_ciphers on;",
     ]
 
 

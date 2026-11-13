@@ -10390,3 +10390,15 @@ a secret (kees00: 48). Live: contact-web restarted with the 42-character
   the apps reach the BAG through the outway, not the api-proxy. Live: both
   paths in `tests/test_bag_mock.py` pass; the outway link passes URLValidator
   in the Open Zaak pod and answers 200.
+
+## WAF TLS 1.2 ciphers: NCSC good/sufficient only (podiumd-tests, 2026-11-13)
+
+The WAF had no `ssl_ciphers`, so nginx's `HIGH:!aNULL:!MD5` accepted 16 TLS
+1.2 suites outside the NCSC guidelines (static RSA, CAMELLIA, ARIA).
+`waf.TLS12_CIPHERS` now lists the six ECDHE suites with AES-GCM or
+ChaCha20-Poly1305, with `ssl_prefer_server_ciphers on`; TLS 1.3 unchanged.
+Deviation: podiumd-infra's WAF (kees00) sets no ciphers either, and the
+Application Gateway's SSL policy is in no repository; this only removes
+weak suites. Live: AES256-SHA, CAMELLIA256-SHA, ARIA256-GCM-SHA384 and
+ECDHE-RSA-AES128-SHA fail the handshake; ECDHE-RSA-AES256-GCM-SHA384 and
+TLS 1.3 connect.

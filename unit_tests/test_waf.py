@@ -98,3 +98,11 @@ def test_the_memory_limit_fits_a_500_mb_upload_in_each_worker():
 def test_apply_waits_for_the_rollout(fake_run: FakeRun):
     waf.apply([ZAC])
     assert fake_run.ran("kubectl", "rollout", "status", f"deployment/{EDGE_SERVICE}")
+
+
+def test_tls_1_2_accepts_only_ecdhe_with_aead_suites():
+    text = waf.rendered([])[0]["data"]["default.conf.template"]
+    ciphers = text.split("ssl_ciphers ", 1)[1].split(";", 1)[0].split(":")
+    assert ciphers
+    assert all(c.startswith("ECDHE-") and ("GCM" in c or "CHACHA20" in c) for c in ciphers)
+    assert "ssl_prefer_server_ciphers on;" in text
