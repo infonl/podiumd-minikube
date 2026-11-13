@@ -10420,3 +10420,8 @@ OMC's Objecten token gets no permission on the taak objecttype here: the
 Objecten token step fails when an objecttype does not exist yet (before
 podiumd-tests' bootstrap); podiumd-tests' step grants it (update_or_create
 leaves unlisted permissions alone). Live: ConfigMap `omc` holds the values.
+- Follow-up (Kees's yes, via podiumd-tests): `messageObjectType.uuid`
+  9ce7e670-... (objecttype ptest-bootstrap-bericht, uuid5) and `version: 1`
+  (the chart defaults to 2; podiumd-tests publishes one version). OMC stores
+  a besluit as a bericht object of it; podiumd-tests' step grants token "omc"
+  read_and_write. Live: ConfigMap `omc` holds both.

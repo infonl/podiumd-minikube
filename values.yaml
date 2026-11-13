@@ -2922,14 +2922,17 @@ podiumd:
           message:
             # As ExternalsPodiumD; the chart's `default "true"` turns false into "true" (omc-7).
             allowed: false
-        # podiumd-tests' bootstrap creates both with these fixed uuids (uuid5):
-        # informatieobjecttype ptest-bootstrap-bijlage and objecttype ptest-bootstrap-taak.
+        # podiumd-tests' bootstrap creates these with fixed uuids (uuid5): informatieobjecttype
+        # ptest-bootstrap-bijlage, objecttypen ptest-bootstrap-taak and ptest-bootstrap-bericht.
         variable:
           objectType:
             decisionInfoObjectType:
               uuids: 320da3a6-d87d-5854-88ad-e8c534bc7e8b
             taskObjectType:
               uuid: 81a4f784-997b-5ab7-a4c5-29c65410ee8b
+            messageObjectType:
+              uuid: 9ce7e670-31a3-52a2-a042-b9ec64910f37
+              version: 1
     ingress:
       enabled: true
       hostname: omc.local
