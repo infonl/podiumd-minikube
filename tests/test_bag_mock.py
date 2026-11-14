@@ -26,3 +26,12 @@ def test_bag_self_links_through_the_outway_name_the_outway(enabled_profiles):
     if not enabled_profiles.get("frankgateway"):
         pytest.skip("'frankgateway' profile is not deployed")
     assert _self_link(OUTWAY) == f"{OUTWAY}{ADDRESS}"
+
+
+def test_the_postcode_lookup_finds_dam_1():
+    body = kubectl(
+        "exec", "-n", NAMESPACE, "deploy/api-proxy", "--",
+        "curl", "-sf", "http://localhost:8080/lvbag/individuelebevragingen/v2/adressen?postcode=1012JS&huisnummer=1",
+    )  # fmt: skip
+    (address,) = json.loads(body)["_embedded"]["adressen"]
+    assert (address["korteNaam"], address["woonplaatsNaam"]) == ("Dam", "Amsterdam")

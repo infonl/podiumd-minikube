@@ -1,6 +1,6 @@
 {{/*
 BAG (Kadaster) for the api-proxy: the vendored answers for one address and one
-search, served by nginx. The reference environments call Kadaster with a key
+search, and files/bag-mock's postcode lookup of that address, served by nginx. The reference environments call Kadaster with a key
 that is not public.
 */}}
 apiVersion: v1
@@ -12,6 +12,7 @@ metadata:
 data:
   nginx.conf: {{ .Files.Get "files/bag-mock/nginx.conf" | quote }}
   {{- (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/bag/*.json").AsConfig | nindent 2 }}
+  {{- (.Files.Glob "files/bag-mock/*.json").AsConfig | nindent 2 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -29,7 +30,7 @@ spec:
       labels:
         app: bag-mock
       annotations:
-        checksum/config: {{ print (.Files.Get "files/bag-mock/nginx.conf") (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/bag/*.json").AsConfig | sha256sum }}
+        checksum/config: {{ print (.Files.Get "files/bag-mock/nginx.conf") (.Files.Glob "vendor/dimpact-zaakafhandelcomponent/bag/*.json").AsConfig (.Files.Glob "files/bag-mock/*.json").AsConfig | sha256sum }}
     spec:
       enableServiceLinks: false
       containers:

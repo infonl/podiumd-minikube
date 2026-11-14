@@ -10425,3 +10425,12 @@ leaves unlisted permissions alone). Live: ConfigMap `omc` holds the values.
   (the chart defaults to 2; podiumd-tests publishes one version). OMC stores
   a besluit as a bericht object of it; podiumd-tests' step grants token "omc"
   read_and_write. Live: ConfigMap `omc` holds both.
+
+## BAG mock: postcode and huisnummer lookup (podiumd-tests, 2026-11-14)
+
+Open Formulieren looks addresses up with GET .../adressen?postcode=&huisnummer=;
+the bag-mock answered 404 (kees00's Kadaster answers). `files/bag-mock/`
+holds the answer for 1012JS 1: `_embedded.adressen` with the vendored Dam 1
+body (generated from `bag-adressen-0363200003761447-body.json`); nginx maps
+"$arg_postcode $arg_huisnummer" to it, other postcodes 404. The q search is
+unchanged. Live: `tests/test_bag_mock.py` (3 passed); 9999XX answers 404.
