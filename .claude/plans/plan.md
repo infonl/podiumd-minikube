@@ -10434,3 +10434,18 @@ holds the answer for 1012JS 1: `_embedded.adressen` with the vendored Dam 1
 body (generated from `bag-adressen-0363200003761447-body.json`); nginx maps
 "$arg_postcode $arg_huisnummer" to it, other postcodes 404. The q search is
 unchanged. Live: `tests/test_bag_mock.py` (3 passed); 9999XX answers 404.
+
+## Open Zaak DB connection pooling: one comparison run (podiumd-tests, 2026-11-15)
+
+helm-charts' `openzaak-db-connection-pooling.md` asks for verification under
+load before `dbPool` is turned on. uwsgi was already the doc's 2 x 4 with
+max requests 1000 (podiumd's values), so only `dbPool` differed (enabled,
+min = max = 4, maxLifetime 1800, maxIdle 300), deployed uncommitted for one
+podiumd-tests perf run (16 users, 5 min) and reverted after. Off
+(20261115-001911) vs on (20261115-003106): 51 -> 75 requests per Open Zaak
+endpoint, p95 down on every call (oz_zaken 1300 -> 760 ms, oz_zaak_create
+1400 -> 830, oz_document_patch 3400 -> 2500, oz_zaken_expand 5700 -> 4600),
+0 failed calls and no restarts in both, 11 -> 12-16 Postgres connections,
+web RSS 520 -> 462 MiB. One run each on a laptop: a direction, not a
+measurement. minikube stays on the reference values (pooling off) until the
+estates turn it on.
