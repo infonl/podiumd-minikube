@@ -232,14 +232,22 @@ def main():
             f"No resultaattype named {NIET_ONTVANKELIJK_RESULTAAT_NAAM!r} found for zaaktype {ZAAKTYPE_IDENTIFICATIE!r}"
         )
 
-    config = http("GET", f"{ZAC_BASE_URL}/zaakafhandelparameters/{zaaktype_uuid}", opener=session)
-    config["caseDefinition"] = {"key": CASE_DEFINITION_KEY}
+    config_url = f"{ZAC_BASE_URL}/zaakafhandelparameters/{zaaktype_uuid}"
+    config = http("GET", config_url, opener=session)
+    if "processDefinition" in config:
+        # ZAC 5.11+: processDefinition replaces caseDefinition, the PUT takes the uuid, isValide replaces valide.
+        process = config["processDefinition"] or {}
+        config["processDefinition"] = {**process, "processEngine": "CMMN", "key": CASE_DEFINITION_KEY}
+        put_url = config_url
+    else:
+        config["caseDefinition"] = {"key": CASE_DEFINITION_KEY}
+        put_url = f"{ZAC_BASE_URL}/zaakafhandelparameters"
     config["defaultGroepId"] = DEFAULT_GROEP_ID
     config["zaakNietOntvankelijkResultaattype"] = resultaattype
     config["productaanvraagtype"] = PRODUCTAANVRAAGTYPE
 
-    updated = http("PUT", f"{ZAC_BASE_URL}/zaakafhandelparameters", opener=session, data=config)
-    if not updated.get("valide"):
+    updated = http("PUT", put_url, opener=session, data=config)
+    if not (updated.get("isValide") or updated.get("valide")):
         sys.exit(f"zaakafhandelparameters for {ZAAKTYPE_IDENTIFICATIE!r} still not valide after PUT: {updated}")
 
     print(f"zaakafhandelparameters for {ZAAKTYPE_IDENTIFICATIE!r} (uuid {zaaktype_uuid}) is valide.")

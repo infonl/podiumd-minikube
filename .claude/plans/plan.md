@@ -10466,3 +10466,26 @@ no manual steps. #720's `openzaak.extraDeploy` creates
 no unapplied Open Zaak migrations. The first frankgateway-inway-seed pod
 failed on APISIX 503 "has no healthy etcd endpoint available"; its retry
 completed (the outway's etcd was not ready yet; the Job's backoff covers it).
+
+### ZAC 5.12: the zaakafhandelparameters seed (zac-42, 2026-11-16)
+
+ZAC 5.10+ Flyway V103-V105 (ran at 11:37:35 in the 4.11.0 upgrade) dropped
+the niet-ontvankelijk resultaattype of every configuration made on 5.9.1
+(zac-42, filed by podiumd-tests), so zaaktype-voor-e2e-testen was no longer
+valid. Our seed Job did not repair it, for two reasons:
+
+- It ran at 11:35:24, before the podiumd release replaced ZAC: the
+  podiumd-minikube release upgrades first and its wait-for-zac accepts the
+  old ZAC. It reruns only when its spec changes, so after a ZAC upgrade it
+  does not run again on the new ZAC. Open; podiumd-infra's seed-zac runs
+  after its helm upgrade.
+- ZAC 5.11 changed the API: PUT /rest/zaakafhandelparameters/{uuid} (was
+  without the uuid: 405), processDefinition {processEngine, key} replaces
+  caseDefinition, isValide replaces valide
+  (ZaaktypeConfigurationRestService, RestZaaktypeConfiguration in v5.12.0).
+  The script now picks the shape from what the GET returns, so it works on
+  5.9.1 and 5.12.0. podiumd-infra's zac.seed still PUTs the old way.
+
+Rerun on 5.12.0 at 14:10: the current version is valid again. As
+podiumd-infra, only the current zaaktype version is seeded; the ended
+version keeps the configuration that Flyway left.
