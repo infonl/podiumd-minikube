@@ -10449,3 +10449,20 @@ endpoint, p95 down on every call (oz_zaken 1300 -> 760 ms, oz_zaak_create
 web RSS 520 -> 462 MiB. One run each on a laptop: a direction, not a
 measurement. minikube stays on the reference values (pooling off) until the
 estates turn it on.
+
+## podiumd 4.11.0 verify deploy with #719-#722 (podiumd-tests, 2026-11-16)
+
+podiumd-tests needs ZAC 5.12.0 for the ZAC Sprint 83 acceptance scenarios.
+helm-charts-a4 merged origin/feature/podiumd-4.11.0 (a963e638) with #719
+(ZAC 5.12.0), #720 (Open Zaak 1.31.1), #721 (OMC 2.4.1) and #722 (Open Klant
+2.19.2) in its worktree `claude-worktree-helm-charts-minikube-4.11.0-verify`,
+uncommitted (helm-charts commits only with Kees's go), so `git archive` had no
+ref: `charts/podiumd` was copied as is into
+`.chart-sources/podiumd-4.11.0-a963e638-pr719-722/` (diff -r identical) and
+selected with set-podiumd-version; monitoring-logging unchanged (0f40c6df).
+Upgrade in place from 4.10.1 (podiumd revision 26), `deploy --full` 304 s,
+no manual steps. #720's `openzaak.extraDeploy` creates
+`openzaak-celery-liveness` (open-zaak-19); the worker started and is Ready;
+no unapplied Open Zaak migrations. The first frankgateway-inway-seed pod
+failed on APISIX 503 "has no healthy etcd endpoint available"; its retry
+completed (the outway's etcd was not ready yet; the Job's backoff covers it).

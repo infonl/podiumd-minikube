@@ -57,9 +57,10 @@ mapfile -t unit_test_files < <(find unit_tests -name '*.py' -not -path '*/__pyca
 wait "$!"
 mapfile -t live_test_files < <(find tests -name '*.py' -not -path '*/__pycache__/*' | sort)
 wait "$!"
-# Shell scripts: sh/bash/dash/ksh shebang, or *.sh; vendor/ is upstream's.
+# Shell scripts: sh/bash/dash/ksh shebang, or *.sh; vendor/ and .chart-sources/ are upstream's.
 mapfile -t shell_scripts < <(
-    find . \( -path ./.venv -o -path ./.git -o -path ./vendor -o -path '*/__pycache__' \) -prune -o -type f -print0 |
+    find . \( -path ./.venv -o -path ./.git -o -path ./vendor -o -path ./.chart-sources -o -path '*/__pycache__' \) \
+        -prune -o -type f -print0 |
         xargs -0 awk 'FNR == 1 && (/^#!.*[\/ ](ba|da|k)?sh([ \t]|$)/ || FILENAME ~ /\.sh$/) {print FILENAME} {nextfile}' |
         sort
 )
