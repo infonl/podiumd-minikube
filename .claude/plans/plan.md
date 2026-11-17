@@ -10520,3 +10520,12 @@ After the reboot, show-cluster-status showed openklant-worker at 379 MiB,
 Set to 1: the worker settled at 150 MiB 9 minutes after the restart (-229
 MiB). The setting is in Open Klant's shared ConfigMap, so its web pod
 restarted as well (deploy --full 262 s, podiumd release only).
+
+Open Klant's PYTHONPYCACHEPREFIX, measured the same day: not set. Its
+image ships bytecode for 6956 of 7234 .py files (Open Zaak, Open
+Formulieren, Open Archiefbeheer and Open Inwoner ship none for
+site-packages). Its worker's liveness probe (`maykin-common
+worker-health-check`, every 60 s) used 0.49-0.59 CPU s per run without the
+prefix, 0.37-0.39 with it once cached (1.86 s for the first run, 9.1 MiB
+in /tmp): 0.15 CPU s a minute, 0.25% of a core. The web pod has HTTP
+probes only. The other four saved 2-5 CPU s per probe.
