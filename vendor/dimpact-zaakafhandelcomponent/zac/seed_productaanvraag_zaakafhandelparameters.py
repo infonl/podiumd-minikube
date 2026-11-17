@@ -39,6 +39,7 @@ import os
 import re
 import secrets
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -53,6 +54,7 @@ SEED_USERNAME = "podiumd-minikube-zac-seed"
 SEED_GROUP = "beheerders"
 
 ZAC_BASE_URL = os.environ["ZAC_BASE_URL"].rstrip("/")
+ZAC_VERSION = os.environ["ZAC_VERSION"]
 OPENZAAK_BASE_URL = os.environ["OPENZAAK_BASE_URL"].rstrip("/")
 ZGW_JWT_CLIENT_ID = os.environ["ZGW_JWT_CLIENT_ID"]
 ZGW_JWT_SECRET = os.environ["ZGW_JWT_SECRET"]
@@ -86,7 +88,6 @@ def zgw_jwt(client_id, secret):
     import base64
     import hashlib
     import hmac
-    import time
 
     def b64url(raw):
         return base64.urlsafe_b64encode(raw).rstrip(b"=")
@@ -144,6 +145,17 @@ def zac_session(password):
         sys.exit(f"Keycloak login of {SEED_USERNAME} did not return to ZAC: {status} {callback}")
     location("GET", callback)
     return opener
+
+
+def zac_session_on_version(password):
+    """A ZAC session once ZAC runs ZAC_VERSION: the podiumd release replaces ZAC after this Job starts."""
+    while True:
+        session = zac_session(password)
+        build = http("GET", f"{ZAC_BASE_URL}/health-check/build-informatie", opener=session)
+        if build.get("versienummer") == ZAC_VERSION:
+            return session
+        print(f"ZAC runs {build.get('versienummer')}, waiting for {ZAC_VERSION}", flush=True)
+        time.sleep(10)
 
 
 def seed_user_password():
@@ -208,7 +220,7 @@ def main():
     zaaktype = current[0]
     zaaktype_uuid = zaaktype["url"].rstrip("/").rsplit("/", 1)[-1]
 
-    session = zac_session(seed_user_password())
+    session = zac_session_on_version(seed_user_password())
 
     # Via ZAC's own endpoint, not openzaak's raw Catalogi API directly: it
     # already returns RestResultaattype-shaped objects (id/naam/...) that

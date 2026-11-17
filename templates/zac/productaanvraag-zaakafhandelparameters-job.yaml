@@ -83,6 +83,9 @@ spec:
             # ZAC requires https (AUTH_SSL_REQUIRED "all", as ExternalsPodiumD).
             - name: ZAC_BASE_URL
               value: https://zac.local/rest
+            # Also reruns this Job after a ZAC version change (deploy deletes this chart's Jobs before its upgrade).
+            - name: ZAC_VERSION
+              value: {{ regexReplaceAll "@.*" (required "podiumd.zac.image.tag: from podiumd's values.yaml" .Values.podiumd.zac.image.tag) "" | quote }}
             - name: OPENZAAK_BASE_URL
               value: https://openzaak.local
             - name: ZGW_JWT_CLIENT_ID

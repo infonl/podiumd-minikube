@@ -10477,8 +10477,14 @@ valid. Our seed Job did not repair it, for two reasons:
 - It ran at 11:35:24, before the podiumd release replaced ZAC: the
   podiumd-minikube release upgrades first and its wait-for-zac accepts the
   old ZAC. It reruns only when its spec changes, so after a ZAC upgrade it
-  does not run again on the new ZAC. Open; podiumd-infra's seed-zac runs
-  after its helm upgrade.
+  does not run again on the new ZAC. Fixed 2026-11-17: the Job carries
+  `ZAC_VERSION` (podiumd's `zac.image.tag` without the digest), so a ZAC
+  version change changes this chart's render and deploy reruns the Job; the
+  script logs in and waits until `GET /rest/health-check/build-informatie`
+  reports that `versienummer` before it seeds. podiumd-infra's seed-zac runs
+  after its helm upgrade instead; here the podiumd-minikube release upgrades
+  first, so the Job waits. Live: deploy --full 57 s, the Job finished after
+  11 s on 5.12.0, valide.
 - ZAC 5.11 changed the API: PUT /rest/zaakafhandelparameters/{uuid} (was
   without the uuid: 405), processDefinition {processEngine, key} replaces
   caseDefinition, isValide replaces valide
