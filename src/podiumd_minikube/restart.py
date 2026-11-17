@@ -15,6 +15,10 @@ from podiumd_minikube.objects import Doc
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import PROFILE
 
+# Started before CoreDNS resolved "postgres", they keep an empty django-cms apphook list
+# ("'cases' is not a registered namespace" on every case mail): known issue open-inwoner-6.
+OPEN_INWONER_WORKERS = ("deployment/openinwoner-worker", "deployment/openinwoner-low-latency-worker")
+
 
 def _workloads() -> list[Doc]:
     return kube.get_json("deployment,statefulset", "-n", NAMESPACE)["items"]
@@ -47,6 +51,17 @@ def stale_pods(items: list[Doc], boot: datetime) -> list[str]:
     return stale
 
 
+def restart_open_inwoner_workers() -> None:
+    """Restart the deployed OPEN_INWONER_WORKERS, now that Postgres resolves, and wait for their rollout."""
+    present = [worker for worker in OPEN_INWONER_WORKERS if kube.is_present(worker)]
+    if not present:
+        return
+    print("Restarting Open Inwoner's workers, which started before Postgres resolved (open-inwoner-6)...")
+    kube.kubectl_shown("rollout", "restart", *present, "-n", NAMESPACE)
+    for worker in present:
+        kube.kubectl_shown("rollout", "status", worker, "-n", NAMESPACE, f"--timeout={deploy.READY_TIMEOUT}s")
+
+
 @lock.holding("start-cluster")
 def start() -> None:
     """Start the node, wait for the apps, restart ZAC once if its boot failed, then start the tunnel."""
@@ -77,5 +92,6 @@ def start() -> None:
             logs = f"kubectl logs deployment/{deploy.ZAC} -n {NAMESPACE}"
             msg = f"ZAC not ready after {deploy.READY_TIMEOUT}s: check `{logs}`"
             raise process.UserError(msg)
+    restart_open_inwoner_workers()
     print("All workloads ready.\n")
     tunnel.setup_tunnel(ask=sys.stdin.isatty())

@@ -10542,3 +10542,11 @@ secret, was tried and reverted the same hour: the token went into the
 podiumd<4.10 objecttypen block (off), so merged Open Object answered 401 for
 5 minutes. On merged Open Object one token per client stays (586bf3a);
 podiumd-tests withdrew the request and externalspodiumd-4.
+
+start-cluster restarts Open Inwoner's workers (2026-11-17, Kees's choice):
+after the 11-16 reboot they started at 09:51:36 while CoreDNS did not
+resolve "postgres" yet; django-cms kept an empty apphook list, so every case
+mail failed with "'cases' is not a registered namespace" (podiumd-tests: 14
+times, 2 portal-notification tests; known issue open-inwoner-6, second
+trigger). restart.restart_open_inwoner_workers runs after every workload is
+ready, for the worker Deployments that exist.

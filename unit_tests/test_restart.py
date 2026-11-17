@@ -63,6 +63,13 @@ def started(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return calls
 
 
+@pytest.fixture(autouse=True)
+def no_open_inwoner(fake_run: FakeRun) -> None:
+    """Open Inwoner's workers are not deployed."""
+    for worker in restart.OPEN_INWONER_WORKERS:
+        fake_run.on("kubectl", "get", worker, returncode=1)
+
+
 def test_start_waits_for_the_workloads_then_starts_the_tunnel(fake_run: FakeRun, started: list[str]):
     restart.start()
     assert started == ["start_node", "setup_tunnel"]
@@ -98,3 +105,13 @@ def test_start_restarts_zac_once_after_a_failed_boot(
             restart.start()
     assert fake_run.ran("kubectl", "rollout") == [["kubectl", "rollout", "restart", "deployment/zac", "-n", "podiumd"]]
     assert started[-1] == ("setup_tunnel" if recovered else "start_node")
+
+
+def test_start_restarts_the_open_inwoner_workers_present(fake_run: FakeRun, started: list[str]):
+    fake_run.on("kubectl", "get", "deployment/openinwoner-worker", stdout="")
+    restart.start()
+    assert fake_run.ran("kubectl", "rollout") == [
+        ["kubectl", "rollout", "restart", "deployment/openinwoner-worker", "-n", "podiumd"],
+        ["kubectl", "rollout", "status", "deployment/openinwoner-worker", "-n", "podiumd", "--timeout=0s"],
+    ]
+    assert started == ["start_node", "setup_tunnel"]
