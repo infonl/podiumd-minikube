@@ -2856,7 +2856,8 @@ podiumd:
   # by its bootstrap); podiumd-tests also subscribes OMC to Open
   # Notificaties (neither reference environment does). Besluiten
   # on Open Zaak: ExternalsPodiumD's separate besluiten host does not exist
-  # here.
+  # here. Not as icat: its ACR image mirror (podiumd's Docker Hub image
+  # instead) and its Sentry DSN (icat's own sentry.io project).
   omc:
     enabled: false
     settings:
