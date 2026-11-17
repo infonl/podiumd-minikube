@@ -16,6 +16,8 @@ from podiumd_minikube.paths import PROFILE
 
 TUNNEL_LOG = Path("/tmp/minikube-tunnel.log")  # noqa: S108 - user-visible log, fixed name on purpose
 TUNNEL_PATTERN = "minikube tunnel"
+# minikube's record of running tunnels; one a reboot killed stays in it when its PID is reused.
+TUNNEL_REGISTRY = Path.home() / ".minikube" / "tunnels.json"
 TIMEOUT_SECONDS = 30
 # minikube's default service network, which holds the LoadBalancer IPs the tunnel hands out.
 SERVICE_CIDR = "10.96.0.0/12"
@@ -103,12 +105,21 @@ def setup_tunnel(*, ask: bool = True) -> bool:  # noqa: FNE005 - starts the tunn
     if not _route(ask=ask):
         return False
     if not pid:
-        print(f"Starting 'minikube tunnel' in the background (log: {TUNNEL_LOG})...")
-        process.spawn(["minikube", "tunnel", "-p", PROFILE], TUNNEL_LOG)
+        _start_tunnel()
     ip = _wait_for_edge_ip()
+    if not process.running(TUNNEL_PATTERN):
+        _print_log_tail()
+        msg = f"'minikube tunnel' exited; tunnel log above ({TUNNEL_LOG})"
+        raise process.UserError(msg)
     print(f"Tunnel is up in the background. Edge external IP: {ip}")
     _print_access(ip)
     return True
+
+
+def _start_tunnel() -> None:
+    print(f"Starting 'minikube tunnel' in the background (log: {TUNNEL_LOG})...")
+    TUNNEL_REGISTRY.unlink(missing_ok=True)  # no tunnel runs, so every entry is stale
+    process.spawn(["minikube", "tunnel", "-p", PROFILE], TUNNEL_LOG)
 
 
 def _wait_for_edge_ip() -> str:
@@ -116,11 +127,15 @@ def _wait_for_edge_ip() -> str:
     print("Waiting for the edge's external IP...")
     ip = polling.wait_until(kube.edge_ip, timeout=TIMEOUT_SECONDS, interval=2)
     if not ip:
-        log = TUNNEL_LOG.read_text(encoding="utf-8") if TUNNEL_LOG.is_file() else "(no log file yet)"
-        print("\n".join(log.splitlines()[-20:]), file=sys.stderr)
+        _print_log_tail()
         msg = f"no external IP for the edge after {TIMEOUT_SECONDS}s; tunnel log above ({TUNNEL_LOG})"
         raise process.UserError(msg)
     return ip
+
+
+def _print_log_tail() -> None:
+    log = TUNNEL_LOG.read_text(encoding="utf-8") if TUNNEL_LOG.is_file() else "(no log file yet)"
+    print("\n".join(log.splitlines()[-20:]), file=sys.stderr)
 
 
 def _print_access(ip: str) -> None:

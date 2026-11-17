@@ -10489,3 +10489,19 @@ valid. Our seed Job did not repair it, for two reasons:
 Rerun on 5.12.0 at 14:10: the current version is valid again. As
 podiumd-infra, only the current zaaktype version is seeded; the ended
 version keeps the configuration that Flyway left.
+
+## Host reboot 2026-11-16 18:27: start-cluster found two bugs (2026-11-17)
+
+`start-cluster` brought revision 27 back in 4 minutes, but:
+
+- `minikube tunnel` exited at once: "another tunnel is already running ...
+  Pid: 58472". `~/.minikube/tunnels.json` still held the tunnel the reboot
+  killed; minikube's own cleanup keeps an entry whose PID is alive, and after
+  15 hours of uptime that PID belonged to another process. `setup_tunnel`
+  still printed "Tunnel is up": the edge's recorded external IP survives a
+  dead tunnel. It now deletes the registry before it starts a tunnel (none
+  runs at that point) and refuses when the tunnel process is gone after the
+  IP check.
+- `show-cluster-status` raised `KeyError: 'memory'`: right after the node
+  start, `crictl stats` lists containers without a memory sample. Those are
+  skipped.

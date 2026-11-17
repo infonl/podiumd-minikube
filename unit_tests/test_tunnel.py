@@ -38,6 +38,7 @@ def machine(
         {
             (tunnel, "ETC_HOSTS"): tmp_path / "hosts",
             (tunnel, "TUNNEL_LOG"): tmp_path / "tunnel.log",
+            (tunnel, "TUNNEL_REGISTRY"): tmp_path / "tunnels.json",
             (hosts, "chart_hosts"): lambda: ["zac.local"],
             (sys, "stdin"): io.StringIO(),
             (tunnel, "_ip"): lambda: "ip",
@@ -53,21 +54,37 @@ def machine(
 
 
 @pytest.fixture
-def spawned(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], Path]]:
+def spawned(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], Path]]:
+    """Record spawns; the spawned tunnel keeps running."""
     calls: list[tuple[list[str], Path]] = []
-    monkeypatch.setattr(process, "spawn", lambda args, log: calls.append((list(args), log)))
+
+    def spawn(args: list[str], log: Path) -> None:
+        calls.append((list(args), log))
+        fake_run.on("pgrep", "-f", tunnel.TUNNEL_PATTERN, stdout="4242\n")
+
+    monkeypatch.setattr(process, "spawn", spawn)
     return calls
 
 
 def test_setup_tunnel_routes_and_starts_the_tunnel(
     machine: FakeRun, spawned: list[tuple[list[str], Path]], capsys: pytest.CaptureFixture[str]
 ):
+    tunnel.TUNNEL_REGISTRY.write_text("[]", encoding="utf-8")
     tunnel.setup_tunnel()
     assert machine.ran("sudo", "ip") == [tunnel.route_args("replace", NODE_IP)]
     assert spawned == [(["minikube", "tunnel", "-p", "minikube"], tunnel.TUNNEL_LOG)]
+    assert not tunnel.TUNNEL_REGISTRY.exists()
     out = capsys.readouterr().out
     assert f"Edge external IP: {EDGE_IP}" in out
     assert "Run podiumd-minikube update-hosts" in out
+
+
+@pytest.mark.usefixtures("machine")
+def test_setup_tunnel_refuses_a_tunnel_that_exited(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    monkeypatch.setattr(process, "spawn", lambda _args, log: log.write_text("another tunnel", encoding="utf-8"))
+    with pytest.raises(UserError, match="'minikube tunnel' exited"):
+        tunnel.setup_tunnel()
+    assert "another tunnel" in capsys.readouterr().err
 
 
 def test_setup_tunnel_is_a_no_op_when_the_tunnel_has_an_ip(
