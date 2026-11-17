@@ -10529,3 +10529,16 @@ worker-health-check`, every 60 s) used 0.49-0.59 CPU s per run without the
 prefix, 0.37-0.39 with it once cached (1.86 s for the first run, 9.1 MiB
 in /tmp): 0.15 CPU s a minute, 0.25% of a core. The web pod has HTTP
 probes only. The other four saved 2-5 CPU s per probe.
+
+## OMC compared with ExternalsPodiumD icat (podiumd-tests, 2026-11-17)
+
+Key by key against icat/ontw's omc block (feature/ontw-icat-podiumd-4.11.0).
+Besides podiumd-tests' test settings (Notify mock, whitelists, test
+objecttypes, Open VTB) only the image (icat's ACR mirror), Sentry (icat's
+own sentry.io project), the omc.local ingress (podiumd-tests posts to
+/Events/Listen) and hosts differ; the first two are now named in
+values.yaml (d497d9c). A separate Objecttypen token for OMC, as kees00's
+secret, was tried and reverted the same hour: the token went into the
+podiumd<4.10 objecttypen block (off), so merged Open Object answered 401 for
+5 minutes. On merged Open Object one token per client stays (586bf3a);
+podiumd-tests withdrew the request and externalspodiumd-4.
