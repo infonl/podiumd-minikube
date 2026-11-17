@@ -1005,6 +1005,7 @@ podiumd:
       enabled: false
     worker:
       replicaCount: 1
+      concurrency: 1 # laptop budget; chart default 4
     tags:
       redis: false
     settings:

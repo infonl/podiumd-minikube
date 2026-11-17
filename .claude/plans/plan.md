@@ -10511,3 +10511,12 @@ version keeps the configuration that Flyway left.
 - `show-cluster-status` raised `KeyError: 'memory'`: right after the node
   start, `crictl stats` lists containers without a memory sample. Those are
   skipped.
+
+## Open Klant's Celery worker at concurrency 1 (2026-11-17)
+
+After the reboot, show-cluster-status showed openklant-worker at 379 MiB,
+228 above the baseline: Open Klant's chart defaults to `worker.concurrency:
+4` and values.yaml had never set it to 1, as for the other Maykin workers.
+Set to 1: the worker settled at 150 MiB 9 minutes after the restart (-229
+MiB). The setting is in Open Klant's shared ConfigMap, so its web pod
+restarted as well (deploy --full 262 s, podiumd release only).
