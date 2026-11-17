@@ -152,8 +152,8 @@ def test_container_usage_adds_replicas_and_samples_cpu(fake_run: FakeRun, monkey
 
 def test_container_usage_without_cpu_takes_one_sample(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(time, "sleep", pytest.fail)
-    _crictl(fake_run, "ps", {"containers": [_container("1", "clamav-0")]})
-    _crictl(fake_run, "stats", {"stats": [_stat("1", 19, 5)]})
+    _crictl(fake_run, "ps", {"containers": [_container("1", "clamav-0"), _container("2", "zac-0")]})
+    _crictl(fake_run, "stats", {"stats": [_stat("1", 19, 5), {"attributes": {"id": "2"}, "cpu": {}}]})
     _reclaimable(fake_run)
     assert status.container_usage([], cpu=False) == {"ns/clamav-0/app": status.Usage(19, 0.0)}
     assert len(fake_run.ran("minikube", "ssh")) == 3

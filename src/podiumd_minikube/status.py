@@ -169,7 +169,7 @@ def container_usage(items: list[Doc], *, cpu: bool = True) -> dict[str, Usage]:
     usage: dict[str, Usage] = {}
     for stat in first:
         label = labels.get(stat["attributes"]["id"])
-        if label is None:
+        if label is None or "memory" not in stat:  # crictl has no memory sample yet for a container just started
             continue
         key = _key(label, names)
         before = usage.get(key, Usage(0, 0))
