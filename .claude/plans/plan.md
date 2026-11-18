@@ -10550,3 +10550,33 @@ mail failed with "'cases' is not a registered namespace" (podiumd-tests: 14
 times, 2 portal-notification tests; known issue open-inwoner-6, second
 trigger). restart.restart_open_inwoner_workers runs after every workload is
 ready, for the worker Deployments that exist.
+
+## Footprint check 2026-11-18, Elasticsearch C1 only (user: "what about the footprint?", "do both")
+
+Read-only checks on the settled cluster found nothing new to cut without a
+behaviour change:
+- Celery workers all run one child (Open Notificaties: one process with a
+  100-thread pool).
+- uWSGI web pods: each worker holds 55-127 MiB private (USS), the app
+  itself. The http router holds about 9 MiB private per pod (about 80 MiB
+  over 9 pods); dropping it changes how the nginx sidecars talk to uWSGI.
+  Kept.
+- Open Inwoner celery-monitor (235 MiB) is a podiumd chart default that
+  ExternalsPodiumD leaves on. Kept.
+- Fewer instances or processes (Solr 3 nodes, Open Formulieren and Open
+  Inwoner 2 uWSGI processes, Open Zaak 2 x 4 threads) would save 100-400
+  MiB each, but each count is there because fewer broke something or slowed
+  the tests. Should not be done (user).
+
+Elasticsearch (KISS, Open Inwoner) got `-XX:TieredStopAtLevel=1` in the shared
+`ES_JAVA_OPTS` anchor (2b64e81), as their launcher, ZAC, Keycloak and
+ZooKeeper already had. Deployed 11:36 CET; podiumd-tests' full tier
+10:37-12:09 UTC+1 (1385 tests: 1274 passed, 5 failed, under investigation
+there). Five minutes after the tier, working set against the baseline: KISS
+607 -> 508, Open Inwoner 588 -> 512 MiB; server process PSS 553/521 (3 days
+up, before) and 555/560 (after a full tier, 2026-10-22) -> 467/452 MiB. Node
+15.3 of 17.5 GiB without reclaimable caches; no container above the
+tolerance. Only the two Elasticsearch entries of `tests/memory-baseline.json`
+were updated: a full refresh would have lowered peak-after-tier values that
+depend on uptime or on which documents were converted (kube-apiserver 1020
+-> 711, office-converter 295 -> 91, Loki 387 -> 288 MiB).
