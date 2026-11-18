@@ -10681,3 +10681,12 @@ failed upgrade (waiting hook, `<app>-config-5`) removed by hand.
 Decision (user): Open Zaak keeps 3 uWSGI processes on minikube (values.yaml
 `podiumd.openzaak.settings.uwsgi.processes`), a deviation from podiumd and the
 estates (2) for test speed; recorded in values.yaml and memory-tuning.md.
+#743 rerun on 49e5f669 (fixes for the three findings), 2026-11-18 17:04-17:28:
+helm upgrade 131 s without #742 (zookeeper hook 34 s and openklant's own hook
+11 s included); an app left at `configuration.job.enabled: true` (openklant)
+keeps its sub-chart hook and is not in the wait hook's list; plain Jobs carry
+TTL 3600. A broken configuration: the wait hook reports each restart, but
+`kubectl logs --previous` fails on this node ("unable to retrieve container
+logs"); fixed in bbda0a68 (falls back to the current container's log).
+Measurements recorded in podiumd-known-issues (zac-49, podiumd-chart-50) by
+podiumd-tests. Cluster restored to 8de27656 with Open Zaak at 3 processes.
