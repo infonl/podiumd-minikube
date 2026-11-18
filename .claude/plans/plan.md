@@ -10600,3 +10600,10 @@ subchart's helpers. Its risks: the Jobs start during the rollout (backoffLimit
 0 in the charts), and the copy drifts from the charts' template. Not changed
 on minikube: a post-renderer that strips the hooks would differ from the
 estates.
+Decision (user, 2026-11-18): no interim fix in podiumd. helm-charts pointed
+out that a failing hook is the estates' only signal: ExternalsPodiumD runs
+`helm upgrade` without `--wait` and checks no Job afterwards, and Helm always
+waits for hooks; plain Jobs would fail silently there. That point and
+helm-charts' others (hooks are not release-tracked, so the switch leaves the
+old Jobs; an initContainer looping `manage.py migrate --check` instead of a
+backoffLimit) go into known issue podiumd-chart-50 for the upstream request.
