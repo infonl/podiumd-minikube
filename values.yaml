@@ -272,8 +272,9 @@ podiumd:
                       memory: 1536Mi
                   env:
                     # Laptop budget: ExternalsPodiumD 1g; old gen peaks at 100 MiB.
+                    # C1 only: a smaller code cache.
                     - name: ES_JAVA_OPTS
-                      value: &esJavaOpts "-Xms192m -Xmx192m"
+                      value: &esJavaOpts "-Xms192m -Xmx192m -XX:TieredStopAtLevel=1"
           volumeClaimTemplates:
             - metadata:
                 name: elasticsearch-data
