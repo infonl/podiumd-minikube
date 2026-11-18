@@ -17,7 +17,6 @@ from podiumd_minikube import cni
 from podiumd_minikube import dependency
 from podiumd_minikube import disk
 from podiumd_minikube import gateway
-from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import memory
 from podiumd_minikube import pki
@@ -82,7 +81,6 @@ def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
             (memory, "host_cpus"): lambda: 16,
             (memory, "wanted"): lambda: 8192,
             (provision, "start_minikube"): lambda cpus, mb: calls.append(f"start {cpus} {mb}"),
-            (kube, "require_minikube_context"): recorder(calls, "require_minikube_context"),
             (cni, "apply"): recorder(calls, "apply"),
             (provision, "tune_control_plane"): lambda: list(control_plane),
             (provision, "tune_node_services"): lambda: list(services),
@@ -92,10 +90,10 @@ def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
         },
     )
     provision.start_node(recorder(calls, "while_starting"))
-    assert calls[:3] == ["start 4 8192", "require_minikube_context", f"restart {restarted}"]
+    assert calls[:2] == ["start 4 8192", f"restart {restarted}"]
     # while_starting runs beside the waits for the control plane and then Cilium.
-    assert [call for call in calls[3:] if call != "while_starting"] == [f"wait {control_plane}", "apply"]
-    assert "while_starting" in calls[3:]
+    assert [call for call in calls[2:] if call != "while_starting"] == [f"wait {control_plane}", "apply"]
+    assert "while_starting" in calls[2:]
     assert fake_run.ran("docker", "update") == [["docker", "update", "--cpus=4", "--cpuset-cpus=0-3", PROFILE]]
 
 

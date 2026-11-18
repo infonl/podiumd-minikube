@@ -294,7 +294,6 @@ def deploy(*, full: bool, extra: list[str], command: str = "deploy", every: bool
 
     Twice while KISS's crawler hook cannot reach Elasticsearch: first without the website (kiss.website_hook_blocked).
     """
-    kube.require_minikube_context()
     disk.check(disk.DEPLOY)
     memory.check(full=full)
     _refuse_old_namespace()

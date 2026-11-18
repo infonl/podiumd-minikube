@@ -145,7 +145,6 @@ RELEASES = [
     releases.Release(releases.PODIUMD, NAMESPACE, CHART_DIR, {}),
 ]
 STEPS = [
-    (kube, "require_minikube_context"),
     (disk, "check"),
     (memory, "check"),
     (dependency, "sync"),
@@ -242,7 +241,6 @@ def _deploy() -> None:
 def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
     _deploy()
     assert called == [
-        "require_minikube_context",
         "check",
         "check",
         "sync",

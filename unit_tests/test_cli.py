@@ -16,7 +16,6 @@ from conftest import FakeRun
 from podiumd_minikube import chart
 from podiumd_minikube import cli
 from podiumd_minikube import deploy
-from podiumd_minikube import kube
 from podiumd_minikube import lock
 from podiumd_minikube import openbao
 from podiumd_minikube import ports
@@ -134,12 +133,11 @@ def test_command_passes_its_arguments_on(
 
 
 @pytest.mark.parametrize(("args", "top"), [([], 20), (["--top", "5"], 5), (["--all"], 0)])
-def test_show_cluster_status_checks_the_context_first(args: list[str], top: int, monkeypatch: pytest.MonkeyPatch):
+def test_show_cluster_status_reports_top(args: list[str], top: int, monkeypatch: pytest.MonkeyPatch):
     calls = []
-    monkeypatch.setattr(kube, "require_minikube_context", lambda: calls.append("context"))
     monkeypatch.setattr(status, "report", calls.append)
     cli.run(["show-cluster-status", *args])
-    assert calls == ["context", top]
+    assert calls == [top]
 
 
 @pytest.mark.usefixtures("monkeypatch")

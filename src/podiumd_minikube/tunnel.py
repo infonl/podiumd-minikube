@@ -95,7 +95,6 @@ def setup_tunnel(*, ask: bool = True) -> bool:  # noqa: FNE005 - starts the tunn
     for the profile in root's home. A recorded IP survives a dead tunnel
     (requests then hang), so only a running process proves the tunnel.
     """
-    kube.require_minikube_context()
     pid = process.running(TUNNEL_PATTERN)
     ip = kube.edge_ip() if pid else ""
     if ip:
@@ -195,7 +194,6 @@ def hosts_hint(ip: str) -> str:
 
 def update_hosts() -> None:
     """Write the current edge IP line to /etc/hosts (backup in /etc/hosts.bak)."""
-    kube.require_minikube_context()
     ip = kube.edge_ip()
     if not ip:
         msg = "the edge has no external IP yet: run podiumd-minikube setup-tunnel first"

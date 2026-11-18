@@ -123,7 +123,6 @@ def start_node(while_starting: Callable[[], None] = _nothing) -> None:
     # quota alone still shows every host CPU to nproc, nginx's worker_processes auto and
     # GOMAXPROCS; the cpuset makes them see `cpus` (seen: 24 nginx workers).
     process.run(["docker", "update", f"--cpus={cpus}", *cpuset_args(cpus, host_cpus), PROFILE])
-    kube.require_minikube_context()
     control_plane = tune_control_plane()
     services = tune_node_services()
     # The kubelet reported restarted static pods up to 100 s late (etcd); a restarted one at once.

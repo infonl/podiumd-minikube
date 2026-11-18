@@ -103,3 +103,17 @@ def test_fetch_shown_prints_its_output_after_success(fake_run: FakeRun, capsys: 
     fake_run.on("helm", "upgrade", stdout="deployed\n", stderr="WARNING: x\n")
     assert process.fetch(["helm", "upgrade"], shown=True) == "deployed\n"
     assert capsys.readouterr() == ("deployed\n", "WARNING: x\n")
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (["kubectl", "get", "pods"], ["kubectl", "--context=minikube", "get", "pods"]),
+        (["helm", "list"], ["helm", "--kube-context=minikube", "list"]),
+        (["env", "A=1", "helm", "upgrade"], ["env", "A=1", "helm", "--kube-context=minikube", "upgrade"]),
+        (["minikube", "ip"], ["minikube", "ip"]),
+        (["env", "A=1"], ["env", "A=1"]),
+    ],
+)
+def test_pinned_adds_the_minikube_context_to_kubectl_and_helm(args: list[str], expected: list[str]):
+    assert process.pinned(args) == expected

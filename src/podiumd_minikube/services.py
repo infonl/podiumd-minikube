@@ -18,7 +18,6 @@ REDIS_MASTER = "app=redis-ha,redis-role=master"
 
 def expose_postgres(local_port: int) -> None:
     """Port-forwards svc/postgres to localhost:local_port and lists its databases."""
-    kube.require_minikube_context()
     forward = f"svc/postgres {local_port}:{POSTGRES_PORT}"
     pid = process.running(f"kubectl .*port-forward.*{forward}")
     if pid:
@@ -52,7 +51,6 @@ def _redis(*args: str) -> str:
 @lock.holding("flush-redis")
 def flush_redis(db: int | None) -> None:
     """FLUSHDB on db, or FLUSHALL when db is None (DBs mix caches and Celery queues per app)."""
-    kube.require_minikube_context()
     if db is not None:
         _flush_db(db)
         return

@@ -14,22 +14,6 @@ from podiumd_minikube.paths import PROFILE
 POD_TIMEOUT = 300
 
 
-def require_minikube_context() -> None:
-    """Refuses to continue unless kubectl's current context is minikube.
-
-    The context has drifted to a real AKS cluster mid-session before (see
-    plan.md), so every script that changes the cluster checks it itself.
-    """
-    result = process.run(["kubectl", "config", "current-context"], check=False)
-    current = result.stdout.strip() if result.returncode == 0 else ""
-    if current != PROFILE:
-        msg = (
-            f"kubectl context is {current or '<none>'!r}, not {PROFILE!r}: "
-            f"run `kubectl config use-context {PROFILE}` and try again"
-        )
-        raise process.UserError(msg)
-
-
 def kubectl(*args: str, stdin: str | None = None) -> str:
     """Stdout of kubectl args; raises ProcessError on failure."""
     return process.output(["kubectl", *args], stdin=stdin)

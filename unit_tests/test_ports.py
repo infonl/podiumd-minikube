@@ -33,7 +33,6 @@ def test_show_port_mappings_lists_routes_and_warns_about_hosts_claimed_twice(
             _ingress("extra.local", "extra", {"number": 8000}),
         ]
     }
-    fake_run.on("kubectl", "config", "current-context", stdout="minikube")
     fake_run.on("kubectl", "get", "svc", "waf", returncode=edge, stdout="10.96.0.200")
     fake_run.on("kubectl", "get", "svc", "-n", "podiumd", stdout=json.dumps(services))
     fake_run.on("kubectl", "get", "ingress", stdout=json.dumps(ingresses))

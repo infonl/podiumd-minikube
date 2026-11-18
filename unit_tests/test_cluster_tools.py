@@ -18,14 +18,6 @@ from podiumd_minikube import tunnel
 from podiumd_minikube.process import UserError
 
 
-def test_require_minikube_context_refuses_another_context(fake_run: FakeRun):
-    fake_run.on("kubectl", "config", "current-context", stdout="podiumd-aks\n")
-    with pytest.raises(UserError, match="'podiumd-aks', not 'minikube'"):
-        kube.require_minikube_context()
-    fake_run.on("kubectl", "config", "current-context", stdout="minikube\n")
-    kube.require_minikube_context()
-
-
 def test_replace_hosts_line_drops_earlier_lines_of_this_project():
     text = "127.0.0.1 localhost\n10.0.0.1 zac.local keycloak.local\n"
     line = hosts.hosts_line("10.0.0.2", ["zac.local", "pabc.local"])

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import override
 
 from podiumd_minikube import polling
+from podiumd_minikube.paths import PROFILE
 
 
 class UserError(Exception):
@@ -35,6 +36,21 @@ class ProcessError(UserError):
         return f"{' '.join(self.argv)} failed ({self.returncode}): {self.stderr.strip()}"
 
 
+# kubectl's current context may be a real cluster (an AKS context was found there mid-session).
+CONTEXT_FLAGS = {"kubectl": f"--context={PROFILE}", "helm": f"--kube-context={PROFILE}"}
+
+
+def pinned(args: Sequence[str]) -> list[str]:
+    """Return args with kubectl and helm pinned to the minikube context, also behind `env VAR=value`."""
+    argv = list(args)
+    index = 1 if argv[:1] == ["env"] else 0
+    while index and index < len(argv) and "=" in argv[index]:
+        index += 1
+    if index < len(argv) and argv[index] in CONTEXT_FLAGS:
+        argv.insert(index + 1, CONTEXT_FLAGS[argv[index]])
+    return argv
+
+
 def run(
     args: Sequence[str],
     *,
@@ -49,7 +65,7 @@ def run(
     """
     pipe = subprocess.PIPE if capture else None
     result = subprocess.run(  # nosec B603  # noqa: S603 - argv lists, never a shell
-        list(args),
+        pinned(args),
         input=stdin,
         stdout=pipe,
         stderr=subprocess.STDOUT if capture and merge_stderr else pipe,
@@ -115,7 +131,7 @@ def spawn(args: Sequence[str], log: Path) -> None:
     with log.open("w", encoding="utf-8") as out:
         # Not waited for: it keeps running after this script exits.
         subprocess.Popen(  # pylint: disable=consider-using-with  # nosec B603  # noqa: S603
-            list(args), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True
+            pinned(args), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True
         )
 
 

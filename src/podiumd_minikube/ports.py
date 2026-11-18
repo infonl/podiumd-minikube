@@ -60,7 +60,6 @@ def port_number(route: Route, services: Doc) -> str:
 
 def show_port_mappings() -> None:
     """Print the edge's entry point and every live Ingress host's backend (the routes follow the Ingresses)."""
-    kube.require_minikube_context()
     ip = kube.edge_ip()
     edge = (
         f"Edge (NGINX Gateway Fabric) LoadBalancer IP: {ip} "

@@ -4,6 +4,7 @@ import subprocess
 
 import pytest
 
+from podiumd_minikube import process
 from podiumd_minikube.paths import NAMESPACE
 
 # The standard EICAR test file; $ is literal here.
@@ -18,7 +19,7 @@ def clamdscan(enabled_profiles):
 
     def scan(content):
         result = subprocess.run(
-            ["kubectl", "exec", "-i", "-n", NAMESPACE, "clamav-0", "--", "clamdscan", "--no-summary", "-"],
+            process.pinned(["kubectl", "exec", "-i", "-n", NAMESPACE, "clamav-0", "--", "clamdscan", "--no-summary", "-"]),
             input=content, capture_output=True, text=True, timeout=30, check=False,
         )  # fmt: skip
         return result.stdout.strip(), result.returncode

@@ -223,7 +223,7 @@ wipe app data and redeploy clean (keeps the cluster, the edge and the images);
 --help` explains one. They are defined in `src/podiumd_minikube/cli.py`; the
 logic is in the rest of the package, for example `manifests.py` (the fixups applied to
 `helm template` output), `dependency.py` (`.podiumd-versions.yaml` and
-`charts/*.tgz`) and `kube.py` (kubectl and the minikube-context guard).
+`charts/*.tgz`) and `kube.py` (kubectl calls; `process` pins kubectl and helm to the minikube context).
 
 ## Shared cluster: the lock
 

@@ -90,7 +90,6 @@ def _apply_changes(source: list[Doc], target: list[Doc]) -> None:
 
 def switch(*, on: bool) -> None:
     """Apply the chart's pod counts (on) or values.yaml's one pod (off), then wait for the pods."""
-    kube.require_minikube_context()
     selected = deploy.options(full=False, extra=[])
     print("Rendering with one pod and with the chart's pod counts...")
     one, several = selected.render().docs, selected.render(*SETS).docs

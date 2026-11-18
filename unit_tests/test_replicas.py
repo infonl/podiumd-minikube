@@ -44,7 +44,6 @@ def switched(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) ->
     request.getfixturevalue("poll_once")
     calls: list[str] = []
     counts = {"redis-ha": 3, "keycloak": 2}
-    monkeypatch.setattr(kube, "require_minikube_context", lambda: None)
     monkeypatch.setattr(deploy, "options", lambda **_: deploy.Options())
     monkeypatch.setattr(deploy.Options, "render", lambda _self, *args: manifests.Render(SEVERAL if args else ONE, []))
     monkeypatch.setattr(kube, "kubectl_shown", lambda *args, **_kwargs: calls.append(" ".join(args)))

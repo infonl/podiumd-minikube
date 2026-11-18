@@ -7,7 +7,6 @@ from collections.abc import Callable
 
 from podiumd_minikube import chart
 from podiumd_minikube import deploy as deployment
-from podiumd_minikube import kube
 from podiumd_minikube import lock
 from podiumd_minikube import manifests
 from podiumd_minikube import openbao
@@ -244,7 +243,6 @@ def show_cluster_status(argv: list[str]) -> None:
     parser.add_argument("--top", type=int, default=20, help="containers to list, largest first (default 20)")
     parser.add_argument("--all", action="store_true", help="list every container")
     args = parser.parse_args(argv)
-    kube.require_minikube_context()
     status.report(0 if args.all else args.top)
 
 

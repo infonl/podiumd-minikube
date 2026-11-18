@@ -45,7 +45,6 @@ def machine(
         },
     )
     tunnel.ETC_HOSTS.write_text("127.0.0.1 localhost\n", encoding="utf-8")
-    fake_run.on("kubectl", "config", "current-context", stdout="minikube\n")
     fake_run.on("pgrep", "-f", tunnel.TUNNEL_PATTERN, returncode=1)
     fake_run.on("minikube", "ip", stdout=f"{NODE_IP}\n")
     fake_run.on("ip", "route", "show", stdout="")

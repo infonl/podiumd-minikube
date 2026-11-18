@@ -20,7 +20,6 @@ def cluster(
 ) -> FakeRun:
     """minikube context, a pod per selector and a port-forward log in tmp_path."""
     request.getfixturevalue("poll_once")
-    monkeypatch.setattr(kube, "require_minikube_context", lambda: None)
     monkeypatch.setattr(kube, "first_pod", lambda selector: f"pod-{selector}")
     monkeypatch.setattr(services, "FORWARD_LOG", tmp_path / "forward.log")
     return fake_run

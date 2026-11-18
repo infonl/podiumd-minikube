@@ -170,7 +170,6 @@ def _delete_bound_volumes() -> None:
 @lock.holding("reset-namespace")
 def reset_namespace(*, yes: bool) -> int:
     """Delete the namespaces and what they leave behind cluster-wide; 1 when not confirmed."""
-    kube.require_minikube_context()
     if not confirmed(RESET_SUMMARY, yes=yes):
         return 1
     print(f"Deleting namespaces {', '.join(RESET_NAMESPACES)} and their releases...")

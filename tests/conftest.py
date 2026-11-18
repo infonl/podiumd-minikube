@@ -4,7 +4,7 @@ Shared fixtures for the live-cluster test suite.
 These are integration/smoke tests against a real, already-deployed minikube
 cluster - not unit tests. They assume:
 
-  - `kubectl` is configured against the cluster (current context)
+  - kubectl and helm reach the minikube context, whatever the current context is (`process.pinned`)
   - the releases are deployed to namespaces `podiumd` and (metrics profile) `monitoring`
   - the edge (NGINX Gateway Fabric) has a real LoadBalancer external IP (via `minikube tunnel` -
     see podiumd-minikube setup-tunnel)
@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from podiumd_minikube import process
 from podiumd_minikube import status
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
@@ -44,7 +45,7 @@ def pytest_addoption(parser):
 
 def kubectl(*args):
     """Run kubectl and return stdout, raising if it fails."""
-    result = subprocess.run(["kubectl", *args], check=False, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(process.pinned(["kubectl", *args]), check=False, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
         msg = f"kubectl {' '.join(args)} failed: {result.stderr}"
         raise RuntimeError(msg)
