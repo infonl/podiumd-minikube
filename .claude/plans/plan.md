@@ -10626,3 +10626,16 @@ CET, 291 s; Job start/completion times from a `kubectl get jobs -w`:
   pipeline uses its own `openbao_unseal.py`).
 - `zac-restart-after-openzaak-config` waits for openzaak-config and restarts
   ZAC only when ZAC started too early: no ZAC restart on this upgrade.
+
+### PR #740 tested; fresh install found a seed bug (2026-11-18)
+
+helm-charts PR #740 (openbao-activate.sh step 5 reuses the hook's
+openbao-config run of the current release revision) tested on minikube in
+five cases, all as expected; results in the PR. On the fresh install of case
+5 our seed Job zac-productaanvraag-zaakafhandelparameters failed (backoff
+limit): on ZAC 5.11+ a zaaktype without zaakafhandelparameters answers GET
+without a `processDefinition` key, so the script took the pre-5.11 branch and
+PUT the collection URL (405). Upgrades never showed it: the parameters
+existed. The branch now keys on `isValide`, which ZAC 5.11+ always returns.
+podiumd-tests' bootstrap step zac-email-confirmation had failed on the
+same missing parameters.

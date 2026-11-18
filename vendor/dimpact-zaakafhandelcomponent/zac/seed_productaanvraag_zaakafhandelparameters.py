@@ -246,9 +246,10 @@ def main():
 
     config_url = f"{ZAC_BASE_URL}/zaakafhandelparameters/{zaaktype_uuid}"
     config = http("GET", config_url, opener=session)
-    if "processDefinition" in config:
-        # ZAC 5.11+: processDefinition replaces caseDefinition, the PUT takes the uuid, isValide replaces valide.
-        process = config["processDefinition"] or {}
+    if "isValide" in config:
+        # ZAC 5.11+: processDefinition replaces caseDefinition (absent until set), the PUT takes the uuid,
+        # isValide replaces valide.
+        process = config.get("processDefinition") or {}
         config["processDefinition"] = {**process, "processEngine": "CMMN", "key": CASE_DEFINITION_KEY}
         put_url = config_url
     else:
