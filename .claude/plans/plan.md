@@ -10709,3 +10709,11 @@ at 1 pod x 3 uWSGI processes, also after #745 merges (values.yaml replicaCount
 for -196 s per full tier; 2 x 2 another +287 MiB for -111 s more and leaves
 about 1.3 GiB free on the node, less than the config Jobs' ~1.5 GiB during a
 deploy. Restored 19:29-19:33.
+#743 at 1b03f6f2 (the wait hook gates each config Job on the Keycloak CR Ready,
+the podiumd realm import, and the app's rollout, then fails after 2 more
+restarts), 2026-11-18 19:47-20:14 CET: fresh install after a namespace reset
+without a false failure (config Jobs restarted up to 5 times before the realm
+import completed, all Complete); forced upgrade 125 s (zookeeper hook still
+in); a broken configuration fails the deploy after 2 min 57 s with the
+ParserError in the hook log, instead of at helm's 15 m timeout; no forbidden
+errors. Restored to 8de27656 with Open Zaak 1 x 3.
