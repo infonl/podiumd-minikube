@@ -10607,3 +10607,22 @@ waits for hooks; plain Jobs would fail silently there. That point and
 helm-charts' others (hooks are not release-tracked, so the switch leaves the
 old Jobs; an initContainer looping `manage.py migrate --check` instead of a
 backoffLimit) go into known issue podiumd-chart-50 for the upstream request.
+
+### Measured redeploy 2026-11-18 (user: "find other deploy time improvements")
+
+`deploy --full --every-release` without a render change, 14:07:35-14:12:24
+CET, 291 s; Job start/completion times from a `kubectl get jobs -w`:
+- chart dependencies 2, render 9, Postgres/edge/CoreDNS/node images 6, CRDs
+  and one-shot Jobs 24, podiumd-minikube 3, monitoring-logging 17 s.
+- `helm upgrade podiumd` 212 s: pre-upgrade hooks and apply 19 s (openbao-db-schema
+  3 s); Frank!Gateway seeds 10 s (one after the other); the nine Maykin config
+  hooks 135 s (podiumd-chart-50); `zookeeper-operator-post-install-upgrade` 34 s,
+  of which 30 s are a hard-coded `sleep 30` in pravega's zookeeper-operator
+  0.2.15 chart (inside the zac chart) before it checks that the
+  ZookeeperCluster CRD exists; no value turns it off; openbao-config 12 s.
+- deploy record, Keycloak client scopes, OpenBao 28 s: podiumd's
+  `openbao-activate.sh` step 5 deletes and reruns openbao-config (13 s) right
+  after the hook ran it. ExternalsPodiumD does not run that script (its
+  pipeline uses its own `openbao_unseal.py`).
+- `zac-restart-after-openzaak-config` waits for openzaak-config and restarts
+  ZAC only when ZAC started too early: no ZAC restart on this upgrade.
