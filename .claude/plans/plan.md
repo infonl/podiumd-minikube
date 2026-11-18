@@ -10580,3 +10580,23 @@ tolerance. Only the two Elasticsearch entries of `tests/memory-baseline.json`
 were updated: a full refresh would have lowered peak-after-tier values that
 depend on uptime or on which documents were converted (kube-apiserver 1020
 -> 711, office-converter 295 -> 91, Loki 387 -> 288 MiB).
+
+### Config Jobs run one at a time as Helm hooks (user: "would it be possible to fix it in podiumd helm?")
+
+Today's one-value deploy: `helm upgrade podiumd` took 221 s, of which 137 s
+went to the nine Maykin config Jobs (objecten 11, openarchiefbeheer 12,
+openformulieren 20, openinwoner 28, openklant 8, opennotificaties 10, openvtb
+23, openzaak 18, referentielijsten 6 s), strictly back to back: their charts
+hard-code `helm.sh/hook: post-install,post-upgrade` in
+`templates/job-config.yaml`, and Helm 4.3 runs hooks one at a time. No value
+turns the hook off, and podiumd cannot change a subchart's annotations.
+Maykin's openbeheer 0.1.3 already renders its config Job as a plain Job.
+Every environment pays this on every podiumd upgrade. Routed through
+podiumd-tests: a known issue for upstream (a value to render the Job without
+the hook), and an interim fix proposed to helm-charts. The interim fix
+disables the subcharts' Jobs and renders plain Jobs named
+`<config>-<release revision>` from one podiumd template that calls each
+subchart's helpers. Its risks: the Jobs start during the rollout (backoffLimit
+0 in the charts), and the copy drifts from the charts' template. Not changed
+on minikube: a post-renderer that strips the hooks would differ from the
+estates.
