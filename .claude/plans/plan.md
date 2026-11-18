@@ -10639,3 +10639,20 @@ PUT the collection URL (405). Upgrades never showed it: the parameters
 existed. The branch now keys on `isValide`, which ZAC 5.11+ always returns.
 podiumd-tests' bootstrap step zac-email-confirmation had failed on the
 same missing parameters.
+
+### CPU during a full tier (2026-11-18, user: "find test time improvements")
+
+Sampler (crictl stats every 15 s, Open Zaak's uWSGI processes from /proc)
+during podiumd-tests' full tier with 8 workers, 15:24:00-15:54:29 CET (1814 s;
+the run before at the default worker count 1880 s):
+- node total: mean 5.57, p95 7.06, max 7.47 of 8 cores;
+- Open Zaak web: mean 1.42, p95 2.14, max 2.80 cores; each of its 2 uWSGI
+  processes mostly 0.6-0.95 core (Python's GIL), recycled after 1000 requests
+  (a new pid about every minute): the saturated component;
+- not saturated: ZAC (p95 0.73, no throttling), Solr's 3 nodes (p95 0.33),
+  Postgres (p95 0.70); bursty: Open Formulieren web (max 4.69), objecten
+  (max 2.87).
+Before it, podiumd-tests shortened its longest test (859 s, 100 zaken -> 40,
+podiumd-tests 5e06111). podiumd-tests keeps its default worker count: more
+workers only add contention. Open: more Open Zaak processes and/or node CPUs
+(the user's call; both differ from the estates or cost laptop capacity).
