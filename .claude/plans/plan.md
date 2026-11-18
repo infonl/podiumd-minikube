@@ -10656,3 +10656,25 @@ Before it, podiumd-tests shortened its longest test (859 s, 100 zaken -> 40,
 podiumd-tests 5e06111). podiumd-tests keeps its default worker count: more
 workers only add contention. Open: more Open Zaak processes and/or node CPUs
 (the user's call; both differ from the estates or cost laptop capacity).
+
+### Open Zaak 3 processes; helm-charts #742/#743 measured (2026-11-18)
+
+Open Zaak with 3 uWSGI processes (`--set`, not kept): podiumd-tests' full tier
+with 8 workers 16:02:05-16:29:06 CET, 1619 s against 1814 s with 2 (-11%; its
+kees00 tier ran from the laptop at the same time). Node mean 5.57 -> 6.07,
+p95 7.06 -> 7.25 of 8 cores (now the limit); Open Zaak's workers summed p95
+1.84 -> 2.15; web container 393 -> 561 MiB; node 14.9 -> 15.5 of 17.5 GiB.
+Back to podiumd's 2 processes pending the user's decision.
+
+helm-charts #742 (zookeeper-operator rendered by podiumd, no 30 s hook) and
+#743 (Maykin config Jobs as plain `<app>-config-<rev>` Jobs plus one waiting
+hook), applied on 8de27656: `helm upgrade podiumd` 212-228 -> 96 s, deploy
+286-291 -> 151 s; config Jobs together 62 s (each 26-62 s from contention);
+peaks 118-257 MiB per Job, about 1.5 GiB together for a minute. Findings sent
+to helm-charts: #743 fails to render while `<app>.configuration.job.enabled`
+is true (ExternalsPodiumD and our values.yaml set it); its template path
+`<Chart.Name>/charts/<app>/...` breaks under an umbrella (our render;
+`$sub.Template.BasePath` works); a broken configuration crash-loops
+(backoffLimit 12, OnFailure) and the waiting hook only fails at helm's 15 m
+timeout without printing the Job's log, as the old hook. Leftovers of the
+failed upgrade (waiting hook, `<app>-config-5`) removed by hand.
