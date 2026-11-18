@@ -826,8 +826,11 @@ podiumd:
     settings:
       # As ExternalsPodiumD (admins sign in through Keycloak).
       disable2fa: true
-      # podiumd's 2 web processes: with 1 (4 threads, one core of Python) ZAC's
-      # notification handling in a full tier queued Open Zaak's requests.
+      # Deviation for test speed (podiumd and the estates: 2): each process tops out
+      # at one core (Python), and with 2 Open Zaak was the saturated component in a
+      # full tier; 3 made it 11% shorter for +168 MiB. podiumd's 4 threads stay.
+      uwsgi:
+        processes: "3"
       # Required: Django refuses every request without SECRET_KEY.
       secretKey: openZaakSecretKey
       # As ExternalsPodiumD: the public host, its nginx Service, and two proxies (edge, nginx).

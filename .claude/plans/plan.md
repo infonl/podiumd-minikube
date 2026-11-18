@@ -10678,3 +10678,6 @@ is true (ExternalsPodiumD and our values.yaml set it); its template path
 (backoffLimit 12, OnFailure) and the waiting hook only fails at helm's 15 m
 timeout without printing the Job's log, as the old hook. Leftovers of the
 failed upgrade (waiting hook, `<app>-config-5`) removed by hand.
+Decision (user): Open Zaak keeps 3 uWSGI processes on minikube (values.yaml
+`podiumd.openzaak.settings.uwsgi.processes`), a deviation from podiumd and the
+estates (2) for test speed; recorded in values.yaml and memory-tuning.md.
