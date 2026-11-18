@@ -10703,3 +10703,9 @@ most 19, total at most about 175 of 500 (opennotificaties' 100-thread worker
 holds 101-106 throughout). Memory: both web containers 848 MiB (1 x 3: 561);
 node 16.2 of 17.5 GiB. Same CPU as 1 x 3 but 7% shorter: probably less
 queueing behind a busy or recycling worker (inference).
+Decision (user, via podiumd-tests, 2026-11-18 evening): minikube keeps Open Zaak
+at 1 pod x 3 uWSGI processes, also after #745 merges (values.yaml replicaCount
+1, uWSGI 3, CPU request 250m instead of #745's 1 core). 1 x 3 costs +168 MiB
+for -196 s per full tier; 2 x 2 another +287 MiB for -111 s more and leaves
+about 1.3 GiB free on the node, less than the config Jobs' ~1.5 GiB during a
+deploy. Restored 19:29-19:33.

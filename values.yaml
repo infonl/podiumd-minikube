@@ -570,7 +570,13 @@ podiumd:
   # --- openzaak (always on - core) ---
   openzaak:
     enabled: true
+    # One pod with 3 uWSGI processes (settings.uwsgi), not podiumd-chart-51's 2 replicas:
+    # 2 x 2 saved 111 s more per full tier for +287 MiB, and the node's 8 cores are the limit.
     replicaCount: 1
+    resources:
+      requests:
+        # podiumd-chart-51 requests 1 core per pod; 250m keeps the 8-core node schedulable.
+        cpu: 250m
     # Laptop CPU: the images of Open Zaak, Open Formulieren, Open Archiefbeheer and
     # Open Inwoner ship no bytecode for their site-packages, in directories their user
     # cannot write, so every new Python process compiles the libraries again: each
