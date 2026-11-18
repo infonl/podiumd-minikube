@@ -10690,3 +10690,16 @@ TTL 3600. A broken configuration: the wait hook reports each restart, but
 logs"); fixed in bbda0a68 (falls back to the current container's log).
 Measurements recorded in podiumd-known-issues (zac-49, podiumd-chart-50) by
 podiumd-tests. Cluster restored to 8de27656 with Open Zaak at 3 processes.
+
+### helm-charts #745 (Open Zaak 2 replicas, podiumd-chart-51) measured (2026-11-18)
+
+8de27656 plus #745's values diff (replicaCount 2, preferred podAntiAffinity,
+requests cpu 1), our replicaCount 1 and uWSGI 3 set aside for the run. Full
+tier with 8 workers 18:30:16-18:55:37 CET: 1507 s (1 x 3: 1618 s, 1 x 2:
+1814 s; all three overlapped with podiumd-tests' kees00 tier on the laptop).
+Node mean 6.19, p95 7.25 of 8 (as 1 x 3); Open Zaak workers summed p95 2.25,
+per pod p95 1.12 of 2: not saturated. Postgres connections: openzaak 7 -> at
+most 19, total at most about 175 of 500 (opennotificaties' 100-thread worker
+holds 101-106 throughout). Memory: both web containers 848 MiB (1 x 3: 561);
+node 16.2 of 17.5 GiB. Same CPU as 1 x 3 but 7% shorter: probably less
+queueing behind a busy or recycling worker (inference).
