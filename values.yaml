@@ -766,6 +766,12 @@ podiumd:
                 - objecten
               heeft_alle_autorisaties: true
               label: Objecten
+            # Open VTB's CloudEvents to Open Notificaties.
+            - uuid: 5e030b42-1c02-470a-a071-d328aff382e5
+              client_ids:
+                - openvtb
+              heeft_alle_autorisaties: true
+              label: Open VTB
 
         notifications_config_enable: true
         notifications_config:
@@ -1992,6 +1998,8 @@ podiumd:
               secret: notificatiesSecret
             - identifier: objecten
               secret: objectenSecret
+            - identifier: openvtb
+              secret: openvtbSecret
 
         notifications_kanalen_config_enable: true
         # Kanalen and filters as ExternalsPodiumD; internetaken,
@@ -2843,6 +2851,26 @@ podiumd:
                   make_users_staff: true
                   superuser_group_names:
                     - administrators
+        # CloudEvents (bericht-geregistreerd, bericht-gepubliceerd) go to Open Notificaties as client openvtb.
+        zgw_consumers_config_enable: true
+        zgw_consumers:
+          services:
+            - identifier: notificaties-api
+              label: Open Notificaties
+              api_root: https://opennotificaties.local/api/v1/
+              api_type: nrc
+              auth_type: zgw
+              client_id: openvtb
+              secret: openvtbSecret
+        notifications_config_enable: true
+        notifications_config:
+          notifications_api_service_identifier: notificaties-api
+    # Replaces podiumd's list, so its NOTIFICATIONS_SOURCE is repeated (without it Open VTB sends no CloudEvent).
+    # podiumd's worker and beat take this list too.
+    extraEnvVars:
+      - name: NOTIFICATIONS_SOURCE
+        value: openvtb
+      - *python-bytecode-cache
     settings:
       # Laptop budget: 1 web process (chart 2); the chart's 2 threads stay.
       uwsgi:

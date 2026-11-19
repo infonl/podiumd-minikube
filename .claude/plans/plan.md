@@ -10776,3 +10776,38 @@ claude-worktree-helm-charts-minikube-4.11.0-tip; archived into
   the 5.9.1 interlude, and with it PATCH /rest/zaken/zaak/{uuid} answered
   405. Their bootstrap (10:37) recreated it; ZAC taak/zaakspecifiek tests 9/9,
   the 405 gone. Nothing else found.
+
+## Open VTB Celery worker and beat, Open VTB to Open Notificaties (2026-11-19 12:00-12:30 CET)
+
+podiumd-tests asked (IN-3501, IN-3532: Open VTB bericht -> Open Notificaties
+-> OMC -> Notify) for helm-charts' draft #746 and for Open VTB's link to
+Open Notificaties.
+
+- #746 adds templates/openvtb-celery.yaml: openvtb-worker and openvtb-beat,
+  the web pod's image, Secret and ConfigMap. Image list of the render
+  unchanged (66 tags) for 5450b2b6 and 5d235d51.
+- Found live on 5450b2b6 (revision 8): openvtb-worker "Cannot connect to
+  redis://redis-ha-master:6379/20: Timeout". The podiumd-redis-ha
+  NetworkPolicy listed openvtb and openvtb-config only. helm lint and
+  template cannot see it. Reported to helm-charts; fixed in a39def49.
+- Found by reading the 0.2.0 image: notifications_api_common's
+  process_cloudevent returns early ("no_notification_source_set") while
+  NOTIFICATIONS_SOURCE is empty, Open VTB's default; the openvtb chart has no
+  key. The web pod sends bericht-geregistreerd, the worker
+  bericht-gepubliceerd (beat task send_berichten_events). a39def49 sets it
+  in openvtb.extraEnvVars and gives the worker and beat that list. Our
+  values.yaml replaces the list (PYTHONPYCACHEPREFIX), so it repeats
+  NOTIFICATIONS_SOURCE.
+- Wiring in values.yaml, as our other apps (no reference environment runs
+  Open VTB's notifications): Open VTB's setup_configuration service
+  notificaties-api (ZGW client openvtb) and notifications_config; Open Zaak
+  Applicatie "Open VTB" (heeft_alle_autorisaties, as every Applicatie here);
+  Open Notificaties credential openvtb.
+- Revision 9 (12:26), 5d235d51 = 567861b0 + #746 with a39def49: deploy
+  294 s (helm upgrade 249 s), worker ready, beat runs. Checked live:
+  Open VTB's NotificationsConfig client is opennotificaties.local, Open
+  Zaak's Applicatie and Open Notificaties' JWTSecret exist.
+- OMC's CloudEvents abonnement (type_substring "nl.overheid.berichten.") is
+  podiumd-tests' bootstrap's, as its zaken abonnement.
+- Revision 8's stopped deploy left its cluster lock; `cluster-lock break`
+  asks for confirmation on stdin (use -y in a non-interactive shell).
