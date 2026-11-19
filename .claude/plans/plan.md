@@ -10771,3 +10771,8 @@ claude-worktree-helm-charts-minikube-4.11.0-tip; archived into
 - Render check of #738: Open VTB ServiceAccount without token mount, PDB
   maxUnavailable 1 (the PDB rendered only after `dependency.sync`: openvtb
   0.2.0's pdb template).
+- After revision 7 (podiumd-tests): smoke 226 passed; ZAC's BPMN process
+  definition (podiumd-tests' bootstrap step zac-bpmn-process) was gone after
+  the 5.9.1 interlude, and with it PATCH /rest/zaken/zaak/{uuid} answered
+  405. Their bootstrap (10:37) recreated it; ZAC taak/zaakspecifiek tests 9/9,
+  the 405 gone. Nothing else found.
