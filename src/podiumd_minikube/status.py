@@ -218,7 +218,8 @@ def problems(
         if status.get("phase") != "Running" or ready < len(containers) or recent:
             restarted = f" restarted: {', '.join(recent)}" if recent else ""
             counts = f"{ready}/{len(containers)}{restarted}"
-            found.append(f"{meta['namespace']}/{meta['name']} {status.get('phase')} {counts}")
+            phase = status.get("phase")
+            found.append(f"{meta['namespace']}/{meta['name']} {phase} {counts}")
     failed = [job for job in jobs if "Failed" in kube.true_conditions(job)]
     found.extend(f"job {job['metadata']['name']} Failed" for job in failed)
     return found

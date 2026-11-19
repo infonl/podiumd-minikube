@@ -477,8 +477,10 @@ def refresh_images(stale: list[str]) -> None:
     if not stale:
         return
     print(f"{len(stale)} image(s) changed digest under the same tag: {' '.join(stale)}")
-    parts = [image.partition("@") for image in stale]
-    by_digest = {f"{tagged.rpartition(':')[0]}@{digest}": tagged for tagged, _, digest in parts}
+    by_digest: dict[str, str] = {}
+    for image in stale:
+        tagged, _, digest = image.partition("@")
+        by_digest[f"{tagged.rpartition(':')[0]}@{digest}"] = tagged
     references = list(by_digest)
     for start in range(0, len(references), BATCH_SIZE):
         pulled = _in_batches(references[start : start + BATCH_SIZE], "pulling", _pull)
@@ -532,7 +534,8 @@ def _provisioned_images() -> list[str]:
     """Return the images of this chart's fully-enabled render, the edge (NGF, the WAF) and cert-manager."""
     print("Deriving the image list from the currently-selected podiumd version...")
     # The kubelet pulls one image at a time; loaded first, the edge and cert-manager wait for none.
-    edge = f"{gateway.ngf_template()}\n---\n{pki.cert_manager_template()}\n---\n{manifests.dump(waf.rendered([]))}"
+    waf_render = manifests.dump(waf.rendered([]))
+    edge = f"{gateway.ngf_template()}\n---\n{pki.cert_manager_template()}\n---\n{waf_render}"
     images = sorted({*chart_images(), *manifests.images(edge)})
     print(f"{len(images)} image(s) referenced by this chart's fully-enabled render, the edge and cert-manager.")
     return images

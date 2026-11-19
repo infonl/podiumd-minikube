@@ -137,5 +137,6 @@ def lines(items: list[Doc]) -> list[str]:
         RELEASE_NAME,
         *sorted(set(counts) - {*dependency.DEPENDENCIES.values(), RELEASE_NAME}),
     ]
-    result.append(f"Running     containers: {', '.join(f'{chart} {counts[chart]}' for chart in shown)}")
+    running = ", ".join(f"{chart} {counts[chart]}" for chart in shown)
+    result.append(f"Running     containers: {running}")
     return result

@@ -71,7 +71,8 @@ def repair_default_client_scopes(render: manifests.Render) -> None:
 
     Skipped when the chart's own repair Job is rendered: an exec here failed when the deploy replaced keycloak-0.
     """
-    if any(name.startswith(CHART_REPAIR_JOB_PREFIX) for name in render.jobs) or not kube.is_present(f"pod/{POD}"):
+    chart_repairs = any(name.startswith(CHART_REPAIR_JOB_PREFIX) for name in render.jobs)
+    if chart_repairs or not kube.is_present(f"pod/{POD}"):
         return
     print("Repairing the podiumd realm's client scopes (keycloak.py)...")
     if not polling.wait_until(lambda: _is_import_done(render), timeout=IMPORT_TIMEOUT, interval=10):

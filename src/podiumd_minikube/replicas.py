@@ -95,7 +95,8 @@ def switch(*, on: bool) -> None:
     one, several = selected.render().docs, selected.render(*SETS).docs
     _apply_changes(*((one, several) if on else (several, one)))
     counts = {name: count if on else 1 for name, (_, count) in MULTI_POD.items()}
-    print(f"Waiting for {', '.join(f'{name} at {count}' for name, count in counts.items())}...")
+    waits = ", ".join(f"{name} at {count}" for name, count in counts.items())
+    print(f"Waiting for {waits}...")
     if polling.wait_until(lambda: _counted(counts), timeout=READY_TIMEOUT, interval=5) is None:
         msg = f"after {READY_TIMEOUT}s: not at their pod count: check `kubectl get statefulset -n {NAMESPACE}`"
         raise process.UserError(msg)
