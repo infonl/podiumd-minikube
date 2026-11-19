@@ -10817,3 +10817,22 @@ Open Notificaties.
   omc.settings.zgw.endpoint.documenten while endpoint.openVtb is set: added
   as https://openzaak.local/documenten/api/v1 (neither reference
   environment sets it yet). Images unchanged; deploy 293 s; no failing pods.
+
+### helm-charts #743 fix 02726e2e (86a21b26) tested (2026-11-19 14:48-14:54 CET)
+
+86a21b26 = 0d65435b + 02726e2e (the wait hook counts failed pods of Jobs
+with restartPolicy Never). Images unchanged. Both upgrades with
+`--set podiumd.<app>.configuration.job.enabled=false` for openzaak,
+openklant, openinwoner and openarchiefbeheer (our values.yaml has true).
+- Revision 11, `--set-string podiumd.openzaak.configuration.data='broken: ['`:
+  deploy 14:48:00, wait hook 14:49:00-14:50:36 (96 s), deploy failed
+  14:50:36. Hook log: "openzaak is rolled out; fails after 2 more
+  restart(s)", "restarted 1/2/3 time(s)" each with the ParserError, then
+  "restarted 2 time(s) after its gate opened: failing". No forbidden. The
+  failed upgrade leaves openzaak-config-11 and
+  zac-restart-after-openzaak-config-11 running; the next upgrade's
+  configuration let openzaak-config-11 complete (4 Error pods stay until
+  its TTL).
+- Revision 12, configuration restored: deploy 197 s (helm upgrade 154 s),
+  every `<app>-config-12` Job and zac-restart-after-openzaak-config-12
+  Complete, hook succeeded.
