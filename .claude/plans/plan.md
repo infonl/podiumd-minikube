@@ -10748,3 +10748,26 @@ behind.
 - `~/.minikube/cache/images`: 9.4 GB of copies from July/August (the
   `minikube image load` era) deleted by hand; only minikube's own Cilium
   copies remain (320 MB).
+
+## podiumd 4.11.0 tip with the open PRs (2026-11-19, user: "switch to the 4.11.0 tip plus all non-draft PRs", then "also include pr 745 and draft pr 738", then "add the 2 zac PRs 719, 736")
+
+helm-charts-8e's local merge on branch verify/minikube-4.11.0-tip, worktree
+claude-worktree-helm-charts-minikube-4.11.0-tip; archived into
+`.chart-sources/podiumd-<sha>` (charts/podiumd + charts/mi-data).
+- Revision 6 (10:02), ef668a52: tip 762a212c + #743 + #723 (docs conflict
+  only) + #745 + #738 (cherry-picked: its branch sits on the old release
+  base). The tip has no #719, so ZAC went from 5.12.0 back to 5.9.1 on the
+  database 5.12 had migrated (Flyway: version 108, validated; ZAC started).
+  Our seed Job waits for ZAC_VERSION 5.12.0 and failed after 261 s ("ZAC runs
+  5.9.1, waiting for 5.12.0"). Missed before the deploy: the image tags of the
+  old and the new render were not compared.
+- Revision 7 (10:32), 567861b0: ef668a52 + #719 (4 commits cherry-picked) +
+  #736. Before deploying: `chart_images()` of 8de27656 and 567861b0 compared,
+  all 66 image tags identical. Deploy 313 s (helm upgrade podiumd 244 s,
+  with ZAC's version change and the other PRs' object changes, so no clean
+  measure of #742/#743); seed Job valide; no failing pods.
+- Open Zaak stays 1 pod x 3 uWSGI with a 250m request (values.yaml, a44d271)
+  over #745's 2 replicas with 1 CPU.
+- Render check of #738: Open VTB ServiceAccount without token mount, PDB
+  maxUnavailable 1 (the PDB rendered only after `dependency.sync`: openvtb
+  0.2.0's pdb template).
