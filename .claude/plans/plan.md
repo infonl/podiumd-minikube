@@ -10836,3 +10836,19 @@ openklant, openinwoner and openarchiefbeheer (our values.yaml has true).
 - Revision 12, configuration restored: deploy 197 s (helm upgrade 154 s),
   every `<app>-config-12` Job and zac-restart-after-openzaak-config-12
   Complete, hook succeeded.
+
+## helm-charts #749 (Open VTB Berichten API only, IN-3500) on minikube (2026-11-19 16:24-16:48 CET)
+
+Request from podiumd-tests (Kees's go for IN-3500). helm-charts built a fresh local branch
+`verify/minikube-4.11.0-tip2` at 3f96338f (worktree `claude-worktree-helm-charts-minikube-tip2`, not
+pushed): #749 c79fe707 on the rebased #746 e6e6efd5 and #743 (incl. 02726e2e), plus #723, #738,
+#719 and #736 as before. A merge into the old verify branch would have conflicted on every rewritten
+#746 commit. Chart images: identical to 86a21b26 (66).
+
+- Our `values.yaml` sets no `openvtb.extraVolumes`/`extraVolumeMounts`, so the chart's
+  ConfigMap `openvtb-podiumd-settings` mount stays; `omc` `zgw.endpoint.documenten` stays.
+- Revision 13 (default `openvtb.conf.podiumd_berichten`): 287 s; web, worker and beat run with it.
+  podiumd-tests: IN-3500, Open VTB, OMC and IN-3532 tests 33 passed. Its first run OOM-killed the
+  openvtb pod (768Mi): podiumd-tests' parallel Django shells, fixed there (one shell at a time).
+- Revision 14 (`--set podiumd.openvtb.settings.djangoSettingsModule=openvtb.conf.podiumd_all`):
+  283 s; the next normal deploy returns to `podiumd_berichten`.
