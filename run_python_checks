@@ -51,22 +51,26 @@ if [[ -x .venv/bin/python3 ]]; then
     fi
 fi
 
-# Arrays keep each file name one argument (SC2046). set -e misses failures
-# inside <(...), so `wait "$!"` checks each one (SC2312).
-mapfile -t unit_test_files < <(find unit_tests -name '*.py' -not -path '*/__pycache__/*' | sort)
-wait "$!"
-mapfile -t live_test_files < <(find tests -name '*.py' -not -path '*/__pycache__/*' | sort)
-wait "$!"
+# Each check's log, and the file lists below, go into a temporary folder.
+logs=$(mktemp -d)
+trap 'rm -rf "$logs"' EXIT
+
+# Arrays keep each file name one argument (SC2046). The lists go through files, not mapfile < <(...): the Bash 3.2
+# of macOS has neither mapfile nor `wait` on a process substitution, and pipefail stops the run when a find fails.
+# read returns 1 at the end of its input.
+find unit_tests -name '*.py' -not -path '*/__pycache__/*' | sort > "$logs/unit_test_files"
+IFS=$'\n' read -r -d '' -a unit_test_files < "$logs/unit_test_files" || true
+find tests -name '*.py' -not -path '*/__pycache__/*' | sort > "$logs/live_test_files"
+IFS=$'\n' read -r -d '' -a live_test_files < "$logs/live_test_files" || true
 # Shell scripts: sh/bash/dash/ksh shebang, or *.sh; vendor/ and .chart-sources/ are upstream's.
-mapfile -t shell_scripts < <(
-    find . \( -path ./.venv -o -path ./.git -o -path ./vendor -o -path ./.chart-sources -o -path '*/__pycache__' \) \
-        -prune -o -type f -print0 |
-        xargs -0 awk 'FNR == 1 && (/^#!.*[\/ ](ba|da|k)?sh([ \t]|$)/ || FILENAME ~ /\.sh$/) {print FILENAME} {nextfile}' |
-        sort
-)
-wait "$!"
-mapfile -t markdown_files < <(find . -maxdepth 2 \( -path ./.venv -o -path ./vendor -o -path ./.claude \) -prune -o -name '*.md' -print | sort)
-wait "$!"
+find . \( -path ./.venv -o -path ./.git -o -path ./vendor -o -path ./.chart-sources -o -path '*/__pycache__' \) \
+    -prune -o -type f -print0 |
+    xargs -0 awk 'FNR == 1 && (/^#!.*[\/ ](ba|da|k)?sh([ \t]|$)/ || FILENAME ~ /\.sh$/) {print FILENAME} {nextfile}' |
+    sort > "$logs/shell_scripts"
+IFS=$'\n' read -r -d '' -a shell_scripts < "$logs/shell_scripts" || true
+find . -maxdepth 2 \( -path ./.venv -o -path ./vendor -o -path ./.claude \) -prune -o -name '*.md' -print | sort \
+    > "$logs/markdown_files"
+IFS=$'\n' read -r -d '' -a markdown_files < "$logs/markdown_files" || true
 code=(src/podiumd_minikube)
 
 tests_pylint_disable=$(python3 -c '
@@ -75,8 +79,6 @@ with open("pyproject.toml", "rb") as f:
     print(",".join(tomllib.load(f)["tool"]["podiumd-minikube"]["pylint-tests"]["disable"]))')
 
 # Each check is a step function. Its output goes to its own log; the logs are printed in order once all steps end.
-logs=$(mktemp -d)
-trap 'rm -rf "$logs"' EXIT
 
 step_ruff_check() { ruff check .; }
 
