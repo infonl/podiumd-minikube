@@ -349,6 +349,8 @@ def _after_upgrades(command: str, found: list[releases.Release], render: manifes
             openbao.activate(render)
     with timed("readiness wait"):
         _wait_ready(live, upgraded.held)
+    # Every profile's images, as provision-cluster: a deploy without --full keeps the others' tags.
+    provision.remove_old_node_images(provision.chart_images())
 
 
 def _before_upgrades(renders: dict[str, manifests.Render], before: manifests.Render) -> None:

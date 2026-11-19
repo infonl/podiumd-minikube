@@ -44,6 +44,11 @@ def node(command: str) -> str:
     return process.output(["minikube", "ssh", "-p", PROFILE, "--", command])
 
 
+def crictl(*args: str) -> Doc:
+    """Return the JSON output of crictl args on the minikube node."""
+    return json.loads(node(" ".join(["sudo", "crictl", *args, "-o", "json"])))
+
+
 def get_json(*args: str) -> Doc:
     """Return the parsed `kubectl get <args> -o json`."""
     return json.loads(kubectl("get", *args, "-o", "json"))

@@ -156,6 +156,7 @@ STEPS = [
     (deployed, "record"),
     (keycloak, "repair_default_client_scopes"),
     (openbao, "activate"),
+    (provision, "remove_old_node_images"),
     (tunnel, "setup_tunnel"),
 ]
 
@@ -226,6 +227,7 @@ def called(
             (deployed, "last_digests"): dict,
             (releases, "is_deployed"): lambda _release: True,
             (openbao, "is_unsealed"): bool,
+            (provision, "chart_images"): list,
         },
     )
     pki.CA_CERT.write_text("")
@@ -257,6 +259,7 @@ def test_deploy_runs_every_step_in_order(fake_run: FakeRun, called: list[str]):
         "record",
         "repair_default_client_scopes",
         "activate",
+        "remove_old_node_images",
         "setup_tunnel",
     ]
     assert fake_run.calls == [

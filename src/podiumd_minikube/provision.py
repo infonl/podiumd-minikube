@@ -6,7 +6,6 @@ reference: minikube's inner Docker has no internet access.
 """
 
 import functools
-import json
 import os
 import sys
 import tempfile
@@ -69,6 +68,13 @@ KUBELET_CONFIG = "/var/lib/kubelet/config.yaml"
 # The node's resolv.conf without its search domains: pods would inherit the laptop's
 # (DHCP, VPN), and musl stops at a "no data" answer for <name>.<that domain>.
 POD_RESOLV_CONF = "/etc/kubernetes/pod-resolv.conf"
+# minikube's 100 never removes an image; 85/80 are the kubelet's defaults. Images loaded from the
+# host that the kubelet removes come back from their registry.
+KUBELET_SETTINGS = {
+    "resolvConf": POD_RESOLV_CONF,
+    "imageGCHighThresholdPercent": 85,
+    "imageGCLowThresholdPercent": 80,
+}
 
 
 def _env_int(name: str, default: int) -> int:
@@ -126,7 +132,7 @@ def start_node(while_starting: Callable[[], None] = _nothing) -> None:
     control_plane = tune_control_plane()
     services = tune_node_services()
     # The kubelet reported restarted static pods up to 100 s late (etcd); a restarted one at once.
-    if (isolate_pod_dns() or control_plane) and "kubelet" not in services:
+    if (tune_kubelet() or control_plane) and "kubelet" not in services:
         services.append("kubelet")
     restart_node_services(services)
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -185,28 +191,28 @@ def nameservers_only(resolv_conf: str) -> str:
     return "".join(f"{line}\n" for line in lines if line.startswith("nameserver "))
 
 
-def with_pod_resolv_conf(config: str) -> str | None:
-    """Return the kubelet configuration with resolvConf POD_RESOLV_CONF; None when it has it already."""
-    parsed: Doc = parse_yaml(config) or {}
-    if parsed.get("resolvConf") == POD_RESOLV_CONF:
+def tuned_kubelet_config(current: str) -> str | None:
+    """Return the kubelet configuration current with KUBELET_SETTINGS; None when it has them already."""
+    parsed: Doc = parse_yaml(current) or {}
+    if all(parsed.get(key) == value for key, value in KUBELET_SETTINGS.items()):
         return None
-    parsed["resolvConf"] = POD_RESOLV_CONF
+    parsed.update(KUBELET_SETTINGS)
     return serialize_yaml(parsed, sort_keys=False)
 
 
-def isolate_pod_dns() -> bool:  # noqa: FNE005 - changes the kubelet configuration
-    """Point the kubelet at POD_RESOLV_CONF; whether its configuration changed (minikube start rewrites it).
+def tune_kubelet() -> bool:  # noqa: FNE005 - changes the kubelet configuration
+    """Write POD_RESOLV_CONF and KUBELET_SETTINGS; whether KUBELET_CONFIG changed (minikube start rewrites it).
 
     Pods started before keep their search domains until they restart.
     """
     wanted = nameservers_only(kube.node("cat /etc/resolv.conf"))
     if kube.node(f"cat {POD_RESOLV_CONF} 2>/dev/null || true").strip() != wanted.strip():
         _write_node_file(POD_RESOLV_CONF, wanted, mode="644")
-    config = with_pod_resolv_conf(kube.node(f"sudo cat {KUBELET_CONFIG}"))
+    config = tuned_kubelet_config(kube.node(f"sudo cat {KUBELET_CONFIG}"))
     if config is None:
         return False
     _write_node_file(KUBELET_CONFIG, config, mode="644")
-    print(f"The kubelet gets resolvConf {POD_RESOLV_CONF} (no search domains of the laptop).")
+    print(f"The kubelet gets resolvConf {POD_RESOLV_CONF} (no search domains of the laptop) and image GC at 85%.")
     return True
 
 
@@ -285,17 +291,61 @@ def _repository(image: str) -> str:
     return name.removeprefix("docker.io/").removeprefix("library/")
 
 
+def _tagged(image: str) -> str:
+    """image as repository:tag without Docker Hub's implicit prefixes."""
+    return f"{_repository(image)}:{image.rpartition(':')[2]}"
+
+
 def old_tags(images: list[str], local: list[str]) -> list[str]:
     """Return the local images (repository:tag) of images' repositories with a tag images do not use."""
-    wanted = {f"{_repository(image)}:{image.rpartition(':')[2]}" for image in images}
+    wanted = {_tagged(image) for image in images}
     repositories = {_repository(image) for image in images}
     return [
         image
         for image in local
-        if not image.endswith(":<none>")
-        and _repository(image) in repositories
-        and f"{_repository(image)}:{image.rpartition(':')[2]}" not in wanted
+        if not image.endswith(":<none>") and _repository(image) in repositories and _tagged(image) not in wanted
     ]
+
+
+def _names(entry: "Doc", key: str) -> list[str]:
+    names: list[str] = entry.get(key) or []
+    return names
+
+
+def old_node_images(references: list[str], listed: "list[Doc]", used: set[str]) -> list[str]:
+    """Return one name per unused `crictl images` entry listed whose names are all old_tags of references.
+
+    `crictl rmi <name>` removes the image with all its tags. An entry without tags counts by its digests.
+    """
+    repositories = {_repository(image) for image in references}
+    old: list[str] = []
+    for entry in listed:
+        tags = _names(entry, "repoTags")
+        untagged = [digest.partition("@")[0] for digest in _names(entry, "repoDigests")]
+        stale = (
+            old_tags(references, tags) == tags
+            if tags
+            else bool({_repository(name) for name in untagged} & repositories)
+        )
+        if entry["id"] not in used and stale:
+            old.append((tags or _names(entry, "repoDigests"))[0])
+    return old
+
+
+def _remove_old_node_images(references: list[str]) -> None:
+    used = {container["imageRef"] for container in kube.crictl("ps", "-a")["containers"]}
+    old = old_node_images(references, kube.crictl("images")["images"], used)
+    if old:
+        print(f"Removing {len(old)} older image(s) of this chart's repositories from the node.")
+        kube.node(" ".join(["sudo", "crictl", "rmi", *old]))
+
+
+def remove_old_node_images(references: list[str]) -> None:
+    """Remove the node's images of references' repositories under another tag that no container uses."""
+    try:
+        _remove_old_node_images(references)
+    except process.ProcessError as error:
+        print(f"WARNING: older images stay on the node: {error}", file=sys.stderr)
 
 
 def remove_old_tags(images: list[str]) -> None:
@@ -305,6 +355,12 @@ def remove_old_tags(images: list[str]) -> None:
     if old:
         print(f"Removing {len(old)} older image tag(s) of this chart's repositories from the host: {' '.join(old)}")
         process.run(["docker", "rmi", *old], check=False)
+
+
+def remove_old_images(references: list[str]) -> None:
+    """Remove older tags of references' repositories from the host and the node."""
+    remove_old_tags(references)
+    remove_old_node_images(references)
 
 
 def chart_images() -> list[str]:
@@ -398,7 +454,7 @@ def stale_images(pinned: list[str]) -> list[str]:
     """
     if not pinned:
         return []
-    listed = json.loads(process.output(["docker", "exec", PROFILE, "crictl", "images", "--digests", "-o", "json"]))
+    listed = kube.crictl("images", "--digests")
     names: list[ImageNames] = [(image["repoTags"], image.get("repoDigests") or []) for image in listed["images"]]
     node = _digests_by_tag(names)
     host_lines = process.output(
@@ -462,7 +518,7 @@ def provision() -> None:
     start_node(functools.partial(load_images, images))
     # monitoring-logging's alloy DaemonSet hardcodes this AKS nodeSelector; values cannot clear it.
     kube.kubectl("label", "node", PROFILE, "kubernetes.azure.com/agentpool=userpool", "--overwrite")
-    remove_old_tags(images)
+    remove_old_images(images)
     _install_edge()
     print(
         "\nCluster provisioned. Next steps:",

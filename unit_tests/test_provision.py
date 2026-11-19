@@ -84,7 +84,7 @@ def test_start_node_writes_the_tuning_then_restarts_the_kubelet_once(
             (cni, "apply"): recorder(calls, "apply"),
             (provision, "tune_control_plane"): lambda: list(control_plane),
             (provision, "tune_node_services"): lambda: list(services),
-            (provision, "isolate_pod_dns"): lambda: kubelet_config,
+            (provision, "tune_kubelet"): lambda: kubelet_config,
             (provision, "restart_node_services"): lambda names: calls.append(f"restart {names}"),
             (provision, "wait_for_control_plane"): lambda names: calls.append(f"wait {names}"),
         },
@@ -167,15 +167,15 @@ KUBELET = "kind: KubeletConfiguration\n"
 @pytest.mark.parametrize(
     ("pod_resolv", "kubelet", "written"),
     [
-        ("nameserver 192.168.49.1\n", provision.with_pod_resolv_conf(KUBELET) or "", []),
+        ("nameserver 192.168.49.1\n", provision.tuned_kubelet_config(KUBELET) or "", []),
         ("", KUBELET, [provision.POD_RESOLV_CONF, provision.KUBELET_CONFIG]),
     ],
 )
-def test_isolate_pod_dns_writes_only_what_differs(fake_run: FakeRun, pod_resolv: str, kubelet: str, written: list[str]):
+def test_tune_kubelet_writes_only_what_differs(fake_run: FakeRun, pod_resolv: str, kubelet: str, written: list[str]):
     fake_run.on(*SSH, "cat /etc/resolv.conf", stdout=RESOLV)
     fake_run.on(*SSH, f"cat {provision.POD_RESOLV_CONF} 2>/dev/null || true", stdout=pod_resolv)
     fake_run.on(*SSH, f"sudo cat {provision.KUBELET_CONFIG}", stdout=kubelet)
-    changed = provision.isolate_pod_dns()
+    changed = provision.tune_kubelet()
     commands = [call[-1] for call in fake_run.ran(*SSH)]
     assert [command.rsplit(" ", 1)[-1] for command in commands if "sudo mv" in command] == written
     assert changed == bool(written)
@@ -227,7 +227,15 @@ B_DIGEST = f"sha256:{'b' * 64}"
 
 
 def _node_and_host(fake_run: FakeRun, node: list[dict[str, list[str]]], host: str) -> None:
-    fake_run.on("docker", "exec", "minikube", "crictl", stdout=json.dumps({"images": node}))
+    fake_run.on(
+        "minikube",
+        "ssh",
+        "-p",
+        PROFILE,
+        "--",
+        "sudo crictl images --digests -o json",
+        stdout=json.dumps({"images": node}),
+    )
     fake_run.on("docker", "images", "--digests", stdout=host)
 
 
@@ -264,7 +272,7 @@ def test_provision_runs_every_step_in_order(fake_run: FakeRun, monkeypatch: pyte
             (gateway, "ngf_template"): lambda: "image: ngf:1",
             (pki, "cert_manager_template"): lambda: "image: cert-manager:2",
             (provision, "load_images"): lambda images: calls.append(f"load {' '.join(images)}"),
-            (provision, "remove_old_tags"): lambda images: calls.append(f"remove old {' '.join(images)}"),
+            (provision, "remove_old_images"): lambda images: calls.append(f"remove old {' '.join(images)}"),
         },
     )
 
@@ -316,3 +324,42 @@ def test_remove_old_tags_runs_one_docker_rmi(fake_run: FakeRun):
     fake_run.on("docker", "images", stdout="busybox:1.36\nbusybox:1.37\npostgres:15\n")
     provision.remove_old_tags(["busybox:1.37"])
     assert fake_run.ran("docker", "rmi") == [["docker", "rmi", "busybox:1.36"]]
+
+
+def test_old_node_images_are_unused_other_tags_of_the_charts_repositories():
+    listed = [
+        {"id": "sha256:wanted", "repoTags": ["docker.io/library/busybox:1.37", "docker.io/library/busybox:1.35"]},
+        {"id": "sha256:old", "repoTags": ["docker.io/library/busybox:1.36", "docker.io/library/busybox:1.34"]},
+        {"id": "sha256:digest", "repoTags": [], "repoDigests": ["docker.io/maykinmedia/open-inwoner@sha256:a1"]},
+        {"id": "sha256:running", "repoTags": ["docker.io/maykinmedia/open-inwoner:2.4.6"]},
+        {"id": "sha256:other", "repoTags": ["docker.io/library/postgres:15"]},
+    ]
+    images = ["busybox:1.37", "maykinmedia/open-inwoner:2.4.9"]
+    assert provision.old_node_images(images, listed, {"sha256:running"}) == [
+        "docker.io/library/busybox:1.36",
+        "docker.io/maykinmedia/open-inwoner@sha256:a1",
+    ]
+
+
+CRICTL = ("minikube", "ssh", "-p", PROFILE, "--")
+
+
+def test_remove_old_node_images_runs_one_crictl_rmi(fake_run: FakeRun):
+    fake_run.on(*CRICTL, "sudo crictl images -o json", stdout='{"images": [{"id": "a", "repoTags": ["busybox:1.36"]}]}')
+    fake_run.on(*CRICTL, "sudo crictl ps -a -o json", stdout='{"containers": []}')
+    provision.remove_old_node_images(["busybox:1.37"])
+    assert fake_run.ran(*CRICTL, "sudo crictl rmi busybox:1.36") == [[*CRICTL, "sudo crictl rmi busybox:1.36"]]
+
+
+def test_remove_old_node_images_only_warns_when_the_node_fails(fake_run: FakeRun, capsys: pytest.CaptureFixture[str]):
+    fake_run.on(*CRICTL, returncode=1)
+    provision.remove_old_node_images(["busybox:1.37"])
+    assert "older images stay on the node" in capsys.readouterr().err
+
+
+def test_remove_old_images_cleans_the_host_and_the_node(monkeypatch: pytest.MonkeyPatch):
+    calls: list[str] = []
+    monkeypatch.setattr(provision, "remove_old_tags", recorder(calls, "host"))
+    monkeypatch.setattr(provision, "remove_old_node_images", recorder(calls, "node"))
+    provision.remove_old_images(["busybox:1.37"])
+    assert calls == ["host", "node"]

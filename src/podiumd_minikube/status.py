@@ -134,10 +134,6 @@ def workloads(items: list[Doc]) -> dict[str, str]:
     return names
 
 
-def _crictl(*args: str) -> Doc:
-    return json.loads(kube.node(" ".join(["sudo", "crictl", *args, "-o", "json"])))
-
-
 def _key(label: dict[str, str], names: dict[str, str]) -> str:
     namespace, pod = label["io.kubernetes.pod.namespace"], label["io.kubernetes.pod.name"]
     return f"{namespace}/{names.get(f'{namespace}/{pod}', pod)}/{label['io.kubernetes.container.name']}"
@@ -159,12 +155,13 @@ def sampled_cores(first: Doc, later: Doc | None) -> float:
 
 def container_usage(items: list[Doc], *, cpu: bool = True) -> dict[str, Usage]:
     """Usage per running container, keyed 'namespace/workload/container'; replicas add up."""
-    labels = {container["id"]: container["labels"] for container in _crictl("ps")["containers"]}
+    labels = {container["id"]: container["labels"] for container in kube.crictl("ps")["containers"]}
     names = workloads(items)
-    first = _crictl("stats")["stats"]
+    first = kube.crictl("stats")["stats"]
     if cpu:
         time.sleep(CPU_SAMPLE_SECONDS)  # a measuring interval, not a wait for a condition
-    second = {stat["attributes"]["id"]: stat for stat in _crictl("stats")["stats"]} if cpu else {}
+    stats: list[Doc] = kube.crictl("stats")["stats"] if cpu else []
+    second = {stat["attributes"]["id"]: stat for stat in stats}
     reclaimable = _reclaimable_bytes()
     usage: dict[str, Usage] = {}
     for stat in first:

@@ -197,12 +197,13 @@ def test_nameservers_only_drops_search_and_options():
     assert provision.nameservers_only(resolv) == "nameserver 192.168.49.1\n"
 
 
-def test_with_pod_resolv_conf_sets_it_once():
-    config = provision.with_pod_resolv_conf("kind: KubeletConfiguration\nclusterDomain: cluster.local\n")
+def test_tuned_kubelet_config_sets_it_once():
+    config = provision.tuned_kubelet_config("kind: KubeletConfiguration\nclusterDomain: cluster.local\n")
     assert config is not None
     assert f"resolvConf: {provision.POD_RESOLV_CONF}" in config
+    assert "imageGCHighThresholdPercent: 85" in config
     assert "clusterDomain: cluster.local" in config
-    assert provision.with_pod_resolv_conf(config) is None
+    assert provision.tuned_kubelet_config(config) is None
 
 
 def test_confirmed_aborts_without_input(monkeypatch: pytest.MonkeyPatch):

@@ -10717,3 +10717,34 @@ import completed, all Complete); forced upgrade 125 s (zookeeper hook still
 in); a broken configuration fails the deploy after 2 min 57 s with the
 ParserError in the hook log, instead of at helm's 15 m timeout; no forbidden
 errors. Restored to 8de27656 with Open Zaak 1 x 3.
+
+## Disk: old images on the node (2026-11-19, user: "memory savings, disk savings, speed improvements?")
+
+`/var/lib/docker` (host volume that is also the node's `/var`) at 66%, 93 of
+148 GB. The node held 139 images, 62 of them not used by any container (19 GB
+compressed; containerd's snapshots 53 GB): minikube writes the kubelet's
+`imageGCHighThresholdPercent: 100`, so the kubelet never removes an image, and
+every version switch (4.10.1, 4.11.0 branches, ZAC 5.4-5.12) left its images
+behind.
+- `provision.KUBELET_SETTINGS`: image GC at 85/80%, the kubelet's defaults,
+  which AKS keeps (minikube's 100 is its own). Written by `tune_kubelet` (was
+  `isolate_pod_dns`) beside `resolvConf` on every start_node.
+- `provision.remove_old_node_images`: removes the node's images whose tags
+  are all older tags (`old_tags`) of the repositories in every profile's
+  render (`chart_images`), or that have only a digest of such a repository,
+  and that no container uses (`crictl ps -a`, terminating pods included);
+  after deploy's readiness wait (a failure only warns), and in
+  provision-cluster beside the host's `remove_old_tags` (`remove_old_images`).
+  Other repositories (podiumd-tests' images) stay. A switch back to an older
+  version pulls its images from the registry again. crictl calls go through
+  `kube.crictl` (was `status._crictl`; `stale_images` used `docker exec`).
+- Found live: `crictl rmi <tag>` removes the whole image with all its tags
+  (containerd's CRI), so the first version, which listed every old tag, made
+  `rmi` exit 1 on a second tag of an image already gone, and an image with a
+  current and an old tag would have lost the current one. Now one name per
+  image, and only when all its tags are old. Live run 09:20 (ledger booked):
+  51 images removed, `/var/lib/docker` 93 -> 85 GB used; every chart image
+  still on the node.
+- `~/.minikube/cache/images`: 9.4 GB of copies from July/August (the
+  `minikube image load` era) deleted by hand; only minikube's own Cilium
+  copies remain (320 MB).
