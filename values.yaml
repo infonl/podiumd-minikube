@@ -2939,6 +2939,8 @@ podiumd:
         endpoint:
           openNotificaties: https://opennotificaties.local/api/v1
           openZaak: https://openzaak.local/zaken/api/v1
+          # Required by podiumd's render while openVtb is set (#746): OMC fetches a bericht's bijlagen here.
+          documenten: https://openzaak.local/documenten/api/v1
           openKlant: https://openklant.local/klantinteracties/api/v1
           contactMomenten: https://openklant.local/klantinteracties/api/v1
           besluiten: https://openzaak.local/besluiten/api/v1

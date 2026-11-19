@@ -10811,3 +10811,9 @@ Open Notificaties.
   podiumd-tests' bootstrap's, as its zaken abonnement.
 - Revision 8's stopped deploy left its cluster lock; `cluster-lock break`
   asks for confirmation on stdin (use -y in a non-interactive shell).
+- Revision 10 (14:35), 0d65435b: 5d235d51 + #746 3b5bf6a7 (worker 320Mi,
+  beat 256Mi requests) + helm-charts' uncommitted OMC change, committed only
+  in its local verify branch. Its render guard needs
+  omc.settings.zgw.endpoint.documenten while endpoint.openVtb is set: added
+  as https://openzaak.local/documenten/api/v1 (neither reference
+  environment sets it yet). Images unchanged; deploy 293 s; no failing pods.
