@@ -861,7 +861,8 @@ def _is_large_configmap(doc: Doc) -> bool:
 
 def dump(docs: list[Doc]) -> str:
     """docs as a multi-document YAML stream."""
-    return yaml.dump_all(docs, Dumper=YAML_DUMPER, default_flow_style=False, sort_keys=False)
+    # types-PyYAML 6.0.12.20261122: width is int | Unknown
+    return yaml.dump_all(docs, Dumper=YAML_DUMPER, default_flow_style=False, sort_keys=False)  # pyright: ignore[reportUnknownMemberType]
 
 
 @dataclass(frozen=True)

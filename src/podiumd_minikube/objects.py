@@ -20,4 +20,5 @@ def parse_yaml(text: str) -> Doc | None:
 
 def serialize_yaml(data: object, *, sort_keys: bool = True) -> str:
     """Return data as one YAML document."""
-    return yaml.dump(data, Dumper=YAML_DUMPER, default_flow_style=False, sort_keys=sort_keys)
+    # types-PyYAML 6.0.12.20261122: width is int | Unknown
+    return yaml.dump(data, Dumper=YAML_DUMPER, default_flow_style=False, sort_keys=sort_keys)  # pyright: ignore[reportUnknownMemberType]

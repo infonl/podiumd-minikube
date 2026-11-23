@@ -116,7 +116,7 @@ def apply_monitoring_logging_crds() -> None:
     if not crds:
         msg = f"no CustomResourceDefinition in {tgz}: check the monitoring-logging version"
         raise UserError(msg)
-    kube.apply(yaml.safe_dump_all(crds), shown=True)
+    kube.apply(yaml.safe_dump_all(crds), shown=True)  # pyright: ignore[reportUnknownMemberType]  # types-PyYAML 6.0.12.20261122: width is int | Unknown
 
 
 def keycloak_version(charts_dir: Path = CHARTS_DIR) -> str | None:

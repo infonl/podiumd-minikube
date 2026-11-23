@@ -156,7 +156,7 @@ def issuer_manifests() -> str:
         "metadata": {"name": ISSUER},
         "spec": {"ca": {"secretName": ISSUER}},
     }
-    return yaml.safe_dump_all([secret, issuer], sort_keys=False)
+    return yaml.safe_dump_all([secret, issuer], sort_keys=False)  # pyright: ignore[reportUnknownMemberType]  # types-PyYAML 6.0.12.20261122: width is int | Unknown
 
 
 def install_issuer() -> None:

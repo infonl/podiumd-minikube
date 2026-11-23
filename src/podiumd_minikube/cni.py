@@ -85,7 +85,7 @@ def render() -> str:
     )
     docs = [doc for doc in yaml.safe_load_all(text) if doc]
     manifests.limit_runtimes(docs)
-    return yaml.safe_dump_all(docs, sort_keys=False)
+    return yaml.safe_dump_all(docs, sort_keys=False)  # pyright: ignore[reportUnknownMemberType]  # types-PyYAML 6.0.12.20261122: width is int | Unknown
 
 
 def write_manifest() -> str:
