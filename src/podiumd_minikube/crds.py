@@ -21,6 +21,7 @@ from podiumd_minikube import kube
 from podiumd_minikube.manifests import name_of
 from podiumd_minikube.manifests import section
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import CHARTS_DIR
 from podiumd_minikube.process import UserError
 
@@ -116,7 +117,7 @@ def apply_monitoring_logging_crds() -> None:
     if not crds:
         msg = f"no CustomResourceDefinition in {tgz}: check the monitoring-logging version"
         raise UserError(msg)
-    kube.apply(yaml.safe_dump_all(crds), shown=True)  # pyright: ignore[reportUnknownMemberType]  # types-PyYAML 6.0.12.20261122: width is int | Unknown
+    kube.apply(serialize_yaml_all(crds, sort_keys=True), shown=True)
 
 
 def keycloak_version(charts_dir: Path = CHARTS_DIR) -> str | None:

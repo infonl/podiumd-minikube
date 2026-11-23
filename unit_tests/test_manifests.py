@@ -11,6 +11,7 @@ import yaml
 from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml_all
 
 DIGEST = "a" * 64
 
@@ -680,5 +681,5 @@ def test_drop_duplicate_env_keeps_the_last_entry_per_name():
 def test_fix_up_drops_only_zacs_own_collector_deployment():
     collector = {"kind": "Deployment", "metadata": {"name": manifests.ZAC_COLLECTOR}}
     service = {"kind": "Service", "metadata": {"name": manifests.ZAC_COLLECTOR}}
-    render = manifests.fix_up(manifests.dump([collector, service]), objecten_merged=False)
+    render = manifests.fix_up(serialize_yaml_all([collector, service]), objecten_merged=False)
     assert [doc["kind"] for doc in render.docs] == ["Service"]

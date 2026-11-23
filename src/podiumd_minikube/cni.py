@@ -12,6 +12,7 @@ from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.objects import serialize_yaml
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import CHART_DIR
 
 CILIUM_REPO = "https://helm.cilium.io"
@@ -85,7 +86,7 @@ def render() -> str:
     )
     docs = [doc for doc in yaml.safe_load_all(text) if doc]
     manifests.limit_runtimes(docs)
-    return yaml.safe_dump_all(docs, sort_keys=False)  # pyright: ignore[reportUnknownMemberType]  # types-PyYAML 6.0.12.20261122: width is int | Unknown
+    return serialize_yaml_all(docs)
 
 
 def write_manifest() -> str:

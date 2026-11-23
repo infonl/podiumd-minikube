@@ -18,6 +18,7 @@ from podiumd_minikube import process
 from podiumd_minikube import tls
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.objects import serialize_yaml
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
 
@@ -294,7 +295,7 @@ def apply(docs: list[Doc], hosts: list[str]) -> None:
     # NGF keeps an ExternalName Service's old target when it changes in place: such a Service is recreated.
     wanted = {(doc["kind"], manifests.name_of(doc)): manifests.section(doc, "spec") for doc in objects}
     _delete_stale(wanted)
-    kube.apply(manifests.dump(objects))
+    kube.apply(serialize_yaml_all(objects))
     if not polling.wait_until(
         lambda: kube.is_present(f"service/{NGF_SERVICE}", EDGE_NAMESPACE), timeout=120, interval=3
     ):

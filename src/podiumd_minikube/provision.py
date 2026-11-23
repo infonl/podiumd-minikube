@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from podiumd_minikube.objects import Doc
 from podiumd_minikube.objects import parse_yaml
 from podiumd_minikube.objects import serialize_yaml
+from podiumd_minikube.objects import serialize_yaml_all
 
 # Fully parallel loads once filled /tmp on the host.
 BATCH_SIZE = 6
@@ -534,7 +535,7 @@ def _provisioned_images() -> list[str]:
     """Return the images of this chart's fully-enabled render, the edge (NGF, the WAF) and cert-manager."""
     print("Deriving the image list from the currently-selected podiumd version...")
     # The kubelet pulls one image at a time; loaded first, the edge and cert-manager wait for none.
-    waf_render = manifests.dump(waf.rendered([]))
+    waf_render = serialize_yaml_all(waf.rendered([]))
     edge = f"{gateway.ngf_template()}\n---\n{pki.cert_manager_template()}\n---\n{waf_render}"
     images = sorted({*chart_images(), *manifests.images(edge)})
     print(f"{len(images)} image(s) referenced by this chart's fully-enabled render, the edge and cert-manager.")

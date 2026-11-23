@@ -6,7 +6,7 @@ from conftest import FakeRun
 
 from podiumd_minikube import chart
 from podiumd_minikube import hosts
-from podiumd_minikube import manifests
+from podiumd_minikube.objects import serialize_yaml_all
 
 
 def _ingress(*hostnames: str) -> dict[str, object]:
@@ -21,7 +21,9 @@ def _ingress(*hostnames: str) -> dict[str, object]:
 
 def test_chart_hosts_renders_every_profile(fake_run: FakeRun, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(chart, "everything_args", lambda: ["--set", "all=true"])
-    fake_run.on("helm", "template", stdout=manifests.dump([_ingress("zac.local", "kiss.local"), _ingress("zac.local")]))
+    fake_run.on(
+        "helm", "template", stdout=serialize_yaml_all([_ingress("zac.local", "kiss.local"), _ingress("zac.local")])
+    )
     assert hosts.chart_hosts() == ["kiss.local", "zac.local"]
     assert fake_run.calls[0][-2:] == ["--set", "all=true"]
 

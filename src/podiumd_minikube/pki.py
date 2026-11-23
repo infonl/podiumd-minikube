@@ -12,7 +12,6 @@ import tempfile
 from pathlib import Path
 
 import certifi
-import yaml
 
 from podiumd_minikube import kube
 from podiumd_minikube import memory
@@ -20,6 +19,7 @@ from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.objects import serialize_yaml
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -156,7 +156,7 @@ def issuer_manifests() -> str:
         "metadata": {"name": ISSUER},
         "spec": {"ca": {"secretName": ISSUER}},
     }
-    return yaml.safe_dump_all([secret, issuer], sort_keys=False)  # pyright: ignore[reportUnknownMemberType]  # types-PyYAML 6.0.12.20261122: width is int | Unknown
+    return serialize_yaml_all([secret, issuer])
 
 
 def install_issuer() -> None:

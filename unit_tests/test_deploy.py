@@ -36,6 +36,7 @@ from podiumd_minikube import releases
 from podiumd_minikube import tunnel
 from podiumd_minikube import waf
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OLD_NAMESPACE
@@ -123,7 +124,7 @@ def _doc(kind: str, name: str) -> Doc:
 
 def test_render_passes_helm_args_and_splits_out_crds(fake_run: FakeRun):
     crd, configmap = _doc("CustomResourceDefinition", "a.x"), _doc("ConfigMap", "c")
-    fake_run.on("helm", "template", stdout=manifests.dump([crd, configmap]))
+    fake_run.on("helm", "template", stdout=serialize_yaml_all([crd, configmap]))
     render = deploy.Options(helm_args=["--set", "a=b"]).render("-s", "templates/x.yaml")
     assert fake_run.ran("helm", "template")[0][-6:] == [*deploy.LOOKUP_ARGS, "--set", "a=b", "-s", "templates/x.yaml"]
     assert ([manifests.name_of(doc) for doc in render.docs], render.crds[0]["kind"]) == (["c"], crd["kind"])
@@ -345,7 +346,7 @@ def test_deploy_needs_the_local_ca(called: list[str]):
 
 def test_render_falls_back_to_plain_helm_template_without_the_crds(fake_run: FakeRun):
     configmap = _doc("ConfigMap", "c")
-    fake_run.on("helm", "template", stdout=manifests.dump([configmap]))
+    fake_run.on("helm", "template", stdout=serialize_yaml_all([configmap]))
     server = ("helm", "template", RELEASE_NAME, str(CHART_DIR), "-n", NAMESPACE, "--include-crds", *deploy.LOOKUP_ARGS)
     fake_run.on(*server, returncode=1, stderr="no matches for kind; ensure CRDs are installed first")
     assert [manifests.name_of(doc) for doc in deploy.Options().render().docs] == [manifests.name_of(configmap)]
@@ -355,7 +356,7 @@ def test_render_falls_back_to_plain_helm_template_without_the_crds(fake_run: Fak
 
 
 def test_render_without_lookup_runs_one_plain_helm_template(fake_run: FakeRun):
-    fake_run.on("helm", "template", stdout=manifests.dump([_doc("ConfigMap", "c")]))
+    fake_run.on("helm", "template", stdout=serialize_yaml_all([_doc("ConfigMap", "c")]))
     deploy.Options().render("-s", "templates/x.yaml", lookup=False)
     calls = fake_run.ran("helm", "template")
     assert len(calls) == 1

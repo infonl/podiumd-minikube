@@ -16,6 +16,7 @@ from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube import tls
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import EDGE_NAMESPACE
 from podiumd_minikube.paths import EDGE_SERVICE
 
@@ -345,7 +346,7 @@ def apply(docs: list[Doc]) -> None:
     wait for it.
     """
     print("\nApplying the WAF in front of NGINX Gateway Fabric (waf.py)...")
-    kube.apply(manifests.dump(rendered(mtls_hosts(docs))))
+    kube.apply(serialize_yaml_all(rendered(mtls_hosts(docs))))
     kube.kubectl_shown("rollout", "status", f"deployment/{EDGE_SERVICE}", "-n", EDGE_NAMESPACE, "--timeout=300s")
     ip = kube.edge_ip()
     shown = ip or "<none - is minikube tunnel running?>"

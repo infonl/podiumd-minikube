@@ -18,6 +18,7 @@ from podiumd_minikube import polling
 from podiumd_minikube import process
 from podiumd_minikube import services
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import NAMESPACE
 
 # StatefulSet -> (the value that sets its pod count, the chart's default count).
@@ -80,7 +81,7 @@ def _apply_changes(source: list[Doc], target: list[Doc]) -> None:
     """Create, patch and delete the live objects so that source becomes target."""
     created, patches, deleted = changes(source, target)
     if created:
-        kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump(created))
+        kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=serialize_yaml_all(created))
     for key, patch in patches.items():
         reference = kube.reference(*key)
         kube.kubectl_shown("patch", reference, "-n", NAMESPACE, "--type", "merge", "-p", json.dumps(patch))

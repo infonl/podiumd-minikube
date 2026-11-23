@@ -17,6 +17,7 @@ from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -59,7 +60,7 @@ def record(command: str, render: manifests.Render, digests: dict[str, str]) -> N
         "digests": json.dumps(digests, sort_keys=True),
     }
     doc = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": CONFIGMAP}, "data": data}
-    kube.apply(manifests.dump([doc]), "-n", NAMESPACE)
+    kube.apply(serialize_yaml_all([doc]), "-n", NAMESPACE)
 
 
 def read() -> dict[str, str]:

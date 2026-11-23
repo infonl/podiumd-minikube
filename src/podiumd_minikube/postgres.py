@@ -16,6 +16,7 @@ from podiumd_minikube import kube
 from podiumd_minikube import manifests
 from podiumd_minikube import process
 from podiumd_minikube import provision
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import VENDOR_DIR
@@ -179,7 +180,7 @@ def migrate_major(render: manifests.Render, current: Server) -> Path | None:
     )
     print(f"Dumped to {dump}.")
     provision.load_images([image])
-    kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=manifests.dump([rendered]))
+    kube.kubectl_shown("apply", "-n", NAMESPACE, "-f", "-", stdin=serialize_yaml_all([rendered]))
     kube.kubectl_shown("rollout", "status", "deployment/postgres", "-n", NAMESPACE, "--timeout=600s")
     restore(dump, wanted, render)
     return dump

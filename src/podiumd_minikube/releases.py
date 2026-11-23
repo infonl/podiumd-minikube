@@ -22,6 +22,7 @@ from podiumd_minikube import process
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.objects import parse_yaml
 from podiumd_minikube.objects import serialize_yaml
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import MONITORING_NAMESPACE
 from podiumd_minikube.paths import MONITORING_RELEASE
@@ -147,7 +148,7 @@ def digest(render: manifests.Render, post_render: list[str]) -> str:
     As podiumd-infra's helmSkipUnchanged, minus its inputs: the render covers them, and is deterministic with lookups.
     """
     sha = hashlib.sha256(json.dumps(post_render).encode())
-    manifest = manifests.dump([*render.docs, *render.large_configmaps, *render.crds])
+    manifest = serialize_yaml_all([*render.docs, *render.large_configmaps, *render.crds])
     sha.update(manifest.encode())
     return sha.hexdigest()
 

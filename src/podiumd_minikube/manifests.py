@@ -15,16 +15,14 @@ from dataclasses import field
 from pathlib import Path
 from typing import cast
 
-import yaml
-
 from podiumd_minikube import memory
 from podiumd_minikube import pki
 from podiumd_minikube import process
 from podiumd_minikube import tls
-from podiumd_minikube.objects import YAML_DUMPER
 from podiumd_minikube.objects import Doc
 from podiumd_minikube.objects import parse_yaml
 from podiumd_minikube.objects import serialize_yaml
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import CHART_DIR
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -859,12 +857,6 @@ def _is_large_configmap(doc: Doc) -> bool:
     return doc.get("kind") == "ConfigMap" and len(serialize_yaml(doc)) > LARGE_CONFIGMAP_BYTES
 
 
-def dump(docs: list[Doc]) -> str:
-    """docs as a multi-document YAML stream."""
-    # types-PyYAML 6.0.12.20261122: width is int | Unknown
-    return yaml.dump_all(docs, Dumper=YAML_DUMPER, default_flow_style=False, sort_keys=False)  # pyright: ignore[reportUnknownMemberType]
-
-
 @dataclass(frozen=True)
 class Render:
     """A fixed-up render: the manifest for `kubectl apply`, plus what it cannot carry.
@@ -892,7 +884,7 @@ class Render:
     @property
     def manifest(self) -> str:
         """docs as YAML."""
-        return dump(self.docs)
+        return serialize_yaml_all(self.docs)
 
     def named(self, kind: str, name: str) -> Doc | None:
         """Return the doc of kind called name, or None."""
@@ -983,7 +975,7 @@ def documents(text: str) -> list[Doc]:
 def post_render_text(rendered: str, *, objecten_merged: bool, ca_trust: bool, hold_zac: bool = False) -> str:
     """post_render on a rendered manifest, image digests stripped: the Helm post-renderer plugin's work."""
     docs = documents(rendered)
-    return dump(post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust, hold_zac=hold_zac))
+    return serialize_yaml_all(post_render(docs, objecten_merged=objecten_merged, ca_trust=ca_trust, hold_zac=hold_zac))
 
 
 def helm_template(*args: str, release: str = RELEASE_NAME, chart: Path = CHART_DIR, namespace: str = NAMESPACE) -> str:

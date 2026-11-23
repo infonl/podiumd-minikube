@@ -37,6 +37,7 @@ from podiumd_minikube import upgrade
 from podiumd_minikube import volumes
 from podiumd_minikube import waf
 from podiumd_minikube.objects import Doc
+from podiumd_minikube.objects import serialize_yaml_all
 from podiumd_minikube.paths import NAMESPACE
 from podiumd_minikube.paths import OLD_NAMESPACE
 from podiumd_minikube.paths import RELEASE_NAME
@@ -130,7 +131,7 @@ def apply_crds(render: manifests.Render, release: str) -> None:
                 "meta.helm.sh/release-namespace": NAMESPACE,
             }
     print(f"\nApplying {len(docs)} CRD(s) first...")
-    kube.apply(manifests.dump(docs), shown=True)
+    kube.apply(serialize_yaml_all(docs), shown=True)
     names = [f"crd/{manifests.name_of(doc)}" for doc in docs]
     kube.kubectl_shown("wait", "--for=condition=Established", *names, "--timeout=60s")
 
