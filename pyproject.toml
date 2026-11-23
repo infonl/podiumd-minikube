@@ -26,8 +26,6 @@ dev = [
     "bandit",
     "basedpyright",
     "jscpd",
-    "types-PyYAML",
-    "types-requests",
     "flake8-pyproject",  # flake8 reads [tool.flake8] in pyproject.toml
     "wemake-python-styleguide",  # flake8 plugin, brings its own pinned flake8
     "flake8-bugbear",  # B907 and B042 only ([tool.flake8] select)
