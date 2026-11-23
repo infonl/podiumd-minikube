@@ -10852,3 +10852,33 @@ pushed): #749 c79fe707 on the rebased #746 e6e6efd5 and #743 (incl. 02726e2e), p
   openvtb pod (768Mi): podiumd-tests' parallel Django shells, fixed there (one shell at a time).
 - Revision 14 (`--set podiumd.openvtb.settings.djangoSettingsModule=openvtb.conf.podiumd_all`):
   283 s; the next normal deploy returns to `podiumd_berichten`.
+
+## helm-charts #754 (redis-ha Sentinel, podiumd-chart-24) and #755 (maykin-common-1) on minikube (2026-11-23 15:31-18:00 CET)
+
+Request from podiumd-tests. helm-charts built `verify/minikube-4.11.0-tip3` (local only) by
+cherry-picking #754 onto ead8d7f8 (#738, #743, #746, #749, #751; #752 excluded on Kees's word): #754
+alone would have dropped ZAC 5.12 (#719) and PKCE (#723). Chart images vs tip2: only nginx 1.31.9,
+plus the Sentinel image with 3 pods. Each head archived as `.chart-sources/podiumd-<sha>`.
+
+- Probe access: podiumd-tests' probe pod could not reach Redis through NetworkPolicy
+  `podiumd-redis-ha`. Kees decided we add `ptest-redis-probe` (ingress to `app=redis-ha` on 6379
+  from `app.kubernetes.io/part-of: podiumd-tests`) by hand, not `extraFrom.redis` in values: that
+  takes effect only with a deploy and puts test wiring into the deployed config. Deleted after the tests.
+- Revision 15 (0a8718f5, `--set podiumd.redis-operator.redis-ha.replicaCount=3`): 327 s; Redis
+  outage 28 s while the pods became a replication set; 100 of 100 keys kept.
+- Labeller bug: kubectl 1.37.2 ignores the in-cluster config when `--request-timeout` is given, so
+  every call of `redis-ha-labeller` went to localhost:8080. Fixed in 652fb517 (`timeout 5`, no
+  `--request-timeout`); revision 16, 322 s, only the labeller rolled.
+- Chaos runs: Celery workers failed their liveness probe after a Redis reconnect (the image's
+  event-loop file stops updating). #755 checks liveness with the broker ping only: Open Zaak through
+  `CELERY_MAX_AGE` in `openzaak.extraEnvVars`, guarded at render time. Our values set their own
+  `openzaak.extraEnvVars` (Helm replaces lists), so a082686 repeats it.
+- Revision 17 (9073abe0: #754 fencing, #755): 334 s; rolled the labeller, Open Zaak and the Open
+  Inwoner and Open VTB workers. Revision 18 (449fb653: fence by pod IP, close connections before
+  REPLICAOF): 339 s, labeller only. pabc rolls on every deploy: its pod template names the Job
+  `pabc-migrations-<revision>`. podiumd-tests: takeover with write-loss check, Redis restart under
+  load and #755's restart test all green.
+- Revision 19 (449fb653, no `--set`, step 4): 331 s; 1 Redis pod, label CronJob back, labeller
+  and sentinel NetworkPolicy gone; podiumd-tests doctor clean, smoke 228 passed. Finding: StatefulSet
+  `redis-ha-s` (owned by RedisReplication `redis-ha`) and its 3 sentinels stay: the operator does
+  not remove them when `spec.sentinel` goes away. Reported to helm-charts; deleted once it has seen it.
