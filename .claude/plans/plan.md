@@ -10882,3 +10882,21 @@ plus the Sentinel image with 3 pods. Each head archived as `.chart-sources/podiu
   and sentinel NetworkPolicy gone; podiumd-tests doctor clean, smoke 228 passed. Finding: StatefulSet
   `redis-ha-s` (owned by RedisReplication `redis-ha`) and its 3 sentinels stay: the operator does
   not remove them when `spec.sentinel` goes away. Reported to helm-charts; deleted once it has seen it.
+- Revision 20 (a7d8c6df, 1 pod): 282 s; the label CronJob deletes a leftover sentinel StatefulSet
+  and labels only `role=replication` pods; `redis-ha-s` gone, smoke 228 passed. Revision 21
+  (a7d8c6df, 3 pods): 286 s. Finding: the labeller's listeners never subscribed
+  (`/tmp/fenced/.listener-*` missing), so 13 of 284 writes were lost in the takeover test.
+  Fixed in b059af1f.
+- Revision 22 (b059af1f, 1 pod): 294 s. Finding: a label Job failed with "status.masterNode not
+  set" when it ran while the operator recreated `redis-ha-0`. Fixed in 59c1ea86 (exit 0 and retry
+  at the next run). Revision 23 (b059af1f, 3 pods): 286 s. Revisions 24 and 25 (59c1ea86, 1 and
+  3 pods): 296 and 290 s; the race was not hit; smoke 229 passed.
+- Revisions 26 and 27 (ba146973, 1 and 3 pods): 293 s each. On 26, CronJob run 29924366 hit the
+  race window and completed. On 27 both labellers had 3 listener files, redis-ha-0 master, -1 and
+  -2 slaves. podiumd-tests: takeover, sentinel replacement and restart under load green.
+- Revision 28 (ba146973, 1 pod, step I): 299 s; sentinels, labeller and sentinel NetworkPolicy
+  gone, label Job "Labels correct: redis-ha-0 is master". Each 3->1 switch recreates `redis-ha-0`:
+  about 35 s Redis outage and a FailedPreStopHook on the removed pods (sent to helm-charts for the
+  upgrade notes).
+- The labeller runs 2 pods (`redis-operator.redis-ha.sentinel.labeller.replicaCount`, for node
+  failure). Left at the chart's 2: Sentinel runs here only for these tests, through `--set`.
