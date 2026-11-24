@@ -10900,3 +10900,23 @@ plus the Sentinel image with 3 pods. Each head archived as `.chart-sources/podiu
   upgrade notes).
 - The labeller runs 2 pods (`redis-operator.redis-ha.sentinel.labeller.replicaCount`, for node
   failure). Left at the chart's 2: Sentinel runs here only for these tests, through `--set`.
+
+## helm-charts #756, #757, #758 on minikube (2026-11-24 10:36-10:52 CET)
+
+Request from podiumd-tests (Kees approved). helm-charts built `verify/minikube-4.11.0-tip4`
+(ac67fbfb): tip3 ba146973 plus cherry-picks of #756 and #757 (the PR heads also carry #752);
+monitoring-logging at #758's head 9f70b286. Archived as `.chart-sources/podiumd-ac67fbfb` and
+`.chart-sources/monitoring-logging-9f70b286`.
+
+- #756 (pabc H1): with `pabc.settings.apiKeys: [""]` the render fails with the guard's message;
+  our values (one key, equal to `zac.pabcApi.apiKey`) render.
+- #757 (podiumd-chart-53): podiumd drops OPENZAAK_PORT and OPENNOTIFICATIES_PORT. Our
+  `openzaak.extraEnvVars` repeated OPENZAAK_PORT; dropped too: the openzaak chart sets
+  `enableServiceLinks: false` in 1.14.2 (podiumd 4.9.4, 4.10.1) and 1.16.0, so Kubernetes
+  injects no OPENZAAK_PORT. We never set `opennotificaties.extraEnvVars`.
+- #758 (podiumd-chart-47): no change in our render, so `deploy` skipped the monitoring-logging
+  upgrade. Our values set both Grafana sidecars' limits, and Loki runs SingleBinary (no compactor
+  or ruler).
+- The host had rebooted at about 08:32; the first deploy failed with "no route to host" (minikube
+  stopped). `start-cluster` took 5 minutes; ZAC's CronJobs `zac-signaleren` and `zac-sig-del`
+  failed 8 pods while ZAC booted, then succeeded at 10:44. Revision 29: 313 s.
