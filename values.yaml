@@ -581,10 +581,8 @@ podiumd:
     # Open Inwoner ship no bytecode for their site-packages, in directories their user
     # cannot write, so every new Python process compiles the libraries again: each
     # Celery liveness probe (openformulieren-worker 6.3 CPU s every 50 s; 1.5 s from
-    # the cache). OPENZAAK_PORT, CELERY_MAX_AGE: podiumd's items (Helm replaces lists).
+    # the cache). CELERY_MAX_AGE: podiumd's item (Helm replaces lists).
     extraEnvVars:
-      - name: OPENZAAK_PORT
-        value: "8000"
       - name: CELERY_MAX_AGE
         value: "315360000"
       - &python-bytecode-cache
