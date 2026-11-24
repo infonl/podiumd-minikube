@@ -10920,3 +10920,6 @@ monitoring-logging at #758's head 9f70b286. Archived as `.chart-sources/podiumd-
 - The host had rebooted at about 08:32; the first deploy failed with "no route to host" (minikube
   stopped). `start-cluster` took 5 minutes; ZAC's CronJobs `zac-signaleren` and `zac-sig-del`
   failed 8 pods while ZAC booted, then succeeded at 10:44. Revision 29: 313 s.
+- Revision 30 (tip5 946d64cf: tip4 plus a cherry-pick of #759, open-zaak-21): 367 s. Open Zaak
+  web and worker have `CELERY_RESULT_BACKEND=disabled`, the web pod `UWSGI_HARAKIRI=300`; our 3
+  uWSGI processes stay. We set no Open Zaak result backend, so nothing to change here.
