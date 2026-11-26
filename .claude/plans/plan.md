@@ -10923,3 +10923,25 @@ monitoring-logging at #758's head 9f70b286. Archived as `.chart-sources/podiumd-
 - Revision 30 (tip5 946d64cf: tip4 plus a cherry-pick of #759, open-zaak-21): 367 s. Open Zaak
   web and worker have `CELERY_RESULT_BACKEND=disabled`, the web pod `UWSGI_HARAKIRI=300`; our 3
   uWSGI processes stay. We set no Open Zaak result backend, so nothing to change here.
+
+## helm-charts 4.10.2 all-PRs round on minikube (2026-11-26 12:22-12:56 CET)
+
+Request from podiumd-tests (Kees's 4.10.2 round, via helm-charts-96): fresh install of
+`verify/kees00-4.10.2-all` 332f6017 (feature/podiumd-4.10.2 d2cf6a94 plus #763, #765, #767, #769,
+#771, #773, #775, #777, #779). Archived podiumd, mi-data and monitoring-logging from that commit as
+`.chart-sources/podiumd-332f6017`; monitoring-logging 1.0.18 moves off 9f70b286 with it.
+
+- The host had rebooted at 09:33, so minikube was stopped. The first `reset-namespace -y` printed
+  "does not exist" for every namespace and failed only at the PersistentVolume step ("no route to
+  host"); nothing was deleted. `teardown._empty` reads an unreachable cluster as an absent
+  namespace (`kube.is_present`). Open, ours: fail at the start with "cluster unreachable: run
+  start-cluster".
+- start-cluster 12:25:56-12:30:12, reset 12:31:21, `deploy --full` until 12:54:22: helm install of
+  podiumd 1036 s, monitoring-logging 171 s. Revisions: podiumd 1, monitoring-logging 1,
+  podiumd-minikube 1.
+- create-required-catalogi-job failed with DeadlineExceeded (activeDeadlineSeconds 900, 12:34:03 to
+  12:49:03). Keycloak became Ready only at 12:42:37 on the CPU-bound node (7.4 of 8 cores). openzaak-config
+  failed 6 times on "Realm does not exist" and completed at 12:48:57, 6 s before the catalogi Job's
+  deadline; that Job needs the client that openzaak-config creates. Re-created by hand from the release
+  manifest (`kubectl replace --force`), complete within a minute. Only seen right after a
+  start-cluster; earlier fresh installs on a settled node finished the Job in time.
