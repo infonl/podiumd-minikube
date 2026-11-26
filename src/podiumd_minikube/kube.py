@@ -39,6 +39,13 @@ def is_kubectl_ok(*args: str) -> bool:
     return process.succeeds(["kubectl", *args])
 
 
+def require_reachable() -> None:
+    """Raise UserError when minikube's API server does not answer."""
+    if not is_kubectl_ok("get", "--raw", "/readyz"):
+        msg = "minikube's API server is unreachable: run `podiumd-minikube start-cluster`"
+        raise process.UserError(msg)
+
+
 def node(command: str) -> str:
     """Stdout of a shell command run on the minikube node; minikube ssh forwards no stdin."""
     return process.output(["minikube", "ssh", "-p", PROFILE, "--", command])

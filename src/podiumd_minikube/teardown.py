@@ -172,6 +172,8 @@ def reset_namespace(*, yes: bool) -> int:
     """Delete the namespaces and what they leave behind cluster-wide; 1 when not confirmed."""
     if not confirmed(RESET_SUMMARY, yes=yes):
         return 1
+    # An unreachable cluster would read as absent namespaces.
+    kube.require_reachable()
     print(f"Deleting namespaces {', '.join(RESET_NAMESPACES)} and their releases...")
     with ThreadPoolExecutor(max_workers=len(RESET_NAMESPACES)) as pool:
         for line in pool.map(_empty, RESET_NAMESPACES):

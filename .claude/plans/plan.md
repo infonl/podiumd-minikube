@@ -10934,8 +10934,9 @@ Request from podiumd-tests (Kees's 4.10.2 round, via helm-charts-96): fresh inst
 - The host had rebooted at 09:33, so minikube was stopped. The first `reset-namespace -y` printed
   "does not exist" for every namespace and failed only at the PersistentVolume step ("no route to
   host"); nothing was deleted. `teardown._empty` reads an unreachable cluster as an absent
-  namespace (`kube.is_present`). Open, ours: fail at the start with "cluster unreachable: run
-  start-cluster".
+  namespace (`kube.is_present`). Fixed: after the confirmation, `kube.require_reachable`
+  (`kubectl get --raw /readyz`) stops it with "minikube's API server is unreachable: run
+  `podiumd-minikube start-cluster`".
 - start-cluster 12:25:56-12:30:12, reset 12:31:21, `deploy --full` until 12:54:22: helm install of
   podiumd 1036 s, monitoring-logging 171 s. Revisions: podiumd 1, monitoring-logging 1,
   podiumd-minikube 1.

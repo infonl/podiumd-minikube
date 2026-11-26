@@ -83,6 +83,14 @@ def test_reset_namespace_deletes_nothing_unconfirmed(
     assert not forgotten
 
 
+def test_reset_namespace_stops_before_deleting_when_the_cluster_is_unreachable(fake_run: FakeRun, forgotten: list[str]):
+    fake_run.on("kubectl", "get", "--raw", "/readyz", returncode=1)
+    with pytest.raises(UserError, match="start-cluster"):
+        teardown.reset_namespace(yes=True)
+    assert [call[:4] for call in fake_run.calls] == [["kubectl", "get", "--raw", "/readyz"]]
+    assert not forgotten
+
+
 def test_reset_namespace_refuses_on_a_held_lock_before_deleting(fake_run: FakeRun, private_lock: Path):
     private_lock.write_text("podiumd-tests run full minikube 2026-10-08T12:00:00+00:00\n", encoding="utf-8")
     with pytest.raises(UserError, match="locked by podiumd-tests"):
