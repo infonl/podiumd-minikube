@@ -10946,3 +10946,9 @@ Request from podiumd-tests (Kees's 4.10.2 round, via helm-charts-96): fresh inst
   deadline; that Job needs the client that openzaak-config creates. Re-created by hand from the release
   manifest (`kubectl replace --force`), complete within a minute. Only seen right after a
   start-cluster; earlier fresh installs on a settled node finished the Job in time.
+- Revision 2, 13:44-13:50 CET: helm upgrade to `verify/kees00-4.10.2-all-2` 5756e23f (332f6017 plus
+  #780: keycloak-repair-client-scopes gives default scope kc-admin-api to the podiumd realm's
+  service-account clients that hold realm-management roles; on revision 1 ZAC got 401 because
+  zac-admin-client lacked it). `deploy --full` 369 s, podiumd helm upgrade 299 s, no failed Job. The Job
+  logged "pabc-admin-client: added default scope kc-admin-api" and the same for zac-admin-client.
+  Archived as `.chart-sources/podiumd-5756e23f`.
